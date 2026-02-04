@@ -1,4 +1,4 @@
-# Model Guide v0.1 - PRD: Use Cases & Flows
+# Model Guide v0.1 - PRD: Use Cases & DB Schema
 
 ---
 
@@ -817,60 +817,3 @@ Organization
 | Escalate to human | ❌ | ❌ | ✅ |
 
 ---
-
-## Flow Diagram
-
-```mermaid
-flowchart TB
-    subgraph Admin Actions
-        A1[Configure Connector] --> A2[Create Agent]
-        A2 --> A2a[Copy API Key]
-        A2a --> A3[Link Tools to Agent]
-        A3 --> A3a[Set Confirmation Flags]
-        A3a --> A5[Activate Agent]
-    end
-
-    subgraph Customer Journey - Order
-        C1[Start Session] --> C2[Agent Greeting]
-        C2 --> C3{Customer Intent}
-        C3 -->|Order| C4[Add Items to Cart]
-        C4 --> C4a[Create Draft Order]
-        C4a --> C4b[Collect Delivery Info]
-        C4b --> C4c[Confirm Order]
-        C4c --> C8[Session End]
-    end
-
-    subgraph Customer Journey - Modify Order
-        C3 -->|Change Order| C5[Authenticate Customer]
-        C5 --> C5a[Create Backend Session]
-        C5a --> C5b[Get Order]
-        C5b --> C5c[Collect New Info]
-        C5c --> C5d{Tool Requires Confirmation?}
-        C5d -->|Yes| C5e[Agent Confirms with Customer]
-        C5e --> C5f[Execute Tool]
-        C5d -->|No| C5f
-        C5f --> C8
-    end
-
-    subgraph Customer Journey - Escalate
-        C3 -->|Escalate| C7[Create Ticket]
-        C7 --> C9[Session Escalated]
-    end
-
-    subgraph Session End
-        C8 --> C10[CSAT Prompt]
-        C9 --> C10
-        C10 --> C11[Customer Feedback]
-    end
-
-    subgraph Support Actions
-        S1[View Dashboard] --> S2[Filter Sessions]
-        S2 --> S3[Select Session]
-        S3 --> S4[View Transcript]
-        S4 --> S5[Review Tool Calls]
-        S5 --> S6[Evaluate Session]
-    end
-
-    A5 --> C1
-    C11 --> S1
-```
