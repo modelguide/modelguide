@@ -79,15 +79,15 @@ Prefixed by **unique connector slug** (not type):
 2. Admin selects a connector from catalog (e.g., "Shopify", "Zendesk")
 3. System displays required configuration fields (from `connectors.config_schema`)
 4. Admin enters connection details (API endpoint, etc.)
-5. Admin creates or selects a secret for credentials
-6. Admin saves the connector tool
+5. Admin creates or selects a secret for credentials (secret is linked to connector)
+6. Admin saves the connector
 7. System validates connection (optional health check)
-8. Connector tool is now available for agents
+8. Connector is now available, and its tools can be linked to agents
 
 **Entities Involved:**
 - `connectors` (catalog)
 - `connector_tools` (instance)
-- `secrets`
+- `secrets` (linked via owner_type/owner_id)
 
 ---
 
@@ -637,6 +637,7 @@ When `agent_connector_tools.requires_confirmation = true`:
 | Field | Type | Description |
 |-------|------|-------------|
 | id | UUID | Primary key |
+| organization_id | UUID | FK → organizations |
 | name | VARCHAR | Slack, Zendesk, REST API, etc. |
 | slug | VARCHAR | **Unique** identifier, used as tool name prefix |
 | description | TEXT | |
@@ -646,7 +647,7 @@ When `agent_connector_tools.requires_confirmation = true`:
 | is_active | BOOLEAN | |
 | created_at | TIMESTAMP | |
 
-**Note:** `slug` must be unique and is used to prefix all tools from this connector (e.g., `pizzapalace_add_to_cart`, `zendesk_create_ticket`).
+**Note:** `slug` must be unique and is used to prefix all tools from this connector (e.g., `pizzapalace_add_to_cart`, `zendesk_create_ticket`). Secrets are linked to connectors via the `secrets` table using polymorphic ownership (`owner_type` + `owner_id`).
 
 ---
 
@@ -661,11 +662,12 @@ When `agent_connector_tools.requires_confirmation = true`:
 | description | TEXT | |
 | tool_schema | JSONB | OpenAI function calling format |
 | connection_config | JSONB | Endpoint URLs, headers, etc. |
-| secret_id | UUID | FK → secrets |
 | timeout_seconds | INTEGER | Default 30 |
 | is_active | BOOLEAN | |
 | created_at | TIMESTAMP | |
 | updated_at | TIMESTAMP | |
+
+**Note:** Tools inherit their authentication credentials from their parent connector's secret.
 
 ---
 
@@ -676,10 +678,16 @@ When `agent_connector_tools.requires_confirmation = true`:
 | organization_id | UUID | FK → organizations |
 | name | VARCHAR | Secret name |
 | secret_type | VARCHAR | api_key, oauth_token, credentials |
-| secret_ref | TEXT | KMS reference or encrypted value |
+| hashed_value | TEXT | Hashed secret value |
+| owner_type | VARCHAR | Polymorphic owner type (enum: connector) |
+| owner_id | UUID | ID of the owning entity (no FK constraint) |
 | expires_at | TIMESTAMP | |
 | created_at | TIMESTAMP | |
 | updated_at | TIMESTAMP | |
+
+**owner_type enum:** `connector` (extensible for future use cases)
+
+**Note:** Uses polymorphic association pattern - `owner_type` identifies the table and `owner_id` identifies the record. No foreign key constraint on `owner_id` to allow flexibility.
 
 ---
 
@@ -783,11 +791,15 @@ Organization
     │
     ├── Users
     │
-    ├── Secrets
+    ├── Secrets ─────────────────┐
+    │   (owner_type: connector)  │
+    │   (owner_id: connector.id) │
+    │                            │
+    ├── Connectors ◄─────────────┘ (polymorphic link via owner_type/owner_id)
+    │     └── ConnectorTools
     │
     ├── Agents
-    │     ├── AgentConnectorTools → ConnectorTools → Connectors (catalog)
-    │     │                              └── Secrets
+    │     ├── AgentConnectorTools → ConnectorTools
     │     └── Sessions
     │           ├── SessionMessages
     │           └── SessionFeedback
@@ -807,6 +819,7 @@ Organization
 | Set tool confirmation flag | ✅ | ❌ | ❌ |
 | Manage users | ✅ | ❌ | ❌ |
 | Manage API keys | ✅ | ❌ | ❌ |
+| Manage secrets | ✅ | ❌ | ❌ |
 | View sessions list | ✅ | ✅ | ❌ |
 | View session detail | ✅ | ✅ | ❌ |
 | Filter sessions | ✅ | ✅ | ❌ |
