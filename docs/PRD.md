@@ -76,17 +76,23 @@ Prefixed by **unique connector slug** (not type):
 
 **Flow:**
 1. Admin navigates to Connectors section
-2. Admin selects a connector from catalog (e.g., "Shopify", "Zendesk")
-3. System displays required configuration fields (from `connectors.config_schema`)
-4. Admin enters connection details (API endpoint, etc.)
-5. Admin creates or selects a secret for credentials (secret is linked to connector)
-6. Admin saves the connector
-7. System validates connection (optional health check)
-8. Connector is now available, and its tools can be linked to agents
+2. Admin clicks "Add Connector"
+3. System displays connector catalog (from `connectors_catalog`)
+4. Admin selects a connector type (e.g., "Shopify", "Zendesk")
+5. System displays required configuration fields (from `connectors_catalog.config_schema`)
+6. Admin enters:
+   - Custom name (e.g., "Pizza Palace Shopify")
+   - Slug (unique identifier, e.g., "pizzapalace")
+   - Connection details (API endpoint, etc.)
+7. Admin creates or selects a secret for credentials (secret is linked to this connector instance)
+8. Admin saves the connector instance
+9. System validates connection (optional health check)
+10. Connector instance is now available, and its tools can be linked to agents
 
 **Entities Involved:**
-- `connectors` (catalog)
-- `connector_tools` (instance)
+- `connectors_catalog` (read-only catalog)
+- `connectors` (org-specific instance)
+- `connector_tools` (tools for this instance)
 - `secrets` (linked via owner_type/owner_id)
 
 ---
@@ -633,21 +639,38 @@ When `agent_connector_tools.requires_confirmation = true`:
 
 ---
 
+### connectors_catalog
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| name | VARCHAR | Slack, Zendesk, Shopify, REST API, etc. |
+| slug | VARCHAR | **Unique** identifier (e.g., `zendesk`, `shopify`) |
+| description | TEXT | What this connector does |
+| connector_type | VARCHAR | api, webhook, database, messaging |
+| config_schema | JSONB | Required fields to configure an instance |
+| auth_methods | ARRAY | api_key, oauth2, basic, none |
+| icon_url | VARCHAR | Display icon |
+| is_active | BOOLEAN | Available in catalog |
+| created_at | TIMESTAMP | |
+
+**Note:** This is the global catalog of available connector types. Read-only for organizations.
+
+---
+
 ### connectors
 | Field | Type | Description |
 |-------|------|-------------|
 | id | UUID | Primary key |
 | organization_id | UUID | FK → organizations |
-| name | VARCHAR | Slack, Zendesk, REST API, etc. |
-| slug | VARCHAR | **Unique** identifier, used as tool name prefix |
-| description | TEXT | |
-| connector_type | VARCHAR | api, webhook, database, messaging |
-| config_schema | JSONB | Required fields to configure |
-| auth_methods | ARRAY | api_key, oauth2, basic, none |
+| connector_catalog_id | UUID | FK → connectors_catalog |
+| name | VARCHAR | Custom display name (e.g., "Pizza Palace Shopify") |
+| slug | VARCHAR | **Unique per org**, used as tool name prefix |
+| config | JSONB | Instance-specific configuration values |
 | is_active | BOOLEAN | |
 | created_at | TIMESTAMP | |
+| updated_at | TIMESTAMP | |
 
-**Note:** `slug` must be unique and is used to prefix all tools from this connector (e.g., `pizzapalace_add_to_cart`, `zendesk_create_ticket`). Secrets are linked to connectors via the `secrets` table using polymorphic ownership (`owner_type` + `owner_id`).
+**Note:** `slug` must be unique within the organization and is used to prefix all tools from this connector instance (e.g., `pizzapalace_add_to_cart`, `zendesk_create_ticket`). Secrets are linked to connectors via the `secrets` table using polymorphic ownership (`owner_type` + `owner_id`).
 
 ---
 
@@ -656,7 +679,7 @@ When `agent_connector_tools.requires_confirmation = true`:
 |-------|------|-------------|
 | id | UUID | Primary key |
 | organization_id | UUID | FK → organizations |
-| connector_id | UUID | FK → connectors |
+| connector_id | UUID | FK → connectors (instance) |
 | name | VARCHAR | Tool display name |
 | slug | VARCHAR | URL-friendly identifier |
 | description | TEXT | |
@@ -667,7 +690,7 @@ When `agent_connector_tools.requires_confirmation = true`:
 | created_at | TIMESTAMP | |
 | updated_at | TIMESTAMP | |
 
-**Note:** Tools inherit their authentication credentials from their parent connector's secret.
+**Note:** Tools belong to a configured connector instance and inherit authentication credentials from their parent connector's secret.
 
 ---
 
@@ -787,18 +810,23 @@ When `agent_connector_tools.requires_confirmation = true`:
 ## V1 Entity Relationships
 
 ```
-Organization
+ConnectorsCatalog (global, read-only)
     │
-    ├── Users
-    │
-    ├── Secrets ─────────────────┐
-    │   (owner_type: connector)  │
-    │   (owner_id: connector.id) │
-    │                            │
-    ├── Connectors ◄─────────────┘ (polymorphic link via owner_type/owner_id)
-    │     └── ConnectorTools
-    │
-    ├── Agents
+    └── defines schema for ──┐
+                             │
+Organization                 │
+    │                        │
+    ├── Users                │
+    │                        │
+    ├── Secrets ─────────────────────────┐
+    │   (owner_type: connector)          │
+    │   (owner_id: connector.id)         │
+    │                                    │
+    ├── Connectors (instances) ◄─────────┤ (polymorphic link)
+    │     │   └── FK → ConnectorsCatalog │
+    │     └── ConnectorTools             │
+    │                                    │
+    ├── Agents                           │
     │     ├── AgentConnectorTools → ConnectorTools
     │     └── Sessions
     │           ├── SessionMessages
