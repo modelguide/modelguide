@@ -9,7 +9,7 @@ This specification defines the REST API (FastAPI) and MCP (FastMCP) interfaces f
 **Key Concepts:**
 - Organizations provide multitenancy via Row-Level Security (RLS)
 - External AI agents authenticate using **API keys** (generated per agent, shown once)
-- **Connectors** are catalog items; **Connector Tools** are org-specific instances with credentials
+- **Connectors Catalog** is a global read-only registry from codebase; **Connectors** are org-specific configurations with credentials referenced via config JSONB
 - Connectors are exposed to agents via MCP protocol for tool discovery and execution
 - **Core MCP tools** are built-in platform tools (session management, escalation, CSAT)
 - Some MCP tools require user confirmation before execution (`requires_confirmation` flag)
@@ -30,17 +30,17 @@ This specification defines the REST API (FastAPI) and MCP (FastMCP) interfaces f
 ┌─────────────────────────────────────────────────────────────────┐
 │                    DATABASE (per org)                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │  Secrets    │  │   Agents    │  │  Agent Connectors       │ │
-│  │  (creds)    │  │  + API Keys │  │  (config + which tools  │ │
-│  │             │  │             │  │   + requires_confirm)   │ │
+│  │  Secrets    │  │   Agents    │  │  Connectors (config)    │ │
+│  │  (creds)    │  │  + API Keys │  │  (refs catalog + config │ │
+│  │             │  │             │  │   with secret UUIDs)    │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Connectors and their tools are defined in the codebase. The database stores:
+Connector definitions (tools, schemas) are in the codebase catalog. The database stores:
 - **Secrets**: Encrypted credentials for connector authentication
 - **Agents**: Agent configuration with API keys
-- **Agent Connectors**: Links agents to connectors with config and tool assignments
+- **Connectors**: Org-specific config linking to catalog entries, with secret UUIDs in config JSONB
 
 **Tool Naming Convention:**
 
@@ -78,11 +78,10 @@ X-Organization-ID: <organization_uuid>
 ```
 
 ### Agent MCP Authentication
-Agents authenticate using their unique `AGENT_KEY` (API key pattern).
+Agents authenticate using their unique `AGENT_KEY` (API key pattern). The agent key is unique per agent and sufficient to identify the agent - the system looks up the agent from the key hash.
 
 ```
 Authorization: Bearer <agent_key>
-X-Agent-ID: <agent_uuid>
 ```
 
 ---
@@ -964,10 +963,9 @@ The MCP server exposes connector tools to authenticated agents for discovery and
 **Authentication:**
 ```
 Authorization: Bearer <agent_key>
-X-Agent-ID: <agent_uuid>
 ```
 
-Only agents with valid AGENT_KEY can access MCP. Admin and Support users do not have MCP access.
+Only agents with valid AGENT_KEY can access MCP. The agent is identified from the key hash. Admin and Support users do not have MCP access.
 
 ---
 
@@ -1113,18 +1111,31 @@ Create a session for tracking the conversation. Returns a session_id used in all
 *Note: The session_id must be passed to all subsequent tool calls (e.g., `core_end_session`, connector tools).*
 
 #### `core_end_session`
-End the session (status: completed or abandoned).
+End the session with full message history (status: completed or abandoned).
 
 ```json
 {
   "name": "core_end_session",
-  "description": "End the session",
+  "description": "End the session with full message history",
   "input_schema": {
     "type": "object",
     "properties": {
-      "session_id": { "type": "string" }
+      "session_id": { "type": "string" },
+      "messages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "role": { "type": "string", "enum": ["user", "assistant", "system", "tool"] },
+            "content": { "type": "string" },
+            "timestamp": { "type": "string", "format": "date-time" },
+            "tool_calls": { "type": "array" }
+          },
+          "required": ["role", "content", "timestamp"]
+        }
+      }
     },
-    "required": ["session_id"]
+    "required": ["session_id", "messages"]
   }
 }
 ```
@@ -1409,28 +1420,24 @@ users
 ├── created_at
 └── updated_at
 
-connectors (catalog - global)
+connectors_catalog (global - from codebase, read-only)
 ├── id (PK)
 ├── name (display name)
 ├── slug (unique, used as tool prefix)
 ├── description
 ├── connector_type (api/webhook/database/messaging)
 ├── config_schema (JSONB)
+├── tools (JSONB - array of tool definitions)
 ├── auth_methods (ARRAY: api_key/oauth2/basic/none)
 ├── is_active
 └── created_at
 
-connector_tools (org-specific instances)
+connectors (org-specific configuration)
 ├── id (PK)
 ├── organization_id (FK) → RLS
-├── connector_id (FK)
-├── name (display name)
-├── slug (unique per org, becomes tool prefix)
-├── description
-├── tool_schema (JSONB - OpenAI function format)
-├── connection_config (JSONB - endpoint URLs, headers)
-├── secret_id (FK → secrets)
-├── timeout_seconds (default 30)
+├── connector_catalog_id (FK → connectors_catalog)
+├── config (JSONB - populated values, secret fields contain secret UUIDs)
+├── is_configured (computed: all required fields have values)
 ├── is_active
 ├── created_at
 └── updated_at
@@ -1475,7 +1482,8 @@ api_keys (agent authentication)
 agent_connector_tools (tool assignment)
 ├── id (PK)
 ├── agent_id (FK)
-├── connector_tool_id (FK)
+├── connector_id (FK → connectors)
+├── tool_name (references tool from catalog)
 ├── is_enabled
 ├── requires_confirmation
 └── created_at
@@ -1527,18 +1535,22 @@ session_feedback
 ### Entity Relationships
 
 ```
+ConnectorsCatalog (global, read-only from codebase)
+    │
+    └── defines tools and config_schema
+
 Organization
     │
     ├── Users
     │
     ├── Secrets
     │
-    ├── ConnectorTools → Connectors (catalog)
-    │         └── Secrets
+    ├── Connectors → ConnectorsCatalog
+    │       └── config JSONB contains secret UUIDs
     │
     ├── Agents
     │     ├── APIKeys
-    │     ├── AgentConnectorTools → ConnectorTools
+    │     ├── AgentConnectorTools → Connectors
     │     └── Sessions
     │           ├── SessionMessages
     │           └── SessionFeedback
