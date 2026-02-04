@@ -44,15 +44,17 @@ Connector definitions (tools, schemas) are in the codebase catalog. The database
 
 **Tool Naming Convention:**
 
-Tools are prefixed by the **connector name** (global):
+Tools are prefixed by the **connector instance slug** (unique per organization):
 
 ```
-{connector_name}_{tool_name}
+{connector.slug}_{tool_name}
 ```
+
+The connector slug is customizable per instance and defaults to the catalog connector name. This allows multiple instances of the same connector type with distinct tool names.
 
 Examples:
-- `medusa_add_to_cart` - medusa connector, add_to_cart tool
-- `zendesk_create_ticket` - zendesk connector, create_ticket tool
+- `medusa_add_to_cart` - medusa connector instance, add_to_cart tool
+- `zendesk_create_ticket` - zendesk connector instance, create_ticket tool
 - `core_create_session` - core (built-in) platform tool
 
 ---
@@ -418,12 +420,12 @@ GET /agents/{agent_id}
   "connectors": [
     {
       "connector_id": "uuid",
-      "connector_name": "medusa",
+      "connector_slug": "medusa",
       "tools": ["medusa_add_to_cart", "medusa_get_cart", "medusa_confirm_order"]
     },
     {
       "connector_id": "uuid",
-      "connector_name": "zendesk",
+      "connector_slug": "zendesk",
       "tools": ["zendesk_create_ticket"]
     }
   ],
@@ -513,7 +515,7 @@ GET /agents/{agent_id}/connectors
     {
       "id": "uuid",
       "connector_id": "uuid",
-      "connector_name": "medusa",
+      "connector_slug": "medusa",
       "tools": [
         {
           "name": "add_to_cart",
@@ -537,7 +539,7 @@ GET /agents/{agent_id}/connectors
 }
 ```
 
-*Note: Tool names are prefixed by connector name globally (e.g., `medusa_add_to_cart`).*
+*Note: Tool names are prefixed by connector instance slug (e.g., `medusa_add_to_cart`). The slug is customizable and defaults to the catalog connector name.*
 
 #### Assign Connector to Agent
 ```http
@@ -1066,16 +1068,18 @@ URI: tools://{tool_name}
 ### MCP Tools
 
 #### Tool Naming Convention
-Tools are prefixed by **connector name** (single underscore):
+Tools are prefixed by the **connector instance slug** (single underscore):
 
 ```
-{connector_name}_{tool_name}
+{connector.slug}_{tool_name}
 ```
+
+The connector slug is customizable per instance and defaults to the catalog connector name. This allows multiple instances of the same connector type with distinct tool names.
 
 Examples:
-- `medusa_add_to_cart` - medusa connector, add_to_cart tool
-- `medusa_confirm_order` - medusa connector, confirm_order tool
-- `zendesk_create_ticket` - zendesk connector, create_ticket tool
+- `medusa_add_to_cart` - medusa connector instance, add_to_cart tool
+- `medusa_confirm_order` - medusa connector instance, confirm_order tool
+- `zendesk_create_ticket` - zendesk connector instance, create_ticket tool
 - `core_create_session` - core (built-in) platform tool
 
 ---
@@ -1203,7 +1207,7 @@ Record CSAT rating from customer.
 
 All connector tools follow a standard pattern:
 
-**Tool Name:** `{connector}__{action}`
+**Tool Name:** `{connector.slug}_{action}`
 
 **Input Schema:** Defined by connector tool
 
@@ -1246,7 +1250,7 @@ All connector tools follow a standard pattern:
   },
   "metadata": {
     "execution_time_ms": 150,
-    "connector": "shopify",
+    "connector": "medusa",
     "tool": "add_to_cart"
   }
 }
@@ -1260,7 +1264,7 @@ All connector tools follow a standard pattern:
   "confirmation_id": "conf_xxxxx",
   "confirmation_message": "This action requires user confirmation",
   "action_summary": {
-    "tool": "shopify__confirm_order",
+    "tool": "medusa_confirm_order",
     "description": "Confirm order for $34.74",
     "parameters": {
       "draft_order_id": "draft_789",
@@ -1299,7 +1303,7 @@ When the agent receives user confirmation, it calls the tool again with `confirm
 
 ### Connector-Specific Tools
 
-Tool names are prefixed by the **connector name** (global). Examples:
+Tool names are prefixed by the **connector instance slug**. The examples below use the catalog connector name as the slug (which is the default). The slug can be customized per connector instance (e.g., `pizzapalace_add_to_cart` for a Medusa instance with slug `pizzapalace`).
 
 #### Medusa Connector Tools
 
@@ -1383,180 +1387,9 @@ Based on [Medusa Store API](https://docs.medusajs.com/api/store):
 
 ---
 
-## Database Schema (Reference)
+## Database Schema
 
-Based on V1 schema from PRD.
-
-### Row-Level Security
-
-All tables with `organization_id` implement RLS:
-
-```sql
-ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY agents_org_isolation ON agents
-  USING (organization_id = current_setting('app.current_org_id')::uuid);
-```
-
-### Key Tables
-
-```
-organizations
-├── id (PK)
-├── name
-├── slug (unique, URL-friendly)
-├── settings (JSONB)
-├── created_at
-└── updated_at
-
-users
-├── id (PK)
-├── organization_id (FK) → RLS
-├── email
-├── name
-├── role (admin/support)
-├── is_active
-├── last_login_at
-├── created_at
-└── updated_at
-
-connectors_catalog (global - from codebase, read-only)
-├── id (PK)
-├── name (display name)
-├── slug (unique, used as tool prefix)
-├── description
-├── connector_type (api/webhook/database/messaging)
-├── config_schema (JSONB)
-├── tools (JSONB - array of tool definitions)
-├── auth_methods (ARRAY: api_key/oauth2/basic/none)
-├── is_active
-└── created_at
-
-connectors (org-specific configuration)
-├── id (PK)
-├── organization_id (FK) → RLS
-├── connector_catalog_id (FK → connectors_catalog)
-├── config (JSONB - populated values, secret fields contain secret UUIDs)
-├── is_configured (computed: all required fields have values)
-├── is_active
-├── created_at
-└── updated_at
-
-secrets (encrypted credentials)
-├── id (PK)
-├── organization_id (FK) → RLS
-├── name
-├── secret_type (api_key/oauth_token/credentials)
-├── secret_ref (KMS reference or encrypted value)
-├── expires_at
-├── created_at
-└── updated_at
-
-agents
-├── id (PK)
-├── organization_id (FK) → RLS
-├── name
-├── description
-├── agent_type (voice for V1)
-├── is_active
-├── system_prompt
-├── tags (ARRAY)
-├── metadata (JSONB)
-├── created_by (FK → users)
-├── created_at
-└── updated_at
-
-api_keys (agent authentication)
-├── id (PK)
-├── organization_id (FK) → RLS
-├── agent_id (FK → agents, nullable for org-level keys)
-├── name
-├── key_hash (SHA-256)
-├── key_prefix (first chars for identification)
-├── is_active
-├── expires_at
-├── last_used_at
-├── created_by (FK → users)
-└── created_at
-
-agent_connector_tools (tool assignment)
-├── id (PK)
-├── agent_id (FK)
-├── connector_id (FK → connectors)
-├── tool_name (references tool from catalog)
-├── is_enabled
-├── requires_confirmation
-└── created_at
-
-sessions
-├── id (PK)
-├── organization_id (FK) → RLS
-├── agent_id (FK)
-├── external_id (external voice platform session ID)
-├── channel_type (voice/web/api/slack/widget)
-├── user_identifier
-├── user_metadata (JSONB)
-├── status (active/completed/escalated/abandoned)
-├── escalation_ref (external ticket ID)
-├── started_at
-├── ended_at
-└── metadata (JSONB)
-
-session_messages
-├── id (PK)
-├── session_id (FK)
-├── role (user/assistant/system/tool)
-├── content (transcript for voice)
-├── audio_url
-├── audio_duration_ms
-├── tool_call_id
-├── tool_name
-├── tool_input (JSONB)
-├── tool_output (JSONB)
-├── model_used
-├── tokens_used
-├── latency_ms
-├── sequence_number
-└── created_at
-
-session_feedback
-├── id (PK)
-├── session_id (FK)
-├── message_id (FK, nullable)
-├── rating (1=negative, 2=positive)
-├── comment
-├── feedback_source (customer/support/system)
-├── feedback_ref
-├── feedback_tags (ARRAY)
-├── user_identifier
-└── created_at
-```
-
-### Entity Relationships
-
-```
-ConnectorsCatalog (global, read-only from codebase)
-    │
-    └── defines tools and config_schema
-
-Organization
-    │
-    ├── Users
-    │
-    ├── Secrets
-    │
-    ├── Connectors → ConnectorsCatalog
-    │       └── config JSONB contains secret UUIDs
-    │
-    ├── Agents
-    │     ├── APIKeys
-    │     ├── AgentConnectorTools → Connectors
-    │     └── Sessions
-    │           ├── SessionMessages
-    │           └── SessionFeedback
-    │
-    └── APIKeys (org-level)
-```
+See [Database Schema](./DB_SCHEMA.md) for the complete database schema.
 
 ---
 
