@@ -1,0 +1,345 @@
+/**
+ * Application error codes and error handling utilities
+ */
+
+export const ErrorCode = {
+  // Authentication
+  UNAUTHORIZED: "UNAUTHORIZED",
+  FORBIDDEN: "FORBIDDEN",
+  INVALID_TOKEN: "INVALID_TOKEN",
+  TOKEN_EXPIRED: "TOKEN_EXPIRED",
+
+  // Agent errors
+  AGENT_NOT_FOUND: "AGENT_NOT_FOUND",
+  AGENT_INACTIVE: "AGENT_INACTIVE",
+  AGENT_KEY_INVALID: "AGENT_KEY_INVALID",
+  AGENT_KEY_EXPIRED: "AGENT_KEY_EXPIRED",
+
+  // User errors
+  USER_NOT_FOUND: "USER_NOT_FOUND",
+  USER_INACTIVE: "USER_INACTIVE",
+  USER_EMAIL_EXISTS: "USER_EMAIL_EXISTS",
+
+  // Organization errors
+  ORGANIZATION_NOT_FOUND: "ORGANIZATION_NOT_FOUND",
+  ORGANIZATION_HEADER_REQUIRED: "ORGANIZATION_HEADER_REQUIRED",
+
+  // Resource errors
+  NOT_FOUND: "NOT_FOUND",
+  CONFLICT: "CONFLICT",
+  ALREADY_EXISTS: "ALREADY_EXISTS",
+
+  // Validation
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  INVALID_INPUT: "INVALID_INPUT",
+
+  // Magic link
+  MAGIC_TOKEN_INVALID: "MAGIC_TOKEN_INVALID",
+  MAGIC_TOKEN_EXPIRED: "MAGIC_TOKEN_EXPIRED",
+  MAGIC_TOKEN_USED: "MAGIC_TOKEN_USED",
+
+  // Connector errors
+  CONNECTOR_NOT_FOUND: "CONNECTOR_NOT_FOUND",
+  CONNECTOR_NOT_CONFIGURED: "CONNECTOR_NOT_CONFIGURED",
+  CONNECTOR_INACTIVE: "CONNECTOR_INACTIVE",
+
+  // Tool errors
+  TOOL_NOT_FOUND: "TOOL_NOT_FOUND",
+  TOOL_INACTIVE: "TOOL_INACTIVE",
+  TOOL_EXECUTION_FAILED: "TOOL_EXECUTION_FAILED",
+
+  // Session errors
+  SESSION_NOT_FOUND: "SESSION_NOT_FOUND",
+  SESSION_ALREADY_ENDED: "SESSION_ALREADY_ENDED",
+
+  // Server errors
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
+} as const;
+
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+/**
+ * Maps error codes to HTTP status codes
+ */
+const statusCodeMap: Record<ErrorCode, number> = {
+  // 401 Unauthorized
+  [ErrorCode.UNAUTHORIZED]: 401,
+  [ErrorCode.INVALID_TOKEN]: 401,
+  [ErrorCode.TOKEN_EXPIRED]: 401,
+  [ErrorCode.AGENT_KEY_INVALID]: 401,
+  [ErrorCode.AGENT_KEY_EXPIRED]: 401,
+  [ErrorCode.MAGIC_TOKEN_INVALID]: 401,
+  [ErrorCode.MAGIC_TOKEN_EXPIRED]: 401,
+  [ErrorCode.MAGIC_TOKEN_USED]: 401,
+
+  // 403 Forbidden
+  [ErrorCode.FORBIDDEN]: 403,
+  [ErrorCode.AGENT_INACTIVE]: 403,
+  [ErrorCode.USER_INACTIVE]: 403,
+
+  // 404 Not Found
+  [ErrorCode.NOT_FOUND]: 404,
+  [ErrorCode.AGENT_NOT_FOUND]: 404,
+  [ErrorCode.USER_NOT_FOUND]: 404,
+  [ErrorCode.ORGANIZATION_NOT_FOUND]: 404,
+  [ErrorCode.CONNECTOR_NOT_FOUND]: 404,
+  [ErrorCode.TOOL_NOT_FOUND]: 404,
+  [ErrorCode.SESSION_NOT_FOUND]: 404,
+
+  // 409 Conflict
+  [ErrorCode.CONFLICT]: 409,
+  [ErrorCode.ALREADY_EXISTS]: 409,
+  [ErrorCode.USER_EMAIL_EXISTS]: 409,
+  [ErrorCode.SESSION_ALREADY_ENDED]: 409,
+
+  // 400 Bad Request
+  [ErrorCode.VALIDATION_ERROR]: 400,
+  [ErrorCode.INVALID_INPUT]: 400,
+  [ErrorCode.ORGANIZATION_HEADER_REQUIRED]: 400,
+  [ErrorCode.CONNECTOR_NOT_CONFIGURED]: 400,
+  [ErrorCode.CONNECTOR_INACTIVE]: 400,
+  [ErrorCode.TOOL_INACTIVE]: 400,
+
+  // 500 Internal Server Error
+  [ErrorCode.INTERNAL_ERROR]: 500,
+  [ErrorCode.TOOL_EXECUTION_FAILED]: 500,
+  [ErrorCode.SERVICE_UNAVAILABLE]: 503,
+};
+
+/**
+ * Custom application error class
+ */
+export class AppError extends Error {
+  public readonly code: ErrorCode;
+  public readonly status: number;
+  public readonly details?: Record<string, unknown>;
+
+  constructor(
+    code: ErrorCode,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "AppError";
+    this.code = code;
+    this.status = statusCodeMap[code] ?? 500;
+    this.details = details;
+
+    // Maintains proper stack trace for where error was thrown
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+
+  toJSON() {
+    return {
+      code: this.code,
+      message: this.message,
+      ...(this.details && { details: this.details }),
+    };
+  }
+}
+
+/**
+ * Factory functions for common errors
+ */
+export const Errors = {
+  // Authentication
+  unauthorized(message = "Authentication required") {
+    return new AppError(ErrorCode.UNAUTHORIZED, message);
+  },
+
+  forbidden(message = "Access denied") {
+    return new AppError(ErrorCode.FORBIDDEN, message);
+  },
+
+  invalidToken(message = "Invalid authentication token") {
+    return new AppError(ErrorCode.INVALID_TOKEN, message);
+  },
+
+  tokenExpired(message = "Authentication token has expired") {
+    return new AppError(ErrorCode.TOKEN_EXPIRED, message);
+  },
+
+  // Generic
+  notFound(resource: string, id?: string) {
+    const message = id
+      ? `${resource} not found: ${id}`
+      : `${resource} not found`;
+    return new AppError(ErrorCode.NOT_FOUND, message);
+  },
+
+  conflict(message: string) {
+    return new AppError(ErrorCode.CONFLICT, message);
+  },
+
+  alreadyExists(resource: string, field?: string) {
+    const message = field
+      ? `${resource} with this ${field} already exists`
+      : `${resource} already exists`;
+    return new AppError(ErrorCode.ALREADY_EXISTS, message);
+  },
+
+  validationError(message: string, details?: Record<string, unknown>) {
+    return new AppError(ErrorCode.VALIDATION_ERROR, message, details);
+  },
+
+  invalidInput(message: string, details?: Record<string, unknown>) {
+    return new AppError(ErrorCode.INVALID_INPUT, message, details);
+  },
+
+  // Agent
+  agentNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.AGENT_NOT_FOUND,
+      id ? `Agent not found: ${id}` : "Agent not found",
+    );
+  },
+
+  agentInactive(id?: string) {
+    return new AppError(
+      ErrorCode.AGENT_INACTIVE,
+      id ? `Agent is inactive: ${id}` : "Agent is inactive",
+    );
+  },
+
+  agentKeyInvalid() {
+    return new AppError(ErrorCode.AGENT_KEY_INVALID, "Invalid API key");
+  },
+
+  agentKeyExpired() {
+    return new AppError(ErrorCode.AGENT_KEY_EXPIRED, "API key has expired");
+  },
+
+  // User
+  userNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.USER_NOT_FOUND,
+      id ? `User not found: ${id}` : "User not found",
+    );
+  },
+
+  userInactive() {
+    return new AppError(ErrorCode.USER_INACTIVE, "User account is inactive");
+  },
+
+  userEmailExists(email: string) {
+    return new AppError(
+      ErrorCode.USER_EMAIL_EXISTS,
+      `User with email ${email} already exists`,
+    );
+  },
+
+  // Organization
+  organizationNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.ORGANIZATION_NOT_FOUND,
+      id ? `Organization not found: ${id}` : "Organization not found",
+    );
+  },
+
+  organizationHeaderRequired() {
+    return new AppError(
+      ErrorCode.ORGANIZATION_HEADER_REQUIRED,
+      "X-Organization-ID header is required",
+    );
+  },
+
+  // Magic link
+  magicTokenInvalid() {
+    return new AppError(
+      ErrorCode.MAGIC_TOKEN_INVALID,
+      "Invalid magic link token",
+    );
+  },
+
+  magicTokenExpired() {
+    return new AppError(
+      ErrorCode.MAGIC_TOKEN_EXPIRED,
+      "Magic link has expired",
+    );
+  },
+
+  magicTokenUsed() {
+    return new AppError(
+      ErrorCode.MAGIC_TOKEN_USED,
+      "Magic link has already been used",
+    );
+  },
+
+  // Connector
+  connectorNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.CONNECTOR_NOT_FOUND,
+      id ? `Connector not found: ${id}` : "Connector not found",
+    );
+  },
+
+  connectorNotConfigured(id?: string) {
+    return new AppError(
+      ErrorCode.CONNECTOR_NOT_CONFIGURED,
+      id ? `Connector not configured: ${id}` : "Connector is not configured",
+    );
+  },
+
+  connectorInactive(id?: string) {
+    return new AppError(
+      ErrorCode.CONNECTOR_INACTIVE,
+      id ? `Connector is inactive: ${id}` : "Connector is inactive",
+    );
+  },
+
+  // Tool
+  toolNotFound(name?: string) {
+    return new AppError(
+      ErrorCode.TOOL_NOT_FOUND,
+      name ? `Tool not found: ${name}` : "Tool not found",
+    );
+  },
+
+  toolInactive(name?: string) {
+    return new AppError(
+      ErrorCode.TOOL_INACTIVE,
+      name ? `Tool is inactive: ${name}` : "Tool is inactive",
+    );
+  },
+
+  toolExecutionFailed(name: string, reason?: string) {
+    return new AppError(
+      ErrorCode.TOOL_EXECUTION_FAILED,
+      reason
+        ? `Tool execution failed (${name}): ${reason}`
+        : `Tool execution failed: ${name}`,
+    );
+  },
+
+  // Session
+  sessionNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.SESSION_NOT_FOUND,
+      id ? `Session not found: ${id}` : "Session not found",
+    );
+  },
+
+  sessionAlreadyEnded(id?: string) {
+    return new AppError(
+      ErrorCode.SESSION_ALREADY_ENDED,
+      id ? `Session already ended: ${id}` : "Session has already ended",
+    );
+  },
+
+  // Server
+  internal(message = "Internal server error") {
+    return new AppError(ErrorCode.INTERNAL_ERROR, message);
+  },
+
+  serviceUnavailable(message = "Service temporarily unavailable") {
+    return new AppError(ErrorCode.SERVICE_UNAVAILABLE, message);
+  },
+};
+
+/**
+ * Type guard to check if an error is an AppError
+ */
+export function isAppError(error: unknown): error is AppError {
+  return error instanceof AppError;
+}

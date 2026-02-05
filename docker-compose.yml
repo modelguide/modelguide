@@ -10,6 +10,7 @@ services:
       - "5434:5432"
     volumes:
       - modelguide_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U modelguide -d modelguide"]
       interval: 10s

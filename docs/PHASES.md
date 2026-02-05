@@ -18,15 +18,16 @@ Core platform features: Database (core tables), Auth, Organizations, Users, Secr
 
 ---
 
-## S1-Phase 1: Database Schema (Core Tables)
+## S1-Phase 1: Database Schema (Core Tables) ✅ IMPLEMENTED
 
 ### 1.1 Core Database Schema
-**File:** `src/db/schema/core.ts`
+**Files:** `src/db/schema/core.ts`, `src/db/schema/enums.ts`, `src/db/schema/index.ts`
 **Reference:** `docs/DB_SCHEMA.md`
 
-Create Drizzle ORM schema definitions for core tables:
+Implemented Drizzle ORM schema definitions for core tables:
 - `organizations` - Multitenancy root entity
 - `users` - Platform users (admin, support)
+- `magic_tokens` - Passwordless auth tokens
 - `connectors_catalog` - Global connector registry (read-only)
 - `connectors` - Org-specific connector instances
 - `connector_tools` - Tools available per connector instance
@@ -34,55 +35,110 @@ Create Drizzle ORM schema definitions for core tables:
 - `agents` - AI agent configurations
 - `api_keys` - Agent authentication keys
 - `agent_connector_tools` - Agent-to-tool assignments
+- `sessions` - Conversation sessions
+- `session_messages` - Individual messages
+- `session_feedback` - CSAT and evaluations
 
-Include indexes: key_hash, (owner_type, owner_id)
+Enums: `user_role`, `connector_type`, `agent_type`, `secret_type`, `owner_type`, `channel_type`, `session_status`, `message_role`, `feedback_source`
 
-### 1.2 Generate & Run Core Migrations
+### 1.2 Database Commands
 ```bash
-make db-generate
-make db-migrate
+make db-up        # Start PostgreSQL container
+make db-push      # Push schema changes (dev)
+make db-generate  # Generate migrations
+make db-migrate   # Run migrations
+make db-seed      # Seed test data
 ```
 
-### 1.3 Shared Utilities
+### 1.3 Seed Data
+**Files:** `src/db/seed/index.ts`, `src/db/seed/connectors-catalog.ts`
+
+Test data includes:
+- **Organization:** Test Organization (slug: `test-org`)
+- **Users:** `admin@test-org.com` (admin), `support@test-org.com` (support)
+- **Connectors Catalog:** Medusa (8 tools), Zendesk (5 tools)
+- **Connector Instance:** Pizza Palace Store (slug: `pizzapalace`)
+- **Agent:** Pizza Order Agent (voice)
+- **API Key:** Generated for agent (shown once during seed)
+
+### 1.4 Shared Utilities
 **Directory:** `src/lib/`
 
-- `src/lib/errors.ts` - Custom error classes and error codes (ref: api-spec.md "Error Codes")
-- `src/lib/crypto.ts` - API key generation (mgk_xxx prefix), hashing (SHA-256), secret encryption
-- `src/lib/pagination.ts` - Pagination helpers for list endpoints
+- `src/lib/errors.ts` - Custom error classes, error codes, factory functions
+- `src/lib/crypto.ts` - API key generation (mgk_xxx), hashing (SHA-256), secret encryption (AES-256-GCM)
+- `src/lib/pagination.ts` - Pagination schema, helpers, response builders
 
 ---
 
-## S1-Phase 2: Authentication & Authorization
+## S1-Phase 2: Authentication & Authorization ✅ IMPLEMENTED
 
-### 2.1 Authentication Middleware
+### 2.1 Magic Link Authentication (Admin/Support)
+**Directory:** `src/features/users/`
+**Files:** `auth.routes.ts`, `auth.service.ts`
+
+Implemented passwordless authentication via magic links:
+
+**Endpoints:**
+- `POST /api/auth/login` - Request magic link (sends to console in dev)
+- `GET /api/auth/verify?token=xxx` - Verify token, get JWT
+- `GET /api/auth/me` - Get current user (requires JWT)
+- `POST /api/auth/logout` - Logout (stateless)
+
+**Security features:**
+- Single-use tokens (marked as used after verification)
+- Token expiration (configurable, default 15 minutes)
+- Atomic concurrent verification handling
+- No email enumeration (same response for valid/invalid users)
+
+### 2.2 Authentication Middleware
 **Directory:** `src/lib/middleware/`
-**Reference:** `docs/api-spec.md` "Authentication" section
+**Files:** `auth.ts`, `index.ts`
 
-Implement two authentication modes:
+Implemented two authentication modes:
 1. **JWT Authentication** (Admin/Support)
    - Parse `Authorization: Bearer <jwt_token>` header
-   - Validate JWT and extract user info
-   - Parse `X-Organization-ID` header for org context
+   - Validate JWT using `jose` library (HS256)
+   - Extract user info and organization context
 
 2. **API Key Authentication** (Agents)
-   - Parse `Authorization: Bearer <agent_key>` header
+   - Parse `Authorization: Bearer <agent_key>` header (mgk_ prefix)
    - Hash key and lookup in `api_keys` table
    - Validate key is active and not expired
    - Extract agent_id and organization_id
 
-### 2.2 RLS Context Setup
-Set PostgreSQL session variables for Row-Level Security:
+### 2.3 Role-Based Access Control
+**Directory:** `src/lib/middleware/`
+**File:** `rbac.ts`
+
+Implemented permission-based RBAC:
+- `hasPermission(role, permission)` - Check single permission
+- `hasAllPermissions(role, permissions)` - Check all permissions
+- `hasAnyPermission(role, permissions)` - Check any permission
+- `getPermissionsForRole(role)` - Get all permissions for a role
+
+Permission categories: agents, connectors, secrets, users, sessions, feedback, analytics
+
+### 2.4 RLS Context Setup
+**File:** `src/lib/middleware/rls.ts`
+
+Prepared for PostgreSQL RLS:
 ```sql
 SET app.organization_id = '<org_uuid>';
 ```
 
-### 2.3 Role-Based Access Control
-**Reference:** `docs/PRD.md` "Personas × Permissions Matrix"
+### 2.5 Supporting Libraries
+**Directory:** `src/lib/`
 
-Implement role checking middleware for:
-- Admin: Full access
-- Support: Read-only sessions, can create feedback, view analytics
-- Agent: MCP access only, session management
+- `jwt.ts` - JWT generation/verification using `jose`
+- `crypto.ts` - API key generation, hashing (SHA-256), magic token generation
+- `magic-link.ts` - Magic link creation, URL building, expiration checking
+- `errors.ts` - Error codes and AppError class
+
+### 2.6 Tests
+**Directory:** `tests/`
+
+- Unit tests: `tests/unit/lib/` (crypto, errors, magic-link, pagination, rbac)
+- Integration tests: `tests/integration/auth.test.ts` (21 tests for auth API)
 
 ---
 
@@ -442,15 +498,15 @@ After integration complete:
 
 ## Stream 1: Core Platform (Independent)
 
-| Phase | Description | Key Files |
-|-------|-------------|-----------|
-| S1-P1 | Database Schema (Core) | `src/db/schema/core.ts` |
-| S1-P2 | Authentication | `src/lib/middleware/auth.ts` |
-| S1-P3 | Organizations & Users | `src/features/organizations/`, `src/features/users/` |
-| S1-P4 | Secrets | `src/features/secrets/` |
-| S1-P5 | Connectors + Implementations | `src/features/connectors/`, `implementations/medusa/`, `implementations/zendesk/` |
-| S1-P6 | Agents | `src/features/agents/` |
-| S1-P7 | MCP Server (Standalone) | `src/features/mcp/`, `src/app.ts` |
+| Phase | Description | Status | Key Files |
+|-------|-------------|--------|-----------|
+| S1-P1 | Database Schema (Core) | ✅ Done | `src/db/schema/core.ts`, `src/db/schema/enums.ts` |
+| S1-P2 | Authentication | ✅ Done | `src/features/users/auth.routes.ts`, `src/lib/middleware/auth.ts`, `src/lib/jwt.ts` |
+| S1-P3 | Organizations & Users | 🔲 TODO | `src/features/organizations/`, `src/features/users/` |
+| S1-P4 | Secrets | 🔲 TODO | `src/features/secrets/` |
+| S1-P5 | Connectors + Implementations | 🔲 TODO | `src/features/connectors/`, `implementations/medusa/`, `implementations/zendesk/` |
+| S1-P6 | Agents | 🔲 TODO | `src/features/agents/` |
+| S1-P7 | MCP Server (Standalone) | 🔲 TODO | `src/features/mcp/`, `src/app.ts` |
 
 ## Stream 2: Sessions & Analytics (Independent)
 
