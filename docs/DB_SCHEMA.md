@@ -59,6 +59,32 @@ Platform users (Admin, Support). Customers interact via agents, not the platform
 
 ---
 
+### magic_tokens
+
+Magic link tokens for passwordless authentication.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| user_id | UUID | FK → users |
+| token_hash | VARCHAR(64) | SHA-256 hash of the magic token |
+| expires_at | TIMESTAMP | Token expiration time |
+| used_at | TIMESTAMP | When token was used (null if unused) |
+| created_at | TIMESTAMP | |
+
+**Constraints:**
+- `token_hash` UNIQUE
+- Index on `user_id`
+
+**Notes:**
+- Tokens are single-use: once `used_at` is set, token cannot be used again
+- Token expiration is configurable (default: 15 minutes)
+- Only the hash is stored, not the actual token
+- Concurrent verification is handled atomically via conditional update
+- Expired tokens should be cleaned up periodically
+
+---
+
 ### connectors_catalog
 
 Global read-only registry of connector types. Defined in codebase, synced to DB.
@@ -410,6 +436,7 @@ ConnectorsCatalog (global, read-only)
 Organization                 │
     │                        │
     ├── Users                │
+    │     └── MagicTokens    │
     │                        │
     ├── Secrets ─────────────────────────┐
     │   (owner_type: connector)          │
@@ -453,6 +480,8 @@ Organization                 │
 
 | Table | Index | Purpose |
 |-------|-------|---------|
+| magic_tokens | `token_hash` | Fast token lookup during verification |
+| magic_tokens | `user_id` | Find tokens by user |
 | api_keys | `key_hash` | Fast authentication lookups |
 | secrets | `(owner_type, owner_id)` | Polymorphic ownership lookups |
 | sessions | `(agent_id, status)` | Session filtering |
