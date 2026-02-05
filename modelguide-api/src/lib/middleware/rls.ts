@@ -56,20 +56,11 @@ export function rlsMiddleware(): MiddlewareHandler<AppBindings> {
   return async (c, next) => {
     const organizationId = c.get("organizationId");
 
-    if (organizationId) {
-      // Set RLS context at the start of the request
-      await setRLSContext(organizationId);
-
-      try {
-        await next();
-      } finally {
-        // Clear context at the end
-        await clearRLSContext();
-      }
-    } else {
-      // No organization context, just continue
-      await next();
+    if (!organizationId) {
+      return next();
     }
+
+    await withRLSContext(organizationId, () => next());
   };
 }
 
@@ -98,7 +89,6 @@ export async function withRLSBypass<T>(
   fn: (tx: typeof db) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    // Set bypass flag for this transaction only (true = transaction-local)
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`);
     return fn(tx as unknown as typeof db);
   });

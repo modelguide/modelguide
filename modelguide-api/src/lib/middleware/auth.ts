@@ -41,7 +41,6 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
 
   const keyHash = hashApiKey(key);
 
-  // Find API key by hash
   const result = await db
     .select({
       apiKey: apiKeys,
@@ -58,38 +57,29 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
 
   const { apiKey, agent } = result[0];
 
-  // Check if API key is active
   if (!apiKey.isActive) {
     return null;
   }
 
-  // Check if API key has expired
   if (apiKey.expiresAt && new Date() > apiKey.expiresAt) {
     return null;
   }
 
   // If API key is scoped to an agent, the agent must exist and be active
-  if (apiKey.agentId && !agent) {
+  if (apiKey.agentId && (!agent || !agent.isActive)) {
     return null;
   }
 
-  if (agent && !agent.isActive) {
-    return null;
-  }
-
-  // Update last used timestamp (fire and forget)
   db.update(apiKeys)
     .set({ lastUsedAt: new Date() })
     .where(eq(apiKeys.id, apiKey.id))
     .execute()
     .catch((err) => {
-      // Log in development, silent in production
       if (process.env.NODE_ENV === "development") {
         console.warn("Failed to update API key lastUsedAt:", err.message);
       }
     });
 
-  // Return agent context if scoped to agent
   if (agent) {
     return {
       id: agent.id,
@@ -100,8 +90,6 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
     };
   }
 
-  // For org-wide API keys without agent scope, we don't return an agent context
-  // These keys are typically used for admin API access, not MCP
   return null;
 }
 
@@ -114,28 +102,22 @@ export function authMiddleware(): MiddlewareHandler<AppBindings> {
     const authHeader = c.req.header(AUTHORIZATION_HEADER);
     const orgHeader = c.req.header(ORGANIZATION_HEADER);
 
-    // Default to no authentication
     let authContext: AuthContext = { type: "none" };
     let organizationId: string | null = orgHeader || null;
 
-    // Try to authenticate if Authorization header is present
     const token = extractBearerToken(authHeader);
 
     if (token) {
       if (isApiKey(token)) {
-        // API key authentication
         const agent = await verifyApiKey(token);
         if (agent) {
           authContext = { type: "agent", agent };
-          // API key auth sets org from the agent
           organizationId = agent.organizationId;
         }
       } else {
-        // JWT authentication
         const user = await verifyJWT(token);
         if (user) {
           authContext = { type: "user", user };
-          // JWT auth uses org from token, but can be overridden by header for admin users
           if (!organizationId) {
             organizationId = user.organizationId;
           }
@@ -143,7 +125,6 @@ export function authMiddleware(): MiddlewareHandler<AppBindings> {
       }
     }
 
-    // Set context variables
     c.set("auth", authContext);
     c.set("organizationId", organizationId);
 
@@ -177,10 +158,6 @@ export function requireUser(): MiddlewareHandler<AppBindings> {
       throw Errors.unauthorized("User authentication required");
     }
 
-    if (!auth.user) {
-      throw Errors.unauthorized();
-    }
-
     await next();
   };
 }
@@ -195,10 +172,6 @@ export function requireAgent(): MiddlewareHandler<AppBindings> {
 
     if (auth.type !== "agent") {
       throw Errors.unauthorized("Agent authentication required");
-    }
-
-    if (!auth.agent) {
-      throw Errors.agentKeyInvalid();
     }
 
     if (!auth.agent.isActive) {

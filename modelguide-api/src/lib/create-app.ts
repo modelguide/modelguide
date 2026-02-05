@@ -27,10 +27,7 @@ export function createRouter() {
 export function createApp() {
   const app = createRouter();
 
-  // Apply authentication middleware globally
   app.use("*", authMiddleware());
-
-  // Apply RLS middleware after auth (requires organizationId from auth)
   app.use("*", rlsMiddleware());
 
   app.notFound((c) => {
@@ -44,16 +41,13 @@ export function createApp() {
   });
 
   app.onError((err, c) => {
-    // Handle AppError instances
     if (isAppError(err)) {
       const status = err.status as ContentfulStatusCode;
       return c.json(err.toJSON(), status);
     }
 
-    // Log unexpected errors
     console.error("Unhandled error:", err);
 
-    // Return generic error for unknown errors
     return c.json(
       {
         code: ErrorCode.INTERNAL_ERROR,

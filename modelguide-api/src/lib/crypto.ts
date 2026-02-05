@@ -44,14 +44,20 @@ export function generateApiKey(): GeneratedApiKey {
 }
 
 /**
- * Computes SHA-256 hash of an API key
+ * Computes SHA-256 hex digest of input string
  */
-export function hashApiKey(key: string): string {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(key);
+function sha256Hex(input: string): string {
+  const data = new TextEncoder().encode(input);
   const sha256 = new Bun.CryptoHasher("sha256");
   sha256.update(data);
   return sha256.digest("hex");
+}
+
+/**
+ * Computes SHA-256 hash of an API key
+ */
+export function hashApiKey(key: string): string {
+  return sha256Hex(key);
 }
 
 /**
@@ -173,9 +179,5 @@ export function generateMagicToken(): string {
  * Hashes a magic token for storage
  */
 export function hashMagicToken(token: string): string {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const sha256 = new Bun.CryptoHasher("sha256");
-  sha256.update(data);
-  return sha256.digest("hex");
+  return sha256Hex(token);
 }

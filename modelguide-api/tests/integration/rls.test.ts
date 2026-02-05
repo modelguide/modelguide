@@ -11,7 +11,6 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { db } from "@db/client";
-import type { Database } from "@db/client";
 import {
   agents,
   apiKeys,
@@ -23,36 +22,11 @@ import {
   sessions,
   users,
 } from "@db/schema";
-import { eq, sql } from "drizzle-orm";
-
-/**
- * Execute a function within a transaction with RLS context set.
- * This ensures set_config and queries run on the same connection.
- */
-async function withRLSTransaction<T>(
-  organizationId: string,
-  fn: (tx: Database) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT set_config('app.organization_id', ${organizationId}, true)`,
-    );
-    return fn(tx as unknown as Database);
-  });
-}
-
-/**
- * Execute a function within a transaction WITHOUT RLS context (empty org_id).
- * This simulates no authentication context.
- */
-async function withoutRLSTransaction<T>(
-  fn: (tx: Database) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.organization_id', '', true)`);
-    return fn(tx as unknown as Database);
-  });
-}
+import { eq, inArray, sql } from "drizzle-orm";
+import {
+  withRLSTransaction,
+  withoutRLSTransaction,
+} from "../helpers/rls";
 
 // Test fixtures
 let orgAId: string;
@@ -256,36 +230,28 @@ beforeAll(async () => {
   });
 });
 
+async function cleanupOrgData(orgId: string): Promise<void> {
+  await withRLSTransaction(orgId, async (tx) => {
+    await tx.delete(sessions).where(eq(sessions.organizationId, orgId));
+    await tx.delete(apiKeys).where(eq(apiKeys.organizationId, orgId));
+    await tx.delete(secrets).where(eq(secrets.organizationId, orgId));
+    await tx
+      .delete(connectorTools)
+      .where(eq(connectorTools.organizationId, orgId));
+    await tx.delete(agents).where(eq(agents.organizationId, orgId));
+    await tx.delete(connectors).where(eq(connectors.organizationId, orgId));
+    await tx.delete(users).where(eq(users.organizationId, orgId));
+  });
+}
+
 afterAll(async () => {
-  // Clean up test data using RLS context for each org
-  await withRLSTransaction(orgAId, async (tx) => {
-    await tx.delete(sessions).where(eq(sessions.organizationId, orgAId));
-    await tx.delete(apiKeys).where(eq(apiKeys.organizationId, orgAId));
-    await tx.delete(secrets).where(eq(secrets.organizationId, orgAId));
-    await tx
-      .delete(connectorTools)
-      .where(eq(connectorTools.organizationId, orgAId));
-    await tx.delete(agents).where(eq(agents.organizationId, orgAId));
-    await tx.delete(connectors).where(eq(connectors.organizationId, orgAId));
-    await tx.delete(users).where(eq(users.organizationId, orgAId));
-  });
+  await cleanupOrgData(orgAId);
+  await cleanupOrgData(orgBId);
 
-  await withRLSTransaction(orgBId, async (tx) => {
-    await tx.delete(sessions).where(eq(sessions.organizationId, orgBId));
-    await tx.delete(apiKeys).where(eq(apiKeys.organizationId, orgBId));
-    await tx.delete(secrets).where(eq(secrets.organizationId, orgBId));
-    await tx
-      .delete(connectorTools)
-      .where(eq(connectorTools.organizationId, orgBId));
-    await tx.delete(agents).where(eq(agents.organizationId, orgBId));
-    await tx.delete(connectors).where(eq(connectors.organizationId, orgBId));
-    await tx.delete(users).where(eq(users.organizationId, orgBId));
-  });
-
-  // Clean up global data (no RLS)
   await db.delete(connectorsCatalog).where(eq(connectorsCatalog.id, catalogId));
-  await db.delete(organizations).where(eq(organizations.id, orgAId));
-  await db.delete(organizations).where(eq(organizations.id, orgBId));
+  await db
+    .delete(organizations)
+    .where(inArray(organizations.id, [orgAId, orgBId]));
 });
 
 // ============================================================================

@@ -1,10 +1,5 @@
 /**
  * Database seed script
- * Populates the database with initial data for development/testing
- */
-
-/**
- * Database seed script
  * Uses migration connection (superuser) to bypass RLS
  */
 

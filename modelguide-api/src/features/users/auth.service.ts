@@ -22,30 +22,25 @@ import { and, eq, isNull, lt } from "drizzle-orm";
  * Returns success even if user doesn't exist (to prevent enumeration)
  */
 export async function requestMagicLink(email: string): Promise<void> {
-  // Find user by email (bypass RLS since we don't know org yet)
   const user = await withRLSBypass((tx) =>
     tx.query.users.findFirst({
       where: eq(users.email, email.toLowerCase()),
     }),
   );
 
-  // If user doesn't exist or is inactive, silently succeed
-  // This prevents email enumeration attacks
+  // Silently succeed for non-existent/inactive users to prevent email enumeration
   if (!user || !user.isActive) {
     return;
   }
 
-  // Generate magic link
   const { tokenHash, link, expiresAt } = createMagicLink();
 
-  // Store token hash in database (magic_tokens has no RLS)
   await db.insert(magicTokens).values({
     userId: user.id,
     tokenHash,
     expiresAt,
   });
 
-  // Send magic link
   await sendMagicLink(user.email, link, user.name);
 }
 
@@ -59,7 +54,6 @@ export async function verifyMagicToken(token: string): Promise<{
 }> {
   const tokenHash = hashMagicToken(token);
 
-  // Find token by hash (magic_tokens has no RLS)
   const magicToken = await db.query.magicTokens.findFirst({
     where: eq(magicTokens.tokenHash, tokenHash),
   });
@@ -68,17 +62,14 @@ export async function verifyMagicToken(token: string): Promise<{
     throw Errors.magicTokenInvalid();
   }
 
-  // Check if token has been used
   if (isMagicTokenUsed(magicToken.usedAt)) {
     throw Errors.magicTokenUsed();
   }
 
-  // Check if token has expired
   if (isMagicTokenExpired(magicToken.expiresAt)) {
     throw Errors.magicTokenExpired();
   }
 
-  // Fetch user (bypass RLS since we don't have org context yet)
   const user = await withRLSBypass((tx) =>
     tx.query.users.findFirst({
       where: eq(users.id, magicToken.userId),
@@ -89,25 +80,21 @@ export async function verifyMagicToken(token: string): Promise<{
     throw Errors.magicTokenInvalid();
   }
 
-  // Check if user is still active
   if (!user.isActive) {
     throw Errors.userInactive();
   }
 
-  // Atomically mark token as used, preventing race conditions
-  // Only updates if token is still unused (usedAt IS NULL)
+  // Atomically mark token as used to prevent race conditions
   const updateResult = await db
     .update(magicTokens)
     .set({ usedAt: new Date() })
     .where(and(eq(magicTokens.id, magicToken.id), isNull(magicTokens.usedAt)))
     .returning({ id: magicTokens.id });
 
-  // If no rows were updated, token was used by a concurrent request
   if (updateResult.length === 0) {
     throw Errors.magicTokenUsed();
   }
 
-  // Update user's last login (bypass RLS)
   await withRLSBypass((tx) =>
     tx
       .update(users)
@@ -115,7 +102,6 @@ export async function verifyMagicToken(token: string): Promise<{
       .where(eq(users.id, user.id)),
   );
 
-  // Generate JWT
   const authUser: AuthUser = {
     id: user.id,
     email: user.email,

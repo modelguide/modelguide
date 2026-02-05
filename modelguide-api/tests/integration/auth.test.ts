@@ -7,26 +7,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
-import type { Database } from "@db/client";
 import { magicTokens, organizations, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { generateJWT } from "@lib/jwt";
-import { eq, sql } from "drizzle-orm";
-
-/**
- * Execute a function within a transaction with RLS context set.
- */
-async function withRLSTransaction<T>(
-  organizationId: string,
-  fn: (tx: Database) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT set_config('app.organization_id', ${organizationId}, true)`,
-    );
-    return fn(tx as unknown as Database);
-  });
-}
+import { eq } from "drizzle-orm";
+import { withRLSTransaction } from "../helpers/rls";
 
 // Test fixtures
 let testOrgId: string;

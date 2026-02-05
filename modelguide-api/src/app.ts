@@ -5,7 +5,6 @@ import { env } from "@/env";
 import { authRoutes } from "@features/users";
 import { createApp, createRouter } from "@lib/create-app";
 
-// Health check route
 const healthRoute = createRoute({
   method: "get",
   path: "/health",
@@ -26,7 +25,6 @@ const healthRoute = createRoute({
   },
 });
 
-// Create API router
 const apiRouter = createRouter();
 
 apiRouter.openapi(healthRoute, (c) => {
@@ -39,16 +37,11 @@ apiRouter.openapi(healthRoute, (c) => {
   );
 });
 
-// Mount auth routes
 apiRouter.route("/auth", authRoutes);
 
-// Create main app
 const app = createApp();
-
-// Mount API routes under /api
 app.route("/api", apiRouter);
 
-// OpenAPI spec
 app.doc("/openapi.json", {
   openapi: "3.1.0",
   info: {
@@ -64,7 +57,6 @@ app.doc("/openapi.json", {
   ],
 });
 
-// Scalar API documentation
 app.get(
   "/docs",
   apiReference({
@@ -77,9 +69,7 @@ app.get(
   }),
 );
 
-// MCP endpoint placeholder
 app.post("/mcp", async (c) => {
-  // MCP server implementation will be added in the mcp feature module
   return c.json({ message: "MCP endpoint - implementation pending" }, 501);
 });
 

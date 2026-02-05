@@ -90,7 +90,6 @@ const errorResponseSchema = z.object({
 // Routes
 // ============================================================================
 
-// POST /api/auth/login - Request magic link
 const loginRoute = createRoute({
   method: "post",
   path: "/login",
@@ -141,7 +140,6 @@ router.openapi(loginRoute, async (c) => {
   return c.json({ message: "Magic link sent" }, 200);
 });
 
-// GET /api/auth/verify - Verify magic link token
 const verifyRoute = createRoute({
   method: "get",
   path: "/verify",
@@ -191,7 +189,6 @@ router.openapi(verifyRoute, async (c) => {
   return c.json(result, 200);
 });
 
-// POST /api/auth/logout - Logout (optional, JWT is stateless)
 const logoutRoute = createRoute({
   method: "post",
   path: "/logout",
@@ -214,12 +211,9 @@ const logoutRoute = createRoute({
 });
 
 router.openapi(logoutRoute, async (c) => {
-  // JWT is stateless, so logout is handled client-side
-  // This endpoint exists for completeness and potential future token blacklisting
   return c.json({ message: "Logged out successfully" }, 200);
 });
 
-// GET /api/auth/me - Get current user
 const meRoute = createRoute({
   method: "get",
   path: "/me",
@@ -251,7 +245,6 @@ const meRoute = createRoute({
   },
 });
 
-// Apply middleware and handler separately
 router.use("/me", requireUser());
 router.openapi(meRoute, async (c) => {
   const user = getCurrentUser(c);
