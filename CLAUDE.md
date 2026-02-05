@@ -54,9 +54,8 @@ modelguide-api/src/
 ├── lib/                  # Shared utilities (createApp, createRouter)
 ├── types/                # Shared TypeScript types (AppBindings)
 └── features/             # Feature modules
-    ├── auth/             # JWT for Admin/Support, API key (mgk_xxx) for Agents
+    ├── users/            # User management, auth (JWT, API keys)
     ├── organization/     # Multitenancy, RLS context
-    ├── account/          # User accounts (admin, support roles)
     ├── agent/            # Agent CRUD, activation, API key generation
     ├── connector/        # Connector catalog, instances, tools
     ├── secret/           # Encrypted credentials storage
