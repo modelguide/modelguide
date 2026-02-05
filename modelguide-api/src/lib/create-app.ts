@@ -1,8 +1,9 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import type { Context } from "hono";
-import type { StatusCode } from "hono/utils/http-status";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 import type { AppBindings } from "@/types";
+import { ErrorCode, isAppError } from "@lib/errors";
+import { authMiddleware } from "@lib/middleware/auth";
 
 export function createRouter() {
   return new OpenAPIHono<AppBindings>({
@@ -12,9 +13,10 @@ export function createRouter() {
         return c.json(
           {
             success: false,
+            code: ErrorCode.VALIDATION_ERROR,
             error: result.error.flatten(),
           },
-          422
+          422,
         );
       }
     },
@@ -24,17 +26,39 @@ export function createRouter() {
 export function createApp() {
   const app = createRouter();
 
+  // Apply authentication middleware globally
+  app.use("*", authMiddleware());
+
   app.notFound((c) => {
-    return c.json({ message: "Not Found" }, 404);
+    return c.json(
+      {
+        code: ErrorCode.NOT_FOUND,
+        message: "Not Found",
+      },
+      404,
+    );
   });
 
   app.onError((err, c) => {
-    console.error(err);
+    // Handle AppError instances
+    if (isAppError(err)) {
+      const status = err.status as ContentfulStatusCode;
+      return c.json(err.toJSON(), status);
+    }
+
+    // Log unexpected errors
+    console.error("Unhandled error:", err);
+
+    // Return generic error for unknown errors
     return c.json(
       {
-        message: err.message || "Internal Server Error",
+        code: ErrorCode.INTERNAL_ERROR,
+        message:
+          process.env.NODE_ENV === "development"
+            ? err.message
+            : "Internal Server Error",
       },
-      500
+      500,
     );
   });
 

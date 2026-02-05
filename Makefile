@@ -1,4 +1,4 @@
-.PHONY: help install dev build start db-up db-down db-generate db-migrate db-push db-studio clean reset logs
+.PHONY: help install dev build start test typecheck lint format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
 
 .DEFAULT_GOAL := help
 
@@ -19,6 +19,18 @@ build: ## Build for production
 start: ## Run production build
 	cd modelguide-api && bun run start
 
+test: ## Run tests
+	cd modelguide-api && bun test
+
+typecheck: ## Run TypeScript type checking
+	cd modelguide-api && bun run typecheck
+
+lint: ## Run linter (with auto-fix)
+	cd modelguide-api && bun run lint
+
+format: ## Format code
+	cd modelguide-api && bun run format
+
 db-up: ## Start PostgreSQL container
 	docker compose up -d postgres
 
@@ -36,6 +48,9 @@ db-push: ## Push schema changes (dev only)
 
 db-studio: ## Open Drizzle Studio
 	cd modelguide-api && bun run db:studio
+
+db-seed: ## Seed database with test data
+	cd modelguide-api && bun run db:seed
 
 clean: ## Remove build artifacts
 	rm -rf modelguide-api/dist

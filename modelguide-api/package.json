@@ -6,10 +6,17 @@
     "dev": "bun run --hot src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run dist/index.js",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check --write .",
+    "lint:check": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "bun run src/db/seed/index.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^0.18.0",
@@ -17,10 +24,12 @@
     "@scalar/hono-api-reference": "^0.5.0",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0",
+    "jose": "^5.2.0",
     "postgres": "^3.4.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
     "@types/bun": "latest",
     "drizzle-kit": "^0.30.0",
     "typescript": "^5.7.0"

@@ -1,8 +1,9 @@
-import { apiReference } from "@scalar/hono-api-reference";
 import { createRoute, z } from "@hono/zod-openapi";
+import { apiReference } from "@scalar/hono-api-reference";
 
-import { createApp, createRouter } from "@lib/create-app";
 import { env } from "@/env";
+import { authRoutes } from "@features/users";
+import { createApp, createRouter } from "@lib/create-app";
 
 // Health check route
 const healthRoute = createRoute({
@@ -34,9 +35,12 @@ apiRouter.openapi(healthRoute, (c) => {
       status: "ok",
       timestamp: new Date().toISOString(),
     },
-    200
+    200,
   );
 });
+
+// Mount auth routes
+apiRouter.route("/auth", authRoutes);
 
 // Create main app
 const app = createApp();
@@ -70,7 +74,7 @@ app.get(
     theme: "kepler",
     layout: "modern",
     pageTitle: "ModelGuide API",
-  })
+  }),
 );
 
 // MCP endpoint placeholder
