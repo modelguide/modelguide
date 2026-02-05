@@ -102,3 +102,163 @@ Configured in tsconfig.json:
 - `@lib/*` → `./src/lib/*`
 - `@db/*` → `./src/db/*`
 - `@/*` → `./src/*`
+
+---
+
+## Dashboard UI (modelguide-ui)
+
+Admin and support dashboard built with TanStack Start. Located in `modelguide-ui/`.
+
+### UI Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| Framework | TanStack Start (SPA mode) |
+| Runtime | React 19, TypeScript 5.7+ |
+| Routing | TanStack Router (file-based) |
+| Data Fetching | TanStack Query |
+| State Management | Zustand with persist middleware |
+| Styling | Tailwind CSS v4 |
+| HTTP Client | ky |
+| API Mocking | MSW (Mock Service Worker) |
+| Charts | recharts |
+| Component Variants | class-variance-authority (cva) |
+
+### UI Commands
+
+```bash
+cd modelguide-ui
+npm run dev           # Start dev server (port 3001)
+npm run build         # Build for production
+npm run typecheck     # TypeScript check
+npm run lint          # Biome lint
+npm run lint:fix      # Auto-fix lint issues
+npm run test          # Run Vitest tests
+```
+
+### UI Directory Structure
+
+```
+modelguide-ui/src/
+├── routes/                    # File-based routing (TanStack Router)
+│   ├── __root.tsx             # Root layout with QueryClientProvider
+│   ├── _authenticated.tsx     # Protected layout with auth check
+│   ├── _authenticated/        # Protected routes
+│   │   ├── index.tsx          # Dashboard
+│   │   ├── sessions.tsx       # Sessions list
+│   │   ├── sessions.$id.tsx   # Session detail
+│   │   ├── agents.tsx         # Agents list
+│   │   ├── agents.$id.tsx     # Agent detail
+│   │   ├── agents.new.tsx     # Create agent
+│   │   ├── connectors.tsx     # Connectors grid
+│   │   ├── connectors.$id.tsx # Connector config
+│   │   ├── secrets.tsx        # Secrets management
+│   │   ├── analytics.tsx      # Analytics charts
+│   │   └── settings.tsx       # User settings
+│   └── login.tsx              # Login page
+├── components/
+│   ├── ui/                    # Reusable UI primitives
+│   │   ├── button.tsx         # Primary/secondary/ghost/danger variants
+│   │   ├── card.tsx           # Card, CardHeader, CardTitle, CardContent
+│   │   ├── input.tsx          # Input with label, error, hint
+│   │   ├── select.tsx         # Select dropdown
+│   │   ├── badge.tsx          # Status badges with dot indicator
+│   │   ├── avatar.tsx         # User avatar with initials fallback
+│   │   ├── spinner.tsx        # Loading indicator
+│   │   ├── dialog.tsx         # Modal wrapper
+│   │   ├── pagination.tsx     # Pagination controls
+│   │   ├── skeleton.tsx       # Loading placeholders
+│   │   └── empty-state.tsx    # No data states
+│   └── layout/
+│       ├── logo.tsx           # {model: guide} branding
+│       ├── sidebar.tsx        # Navigation with MAIN/ADMIN sections
+│       ├── header.tsx         # Top bar with user menu
+│       └── app-shell.tsx      # Sidebar + header + content
+├── features/                  # Feature-specific components
+│   ├── auth/components/       # Login form
+│   ├── dashboard/components/  # Stats cards, recent sessions
+│   ├── sessions/components/   # Sessions table, transcript, filters
+│   ├── agents/components/     # Agents table, API key modal
+│   ├── connectors/components/ # Connectors grid, config form
+│   ├── secrets/components/    # Secrets table, forms
+│   ├── analytics/components/  # Charts (trend, status, channel)
+│   └── settings/components/   # Profile, appearance, users
+├── stores/
+│   ├── auth.ts                # Zustand auth store with persist
+│   └── theme.ts               # Theme store (dark/light/system)
+├── schemas/                   # Zod schemas for type safety
+├── mocks/
+│   ├── browser.ts             # MSW worker setup
+│   ├── handlers/              # API mock handlers
+│   └── data/                  # Mock data
+├── lib/
+│   ├── cn.ts                  # clsx + tailwind-merge utility
+│   ├── utils.ts               # formatDuration, formatDate, etc.
+│   └── api.ts                 # ky instance with auth headers
+└── styles/
+    └── app.css                # Tailwind config and design tokens
+```
+
+### UI Design System
+
+**Design Direction: "Terminal Luxe"** — A fusion of developer-tool rawness with refined precision.
+
+**Typography:**
+- Primary UI: `--font-mono: 'JetBrains Mono'` — technical, precise
+- Body text: `--font-sans: 'IBM Plex Sans'` — warm, readable
+
+**Color Tokens (defined in app.css):**
+```css
+--color-brand: oklch(0.75 0.18 60);       /* Orange accent */
+--color-bg-base: oklch(0.12 0.01 240);    /* Near-black background */
+--color-bg-elevated: oklch(0.16 0.01 240); /* Cards, modals */
+--color-fg-primary: oklch(0.98 0 0);       /* Primary text */
+--color-fg-secondary: oklch(0.75 0.02 240); /* Secondary text */
+--color-success: oklch(0.75 0.2 160);      /* Green */
+--color-warning: oklch(0.8 0.15 85);       /* Amber */
+--color-error: oklch(0.7 0.2 25);          /* Red */
+```
+
+### UI Development Patterns
+
+**Component Variants with CVA:**
+```tsx
+import { cva, type VariantProps } from 'class-variance-authority'
+
+const buttonVariants = cva('base-classes', {
+  variants: {
+    variant: { primary: '...', secondary: '...' },
+    size: { sm: '...', md: '...' },
+  },
+  defaultVariants: { variant: 'primary', size: 'md' },
+})
+```
+
+**Data Fetching with TanStack Query:**
+```tsx
+const { data, isLoading } = useQuery({
+  queryKey: ['agents'],
+  queryFn: () => api.get('agents').json<AgentListResponse>(),
+})
+```
+
+**Route Protection:**
+```tsx
+export const Route = createFileRoute('/_authenticated')({
+  beforeLoad: async ({ location }) => {
+    const { isAuthenticated } = useAuthStore.getState()
+    if (!isAuthenticated) {
+      throw redirect({ to: '/login', search: { redirect: location.pathname } })
+    }
+  },
+})
+```
+
+**Mock Credentials (dev only):**
+- Admin: `admin@modelguide.ai` / `admin123`
+- Support: `support@modelguide.ai` / `support123`
+
+### UI Path Aliases
+
+Configured in modelguide-ui/tsconfig.json:
+- `~/` → `./src/`
