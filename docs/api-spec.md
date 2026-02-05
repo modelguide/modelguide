@@ -72,12 +72,96 @@ Examples:
 ## Authentication
 
 ### Admin/Support API Authentication
-Standard JWT-based authentication with organization context.
 
+Admin and Support users authenticate using **magic link** passwordless authentication:
+
+#### 1. Request Magic Link
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@test-org.com"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Magic link sent"
+}
+```
+
+In development mode, the magic link is printed to the console. In production, it would be sent via email.
+
+**Security Note:** The endpoint returns the same response for valid, invalid, and inactive users to prevent email enumeration attacks.
+
+#### 2. Verify Token & Get JWT
+```http
+GET /api/auth/verify?token=<magic_token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "uuid",
+    "email": "admin@test-org.com",
+    "name": "Admin User",
+    "role": "admin",
+    "organizationId": "uuid"
+  }
+}
+```
+
+**Error Responses:**
+- `401 MAGIC_TOKEN_INVALID` - Token not found
+- `401 MAGIC_TOKEN_EXPIRED` - Token has expired (default: 15 minutes)
+- `401 MAGIC_TOKEN_USED` - Token has already been used
+
+#### 3. Use JWT for Authenticated Requests
 ```
 Authorization: Bearer <jwt_token>
 X-Organization-ID: <organization_uuid>
 ```
+
+#### 4. Get Current User
+```http
+GET /api/auth/me
+Authorization: Bearer <jwt_token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "email": "admin@test-org.com",
+  "name": "Admin User",
+  "role": "admin",
+  "organizationId": "uuid"
+}
+```
+
+#### 5. Logout
+```http
+POST /api/auth/logout
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+*Note: JWTs are stateless, so logout is primarily for client-side cleanup.*
+
+#### Magic Link Security Features
+- Tokens are single-use (marked as used after verification)
+- Tokens expire after 15 minutes (configurable via `MAGIC_LINK_EXPIRES_IN`)
+- Token hashes are stored in database (not the actual tokens)
+- Concurrent verification attempts are handled atomically (only one succeeds)
 
 ### Agent MCP Authentication
 Agents authenticate using their unique `AGENT_KEY` (API key pattern). The agent key is unique per agent and sufficient to identify the agent - the system looks up the agent from the key hash.

@@ -1,10 +1,10 @@
-import { apiReference } from "@scalar/hono-api-reference";
 import { createRoute, z } from "@hono/zod-openapi";
+import { apiReference } from "@scalar/hono-api-reference";
 
-import { createApp, createRouter } from "@lib/create-app";
 import { env } from "@/env";
+import { authRoutes } from "@features/users";
+import { createApp, createRouter } from "@lib/create-app";
 
-// Health check route
 const healthRoute = createRoute({
   method: "get",
   path: "/health",
@@ -25,7 +25,6 @@ const healthRoute = createRoute({
   },
 });
 
-// Create API router
 const apiRouter = createRouter();
 
 apiRouter.openapi(healthRoute, (c) => {
@@ -34,17 +33,15 @@ apiRouter.openapi(healthRoute, (c) => {
       status: "ok",
       timestamp: new Date().toISOString(),
     },
-    200
+    200,
   );
 });
 
-// Create main app
-const app = createApp();
+apiRouter.route("/auth", authRoutes);
 
-// Mount API routes under /api
+const app = createApp();
 app.route("/api", apiRouter);
 
-// OpenAPI spec
 app.doc("/openapi.json", {
   openapi: "3.1.0",
   info: {
@@ -58,9 +55,20 @@ app.doc("/openapi.json", {
       description: "Development server",
     },
   ],
-});
+  security: [{ bearerAuth: [] }],
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http" as const,
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description:
+          "JWT token obtained from /api/auth/verify after magic link login",
+      },
+    },
+  },
+} as any);
 
-// Scalar API documentation
 app.get(
   "/docs",
   apiReference({
@@ -70,12 +78,10 @@ app.get(
     theme: "kepler",
     layout: "modern",
     pageTitle: "ModelGuide API",
-  })
+  }),
 );
 
-// MCP endpoint placeholder
 app.post("/mcp", async (c) => {
-  // MCP server implementation will be added in the mcp feature module
   return c.json({ message: "MCP endpoint - implementation pending" }, 501);
 });
 

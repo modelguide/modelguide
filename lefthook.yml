@@ -1,0 +1,22 @@
+# Lefthook configuration for ModelGuide monorepo
+# https://lefthook.dev/configuration/
+
+pre-commit:
+  parallel: true
+  commands:
+    ui-lint:
+      root: modelguide-ui/
+      glob: "*.{ts,tsx,js,jsx,json,css}"
+      run: npx biome check --write {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
+    ui-typecheck:
+      root: modelguide-ui/
+      run: npm run typecheck
+
+    api-typecheck:
+      root: modelguide-api/
+      run: bun tsc --noEmit
