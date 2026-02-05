@@ -1,34 +1,13 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  Globe,
-  MessageCircle,
-  MessageSquare,
-  Phone,
-  Send,
-  Slack,
-  ThumbsDown,
-  ThumbsUp,
-} from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { MessageSquare } from 'lucide-react'
+import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
-import { Button } from '~/components/ui/button'
-import { Dialog } from '~/components/ui/dialog'
+import { RatingBadge } from '~/components/ui/rating-badge'
+import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Tooltip } from '~/components/ui/tooltip'
-import { api } from '~/lib/api'
-import { cn } from '~/lib/cn'
+import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
-import type { ChannelType, Session, SessionStatus } from '~/schemas/sessions'
-
-const channelConfig: Record<ChannelType, { icon: ReactNode; label: string }> = {
-  voice: { icon: <Phone className="h-4 w-4" />, label: 'Voice' },
-  web: { icon: <Globe className="h-4 w-4" />, label: 'Web' },
-  api: { icon: <Send className="h-4 w-4" />, label: 'API' },
-  slack: { icon: <Slack className="h-4 w-4" />, label: 'Slack' },
-  widget: { icon: <MessageCircle className="h-4 w-4" />, label: 'Widget' },
-  sms: { icon: <MessageCircle className="h-4 w-4" />, label: 'SMS' },
-  whatsapp: { icon: <MessageCircle className="h-4 w-4" />, label: 'WhatsApp' },
-}
+import type { Session, SessionStatus } from '~/schemas/sessions'
 
 const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated' | 'abandoned'> = {
   active: 'active',
@@ -137,7 +116,7 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
 
       {ratingSession && (
         <RatingDialog
-          session={ratingSession}
+          sessionId={ratingSession.id}
           open={!!ratingSession}
           onClose={() => setRatingSession(null)}
         />
@@ -240,128 +219,3 @@ function SessionRow({ session, onRate, index }: SessionRowProps) {
   )
 }
 
-function RatingBadge({
-  rating,
-  label,
-  showAddButton,
-}: {
-  rating?: number
-  label: string
-  showAddButton?: boolean
-}) {
-  if (!rating && !showAddButton) {
-    return <span className="text-sm text-fg-muted">—</span>
-  }
-
-  if (!rating && showAddButton) {
-    return (
-      <span className="flex items-center gap-1.5 rounded-lg border border-dashed border-fg-subtle/30 px-2.5 py-1.5 text-sm text-fg-muted transition-all group-hover:border-brand-500/50 group-hover:bg-brand-500/5 group-hover:text-brand-400">
-        <ThumbsUp className="h-3.5 w-3.5" />
-        <span className="text-xs font-medium">Rate</span>
-      </span>
-    )
-  }
-
-  const isPositive = rating === 2
-
-  return (
-    <Tooltip content={`${label}: ${isPositive ? 'Good' : 'Bad'}`} side="top">
-      <span
-        className={cn(
-          'inline-flex h-8 w-8 items-center justify-center rounded-lg transition-transform hover:scale-110',
-          isPositive ? 'bg-success/15 text-success' : 'bg-error/15 text-error',
-        )}
-      >
-        {isPositive ? <ThumbsUp className="h-4 w-4" /> : <ThumbsDown className="h-4 w-4" />}
-      </span>
-    </Tooltip>
-  )
-}
-
-function RatingDialog({
-  session,
-  open,
-  onClose,
-}: {
-  session: Session
-  open: boolean
-  onClose: () => void
-}) {
-  const queryClient = useQueryClient()
-  const [rating, setRating] = useState<number | null>(null)
-  const [comment, setComment] = useState('')
-
-  const mutation = useMutation({
-    mutationFn: (data: { rating: number; comment: string }) =>
-      api
-        .post(`sessions/${session.id}/feedback`, { json: { ...data, feedback_source: 'support' } })
-        .json(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      onClose()
-    },
-  })
-
-  const handleSubmit = () => {
-    if (rating !== null) {
-      mutation.mutate({ rating, comment })
-    }
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} title="Rate Session" size="sm">
-      <div className="space-y-4">
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setRating(2)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-semibold transition-all duration-200',
-              rating === 2
-                ? 'border-success bg-success/10 text-success scale-[1.02]'
-                : 'border-fg-subtle/20 text-fg-muted hover:border-success/40 hover:text-success',
-            )}
-          >
-            <ThumbsUp className="h-5 w-5" />
-            Good
-          </button>
-          <button
-            type="button"
-            onClick={() => setRating(1)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-semibold transition-all duration-200',
-              rating === 1
-                ? 'border-error bg-error/10 text-error scale-[1.02]'
-                : 'border-fg-subtle/20 text-fg-muted hover:border-error/40 hover:text-error',
-            )}
-          >
-            <ThumbsDown className="h-5 w-5" />
-            Bad
-          </button>
-        </div>
-
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Add a note (optional)"
-          className="w-full rounded-xl border border-fg-subtle/20 bg-bg-subtle px-4 py-3 text-sm text-fg-primary placeholder:text-fg-muted transition-colors focus:border-brand-500 focus:outline-none resize-none"
-          rows={2}
-        />
-
-        <div className="flex gap-3">
-          <Button variant="secondary" onClick={onClose} className="flex-1">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            loading={mutation.isPending}
-            disabled={rating === null}
-            className="flex-1"
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  )
-}

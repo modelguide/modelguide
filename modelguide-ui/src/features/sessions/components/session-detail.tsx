@@ -1,24 +1,14 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  AlertTriangle,
-  Globe,
-  MessageCircle,
-  Phone,
-  Send,
-  Slack,
-  ThumbsDown,
-  ThumbsUp,
-} from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
-import { Dialog } from '~/components/ui/dialog'
+import { RatingBadge } from '~/components/ui/rating-badge'
+import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Tooltip } from '~/components/ui/tooltip'
-import { api } from '~/lib/api'
-import { cn } from '~/lib/cn'
+import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
-import type { ChannelType, Session, SessionStatus } from '~/schemas/sessions'
+import type { Session, SessionStatus } from '~/schemas/sessions'
 import { Transcript } from './transcript'
 
 const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated' | 'abandoned'> = {
@@ -26,16 +16,6 @@ const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated'
   completed: 'completed',
   escalated: 'escalated',
   abandoned: 'abandoned',
-}
-
-const channelConfig: Record<ChannelType, { icon: ReactNode; label: string }> = {
-  voice: { icon: <Phone className="h-4 w-4" />, label: 'Voice' },
-  web: { icon: <Globe className="h-4 w-4" />, label: 'Web' },
-  api: { icon: <Send className="h-4 w-4" />, label: 'API' },
-  slack: { icon: <Slack className="h-4 w-4" />, label: 'Slack' },
-  widget: { icon: <MessageCircle className="h-4 w-4" />, label: 'Widget' },
-  sms: { icon: <MessageCircle className="h-4 w-4" />, label: 'SMS' },
-  whatsapp: { icon: <MessageCircle className="h-4 w-4" />, label: 'WhatsApp' },
 }
 
 export interface SessionDetailProps {
@@ -109,12 +89,12 @@ export function SessionDetail({ session }: SessionDetailProps) {
             </InfoItem>
 
             <InfoItem label="User Rating">
-              <RatingDisplay rating={customerFeedback?.rating} />
+              <RatingBadge rating={customerFeedback?.rating} size="sm" />
             </InfoItem>
 
             <InfoItem label="Expert Rating">
               <div className="flex items-center gap-2">
-                <RatingDisplay rating={supportFeedback?.rating} />
+                <RatingBadge rating={supportFeedback?.rating} size="sm" />
                 {!supportFeedback && (
                   <Button variant="secondary" size="sm" onClick={() => setShowRatingDialog(true)}>
                     Rate
@@ -157,18 +137,7 @@ export function SessionDetail({ session }: SessionDetailProps) {
                     key={fb.id}
                     className="flex items-start gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle p-3"
                   >
-                    <span
-                      className={cn(
-                        'inline-flex h-6 w-6 items-center justify-center rounded-full',
-                        fb.rating === 2 ? 'bg-success/15 text-success' : 'bg-error/15 text-error',
-                      )}
-                    >
-                      {fb.rating === 2 ? (
-                        <ThumbsUp className="h-3 w-3" />
-                      ) : (
-                        <ThumbsDown className="h-3 w-3" />
-                      )}
-                    </span>
+                    <RatingBadge rating={fb.rating} size="xs" />
                     <div>
                       <p className="text-xs font-medium text-fg-muted capitalize">
                         {fb.feedback_source === 'customer' ? 'User' : 'Expert'}
@@ -184,7 +153,7 @@ export function SessionDetail({ session }: SessionDetailProps) {
 
       {showRatingDialog && (
         <RatingDialog
-          session={session}
+          sessionId={session.id}
           open={showRatingDialog}
           onClose={() => setShowRatingDialog(false)}
         />
@@ -202,109 +171,3 @@ function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function RatingDisplay({ rating }: { rating?: number }) {
-  if (!rating) {
-    return <span className="text-sm text-fg-muted">—</span>
-  }
-
-  const isPositive = rating === 2
-
-  return (
-    <span
-      className={cn(
-        'inline-flex h-7 w-7 items-center justify-center rounded-full',
-        isPositive ? 'bg-success/15 text-success' : 'bg-error/15 text-error',
-      )}
-    >
-      {isPositive ? <ThumbsUp className="h-3.5 w-3.5" /> : <ThumbsDown className="h-3.5 w-3.5" />}
-    </span>
-  )
-}
-
-function RatingDialog({
-  session,
-  open,
-  onClose,
-}: {
-  session: Session
-  open: boolean
-  onClose: () => void
-}) {
-  const queryClient = useQueryClient()
-  const [rating, setRating] = useState<number | null>(null)
-  const [comment, setComment] = useState('')
-
-  const mutation = useMutation({
-    mutationFn: (data: { rating: number; comment: string }) =>
-      api
-        .post(`sessions/${session.id}/feedback`, { json: { ...data, feedback_source: 'support' } })
-        .json(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      onClose()
-    },
-  })
-
-  const handleSubmit = () => {
-    if (rating !== null) {
-      mutation.mutate({ rating, comment })
-    }
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} title="Rate Session" size="sm">
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setRating(2)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-colors',
-              rating === 2
-                ? 'border-success bg-success/10 text-success'
-                : 'border-fg-subtle/20 text-fg-muted hover:border-success/40 hover:text-success',
-            )}
-          >
-            <ThumbsUp className="h-4 w-4" />
-            Good
-          </button>
-          <button
-            type="button"
-            onClick={() => setRating(1)}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-colors',
-              rating === 1
-                ? 'border-error bg-error/10 text-error'
-                : 'border-fg-subtle/20 text-fg-muted hover:border-error/40 hover:text-error',
-            )}
-          >
-            <ThumbsDown className="h-4 w-4" />
-            Bad
-          </button>
-        </div>
-
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Add a note (optional)"
-          className="w-full rounded-lg border border-fg-subtle/20 bg-bg-subtle px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted transition-colors focus:border-brand-500 focus:outline-none resize-none"
-          rows={2}
-        />
-
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onClose} className="flex-1">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            loading={mutation.isPending}
-            disabled={rating === null}
-            className="flex-1"
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  )
-}
