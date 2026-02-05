@@ -55,11 +55,11 @@ modelguide-api/src/
 ├── types/                # Shared TypeScript types (AppBindings)
 └── features/             # Feature modules
     ├── users/            # User management, auth (JWT, API keys)
-    ├── organization/     # Multitenancy, RLS context
-    ├── agent/            # Agent CRUD, activation, API key generation
-    ├── connector/        # Connector catalog, instances, tools
-    ├── secret/           # Encrypted credentials storage
-    ├── session/          # Session lifecycle, messages
+    ├── organizations/    # Multitenancy, RLS context
+    ├── agents/           # Agent CRUD, activation, API key generation
+    ├── connectors/       # Connector catalog, instances, tools
+    ├── secrets/          # Encrypted credentials storage
+    ├── sessions/         # Session lifecycle, messages
     ├── feedback/         # Customer CSAT, support evaluations
     ├── analytics/        # Summary metrics, trends
     └── mcp/              # MCP server, resources, core tools
