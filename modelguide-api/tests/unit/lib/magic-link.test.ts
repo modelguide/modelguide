@@ -14,7 +14,7 @@ import {
 beforeAll(() => {
   // Set env vars for magic link tests
   process.env.APP_URL = "http://localhost:3000";
-  process.env.MAGIC_LINK_EXPIRES_IN = "15";
+  process.env.MAGIC_LINK_EXPIRES_IN_MINUTES = "15";
 });
 
 describe("createMagicLink", () => {

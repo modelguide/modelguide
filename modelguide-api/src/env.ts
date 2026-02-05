@@ -22,7 +22,7 @@ const envSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
 
   // Magic link expiration in minutes
-  MAGIC_LINK_EXPIRES_IN: z.coerce.number().default(15),
+  MAGIC_LINK_EXPIRES_IN_MINUTES: z.coerce.number().default(15),
 });
 
 export type Env = z.infer<typeof envSchema>;
