@@ -2,9 +2,9 @@
 
 ## Overview
 
-This specification defines the REST API (FastAPI) and MCP (FastMCP) interfaces for ModelGuide - a platform that connects external AI agents with service connectors (e-commerce, helpdesk, etc.).
+This specification defines the REST API (Hono) and MCP (@modelcontextprotocol/sdk) interfaces for ModelGuide - a platform that connects external AI agents with service connectors (e-commerce, helpdesk, etc.).
 
-**Tech Stack:** FastAPI, FastMCP, PostgreSQL
+**Tech Stack:** Hono, @modelcontextprotocol/sdk, Bun.js, TypeScript, PostgreSQL
 
 **Key Concepts:**
 - Organizations provide multitenancy via Row-Level Security (RLS)
@@ -88,36 +88,48 @@ Authorization: Bearer <agent_key>
 
 ---
 
-## Combined FastAPI + FastMCP Application
+## Combined Hono + MCP Application
 
-API and MCP are served from a single FastAPI application using FastMCP integration.
+API and MCP are served from a single Hono application using @modelcontextprotocol/sdk.
 
-```python
-from fastmcp import FastMCP
-from fastapi import FastAPI
+```typescript
+import { Hono } from "hono";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { toFetchResponse, toReqRes } from "fetch-to-node";
 
-# Create MCP server with connector tools
-mcp = FastMCP("ModelGuide MCP")
+// Create Hono app
+const app = new Hono();
 
-# Register connector tools dynamically
-for connector in connector_registry.get_all():
-    for tool in connector.tools:
-        mcp.tool(tool.handler)
+// Create MCP server with connector tools
+const server = new McpServer(
+  { name: "ModelGuide MCP", version: "1.0.0" },
+  { capabilities: { logging: {} } }
+);
 
-# Create MCP ASGI app
-mcp_app = mcp.http_app(path='/mcp')
+// Register connector tools dynamically
+for (const connector of connectorRegistry.getAll()) {
+  for (const tool of connector.tools) {
+    server.tool(tool.name, tool.description, tool.schema, tool.handler);
+  }
+}
 
-# Create combined FastAPI app
-app = FastAPI(
-    title="ModelGuide API",
-    lifespan=mcp_app.lifespan
-)
+// MCP endpoint
+app.post("/mcp", async (c) => {
+  const { req, res } = toReqRes(c.req.raw);
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+  await server.connect(transport);
+  await transport.handleRequest(req, res, await c.req.json());
+  res.on("close", () => transport.close());
+  return toFetchResponse(res);
+});
 
-# Mount MCP server
-app.mount("/mcp", mcp_app)
+// REST endpoints available at /api/*
+// MCP available at /mcp (Streamable HTTP transport)
 
-# REST endpoints available at /api/*
-# MCP available at /mcp (SSE transport)
+export default app;
 ```
 
 ---
@@ -950,7 +962,7 @@ GET /analytics/trends
 
 ---
 
-## MCP Specification (FastMCP)
+## MCP Specification (@modelcontextprotocol/sdk)
 
 The MCP server exposes connector tools to authenticated agents for discovery and execution.
 
@@ -960,7 +972,7 @@ The MCP server exposes connector tools to authenticated agents for discovery and
 
 **Transport:** SSE (Server-Sent Events) over HTTP
 
-**Endpoint:** `/mcp` (mounted on the same FastAPI app as REST API)
+**Endpoint:** `/mcp` (served from the same Hono app as REST API)
 
 **Authentication:**
 ```
