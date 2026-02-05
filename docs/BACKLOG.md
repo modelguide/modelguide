@@ -44,6 +44,23 @@ Ideas and improvements for future PRs.
 
 ---
 
+## Security
+
+### Auth Token Storage Risk
+- Replace localStorage-based auth token persistence with httpOnly cookies or another XSS-resistant approach
+- Consider short-lived tokens + refresh flow
+- Files affected:
+  - `modelguide-ui/src/stores/auth.ts`
+
+### Auth Revalidation on App Load
+- Validate persisted auth state by calling `/api/auth/me` on boot and clearing stale tokens
+- Ensure redirects on failure
+- Files affected:
+  - `modelguide-ui/src/stores/auth.ts`
+  - `modelguide-ui/src/routes/_authenticated.tsx`
+
+---
+
 ## Testing
 
 ### E2E Tests
@@ -58,3 +75,8 @@ Ideas and improvements for future PRs.
 - Component tests with Testing Library
 - Schema validation tests
 - Utility function tests
+
+### Added From Review
+- Login honors `redirect` query param after successful auth
+- 401 responses force logout and redirect to `/login`
+- Session list row keyboard handling does not navigate when focus is on action buttons

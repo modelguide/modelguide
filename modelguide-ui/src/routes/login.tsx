@@ -5,6 +5,9 @@ import { LoginForm } from '~/features/auth/components/login-form'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/login')({
+  validateSearch: (search) => ({
+    redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
+  }),
   beforeLoad: async () => {
     const { isAuthenticated } = useAuthStore.getState()
     if (isAuthenticated) {
@@ -15,6 +18,8 @@ export const Route = createFileRoute('/login')({
 })
 
 function LoginPage() {
+  const { redirect: redirectTo } = Route.useSearch()
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg-base p-4">
       <div className="w-full max-w-sm animate-fade-up">
@@ -26,7 +31,7 @@ function LoginPage() {
 
         {/* Login Form */}
         <Card>
-          <LoginForm />
+          <LoginForm redirectTo={redirectTo} />
         </Card>
       </div>
     </div>

@@ -1,4 +1,5 @@
-import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
+import { Outlet, createFileRoute, redirect, useNavigate, useRouterState } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { AppShell } from '~/components/layout/app-shell'
 import { useAuthStore } from '~/stores/auth'
 
@@ -18,11 +19,21 @@ export const Route = createFileRoute('/_authenticated')({
 })
 
 function AuthenticatedLayout() {
-  const { user, logout } = useAuthStore()
+  const { user, logout, isAuthenticated } = useAuthStore()
+  const navigate = useNavigate()
+  const location = useRouterState({ select: (state) => state.location })
 
-  if (!user) {
-    return null
-  }
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate({
+        to: '/login',
+        search: { redirect: location.pathname },
+        replace: true,
+      })
+    }
+  }, [isAuthenticated, location.pathname, navigate])
+
+  if (!user) return null
 
   return (
     <AppShell

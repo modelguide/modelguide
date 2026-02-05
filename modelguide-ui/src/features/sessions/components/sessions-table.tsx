@@ -165,6 +165,9 @@ function SessionRow({ session, onRate, index }: SessionRowProps) {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.target as HTMLElement).closest('button')) {
+      return
+    }
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       navigate({ to: '/sessions/$id', params: { id: session.id } })

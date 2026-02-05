@@ -6,7 +6,11 @@ import { Input } from '~/components/ui/input'
 import { loginRequestSchema } from '~/schemas/auth'
 import { useAuthStore } from '~/stores/auth'
 
-export function LoginForm() {
+export interface LoginFormProps {
+  redirectTo?: string
+}
+
+export function LoginForm({ redirectTo }: LoginFormProps) {
   const navigate = useNavigate()
   const login = useAuthStore((s) => s.login)
 
@@ -29,7 +33,9 @@ export function LoginForm() {
     setLoading(true)
     try {
       await login(email, password)
-      navigate({ to: '/' })
+      const safeRedirect =
+        redirectTo && redirectTo.startsWith('/') ? redirectTo : '/'
+      navigate({ to: safeRedirect })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
