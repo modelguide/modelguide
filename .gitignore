@@ -32,3 +32,6 @@ bun.lockb
 
 # Drizzle
 drizzle/meta/
+
+# Claude Code
+.claude/settings.local.json
