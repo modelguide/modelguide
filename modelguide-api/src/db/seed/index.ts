@@ -3,8 +3,15 @@
  * Populates the database with initial data for development/testing
  */
 
+/**
+ * Database seed script
+ * Uses migration connection (superuser) to bypass RLS
+ */
+
 import { generateApiKey } from "@lib/crypto";
-import { db } from "../client";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "../schema";
 import {
   type CatalogTool,
   agentConnectorTools,
@@ -17,6 +24,18 @@ import {
   users,
 } from "../schema";
 import { connectorsCatalogSeed } from "./connectors-catalog";
+
+// Use migration URL (superuser) to bypass RLS for seeding
+const connectionString =
+  process.env.DATABASE_MIGRATION_URL || process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error("DATABASE_MIGRATION_URL or DATABASE_URL must be set");
+  process.exit(1);
+}
+
+const queryClient = postgres(connectionString);
+const db = drizzle(queryClient, { schema });
 
 async function seed() {
   console.log("Starting database seed...\n");
@@ -280,6 +299,5 @@ seed()
   })
   .finally(async () => {
     // Close database connection
-    const { closeDatabase } = await import("../client");
-    await closeDatabase();
+    await queryClient.end();
   });
