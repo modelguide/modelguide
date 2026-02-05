@@ -43,7 +43,7 @@ db-generate: ## Generate database migrations
 db-migrate: ## Run database migrations
 	cd modelguide-api && bun run db:migrate
 
-db-push: ## Push schema changes (dev only)
+db-push: ## Push schema changes (dev only - use db-migrate for production)
 	cd modelguide-api && bun run db:push
 
 db-studio: ## Open Drizzle Studio

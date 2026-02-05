@@ -11,16 +11,21 @@ import type { MiddlewareHandler } from "hono";
 /**
  * Set RLS context for the current database connection
  * This sets app.organization_id as a session variable that RLS policies can use
+ * Uses set_config() function for proper parameterized value passing
+ * The third parameter `false` means session-level (persists for connection lifetime)
  */
 export async function setRLSContext(organizationId: string): Promise<void> {
-  await db.execute(sql`SET LOCAL app.organization_id = ${organizationId}`);
+  await db.execute(
+    sql`SELECT set_config('app.organization_id', ${organizationId}, false)`,
+  );
 }
 
 /**
- * Clear RLS context
+ * Clear RLS context by setting it to empty string
+ * Uses set_config() for consistency
  */
 export async function clearRLSContext(): Promise<void> {
-  await db.execute(sql`RESET app.organization_id`);
+  await db.execute(sql`SELECT set_config('app.organization_id', '', false)`);
 }
 
 /**
@@ -82,4 +87,19 @@ export async function getRLSContext(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Execute a function with RLS bypass enabled within a transaction
+ * The bypass is transaction-scoped so it doesn't leak to other connections
+ * Use for auth operations that need to access users before org context is established
+ */
+export async function withRLSBypass<T>(
+  fn: (tx: typeof db) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    // Set bypass flag for this transaction only (true = transaction-local)
+    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`);
+    return fn(tx as unknown as typeof db);
+  });
 }

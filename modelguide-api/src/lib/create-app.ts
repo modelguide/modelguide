@@ -4,6 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppBindings } from "@/types";
 import { ErrorCode, isAppError } from "@lib/errors";
 import { authMiddleware } from "@lib/middleware/auth";
+import { rlsMiddleware } from "@lib/middleware/rls";
 
 export function createRouter() {
   return new OpenAPIHono<AppBindings>({
@@ -28,6 +29,9 @@ export function createApp() {
 
   // Apply authentication middleware globally
   app.use("*", authMiddleware());
+
+  // Apply RLS middleware after auth (requires organizationId from auth)
+  app.use("*", rlsMiddleware());
 
   app.notFound((c) => {
     return c.json(

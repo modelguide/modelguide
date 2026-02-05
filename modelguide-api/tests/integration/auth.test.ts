@@ -7,10 +7,26 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
+import type { Database } from "@db/client";
 import { magicTokens, organizations, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { generateJWT } from "@lib/jwt";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+
+/**
+ * Execute a function within a transaction with RLS context set.
+ */
+async function withRLSTransaction<T>(
+  organizationId: string,
+  fn: (tx: Database) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT set_config('app.organization_id', ${organizationId}, true)`,
+    );
+    return fn(tx as unknown as Database);
+  });
+}
 
 // Test fixtures
 let testOrgId: string;
@@ -54,7 +70,7 @@ async function cleanupMagicTokens(userId: string) {
 }
 
 beforeAll(async () => {
-  // Create test organization
+  // Create test organization (no RLS on organizations table)
   const [org] = await db
     .insert(organizations)
     .values({
@@ -64,40 +80,47 @@ beforeAll(async () => {
     .returning();
   testOrgId = org.id;
 
-  // Create active test user
+  // Create active test user (with RLS context)
   testUserEmail = `test_${Date.now()}@test.com`;
-  const [user] = await db
-    .insert(users)
-    .values({
-      organizationId: testOrgId,
-      email: testUserEmail,
-      name: "Test User",
-      role: "admin",
-      isActive: true,
-    })
-    .returning();
+  const [user] = await withRLSTransaction(testOrgId, async (tx) => {
+    return tx
+      .insert(users)
+      .values({
+        organizationId: testOrgId,
+        email: testUserEmail,
+        name: "Test User",
+        role: "admin",
+        isActive: true,
+      })
+      .returning();
+  });
   testUserId = user.id;
 
-  // Create inactive test user
+  // Create inactive test user (with RLS context)
   inactiveUserEmail = `inactive_${Date.now()}@test.com`;
-  const [inactiveUser] = await db
-    .insert(users)
-    .values({
-      organizationId: testOrgId,
-      email: inactiveUserEmail,
-      name: "Inactive User",
-      role: "support",
-      isActive: false,
-    })
-    .returning();
+  const [inactiveUser] = await withRLSTransaction(testOrgId, async (tx) => {
+    return tx
+      .insert(users)
+      .values({
+        organizationId: testOrgId,
+        email: inactiveUserEmail,
+        name: "Inactive User",
+        role: "support",
+        isActive: false,
+      })
+      .returning();
+  });
   inactiveUserId = inactiveUser.id;
 });
 
 afterAll(async () => {
   // Clean up test data in reverse order of dependencies
+  // Magic tokens don't have RLS, but users do
   await cleanupMagicTokens(testUserId);
   await cleanupMagicTokens(inactiveUserId);
-  await db.delete(users).where(eq(users.organizationId, testOrgId));
+  await withRLSTransaction(testOrgId, async (tx) => {
+    await tx.delete(users).where(eq(users.organizationId, testOrgId));
+  });
   await db.delete(organizations).where(eq(organizations.id, testOrgId));
 });
 

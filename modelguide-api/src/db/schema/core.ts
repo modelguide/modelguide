@@ -84,7 +84,7 @@ export const users = pgTable(
   (table) => [
     uniqueIndex("users_org_email_unique").on(table.organizationId, table.email),
   ],
-);
+).enableRLS();
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   organization: one(organizations, {
@@ -203,7 +203,7 @@ export const connectors = pgTable(
     ),
     index("connectors_org_idx").on(table.organizationId),
   ],
-);
+).enableRLS();
 
 export const connectorsRelations = relations(connectors, ({ one, many }) => ({
   organization: one(organizations, {
@@ -257,7 +257,7 @@ export const connectorTools = pgTable(
     index("connector_tools_org_idx").on(table.organizationId),
     index("connector_tools_connector_idx").on(table.connectorId),
   ],
-);
+).enableRLS();
 
 export const connectorToolsRelations = relations(
   connectorTools,
@@ -302,7 +302,7 @@ export const secrets = pgTable(
     index("secrets_org_idx").on(table.organizationId),
     index("secrets_owner_idx").on(table.ownerType, table.ownerId),
   ],
-);
+).enableRLS();
 
 export const secretsRelations = relations(secrets, ({ one }) => ({
   organization: one(organizations, {
@@ -343,7 +343,7 @@ export const agents = pgTable(
     index("agents_org_idx").on(table.organizationId),
     index("agents_active_idx").on(table.organizationId, table.isActive),
   ],
-);
+).enableRLS();
 
 export const agentsRelations = relations(agents, ({ one, many }) => ({
   organization: one(organizations, {
@@ -391,7 +391,7 @@ export const apiKeys = pgTable(
     index("api_keys_org_idx").on(table.organizationId),
     index("api_keys_agent_idx").on(table.agentId),
   ],
-);
+).enableRLS();
 
 export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   organization: one(organizations, {
@@ -488,7 +488,7 @@ export const sessions = pgTable(
     index("sessions_started_at_idx").on(table.startedAt),
     index("sessions_external_id_idx").on(table.externalId),
   ],
-);
+).enableRLS();
 
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   organization: one(organizations, {
