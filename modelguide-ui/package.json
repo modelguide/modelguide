@@ -27,6 +27,7 @@
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^3.7.0",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.24.2",
     "zustand": "^5.0.2"
@@ -50,5 +51,8 @@
     "vite": "^7.3.1",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.0"
+  },
+  "msw": {
+    "workerDirectory": ["public"]
   }
 }
