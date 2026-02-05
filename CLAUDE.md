@@ -201,23 +201,38 @@ modelguide-ui/src/
 
 ### UI Design System
 
-**Design Direction: "Terminal Luxe"** — A fusion of developer-tool rawness with refined precision.
+**Design Direction: "Atmospheric Dark"** — Modern SaaS aesthetics with warm ember accents and depth.
 
 **Typography:**
-- Primary UI: `--font-mono: 'JetBrains Mono'` — technical, precise
-- Body text: `--font-sans: 'IBM Plex Sans'` — warm, readable
+- Display: `--font-display: 'Syne'` — distinctive headings
+- Body: `--font-sans: 'IBM Plex Sans'` — clean, readable
+- Code: `--font-mono: 'JetBrains Mono'` — technical elements
 
 **Color Tokens (defined in app.css):**
 ```css
---color-brand: oklch(0.75 0.18 60);       /* Orange accent */
---color-bg-base: oklch(0.12 0.01 240);    /* Near-black background */
---color-bg-elevated: oklch(0.16 0.01 240); /* Cards, modals */
---color-fg-primary: oklch(0.98 0 0);       /* Primary text */
---color-fg-secondary: oklch(0.75 0.02 240); /* Secondary text */
---color-success: oklch(0.75 0.2 160);      /* Green */
---color-warning: oklch(0.8 0.15 85);       /* Amber */
---color-error: oklch(0.7 0.2 25);          /* Red */
+/* Brand - Ember orange */
+--color-brand-500: #f97316;
+
+/* Dark mode backgrounds */
+--color-bg-base: #0a0a0b;
+--color-bg-elevated: #141416;
+--color-bg-subtle: #1c1c1f;
+
+/* Dark mode foregrounds */
+--color-fg-primary: #fafafa;
+--color-fg-secondary: #a8a8b3;
+--color-fg-muted: #6b6b76;
+
+/* Semantic */
+--color-success: #10b981;
+--color-warning: #f59e0b;
+--color-error: #ef4444;
 ```
+
+**Theme Support:**
+- Dark mode (default) with atmospheric gradients
+- Light mode with warm stone tones
+- Toggle via header icon or Settings page
 
 ### UI Development Patterns
 

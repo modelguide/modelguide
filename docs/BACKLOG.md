@@ -50,17 +50,13 @@ Ideas and improvements for future PRs.
   - Update all `useQuery` and `useMutation` calls
 
 ### Form Validation
-- Use Zod schemas for runtime validation before form submission
-- Currently login form validates on blur but doesn't use `loginRequestSchema.safeParse()`
-- Files affected:
-  - `modelguide-ui/src/features/auth/components/login-form.tsx`
-  - Other form components
+- ✅ Login form now uses `loginRequestSchema.safeParse()` before submission
+- Apply same pattern to other form components:
+  - `modelguide-ui/src/features/agents/components/agent-form.tsx`
+  - `modelguide-ui/src/features/secrets/components/secret-form.tsx`
 
 ### Comment Auth Guard Logic
-- `_authenticated.tsx` has both `beforeLoad` and `useEffect` guards
-- Add comment explaining: beforeLoad handles initial navigation, useEffect handles mid-session logout
-- Files affected:
-  - `modelguide-ui/src/routes/_authenticated.tsx`
+- ✅ Done - `_authenticated.tsx` has comments explaining dual guard approach
 
 ---
 
@@ -96,7 +92,7 @@ Ideas and improvements for future PRs.
 - Schema validation tests
 - Utility function tests
 
-### Added From Review
-- Login honors `redirect` query param after successful auth
-- 401 responses force logout and redirect to `/login`
-- Session list row keyboard handling does not navigate when focus is on action buttons
+### Completed From Review
+- ✅ Login honors `redirect` query param after successful auth
+- ✅ 401 responses force logout and redirect to `/login`
+- ✅ Session list row keyboard handling does not navigate when focus is on action buttons
