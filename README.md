@@ -2,11 +2,18 @@
 
 AI agent management platform connecting external AI agents with service connectors via MCP.
 
-## Tech Stack
+## Project Structure
 
-Bun.js, Hono, Drizzle ORM, PostgreSQL, @modelcontextprotocol/sdk
+```
+modelguide/
+├── modelguide-api/    # Backend API (Hono + MCP)
+├── modelguide-ui/     # Dashboard UI (TanStack Start)
+└── docs/              # Documentation
+```
 
-## Setup
+## Quick Start
+
+### API Server
 
 ```bash
 # Install dependencies
@@ -19,9 +26,25 @@ make db-up
 make dev
 ```
 
-Server runs at http://localhost:3000
+API runs at http://localhost:3000
 
-## Endpoints
+### Dashboard UI
+
+```bash
+cd modelguide-ui
+npm install
+npm run dev
+```
+
+Dashboard runs at http://localhost:3001
+
+## Tech Stack
+
+**API:** Bun.js, Hono, Drizzle ORM, PostgreSQL, @modelcontextprotocol/sdk
+
+**UI:** TanStack Start, React 19, Tailwind CSS v4, Zustand, Vitest
+
+## API Endpoints
 
 - `/api/health` - Health check
 - `/docs` - API documentation
@@ -32,3 +55,5 @@ Server runs at http://localhost:3000
 - [API Specification](docs/api-spec.md)
 - [Database Schema](docs/DB_SCHEMA.md)
 - [Product Requirements](docs/PRD.md)
+- [UI Structure](docs/UI_STRUCTURE.md)
+- [UI Implementation](docs/UI_IMPLEMENTATION.md)

@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+@theme {
+  /* Typography — Terminal Luxe */
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+
+  /* Brand — the ember */
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-brand-800: #9a3412;
+  --color-brand-900: #7c2d12;
+  --color-brand-950: #431407;
+
+  /* Dark mode backgrounds (default) */
+  --color-bg-base: #09090b;
+  --color-bg-elevated: #18181b;
+  --color-bg-subtle: #27272a;
+  --color-bg-muted: #3f3f46;
+
+  /* Dark mode foregrounds */
+  --color-fg-primary: #fafafa;
+  --color-fg-secondary: #a1a1aa;
+  --color-fg-muted: #71717a;
+  --color-fg-subtle: #52525b;
+
+  /* Semantic colors */
+  --color-success: #22c55e;
+  --color-success-muted: #14532d;
+  --color-warning: #eab308;
+  --color-warning-muted: #422006;
+  --color-error: #ef4444;
+  --color-error-muted: #450a0a;
+  --color-info: #3b82f6;
+  --color-info-muted: #1e3a5f;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 64px;
+  --header-height: 56px;
+  --content-max-width: 1152px;
+}
+
+/* Animations */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(249, 115, 22, 0.15);
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Utility classes */
+@layer utilities {
+  .animate-fade-up {
+    animation: fade-up 300ms ease-out both;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-breathe {
+    animation: breathe 3s ease-in-out infinite;
+  }
+
+  .stagger-1 {
+    animation-delay: 0ms;
+  }
+  .stagger-2 {
+    animation-delay: 30ms;
+  }
+  .stagger-3 {
+    animation-delay: 60ms;
+  }
+  .stagger-4 {
+    animation-delay: 90ms;
+  }
+  .stagger-5 {
+    animation-delay: 120ms;
+  }
+}
+
+/* Base styles */
+@layer base {
+  html {
+    font-family: var(--font-mono);
+    background-color: var(--color-bg-base);
+    color: var(--color-fg-primary);
+  }
+
+  body {
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: var(--color-brand-500);
+    color: white;
+  }
+
+  /* Focus visible */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+}
