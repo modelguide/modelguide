@@ -10,7 +10,7 @@ import { db } from "@db/client";
 import { magicTokens, organizations, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { generateJWT } from "@lib/jwt";
-import { eq } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { withRLSTransaction } from "../helpers/rls";
 
 // Test fixtures
@@ -124,6 +124,70 @@ describe("POST /api/auth/login", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
+  });
+
+  test("creates magic token record in DB for valid user", async () => {
+    const beforeCount = await db
+      .select()
+      .from(magicTokens)
+      .where(eq(magicTokens.userId, testUserId));
+
+    const response = await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: testUserEmail }),
+    });
+
+    expect(response.status).toBe(200);
+
+    const afterCount = await db
+      .select()
+      .from(magicTokens)
+      .where(eq(magicTokens.userId, testUserId));
+
+    expect(afterCount.length).toBe(beforeCount.length + 1);
+
+    // Verify the new token has correct fields
+    const latestToken = await db.query.magicTokens.findFirst({
+      where: eq(magicTokens.userId, testUserId),
+      orderBy: desc(magicTokens.createdAt),
+    });
+    expect(latestToken).toBeDefined();
+    expect(latestToken!.tokenHash).toBeDefined();
+    expect(latestToken!.expiresAt).toBeInstanceOf(Date);
+    expect(latestToken!.usedAt).toBeNull();
+  });
+
+  test("does not create magic token for non-existent user", async () => {
+    const beforeTokens = await db.select().from(magicTokens);
+
+    await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "nonexistent@example.com" }),
+    });
+
+    const afterTokens = await db.select().from(magicTokens);
+    expect(afterTokens.length).toBe(beforeTokens.length);
+  });
+
+  test("does not create magic token for inactive user", async () => {
+    const beforeTokens = await db
+      .select()
+      .from(magicTokens)
+      .where(eq(magicTokens.userId, inactiveUserId));
+
+    await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: inactiveUserEmail }),
+    });
+
+    const afterTokens = await db
+      .select()
+      .from(magicTokens)
+      .where(eq(magicTokens.userId, inactiveUserId));
+    expect(afterTokens.length).toBe(beforeTokens.length);
   });
 
   test("returns success for non-existent user (no enumeration)", async () => {

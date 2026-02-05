@@ -48,9 +48,8 @@ export async function withRLSContext<T>(
  * Middleware that sets RLS context from organization ID
  * Note: This should be used after authMiddleware which sets organizationId
  *
- * IMPORTANT: This middleware requires that database queries are wrapped
- * in a transaction to ensure the SET LOCAL persists for the connection.
- * For single queries, consider using withRLSContext instead.
+ * IMPORTANT: RLS context is set at session level (persists for connection lifetime).
+ * The context is cleared after each request in the finally block.
  */
 export function rlsMiddleware(): MiddlewareHandler<AppBindings> {
   return async (c, next) => {
