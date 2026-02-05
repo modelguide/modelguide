@@ -1,6 +1,6 @@
 import { LogOut, Menu, Moon, Sun } from 'lucide-react'
 import { Button } from '~/components/ui/button'
-import { cn } from '~/lib/cn'
+import { useThemeStore } from '~/stores/theme'
 
 export interface HeaderProps {
   title?: string
@@ -40,11 +40,22 @@ export function Header({ title, onMenuClick, onLogout, showMenuButton }: HeaderP
 }
 
 function ThemeToggle() {
-  // Theme toggle will be implemented in Phase 9
+  const { theme, setTheme } = useThemeStore()
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+  const toggleTheme = () => {
+    setTheme(isDark ? 'light' : 'dark')
+  }
+
   return (
-    <Button variant="ghost" size="icon-sm" aria-label="Toggle theme" className="text-fg-secondary">
-      <Sun className="h-4 w-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Toggle theme"
+      className="text-fg-secondary"
+      onClick={toggleTheme}
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </Button>
   )
 }

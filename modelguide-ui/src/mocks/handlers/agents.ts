@@ -2,7 +2,7 @@ import { http, HttpResponse, delay } from 'msw'
 import { getAgentById, mockAgents } from '~/mocks/data/agents'
 
 export const agentHandlers = [
-  http.get('/api/agents', async () => {
+  http.get('*/api/agents', async () => {
     await delay(200)
     return HttpResponse.json({
       items: mockAgents,
@@ -12,7 +12,7 @@ export const agentHandlers = [
     })
   }),
 
-  http.get('/api/agents/:id', async ({ params }) => {
+  http.get('*/api/agents/:id', async ({ params }) => {
     await delay(150)
     const agent = getAgentById(params.id as string)
     if (!agent) {
@@ -21,7 +21,7 @@ export const agentHandlers = [
     return HttpResponse.json(agent)
   }),
 
-  http.post('/api/agents', async ({ request }) => {
+  http.post('*/api/agents', async ({ request }) => {
     await delay(300)
     const body = (await request.json()) as Record<string, unknown>
     const newAgent = {
@@ -36,7 +36,7 @@ export const agentHandlers = [
     return HttpResponse.json({ ...newAgent, api_key: apiKey }, { status: 201 })
   }),
 
-  http.patch('/api/agents/:id', async ({ params, request }) => {
+  http.patch('*/api/agents/:id', async ({ params, request }) => {
     await delay(200)
     const agent = getAgentById(params.id as string)
     if (!agent) {
@@ -46,7 +46,7 @@ export const agentHandlers = [
     return HttpResponse.json({ ...agent, ...body, updated_at: new Date().toISOString() })
   }),
 
-  http.post('/api/agents/:id/activate', async ({ params }) => {
+  http.post('*/api/agents/:id/activate', async ({ params }) => {
     await delay(200)
     const agent = getAgentById(params.id as string)
     if (!agent) {
@@ -55,7 +55,7 @@ export const agentHandlers = [
     return HttpResponse.json({ ...agent, is_active: true })
   }),
 
-  http.post('/api/agents/:id/deactivate', async ({ params }) => {
+  http.post('*/api/agents/:id/deactivate', async ({ params }) => {
     await delay(200)
     const agent = getAgentById(params.id as string)
     if (!agent) {
@@ -64,7 +64,7 @@ export const agentHandlers = [
     return HttpResponse.json({ ...agent, is_active: false })
   }),
 
-  http.post('/api/agents/:id/regenerate-key', async ({ params }) => {
+  http.post('*/api/agents/:id/regenerate-key', async ({ params }) => {
     await delay(300)
     const agent = getAgentById(params.id as string)
     if (!agent) {
@@ -75,7 +75,7 @@ export const agentHandlers = [
     return HttpResponse.json({ api_key: apiKey, key_prefix: keyPrefix })
   }),
 
-  http.delete('/api/agents/:id', async ({ params }) => {
+  http.delete('*/api/agents/:id', async ({ params }) => {
     await delay(200)
     const agent = getAgentById(params.id as string)
     if (!agent) {

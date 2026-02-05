@@ -2,7 +2,7 @@ import { http, HttpResponse, delay } from 'msw'
 import { findUserByCredentials, generateMockToken } from '~/mocks/data/users'
 
 export const authHandlers = [
-  http.post('/api/auth/login', async ({ request }) => {
+  http.post('*/api/auth/login', async ({ request }) => {
     await delay(300) // Simulate network latency
 
     const body = await request.json()
@@ -23,12 +23,12 @@ export const authHandlers = [
     })
   }),
 
-  http.post('/api/auth/logout', async () => {
+  http.post('*/api/auth/logout', async () => {
     await delay(100)
     return HttpResponse.json({ success: true })
   }),
 
-  http.get('/api/auth/me', async ({ request }) => {
+  http.get('*/api/auth/me', async ({ request }) => {
     await delay(100)
 
     const authHeader = request.headers.get('Authorization')

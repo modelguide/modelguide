@@ -57,6 +57,29 @@
   --content-max-width: 1200px;
 }
 
+/* Light mode overrides - warm, softer tones */
+.light {
+  --color-bg-base: #f8f7f4;
+  --color-bg-elevated: #ffffff;
+  --color-bg-subtle: #f0eeea;
+  --color-bg-muted: #e5e3de;
+
+  --color-fg-primary: #1c1917;
+  --color-fg-secondary: #57534e;
+  --color-fg-muted: #78716c;
+  --color-fg-subtle: #a8a29e;
+
+  --color-success-muted: #dcfce7;
+  --color-warning-muted: #fef9c3;
+  --color-error-muted: #fee2e2;
+  --color-info-muted: #e0f2fe;
+
+  --color-purple-muted: #f3e8ff;
+  --color-teal-muted: #ccfbf1;
+  --color-pink-muted: #fce7f3;
+  --color-indigo-muted: #e0e7ff;
+}
+
 /* Animations */
 @keyframes fade-up {
   from {
@@ -275,6 +298,10 @@
   dialog::backdrop {
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(4px);
+  }
+
+  .light dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
   }
 }
 

@@ -2,7 +2,7 @@ import { http, HttpResponse, delay } from 'msw'
 import { getConnectorById, mockConnectors } from '~/mocks/data/connectors'
 
 export const connectorHandlers = [
-  http.get('/api/connectors', async () => {
+  http.get('*/api/connectors', async () => {
     await delay(200)
     return HttpResponse.json({
       items: mockConnectors,
@@ -12,7 +12,7 @@ export const connectorHandlers = [
     })
   }),
 
-  http.get('/api/connectors/:id', async ({ params }) => {
+  http.get('*/api/connectors/:id', async ({ params }) => {
     await delay(150)
     const connector = getConnectorById(params.id as string)
     if (!connector) {
@@ -21,7 +21,7 @@ export const connectorHandlers = [
     return HttpResponse.json(connector)
   }),
 
-  http.patch('/api/connectors/:id', async ({ params, request }) => {
+  http.patch('*/api/connectors/:id', async ({ params, request }) => {
     await delay(200)
     const connector = getConnectorById(params.id as string)
     if (!connector) {
@@ -31,7 +31,7 @@ export const connectorHandlers = [
     return HttpResponse.json({ ...connector, ...body, is_configured: true })
   }),
 
-  http.post('/api/connectors/:id/health-check', async ({ params }) => {
+  http.post('*/api/connectors/:id/health-check', async ({ params }) => {
     await delay(500)
     const connector = getConnectorById(params.id as string)
     if (!connector) {

@@ -2,7 +2,7 @@ import { http, HttpResponse, delay } from 'msw'
 import { mockUsers } from '~/mocks/data/users'
 
 export const userHandlers = [
-  http.get('/api/users', async () => {
+  http.get('*/api/users', async () => {
     await delay(200)
     return HttpResponse.json({
       items: mockUsers.map((u) => ({

@@ -1,8 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
-import { AlertCircle, Lock, Mail } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '~/components/ui/button'
-import { Input } from '~/components/ui/input'
 import { loginRequestSchema } from '~/schemas/auth'
 import { useAuthStore } from '~/stores/auth'
 
@@ -44,45 +43,57 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Input
-        label="Email"
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="admin@modelguide.ai"
-        leftIcon={<Mail className="h-4 w-4" />}
-        autoComplete="email"
-        disabled={loading}
-        required
-      />
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
+        <label
+          htmlFor="email"
+          className="mb-2 block font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
+        >
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@company.com"
+          autoComplete="email"
+          disabled={loading}
+          required
+          className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-3 text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+        />
+      </div>
 
-      <Input
-        label="Password"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Enter your password"
-        leftIcon={<Lock className="h-4 w-4" />}
-        autoComplete="current-password"
-        disabled={loading}
-        required
-      />
+      <div>
+        <label
+          htmlFor="password"
+          className="mb-2 block font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
+        >
+          Password
+        </label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+          autoComplete="current-password"
+          disabled={loading}
+          required
+          className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-3 text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+        />
+      </div>
 
       {error ? (
-        <div className="flex items-center gap-2 rounded border border-error/30 bg-error-muted p-3 text-sm text-error">
+        <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-3 text-sm text-error">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       ) : null}
 
-      <Button type="submit" loading={loading} className="w-full">
+      <Button type="submit" loading={loading} className="w-full mt-2">
         Sign in
       </Button>
-
-      <p className="text-center font-sans text-xs text-fg-muted">
-        Demo: admin@modelguide.ai / admin123
-      </p>
     </form>
   )
 }

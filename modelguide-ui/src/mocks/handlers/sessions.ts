@@ -2,7 +2,7 @@ import { http, HttpResponse, delay } from 'msw'
 import { getSessionById, mockSessions } from '~/mocks/data/sessions'
 
 export const sessionHandlers = [
-  http.get('/api/sessions', async ({ request }) => {
+  http.get('*/api/sessions', async ({ request }) => {
     await delay(200)
 
     const url = new URL(request.url)
@@ -36,7 +36,7 @@ export const sessionHandlers = [
     })
   }),
 
-  http.get('/api/sessions/:id', async ({ params }) => {
+  http.get('*/api/sessions/:id', async ({ params }) => {
     await delay(150)
 
     const session = getSessionById(params.id as string)
@@ -47,7 +47,7 @@ export const sessionHandlers = [
     return HttpResponse.json(session)
   }),
 
-  http.post('/api/sessions/:id/feedback', async ({ params, request }) => {
+  http.post('*/api/sessions/:id/feedback', async ({ params, request }) => {
     await delay(200)
 
     const session = mockSessions.find((s) => s.id === params.id)

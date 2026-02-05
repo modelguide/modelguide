@@ -41,10 +41,18 @@ function RootComponent() {
   useEffect(() => {
     async function initMocks() {
       if (import.meta.env.DEV && typeof window !== 'undefined') {
-        const { worker } = await import('~/mocks/browser')
-        await worker.start({
-          onUnhandledRequest: 'bypass',
-        })
+        try {
+          const { worker } = await import('~/mocks/browser')
+          await worker.start({
+            onUnhandledRequest: 'bypass',
+            serviceWorker: {
+              url: '/mockServiceWorker.js',
+            },
+          })
+          console.log('[MSW] Mock service worker started')
+        } catch (error) {
+          console.error('[MSW] Failed to start mock service worker:', error)
+        }
       }
       setMocksReady(true)
     }
