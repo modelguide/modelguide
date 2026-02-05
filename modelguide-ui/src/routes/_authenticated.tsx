@@ -4,6 +4,7 @@ import { AppShell } from '~/components/layout/app-shell'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated')({
+  // Guard for initial navigation - runs before route renders
   beforeLoad: async ({ location }) => {
     const { isAuthenticated } = useAuthStore.getState()
     if (!isAuthenticated) {
@@ -23,6 +24,8 @@ function AuthenticatedLayout() {
   const navigate = useNavigate()
   const location = useRouterState({ select: (state) => state.location })
 
+  // Reactive guard for mid-session logout (e.g., 401 response, manual logout)
+  // Complements beforeLoad which only runs on initial navigation
   useEffect(() => {
     if (!isAuthenticated) {
       navigate({

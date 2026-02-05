@@ -179,6 +179,7 @@ function SessionRow({ session, onRate, index }: SessionRowProps) {
       onClick={handleRowClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
+      aria-label={`View session with ${session.agent.name}, ${session.status}`}
       className="table-row-interactive cursor-pointer border-b border-fg-subtle/5 last:border-0 animate-fade-up focus:outline-none focus:bg-brand-500/5"
       style={{ animationDelay: `${index * 30}ms` }}
     >

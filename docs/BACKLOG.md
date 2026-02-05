@@ -7,12 +7,8 @@ Ideas and improvements for future PRs.
 ## Accessibility (a11y)
 
 ### Keyboard Navigation for Clickable Table Rows
-- Add `onKeyDown` handlers for Enter/Space to navigate
-- Add `tabIndex={0}` and `role` attributes
-- Add focus styles (`focus:ring`, `focus:outline`)
-- Files affected:
-  - `modelguide-ui/src/features/sessions/components/sessions-table.tsx`
-  - `modelguide-ui/src/features/dashboard/components/recent-sessions.tsx`
+- ✅ Sessions table has keyboard navigation with `tabIndex`, `onKeyDown`, focus styles, and `aria-label`
+- Apply same pattern to other tables:
   - `modelguide-ui/src/features/agents/components/agents-table.tsx`
   - `modelguide-ui/src/features/secrets/components/secrets-table.tsx`
 
@@ -41,6 +37,30 @@ Ideas and improvements for future PRs.
 ### Mobile Responsive
 - Collapsible sidebar drawer on mobile
 - Responsive table layouts (card view on small screens)
+
+---
+
+## Code Quality
+
+### Query Key Constants
+- Extract query keys to constants to prevent typos and enable easy refactoring
+- Example: `QUERY_KEYS.sessions`, `QUERY_KEYS.agents`
+- Files affected:
+  - Create `modelguide-ui/src/lib/query-keys.ts`
+  - Update all `useQuery` and `useMutation` calls
+
+### Form Validation
+- Use Zod schemas for runtime validation before form submission
+- Currently login form validates on blur but doesn't use `loginRequestSchema.safeParse()`
+- Files affected:
+  - `modelguide-ui/src/features/auth/components/login-form.tsx`
+  - Other form components
+
+### Comment Auth Guard Logic
+- `_authenticated.tsx` has both `beforeLoad` and `useEffect` guards
+- Add comment explaining: beforeLoad handles initial navigation, useEffect handles mid-session logout
+- Files affected:
+  - `modelguide-ui/src/routes/_authenticated.tsx`
 
 ---
 
