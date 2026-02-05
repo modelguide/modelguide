@@ -1,26 +1,7 @@
-/**
- * JWT generation and verification utilities
- */
-
 import { env } from "@/env";
-import type { AuthUser } from "@/types";
-import { type JWTPayload, SignJWT, jwtVerify } from "jose";
+import type { AuthUser, UserRole } from "@/types";
+import { sign, verify } from "hono/jwt";
 
-/**
- * JWT payload structure
- */
-export interface JWTTokenPayload extends JWTPayload {
-  sub: string; // User ID
-  email: string;
-  name: string;
-  role: "admin" | "support";
-  org: string; // Organization ID
-}
-
-/**
- * Parse duration string to seconds
- * Supports: 1h, 24h, 7d, 30d, etc.
- */
 function parseDuration(duration: string): number {
   const match = duration.match(/^(\d+)([hdm])$/);
   if (!match) {
@@ -42,81 +23,40 @@ function parseDuration(duration: string): number {
   }
 }
 
-/**
- * Get the secret key for JWT signing/verification
- */
-function getSecretKey(): Uint8Array {
-  return new TextEncoder().encode(env.JWT_SECRET);
-}
-
-/**
- * Generate a JWT token for an authenticated user
- */
 export async function generateJWT(user: AuthUser): Promise<string> {
-  const secretKey = getSecretKey();
   const expiresIn = parseDuration(env.JWT_EXPIRES_IN);
+  const now = Math.floor(Date.now() / 1000);
 
-  const jwt = await new SignJWT({
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    org: user.organizationId,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(user.id)
-    .setIssuedAt()
-    .setExpirationTime(Math.floor(Date.now() / 1000) + expiresIn)
-    .sign(secretKey);
-
-  return jwt;
+  return sign(
+    {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      org: user.organizationId,
+      iat: now,
+      exp: now + expiresIn,
+    },
+    env.JWT_SECRET,
+  );
 }
 
-/**
- * Verify and decode a JWT token
- * Returns the user payload if valid, null if invalid/expired
- */
 export async function verifyJWT(token: string): Promise<AuthUser | null> {
   try {
-    const secretKey = getSecretKey();
-    const { payload } = await jwtVerify(token, secretKey);
+    const payload = await verify(token, env.JWT_SECRET, "HS256");
 
-    const typedPayload = payload as JWTTokenPayload;
-
-    if (
-      !typedPayload.sub ||
-      !typedPayload.email ||
-      !typedPayload.role ||
-      !typedPayload.org
-    ) {
+    if (!payload.sub || !payload.email || !payload.role || !payload.org) {
       return null;
     }
 
     return {
-      id: typedPayload.sub,
-      email: typedPayload.email,
-      name: typedPayload.name || "",
-      role: typedPayload.role,
-      organizationId: typedPayload.org,
+      id: payload.sub as string,
+      email: payload.email as string,
+      name: (payload.name as string) || "",
+      role: payload.role as UserRole,
+      organizationId: payload.org as string,
     };
   } catch {
     return null;
-  }
-}
-
-/**
- * Check if a JWT token is expired without full verification
- * Useful for determining if token should be refreshed
- */
-export function isTokenExpired(token: string): boolean {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return true;
-
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    if (!payload.exp) return true;
-
-    return payload.exp * 1000 < Date.now();
-  } catch {
-    return true;
   }
 }
