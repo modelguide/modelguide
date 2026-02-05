@@ -59,13 +59,15 @@ async function seed() {
     process.exit(1);
   }
 
-  // 2. Create test organization
-  console.log("\nSeeding test organization...");
-  const [org] = await db
+  // 2. Create test organizations (2 orgs to test RLS isolation)
+  console.log("\nSeeding test organizations...");
+
+  // Organization 1: Pizza Palace
+  const [org1] = await db
     .insert(organizations)
     .values({
-      name: "Test Organization",
-      slug: "test-org",
+      name: "Pizza Palace",
+      slug: "pizza-palace",
       settings: {
         timezone: "America/New_York",
         features: ["voice-agents"],
@@ -74,41 +76,80 @@ async function seed() {
     .onConflictDoNothing()
     .returning();
 
-  if (!org) {
-    // Organization already exists, fetch it
-    const existingOrg = await db.query.organizations.findFirst({
-      where: (orgs, { eq }) => eq(orgs.slug, "test-org"),
-    });
-    if (!existingOrg) {
-      console.error("Failed to create or find test organization");
-      process.exit(1);
-    }
-    console.log("  Using existing organization:", existingOrg.name);
-    await seedOrgData(existingOrg.id, medusaCatalog.id);
-  } else {
-    console.log("  Created organization:", org.name);
-    await seedOrgData(org.id, medusaCatalog.id);
+  const pizzaOrg =
+    org1 ||
+    (await db.query.organizations.findFirst({
+      where: (orgs, { eq }) => eq(orgs.slug, "pizza-palace"),
+    }));
+
+  if (!pizzaOrg) {
+    console.error("Failed to create or find Pizza Palace organization");
+    process.exit(1);
   }
+  console.log("  Created/found organization:", pizzaOrg.name);
+
+  // Organization 2: Burger Barn
+  const [org2] = await db
+    .insert(organizations)
+    .values({
+      name: "Burger Barn",
+      slug: "burger-barn",
+      settings: {
+        timezone: "America/Los_Angeles",
+        features: ["chat-agents"],
+      },
+    })
+    .onConflictDoNothing()
+    .returning();
+
+  const burgerOrg =
+    org2 ||
+    (await db.query.organizations.findFirst({
+      where: (orgs, { eq }) => eq(orgs.slug, "burger-barn"),
+    }));
+
+  if (!burgerOrg) {
+    console.error("Failed to create or find Burger Barn organization");
+    process.exit(1);
+  }
+  console.log("  Created/found organization:", burgerOrg.name);
+
+  // Seed data for both organizations
+  console.log("\n--- Seeding Pizza Palace data ---");
+  await seedOrgData(pizzaOrg.id, medusaCatalog.id, "pizza-palace");
+
+  console.log("\n--- Seeding Burger Barn data ---");
+  await seedOrgData(burgerOrg.id, medusaCatalog.id, "burger-barn");
 
   console.log("\nSeed completed successfully!");
+  console.log("\nTest credentials:");
+  console.log("  Pizza Palace: admin@pizza-palace.com");
+  console.log("  Burger Barn:  admin@burger-barn.com");
 }
 
-async function seedOrgData(organizationId: string, medusaCatalogId: string) {
+async function seedOrgData(
+  organizationId: string,
+  medusaCatalogId: string,
+  orgSlug: string,
+) {
   // 3. Create test users
   console.log("\nSeeding test users...");
+  const adminEmail = `admin@${orgSlug}.com`;
+  const supportEmail = `support@${orgSlug}.com`;
+
   const [adminUser] = await db
     .insert(users)
     .values([
       {
         organizationId,
-        email: "admin@test-org.com",
+        email: adminEmail,
         name: "Admin User",
         role: "admin",
         isActive: true,
       },
       {
         organizationId,
-        email: "support@test-org.com",
+        email: supportEmail,
         name: "Support User",
         role: "support",
         isActive: true,
@@ -121,10 +162,7 @@ async function seedOrgData(organizationId: string, medusaCatalogId: string) {
     adminUser ||
     (await db.query.users.findFirst({
       where: (u, { eq, and }) =>
-        and(
-          eq(u.organizationId, organizationId),
-          eq(u.email, "admin@test-org.com"),
-        ),
+        and(eq(u.organizationId, organizationId), eq(u.email, adminEmail)),
     }));
 
   if (!admin) {
@@ -136,16 +174,16 @@ async function seedOrgData(organizationId: string, medusaCatalogId: string) {
 
   // 4. Create test connector instance
   console.log("\nSeeding test connector...");
+  const connectorSlug = orgSlug.replace(/-/g, "");
   const [connector] = await db
     .insert(connectors)
     .values({
       organizationId,
       connectorCatalogId: medusaCatalogId,
-      name: "Pizza Palace Store",
-      slug: "pizzapalace",
+      name: `${orgSlug} Store`,
+      slug: connectorSlug,
       config: {
-        baseUrl: "https://api.pizzapalace.example.com",
-        // In real usage, this would be a secret UUID reference
+        baseUrl: `https://api.${orgSlug}.example.com`,
         apiToken: "placeholder-secret-uuid",
       },
       isActive: true,
@@ -157,7 +195,7 @@ async function seedOrgData(organizationId: string, medusaCatalogId: string) {
     connector ||
     (await db.query.connectors.findFirst({
       where: (c, { eq, and }) =>
-        and(eq(c.organizationId, organizationId), eq(c.slug, "pizzapalace")),
+        and(eq(c.organizationId, organizationId), eq(c.slug, connectorSlug)),
     }));
 
   if (!testConnector) {
@@ -196,15 +234,16 @@ async function seedOrgData(organizationId: string, medusaCatalogId: string) {
 
   // 6. Create test agent
   console.log("\nSeeding test agent...");
+  const agentName = `${orgSlug} Order Agent`;
   const [agent] = await db
     .insert(agents)
     .values({
       organizationId,
-      name: "Pizza Order Agent",
-      description: "Voice agent for handling pizza orders",
+      name: agentName,
+      description: `Voice agent for handling ${orgSlug} orders`,
       agentType: "voice",
       isActive: true,
-      systemPrompt: `You are a helpful pizza ordering assistant for Pizza Palace.
+      systemPrompt: `You are a helpful ordering assistant for ${orgSlug}.
 You can help customers:
 - Browse the menu
 - Add items to their cart
@@ -212,7 +251,7 @@ You can help customers:
 - Track existing orders
 
 Always be friendly and helpful. If you're unsure about something, ask for clarification.`,
-      tags: ["pizza", "orders", "voice"],
+      tags: [orgSlug, "orders", "voice"],
       metadata: {
         version: "1.0.0",
         language: "en",
@@ -226,10 +265,7 @@ Always be friendly and helpful. If you're unsure about something, ask for clarif
     agent ||
     (await db.query.agents.findFirst({
       where: (a, { eq, and }) =>
-        and(
-          eq(a.organizationId, organizationId),
-          eq(a.name, "Pizza Order Agent"),
-        ),
+        and(eq(a.organizationId, organizationId), eq(a.name, agentName)),
     }));
 
   if (!testAgent) {
@@ -248,7 +284,7 @@ Always be friendly and helpful. If you're unsure about something, ask for clarif
     .values({
       organizationId,
       agentId: testAgent.id,
-      name: "Pizza Agent API Key",
+      name: `${orgSlug} API Key`,
       keyHash: hash,
       keyPrefix: prefix,
       isActive: true,
