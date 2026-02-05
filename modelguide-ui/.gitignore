@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.output/
+.vinxi/
+.nitro/
+dist/
+
+# Generated files
+src/routeTree.gen.ts
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# MSW
+public/mockServiceWorker.js
