@@ -15,9 +15,9 @@ const router = createRouter();
 
 const loginRequestSchema = z.object({
   email: z.string().email().openapi({
-    example: "admin@test-org.com",
+    example: "admin@pizza-palace.com",
     description:
-      "User's email address. Seed users: admin@test-org.com (admin role), support@test-org.com (support role)",
+      "User's email address. Seed users: admin@pizza-palace.com, support@pizza-palace.com, admin@burger-barn.com, support@burger-barn.com",
   }),
 });
 
@@ -38,7 +38,7 @@ const verifyResponseSchema = z.object({
         example: "550e8400-e29b-41d4-a716-446655440000",
       }),
       email: z.string().email().openapi({
-        example: "admin@test-org.com",
+        example: "admin@pizza-palace.com",
       }),
       name: z.string().openapi({
         example: "Admin User",
@@ -48,6 +48,7 @@ const verifyResponseSchema = z.object({
       }),
       organizationId: z.string().uuid().openapi({
         example: "550e8400-e29b-41d4-a716-446655440001",
+        description: "Organization ID (Pizza Palace or Burger Barn)",
       }),
     })
     .openapi({
@@ -60,7 +61,7 @@ const meResponseSchema = z.object({
     example: "550e8400-e29b-41d4-a716-446655440000",
   }),
   email: z.string().email().openapi({
-    example: "admin@test-org.com",
+    example: "admin@pizza-palace.com",
   }),
   name: z.string().openapi({
     example: "Admin User",
@@ -71,7 +72,7 @@ const meResponseSchema = z.object({
   }),
   organizationId: z.string().uuid().openapi({
     example: "550e8400-e29b-41d4-a716-446655440001",
-    description: "Organization ID the user belongs to (Test Organization)",
+    description: "Organization ID (Pizza Palace or Burger Barn)",
   }),
 });
 
@@ -98,8 +99,8 @@ const loginRoute = createRoute({
   description: `Sends a magic link to the user's email for passwordless authentication.
 
 **Test with seed data:**
-- \`admin@test-org.com\` - Admin user with full permissions
-- \`support@test-org.com\` - Support user with limited permissions
+- \`admin@pizza-palace.com\` / \`support@pizza-palace.com\` (Pizza Palace org)
+- \`admin@burger-barn.com\` / \`support@burger-barn.com\` (Burger Barn org)
 
 In development mode, the magic link is printed to the console instead of being sent via email.`,
   request: {
@@ -223,8 +224,20 @@ const meRoute = createRoute({
 
 **Requires:** Bearer JWT token in Authorization header.
 
-**Example:** \`Authorization: Bearer eyJhbGciOiJIUzI1NiIs...\``,
+**How to get a token:**
+1. POST /api/auth/login with \`{"email": "admin@pizza-palace.com"}\`
+2. Copy the token from the console magic link URL
+3. GET /api/auth/verify?token=YOUR_TOKEN to receive a JWT
+4. Use the JWT below as Bearer token`,
   security: [{ bearerAuth: [] }],
+  request: {
+    headers: z.object({
+      authorization: z.string().openapi({
+        example: "Bearer <paste JWT from /api/auth/verify>",
+        description: "JWT token from the verify endpoint",
+      }),
+    }),
+  },
   responses: {
     200: {
       description: "Current user information",

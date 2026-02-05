@@ -55,7 +55,19 @@ app.doc("/openapi.json", {
       description: "Development server",
     },
   ],
-});
+  security: [{ bearerAuth: [] }],
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http" as const,
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description:
+          "JWT token obtained from /api/auth/verify after magic link login",
+      },
+    },
+  },
+} as any);
 
 app.get(
   "/docs",
