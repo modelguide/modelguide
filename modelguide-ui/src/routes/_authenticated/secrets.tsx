@@ -4,6 +4,7 @@ import { KeyRound, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
+import { PageHeader } from '~/components/ui/page-header'
 import { DeleteSecretDialog } from '~/features/secrets/components/delete-secret-dialog'
 import { SecretForm } from '~/features/secrets/components/secret-form'
 import { SecretsTable } from '~/features/secrets/components/secrets-table'
@@ -46,25 +47,21 @@ function SecretsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between animate-fade-up">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning/15">
-            <KeyRound className="h-5 w-5 text-warning" />
-          </div>
-          <div>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-fg-primary">
-              Secrets
-            </h1>
-            <p className="text-sm text-fg-muted">Manage encrypted credentials and API keys</p>
-          </div>
-        </div>
-        {isAdmin && !showCreateForm ? (
-          <Button onClick={() => setShowCreateForm(true)}>
-            <Plus className="h-4 w-4" />
-            Add Secret
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        icon={KeyRound}
+        iconBg="bg-warning/15"
+        iconColor="text-warning"
+        title="Secrets"
+        description="Manage encrypted credentials and API keys"
+        actions={
+          isAdmin && !showCreateForm ? (
+            <Button onClick={() => setShowCreateForm(true)}>
+              <Plus className="h-4 w-4" />
+              Add Secret
+            </Button>
+          ) : null
+        }
+      />
 
       {showCreateForm ? (
         <Card className="animate-fade-up">

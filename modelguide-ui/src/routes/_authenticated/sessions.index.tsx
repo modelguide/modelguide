@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { MessageSquare } from 'lucide-react'
 import { useState } from 'react'
+import { PageHeader } from '~/components/ui/page-header'
 import { Pagination } from '~/components/ui/pagination'
 import {
   type SessionFilters,
@@ -42,19 +43,13 @@ function SessionsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="animate-fade-up">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-info/15">
-            <MessageSquare className="h-5 w-5 text-info" />
-          </div>
-          <div>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-fg-primary">
-              Sessions
-            </h1>
-            <p className="text-sm text-fg-muted">Browse and analyze conversation sessions</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={MessageSquare}
+        iconBg="bg-info/15"
+        iconColor="text-info"
+        title="Sessions"
+        description="Browse and analyze conversation sessions"
+      />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <SessionsFilters filters={filters} onFiltersChange={handleFiltersChange} />

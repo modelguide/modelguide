@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { BarChart3, Calendar } from 'lucide-react'
+import { PageHeader } from '~/components/ui/page-header'
 import { Spinner } from '~/components/ui/spinner'
 import { AnalyticsSummary } from '~/features/analytics/components/analytics-summary'
 import { ChannelBreakdown } from '~/features/analytics/components/channel-breakdown'
@@ -22,27 +23,23 @@ function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between animate-fade-up">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple/15">
-            <BarChart3 className="h-5 w-5 text-purple" />
-          </div>
-          <div>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-fg-primary">
-              Analytics
-            </h1>
-            <p className="text-sm text-fg-muted">Performance metrics and trends</p>
-          </div>
-        </div>
-        {data?.period ? (
-          <div className="flex items-center gap-2 rounded-lg border border-fg-subtle/20 bg-bg-elevated px-3 py-2">
-            <Calendar className="h-4 w-4 text-fg-muted" />
-            <span className="text-xs text-fg-secondary">
-              {formatDate(data.period.from)} — {formatDate(data.period.to)}
-            </span>
-          </div>
-        ) : null}
-      </div>
+      <PageHeader
+        icon={BarChart3}
+        iconBg="bg-purple/15"
+        iconColor="text-purple"
+        title="Analytics"
+        description="Performance metrics and trends"
+        actions={
+          data?.period ? (
+            <div className="flex items-center gap-2 rounded-lg border border-fg-subtle/20 bg-bg-elevated px-3 py-2">
+              <Calendar className="h-4 w-4 text-fg-muted" />
+              <span className="text-xs text-fg-secondary">
+                {formatDate(data.period.from)} — {formatDate(data.period.to)}
+              </span>
+            </div>
+          ) : null
+        }
+      />
 
       {isLoading ? (
         <div className="flex justify-center py-12">

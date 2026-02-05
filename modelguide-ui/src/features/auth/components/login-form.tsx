@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { AlertCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '~/components/ui/button'
+import { Label } from '~/components/ui/label'
 import { loginRequestSchema } from '~/schemas/auth'
 import { useAuthStore } from '~/stores/auth'
 
@@ -45,12 +46,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label
-          htmlFor="email"
-          className="mb-2 block font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
-          Email
-        </label>
+        <Label htmlFor="email">Email</Label>
         <input
           id="email"
           type="email"
@@ -65,12 +61,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
       </div>
 
       <div>
-        <label
-          htmlFor="password"
-          className="mb-2 block font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted"
-        >
-          Password
-        </label>
+        <Label htmlFor="password">Password</Label>
         <input
           id="password"
           type="password"

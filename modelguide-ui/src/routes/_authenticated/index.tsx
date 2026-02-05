@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '~/components/ui/button'
+import { PageHeader } from '~/components/ui/page-header'
 import { StatsGrid } from '~/features/dashboard/components/stats-grid'
 import { SessionsTable } from '~/features/sessions/components/sessions-table'
 import { api } from '~/lib/api'
@@ -30,20 +31,13 @@ function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Hero Header */}
-      <div className="animate-fade-up">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/15">
-            <Sparkles className="h-5 w-5 text-brand-400" />
-          </div>
-          <div>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-fg-primary">
-              Dashboard
-            </h1>
-            <p className="text-sm text-fg-muted">Overview of your agent operations</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={Sparkles}
+        iconBg="bg-brand-500/15"
+        iconColor="text-brand-400"
+        title="Dashboard"
+        description="Overview of your agent operations"
+      />
 
       {/* Stats Grid */}
       {analyticsLoading || !analytics ? (
