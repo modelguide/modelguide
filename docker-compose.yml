@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: modelguide-postgres
+    environment:
+      POSTGRES_USER: modelguide
+      POSTGRES_PASSWORD: modelguide
+      POSTGRES_DB: modelguide
+    ports:
+      - "5434:5432"
+    volumes:
+      - modelguide_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U modelguide -d modelguide"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  modelguide_postgres_data:
