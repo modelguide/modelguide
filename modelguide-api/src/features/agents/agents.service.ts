@@ -99,9 +99,6 @@ export async function createAgent(
     name: string;
     description?: string;
     agentType?: AgentType;
-    systemPrompt?: string;
-    tags?: string[];
-    metadata?: Record<string, unknown>;
   },
   createdBy: string,
 ) {
@@ -114,9 +111,6 @@ export async function createAgent(
         description: data.description,
         agentType: data.agentType ?? "voice",
         isActive: false,
-        systemPrompt: data.systemPrompt,
-        tags: data.tags ?? [],
-        metadata: data.metadata ?? {},
         createdBy,
       })
       .returning();

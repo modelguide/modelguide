@@ -76,9 +76,6 @@ const createAgentSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: "Order Agent" }),
   description: z.string().optional(),
   agentType: z.enum(["voice"]).default("voice").optional(),
-  systemPrompt: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
 });
 
 const updateAgentSchema = z

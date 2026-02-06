@@ -122,9 +122,6 @@ describe("POST /api/agents", () => {
         name: "Test Agent Create",
         description: "Test agent for creation",
         agentType: "voice",
-        systemPrompt: "You are a test agent.",
-        tags: ["test"],
-        metadata: { version: "1.0" },
       }),
     });
 
