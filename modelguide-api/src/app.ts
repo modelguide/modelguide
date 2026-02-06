@@ -2,8 +2,9 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiReference } from "@scalar/hono-api-reference";
 
 import { env } from "@/env";
+import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
-import { authRoutes } from "@features/users";
+import { authRoutes, userRoutes } from "@features/users";
 import { createApp, createRouter } from "@lib/create-app";
 
 const healthRoute = createRoute({
@@ -39,7 +40,9 @@ apiRouter.openapi(healthRoute, (c) => {
 });
 
 apiRouter.route("/auth", authRoutes);
+apiRouter.route("/organizations", organizationRoutes);
 apiRouter.route("/secrets", secretsRoutes);
+apiRouter.route("/users", userRoutes);
 
 const app = createApp();
 app.route("/api", apiRouter);

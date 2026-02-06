@@ -2,7 +2,7 @@
 
 Complete implementation specification derived from PRD.md, api-spec.md, and DB_SCHEMA.md.
 
-**Design Direction:** "Terminal Luxe" — see `UI_STRUCTURE.md` for design system.
+**Design Direction:** "Atmospheric Dark" — see `UI_STRUCTURE.md` for design system.
 
 ---
 

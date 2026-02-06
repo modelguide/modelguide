@@ -35,3 +35,4 @@ drizzle/meta/
 
 # Claude Code
 .claude/settings.local.json
+.claude/local/
