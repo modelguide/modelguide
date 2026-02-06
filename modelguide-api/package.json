@@ -7,6 +7,8 @@
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run dist/index.js",
     "test": "bun test",
+    "test:unit": "bun test --preload ./tests/setup/unit-preload.ts tests/unit",
+    "test:integration": "bun test --preload ./tests/setup/integration-preload.ts tests/integration",
     "typecheck": "tsc --noEmit",
     "lint": "biome check --write .",
     "lint:check": "biome check .",
@@ -31,6 +33,7 @@
     "@biomejs/biome": "^1.9.0",
     "@types/bun": "latest",
     "drizzle-kit": "^0.30.0",
+    "testcontainers": "^11.11.0",
     "typescript": "^5.7.0"
   }
 }

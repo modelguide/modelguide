@@ -1,56 +1,99 @@
-.PHONY: help install dev build start test typecheck lint format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
+.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
 
 .DEFAULT_GOAL := help
 
 help: ## Show available commands
 	@echo "ModelGuide Development Commands"
 	@echo "==============================="
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install dependencies
+# =============================================================================
+# API
+# =============================================================================
+
+api-install: ## [API] Install dependencies
 	cd modelguide-api && bun install
 
-dev: ## Start dev server with hot reload
+api-dev: ## [API] Start dev server with hot reload
 	cd modelguide-api && bun run dev
 
-build: ## Build for production
+api-build: ## [API] Build for production
 	cd modelguide-api && bun run build
 
-start: ## Run production build
+api-start: ## [API] Run production build
 	cd modelguide-api && bun run start
 
-test: ## Run tests
+api-test: ## [API] Run all tests
 	cd modelguide-api && bun test
 
-typecheck: ## Run TypeScript type checking
+api-test-unit: ## [API] Run unit tests
+	cd modelguide-api && bun run test:unit
+
+api-test-integration: ## [API] Run integration tests (requires Docker)
+	cd modelguide-api && bun run test:integration
+
+api-typecheck: ## [API] Run TypeScript type checking
 	cd modelguide-api && bun run typecheck
 
-lint: ## Run linter (with auto-fix)
+api-lint: ## [API] Run linter (with auto-fix)
 	cd modelguide-api && bun run lint
 
-format: ## Format code
+api-lint-check: ## [API] Run linter (check only)
+	cd modelguide-api && bun run lint:check
+
+api-format: ## [API] Format code
 	cd modelguide-api && bun run format
 
-db-up: ## Start PostgreSQL container
+# =============================================================================
+# UI
+# =============================================================================
+
+ui-install: ## [UI] Install dependencies
+	cd modelguide-ui && npm ci
+
+ui-dev: ## [UI] Start dev server
+	cd modelguide-ui && npm run dev
+
+ui-test: ## [UI] Run tests
+	cd modelguide-ui && npm run test:ci
+
+ui-typecheck: ## [UI] Run TypeScript type checking
+	cd modelguide-ui && npm run typecheck
+
+ui-lint: ## [UI] Run linter
+	cd modelguide-ui && npm run lint
+
+ui-format: ## [UI] Format code
+	cd modelguide-ui && npm run format
+
+# =============================================================================
+# Database
+# =============================================================================
+
+db-up: ## [DB] Start PostgreSQL container
 	docker compose up -d postgres
 
-db-down: ## Stop PostgreSQL container
+db-down: ## [DB] Stop PostgreSQL container
 	docker compose down
 
-db-generate: ## Generate database migrations
+db-generate: ## [DB] Generate database migrations
 	cd modelguide-api && bun run db:generate
 
-db-migrate: ## Run database migrations
+db-migrate: ## [DB] Run database migrations
 	cd modelguide-api && bun run db:migrate
 
-db-push: ## Push schema changes (dev only - use db-migrate for production)
+db-push: ## [DB] Push schema changes (dev only)
 	cd modelguide-api && bun run db:push
 
-db-studio: ## Open Drizzle Studio
+db-studio: ## [DB] Open Drizzle Studio
 	cd modelguide-api && bun run db:studio
 
-db-seed: ## Seed database with test data
+db-seed: ## [DB] Seed database with test data
 	cd modelguide-api && bun run db:seed
+
+# =============================================================================
+# General
+# =============================================================================
 
 clean: ## Remove build artifacts
 	rm -rf modelguide-api/dist
