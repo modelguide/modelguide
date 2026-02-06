@@ -37,6 +37,7 @@ function createChainRecorder(
     db.transaction(async (tx) => {
       await tx.execute(configSql);
       // Start the chain: tx.select(...), tx.insert(...), etc.
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic proxy requires runtime method dispatch
       let chain: any = (tx as any)[method](...args);
       // Replay recorded calls: .from(...), .where(...), .values(...), etc.
       for (const call of calls) {
@@ -45,18 +46,22 @@ function createChainRecorder(
       return chain;
     });
 
+  // biome-ignore lint/suspicious/noExplicitAny: proxy must masquerade as a Drizzle query builder
   const proxy: any = new Proxy(
     {},
     {
       get(_target, prop) {
         if (prop === "then") {
           // When awaited, execute the chain inside a transaction
+          // biome-ignore lint/suspicious/noExplicitAny: thenable protocol requires untyped resolve/reject
           return (resolve: any, reject: any) => replay().then(resolve, reject);
         }
         if (prop === "catch") {
+          // biome-ignore lint/suspicious/noExplicitAny: thenable protocol
           return (reject: any) => replay().catch(reject);
         }
         if (prop === "finally") {
+          // biome-ignore lint/suspicious/noExplicitAny: thenable protocol
           return (cb: any) => replay().finally(cb);
         }
         // Record the chained call and return the proxy for further chaining
@@ -80,11 +85,15 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
     get(target, prop, receiver) {
       // Intercept transaction() — inject config before user callback
       if (prop === "transaction") {
+        // biome-ignore lint/suspicious/noExplicitAny: must match Drizzle's transaction signature
         return (fn: (tx: any) => Promise<any>, ...rest: any[]) =>
-          target.transaction(async (tx) => {
-            await tx.execute(configSql);
-            return fn(tx);
-          }, ...rest);
+          target.transaction(
+            async (tx) => {
+              await tx.execute(configSql);
+              return fn(tx);
+            },
+            ...rest,
+          );
       }
 
       // Intercept select/insert/update/delete — return chain recorder
@@ -98,6 +107,7 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
 
       // Intercept execute() — wrap raw SQL in transaction
       if (prop === "execute") {
+        // biome-ignore lint/suspicious/noExplicitAny: accepts any SQL query
         return (query: any) =>
           target.transaction(async (tx) => {
             await tx.execute(configSql);
@@ -110,6 +120,7 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
         const queryObj = target.query;
         return new Proxy(queryObj, {
           get(qTarget, tableName) {
+            // biome-ignore lint/suspicious/noExplicitAny: dynamic table access by name
             const tableApi = (qTarget as any)[tableName];
             if (!tableApi || typeof tableApi !== "object") {
               return tableApi;
@@ -124,6 +135,7 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
                 return (...args: unknown[]) =>
                   target.transaction(async (tx) => {
                     await tx.execute(configSql);
+                    // biome-ignore lint/suspicious/noExplicitAny: dynamic table access by name
                     return (tx.query as any)[tableName][methodName](...args);
                   });
               },

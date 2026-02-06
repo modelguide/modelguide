@@ -66,9 +66,7 @@ describe("Error status codes", () => {
   test("400 errors have correct status", () => {
     expect(new AppError(ErrorCode.VALIDATION_ERROR, "").status).toBe(400);
     expect(new AppError(ErrorCode.INVALID_INPUT, "").status).toBe(400);
-    expect(
-      new AppError(ErrorCode.ORGANIZATION_REQUIRED, "").status,
-    ).toBe(400);
+    expect(new AppError(ErrorCode.ORGANIZATION_REQUIRED, "").status).toBe(400);
   });
 
   test("500 errors have correct status", () => {
