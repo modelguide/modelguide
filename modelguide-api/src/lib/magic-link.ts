@@ -27,7 +27,7 @@ export function createMagicLink(): GeneratedMagicLink {
   const tokenHash = hashMagicToken(token);
   const link = buildMagicLinkUrl(token);
   const expiresAt = new Date(
-    Date.now() + env.MAGIC_LINK_EXPIRES_IN * 60 * 1000,
+    Date.now() + env.MAGIC_LINK_EXPIRES_IN_MINUTES * 60 * 1000,
   );
 
   return {
@@ -65,7 +65,7 @@ export async function sendMagicLink(
       console.log(`User: ${userName}`);
     }
     console.log(`Link: ${link}`);
-    console.log(`Expires in: ${env.MAGIC_LINK_EXPIRES_IN} minutes`);
+    console.log(`Expires in: ${env.MAGIC_LINK_EXPIRES_IN_MINUTES} minutes`);
     console.log("========================================\n");
     return;
   }
