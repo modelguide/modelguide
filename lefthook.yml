@@ -6,9 +6,7 @@ pre-commit:
   commands:
     ui-lint:
       root: modelguide-ui/
-      glob: "*.{ts,tsx,js,jsx,json,css}"
-      run: npx biome check --write {staged_files}
-      stage_fixed: true
+      run: npm run lint
 
 pre-push:
   parallel: true
