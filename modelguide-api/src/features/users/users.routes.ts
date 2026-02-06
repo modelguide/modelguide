@@ -27,6 +27,7 @@ const userResponseSchema = z.object({
   email: z.string().email(),
   name: z.string(),
   role: z.enum(["admin", "support"]),
+  organizationId: z.string().uuid(),
   isActive: z.boolean(),
   lastLoginAt: z.string().nullable(),
   createdAt: z.string(),
@@ -39,10 +40,14 @@ const createUserSchema = z.object({
   role: z.enum(["admin", "support"]).default("support"),
 });
 
-const updateUserSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  role: z.enum(["admin", "support"]).optional(),
-});
+const updateUserSchema = z
+  .object({
+    name: z.string().min(1).max(255).optional(),
+    role: z.enum(["admin", "support"]).optional(),
+  })
+  .refine((data) => data.name !== undefined || data.role !== undefined, {
+    message: "At least one field must be provided",
+  });
 
 const errorResponseSchema = z.object({
   code: z.string(),
@@ -54,6 +59,7 @@ function formatUser(user: {
   email: string;
   name: string;
   role: string;
+  organizationId: string;
   isActive: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -64,6 +70,7 @@ function formatUser(user: {
     email: user.email,
     name: user.name,
     role: user.role as "admin" | "support",
+    organizationId: user.organizationId,
     isActive: user.isActive,
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     createdAt: user.createdAt.toISOString(),
@@ -273,6 +280,11 @@ router.openapi(updateUserRoute, async (c) => {
     throw Errors.forbidden("Only admins can change user roles");
   }
 
+  // Prevent admin self-demotion (could lock out the org)
+  if (isAdmin && currentUser.id === id && data.role && data.role !== currentUser.role) {
+    throw Errors.forbidden("Cannot change your own role");
+  }
+
   const updateData = isAdmin ? data : { name: data.name };
   const user = await updateUser(orgId, id, updateData);
   return c.json(formatUser(user), 200);
@@ -318,6 +330,10 @@ router.openapi(deleteUserRoute, async (c) => {
 
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
+
+  if (id === currentUser.id) {
+    throw Errors.forbidden("Cannot deactivate your own account");
+  }
 
   await deactivateUser(orgId, id);
 

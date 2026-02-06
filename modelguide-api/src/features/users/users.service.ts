@@ -6,7 +6,7 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { count, eq } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 
 export async function listUsers(orgId: string, pagination: PaginationParams) {
   const { page, pageSize } = pagination;
@@ -14,7 +14,12 @@ export async function listUsers(orgId: string, pagination: PaginationParams) {
 
   return forOrg(orgId, async (tx) => {
     const [items, [{ total }]] = await Promise.all([
-      tx.select().from(users).limit(pageSize).offset(offset),
+      tx
+        .select()
+        .from(users)
+        .orderBy(asc(users.createdAt))
+        .limit(pageSize)
+        .offset(offset),
       tx.select({ total: count() }).from(users),
     ]);
 
@@ -58,7 +63,8 @@ export async function createUser(
   } catch (error: unknown) {
     if (
       error instanceof Error &&
-      error.message.includes("users_org_email_unique")
+      ((error as any).code === "23505" ||
+        error.message.includes("users_org_email_unique"))
     ) {
       throw Errors.userEmailExists(data.email);
     }

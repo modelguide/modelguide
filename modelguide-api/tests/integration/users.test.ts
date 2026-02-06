@@ -144,6 +144,7 @@ describe("GET /api/users/:id", () => {
 
     const body = await response.json();
     expect(body.id).toBe(s.pizzaSupport.id);
+    expect(body.organizationId).toBe(s.pizzaOrg.id);
   });
 
   test("support can get self", async () => {
@@ -229,6 +230,26 @@ describe("PATCH /api/users/:id", () => {
     });
     expect(response.status).toBe(403);
   });
+
+  test("admin cannot demote themselves", async () => {
+    const headers = await authHeadersFor(s.pizzaAdmin);
+    const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ role: "support" }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  test("empty body returns 422", async () => {
+    const headers = await authHeadersFor(s.pizzaAdmin);
+    const response = await request(`/api/users/${s.pizzaSupport.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(422);
+  });
 });
 
 // ============================================================================
@@ -263,6 +284,15 @@ describe("DELETE /api/users/:id", () => {
 
   test("support cannot deactivate users (403)", async () => {
     const headers = await authHeadersFor(s.pizzaSupport);
+    const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(response.status).toBe(403);
+  });
+
+  test("admin cannot deactivate themselves", async () => {
+    const headers = await authHeadersFor(s.pizzaAdmin);
     const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
       method: "DELETE",
       headers,
