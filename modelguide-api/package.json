@@ -18,7 +18,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "bun run src/db/seed/index.ts"
+    "db:seed": "bun run src/db/seed/index.ts",
+    "sync:connectors": "bun run src/features/connectors/catalog/sync.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^0.18.0",
