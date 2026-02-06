@@ -537,7 +537,7 @@ router.openapi(listAgentConnectorsRoute, async (c) => {
 });
 
 // POST /:id/connectors
-const assignConnectorRoute = createRoute({
+const assignConnectorToolsRoute = createRoute({
   method: "post",
   path: "/{id}/connectors",
   tags: ["Agents"],
@@ -570,7 +570,7 @@ const assignConnectorRoute = createRoute({
   },
 });
 
-router.openapi(assignConnectorRoute, async (c) => {
+router.openapi(assignConnectorToolsRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
