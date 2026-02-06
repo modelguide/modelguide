@@ -20,9 +20,7 @@ export async function forApp<T>(
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT set_config('app.bypass_rls', 'on', true)`,
-    );
+    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`);
     return fn(tx);
   });
 }
