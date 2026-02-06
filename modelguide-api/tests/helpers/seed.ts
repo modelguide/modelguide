@@ -8,11 +8,13 @@ import type { AuthUser } from "@/types";
 import { forApp } from "@db/rls";
 import {
   agents,
+  apiKeys,
   connectors,
   connectorsCatalog,
   organizations,
   users,
 } from "@db/schema";
+import { generateApiKey } from "@lib/crypto";
 import { generateJWT } from "@lib/jwt";
 import { and, eq } from "drizzle-orm";
 
@@ -176,4 +178,41 @@ export async function authHeadersFor(
   };
   const jwt = await generateJWT(authUser);
   return { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" };
+}
+
+/**
+ * Cache of generated agent API keys (agentId → raw key).
+ * We create a fresh API key per agent since raw keys are not stored in DB.
+ */
+const _agentKeyCache = new Map<string, string>();
+
+/** Build Authorization + Content-Type headers for an agent (API key auth). */
+export async function agentHeadersFor(
+  agentId: string,
+  organizationId: string,
+): Promise<Record<string, string>> {
+  let rawKey = _agentKeyCache.get(agentId);
+
+  if (!rawKey) {
+    const generated = generateApiKey();
+    rawKey = generated.key;
+
+    await forApp(async (tx) => {
+      await tx.insert(apiKeys).values({
+        organizationId,
+        agentId,
+        name: `test-key-${agentId.slice(0, 8)}`,
+        keyHash: generated.hash,
+        keyPrefix: generated.prefix,
+        isActive: true,
+      });
+    });
+
+    _agentKeyCache.set(agentId, rawKey);
+  }
+
+  return {
+    Authorization: `Bearer ${rawKey}`,
+    "Content-Type": "application/json",
+  };
 }

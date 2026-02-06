@@ -566,7 +566,7 @@ export const sessionMessages = pgTable(
   },
   (table) => [
     index("session_messages_session_idx").on(table.sessionId),
-    index("session_messages_sequence_idx").on(
+    uniqueIndex("session_messages_session_sequence_unique").on(
       table.sessionId,
       table.sequenceNumber,
     ),
