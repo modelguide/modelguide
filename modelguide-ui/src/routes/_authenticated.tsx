@@ -1,4 +1,10 @@
-import { Outlet, createFileRoute, redirect, useNavigate, useRouterState } from '@tanstack/react-router'
+import {
+  Outlet,
+  createFileRoute,
+  redirect,
+  useNavigate,
+  useRouterState,
+} from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { AppShell } from '~/components/layout/app-shell'
 import { useAuthStore } from '~/stores/auth'

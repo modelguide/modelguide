@@ -218,4 +218,3 @@ function SessionRow({ session, onRate, index }: SessionRowProps) {
     </tr>
   )
 }
-

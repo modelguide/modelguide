@@ -33,8 +33,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
     setLoading(true)
     try {
       await login(email, password)
-      const safeRedirect =
-        redirectTo && redirectTo.startsWith('/') ? redirectTo : '/'
+      const safeRedirect = redirectTo?.startsWith('/') ? redirectTo : '/'
       navigate({ to: safeRedirect })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')

@@ -22,12 +22,7 @@ export function PageHeader({
   return (
     <div className="flex items-center justify-between animate-fade-up">
       <div className="flex items-center gap-3">
-        <div
-          className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-xl',
-            iconBg,
-          )}
-        >
+        <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', iconBg)}>
           <Icon className={cn('h-5 w-5', iconColor)} />
         </div>
         <div>

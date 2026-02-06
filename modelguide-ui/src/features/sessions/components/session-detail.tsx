@@ -170,4 +170,3 @@ function InfoItem({ label, children }: { label: string; children: ReactNode }) {
     </div>
   )
 }
-

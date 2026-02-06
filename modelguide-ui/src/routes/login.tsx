@@ -42,7 +42,10 @@ function LoginPage() {
 
           {/* Forgot Password */}
           <div className="mt-6 text-center">
-            <button type="button" className="text-sm text-fg-muted hover:text-fg-secondary transition-colors">
+            <button
+              type="button"
+              className="text-sm text-fg-muted hover:text-fg-secondary transition-colors"
+            >
               Forgot your password?
             </button>
           </div>
@@ -72,11 +75,16 @@ function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-brand-500/5 via-transparent to-brand-500/10" />
 
         {/* Content */}
-        <div className="relative z-10 max-w-md px-8 text-center animate-fade-up" style={{ animationDelay: '100ms' }}>
+        <div
+          className="relative z-10 max-w-md px-8 text-center animate-fade-up"
+          style={{ animationDelay: '100ms' }}
+        >
           {/* Logo Icon */}
           <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-2xl bg-brand-500/15 shadow-lg shadow-brand-500/10">
             <span className="font-display text-2xl font-bold text-brand-400">
-              {'{'}<span className="text-brand-500">m</span>{'}'}
+              {'{'}
+              <span className="text-brand-500">m</span>
+              {'}'}
             </span>
           </div>
 
@@ -89,7 +97,8 @@ function LoginPage() {
 
           {/* Description */}
           <p className="mt-4 text-fg-secondary leading-relaxed">
-            Configure agents, connect your tools, and deliver exceptional customer experiences with intelligent voice and chat automation.
+            Configure agents, connect your tools, and deliver exceptional customer experiences with
+            intelligent voice and chat automation.
           </p>
         </div>
 

@@ -41,7 +41,11 @@ export function Header({ title, onMenuClick, onLogout, showMenuButton }: HeaderP
 
 function ThemeToggle() {
   const { theme, setTheme } = useThemeStore()
-  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const isDark =
+    theme === 'dark' ||
+    (theme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   const toggleTheme = () => {
     setTheme(isDark ? 'light' : 'dark')
