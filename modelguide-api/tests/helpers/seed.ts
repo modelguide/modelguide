@@ -8,12 +8,9 @@ import type { AuthUser } from "@/types";
 import { forApp } from "@db/rls";
 import {
   agents,
-  apiKeys,
   connectors,
   connectorsCatalog,
   organizations,
-  secrets,
-  sessions,
   users,
 } from "@db/schema";
 import { generateJWT } from "@lib/jwt";
@@ -80,10 +77,7 @@ export async function getTestSeed(): Promise<TestSeed> {
       };
     };
 
-    const pizzaAdmin = await lookupUser(
-      pizzaOrg.id,
-      "admin@pizza-palace.com",
-    );
+    const pizzaAdmin = await lookupUser(pizzaOrg.id, "admin@pizza-palace.com");
     const pizzaSupport = await lookupUser(
       pizzaOrg.id,
       "support@pizza-palace.com",
@@ -92,10 +86,7 @@ export async function getTestSeed(): Promise<TestSeed> {
       pizzaOrg.id,
       "inactive@pizza-palace.com",
     );
-    const burgerAdmin = await lookupUser(
-      burgerOrg.id,
-      "admin@burger-barn.com",
-    );
+    const burgerAdmin = await lookupUser(burgerOrg.id, "admin@burger-barn.com");
     const burgerSupport = await lookupUser(
       burgerOrg.id,
       "support@burger-barn.com",

@@ -78,9 +78,7 @@ describe("Users RLS", () => {
       return tx.select().from(users);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((u) => u.organizationId === s.burgerOrg.id)).toBe(
-      true,
-    );
+    expect(result.every((u) => u.organizationId === s.burgerOrg.id)).toBe(true);
   });
 
   test("Cannot insert user for different organization", async () => {
@@ -122,9 +120,7 @@ describe("Connectors RLS", () => {
       return tx.select().from(connectors);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((c) => c.organizationId === s.burgerOrg.id)).toBe(
-      true,
-    );
+    expect(result.every((c) => c.organizationId === s.burgerOrg.id)).toBe(true);
   });
 
   test("Cannot insert connector for different organization", async () => {
@@ -166,9 +162,7 @@ describe("Connector Tools RLS", () => {
       return tx.select().from(connectorTools);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((t) => t.organizationId === s.burgerOrg.id)).toBe(
-      true,
-    );
+    expect(result.every((t) => t.organizationId === s.burgerOrg.id)).toBe(true);
   });
 
   test("Without RLS context, no connector tools returned", async () => {
@@ -197,9 +191,7 @@ describe("Secrets RLS", () => {
       return tx.select().from(secrets);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((r) => r.organizationId === s.burgerOrg.id)).toBe(
-      true,
-    );
+    expect(result.every((r) => r.organizationId === s.burgerOrg.id)).toBe(true);
   });
 
   test("Cannot insert secret for different organization", async () => {
@@ -243,9 +235,7 @@ describe("Agents RLS", () => {
       return tx.select().from(agents);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((a) => a.organizationId === s.burgerOrg.id)).toBe(
-      true,
-    );
+    expect(result.every((a) => a.organizationId === s.burgerOrg.id)).toBe(true);
   });
 
   test("Cannot insert agent for different organization", async () => {
@@ -286,9 +276,7 @@ describe("API Keys RLS", () => {
       return tx.select().from(apiKeys);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((k) => k.organizationId === s.burgerOrg.id)).toBe(
-      true,
-    );
+    expect(result.every((k) => k.organizationId === s.burgerOrg.id)).toBe(true);
   });
 
   test("Cannot insert API key for different organization", async () => {
@@ -331,9 +319,7 @@ describe("Sessions RLS", () => {
       return tx.select().from(sessions);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((r) => r.organizationId === s.burgerOrg.id)).toBe(
-      true,
-    );
+    expect(result.every((r) => r.organizationId === s.burgerOrg.id)).toBe(true);
   });
 
   test("Cannot insert session for different organization", async () => {
@@ -374,10 +360,7 @@ describe("Cross-org isolation", () => {
 
   test("Org A cannot delete Org B data", async () => {
     const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
-      return tx
-        .delete(users)
-        .where(eq(users.id, s.burgerAdmin.id))
-        .returning();
+      return tx.delete(users).where(eq(users.id, s.burgerAdmin.id)).returning();
     });
     expect(result.length).toBe(0);
 
@@ -385,10 +368,7 @@ describe("Cross-org isolation", () => {
     const verifyResult = await withRLSTransaction(
       s.burgerOrg.id,
       async (tx) => {
-        return tx
-          .select()
-          .from(users)
-          .where(eq(users.id, s.burgerAdmin.id));
+        return tx.select().from(users).where(eq(users.id, s.burgerAdmin.id));
       },
     );
     expect(verifyResult.length).toBe(1);

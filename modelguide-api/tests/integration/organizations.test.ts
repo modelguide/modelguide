@@ -1,15 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import { organizations } from "@db/schema";
-import {
-  withRLSTransaction,
-  withoutRLSTransaction,
-} from "../helpers/rls";
-import {
-  type TestSeed,
-  authHeadersFor,
-  getTestSeed,
-} from "../helpers/seed";
+import { withRLSTransaction, withoutRLSTransaction } from "../helpers/rls";
+import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
 let s: TestSeed;
 
