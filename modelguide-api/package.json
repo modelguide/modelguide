@@ -22,6 +22,7 @@
     "sync:connectors": "bun run src/features/connectors/catalog/sync.ts"
   },
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.34.0",
     "@hono/zod-openapi": "^0.18.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@scalar/hono-api-reference": "^0.5.0",

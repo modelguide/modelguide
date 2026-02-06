@@ -11,6 +11,7 @@ import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
 import { sessionRoutes } from "@features/sessions";
 import { authRoutes, userRoutes } from "@features/users";
+import { elevenlabsWebhooks } from "@features/webhooks";
 import { createApp, createRouter } from "@lib/create-app";
 
 const healthRoute = createRoute({
@@ -97,6 +98,8 @@ app.get(
     pageTitle: "ModelGuide API",
   }),
 );
+
+app.route("/webhooks/elevenlabs", elevenlabsWebhooks);
 
 // MCP endpoint — separate from API router (different protocol, not REST)
 app.on(["POST", "GET", "DELETE"], "/mcp", mcpHandler);

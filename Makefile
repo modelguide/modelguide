@@ -1,4 +1,4 @@
-.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
+.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset tunnel logs
 
 .DEFAULT_GOAL := help
 
@@ -104,6 +104,9 @@ clean: ## Remove build artifacts
 
 reset: ## Stop containers and remove volumes
 	docker compose down -v
+
+tunnel: ## Start ngrok tunnel to dev server
+	ngrok http 3000
 
 logs: ## View Docker container logs
 	docker compose logs -f postgres

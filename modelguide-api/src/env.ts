@@ -39,6 +39,9 @@ const envSchema = z
     // Resend email configuration
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM_EMAIL: z.string().email().optional(),
+
+    // ElevenLabs webhook secret for signature verification
+    ELEVENLABS_WEBHOOK_SECRET: z.string().default(""),
   })
   .refine(
     (data) =>
