@@ -23,10 +23,7 @@ import {
   users,
 } from "@db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
-import {
-  withRLSTransaction,
-  withoutRLSTransaction,
-} from "../helpers/rls";
+import { withRLSTransaction, withoutRLSTransaction } from "../helpers/rls";
 
 // Test fixtures
 let orgAId: string;

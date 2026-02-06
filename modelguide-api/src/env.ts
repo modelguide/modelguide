@@ -21,7 +21,10 @@ const envSchema = z.object({
   // Application URL (for magic links)
   APP_URL: z.string().url().default("http://localhost:3000"),
 
-  // Magic link expiration in minutes
+  // Magic link configuration
+  MAGIC_LINK_SECRET: z
+    .string()
+    .min(32, "MAGIC_LINK_SECRET must be at least 32 characters"),
   MAGIC_LINK_EXPIRES_IN_MINUTES: z.coerce.number().default(15),
 });
 

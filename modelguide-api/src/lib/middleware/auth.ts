@@ -15,7 +15,6 @@ import type { Context, MiddlewareHandler } from "hono";
 
 const bypassDb = createRLSDrizzle(db).bypass();
 
-const ORGANIZATION_HEADER = "X-Organization-ID";
 const AUTHORIZATION_HEADER = "Authorization";
 
 /**
@@ -104,10 +103,9 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
 export function authMiddleware(): MiddlewareHandler<AppBindings> {
   return async (c, next) => {
     const authHeader = c.req.header(AUTHORIZATION_HEADER);
-    const orgHeader = c.req.header(ORGANIZATION_HEADER);
 
     let authContext: AuthContext = { type: "none" };
-    let organizationId: string | null = orgHeader || null;
+    let organizationId: string | null = null;
 
     const token = extractBearerToken(authHeader);
 
@@ -122,9 +120,7 @@ export function authMiddleware(): MiddlewareHandler<AppBindings> {
         const user = await verifyJWT(token);
         if (user) {
           authContext = { type: "user", user };
-          if (!organizationId) {
-            organizationId = user.organizationId;
-          }
+          organizationId = user.organizationId;
         }
       }
     }
@@ -194,7 +190,7 @@ export function requireOrganization(): MiddlewareHandler<AppBindings> {
     const organizationId = c.get("organizationId");
 
     if (!organizationId) {
-      throw Errors.organizationHeaderRequired();
+      throw Errors.organizationRequired();
     }
 
     await next();
@@ -229,7 +225,7 @@ export function getCurrentAgent(c: Context<AppBindings>) {
 export function getOrganizationId(c: Context<AppBindings>): string {
   const orgId = c.get("organizationId");
   if (!orgId) {
-    throw Errors.organizationHeaderRequired();
+    throw Errors.organizationRequired();
   }
   return orgId;
 }
