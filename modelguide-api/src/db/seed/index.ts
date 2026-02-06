@@ -4,6 +4,7 @@
  */
 
 import { generateApiKey } from "@lib/crypto";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../schema";
@@ -16,23 +17,26 @@ import {
   connectors,
   connectorsCatalog,
   organizations,
+  secrets,
+  sessions,
   users,
 } from "../schema";
 import { connectorsCatalogSeed } from "./connectors-catalog";
 
-// Use migration URL (superuser) to bypass RLS for seeding
-const connectionString =
-  process.env.DATABASE_MIGRATION_URL || process.env.DATABASE_URL;
+type SeedDb = PostgresJsDatabase<typeof schema>;
 
-if (!connectionString) {
-  console.error("DATABASE_MIGRATION_URL or DATABASE_URL must be set");
-  process.exit(1);
+export async function runSeed(connectionString: string) {
+  const queryClient = postgres(connectionString);
+  const db = drizzle(queryClient, { schema });
+
+  try {
+    await seedAll(db);
+  } finally {
+    await queryClient.end();
+  }
 }
 
-const queryClient = postgres(connectionString);
-const db = drizzle(queryClient, { schema });
-
-async function seed() {
+async function seedAll(db: SeedDb) {
   console.log("Starting database seed...\n");
 
   // 1. Seed connectors catalog (global)
@@ -111,10 +115,10 @@ async function seed() {
 
   // Seed data for both organizations
   console.log("\n--- Seeding Pizza Palace data ---");
-  await seedOrgData(pizzaOrg.id, medusaCatalog.id, "pizza-palace");
+  await seedOrgData(db, pizzaOrg.id, medusaCatalog.id, "pizza-palace");
 
   console.log("\n--- Seeding Burger Barn data ---");
-  await seedOrgData(burgerOrg.id, medusaCatalog.id, "burger-barn");
+  await seedOrgData(db, burgerOrg.id, medusaCatalog.id, "burger-barn");
 
   console.log("\nSeed completed successfully!");
   console.log("\nTest credentials:");
@@ -123,6 +127,7 @@ async function seed() {
 }
 
 async function seedOrgData(
+  db: SeedDb,
   organizationId: string,
   medusaCatalogId: string,
   orgSlug: string,
@@ -131,6 +136,7 @@ async function seedOrgData(
   console.log("\nSeeding test users...");
   const adminEmail = `admin@${orgSlug}.com`;
   const supportEmail = `support@${orgSlug}.com`;
+  const inactiveEmail = `inactive@${orgSlug}.com`;
 
   const [adminUser] = await db
     .insert(users)
@@ -148,6 +154,13 @@ async function seedOrgData(
         name: "Support User",
         role: "support",
         isActive: true,
+      },
+      {
+        organizationId,
+        email: inactiveEmail,
+        name: "Inactive User",
+        role: "support",
+        isActive: false,
       },
     ])
     .onConflictDoNothing()
@@ -320,15 +333,48 @@ Always be friendly and helpful. If you're unsure about something, ask for clarif
     .returning();
 
   console.log(`  Linked ${linkedTools.length} tools to agent`);
+
+  // 9. Create test secret
+  console.log("\nSeeding test secret...");
+  await db
+    .insert(secrets)
+    .values({
+      organizationId,
+      name: `${orgSlug} API Token`,
+      secretType: "api_key",
+      encryptedValue: `encrypted_placeholder_${orgSlug}`,
+      ownerType: "connector",
+      ownerId: testConnector.id,
+    })
+    .onConflictDoNothing();
+  console.log("  Created/found secret");
+
+  // 10. Create test session
+  console.log("\nSeeding test session...");
+  await db
+    .insert(sessions)
+    .values({
+      organizationId,
+      agentId: testAgent.id,
+      channelType: "voice",
+      status: "active",
+    })
+    .onConflictDoNothing();
+  console.log("  Created/found session");
 }
 
-// Run seed
-seed()
-  .catch((error) => {
+// CLI entry point
+if (import.meta.main) {
+  const connectionString =
+    process.env.DATABASE_MIGRATION_URL || process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    console.error("DATABASE_MIGRATION_URL or DATABASE_URL must be set");
+    process.exit(1);
+  }
+
+  runSeed(connectionString).catch((error) => {
     console.error("Seed failed:", error);
     process.exit(1);
-  })
-  .finally(async () => {
-    // Close database connection
-    await queryClient.end();
   });
+}

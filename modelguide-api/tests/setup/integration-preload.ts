@@ -2,7 +2,7 @@
  * Bun preload script for integration tests.
  *
  * Starts a disposable PostgreSQL container via Testcontainers,
- * sets all required env vars, and runs Drizzle migrations
+ * sets all required env vars, runs Drizzle migrations, and seeds test data
  * BEFORE any test module is imported.
  *
  * Usage: bun test --preload ./tests/setup/integration-preload.ts tests/integration
@@ -78,6 +78,10 @@ const migrationsFolder = path.resolve(import.meta.dir, "..", "..", "drizzle");
 await migrate(migrationDb, { migrationsFolder });
 await migrationClient.end();
 
+// Run seed as superuser (creates orgs, users, connectors, agents, etc.)
+const { runSeed } = await import("../../src/db/seed/index");
+await runSeed(migrationUrl);
+
 console.log(
   `[integration-preload] PostgreSQL container ready at ${host}:${port}`,
 );
@@ -85,5 +89,9 @@ console.log(
 // Stop container on process exit
 process.on("beforeExit", async () => {
   console.log("[integration-preload] Stopping PostgreSQL container...");
+  const { closeAppDb } = await import("../helpers/rls");
+  await closeAppDb();
+  const { closeDatabase } = await import("../../src/db/client");
+  await closeDatabase();
   await container.stop();
 });
