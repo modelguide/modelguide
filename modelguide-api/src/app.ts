@@ -67,6 +67,7 @@ app.doc("/openapi.json", {
       },
     },
   },
+  // biome-ignore lint/suspicious/noExplicitAny: OpenAPIObjectConfig omits `components` but we need securitySchemes for Scalar docs
 } as any);
 
 app.get(

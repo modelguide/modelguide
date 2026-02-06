@@ -57,8 +57,7 @@ const migrationUrl = `postgresql://${PG_USER}:${PG_PASSWORD}@${host}:${port}/${P
 process.env.DATABASE_URL = appUrl;
 process.env.DATABASE_MIGRATION_URL = migrationUrl;
 process.env.NODE_ENV = "test";
-process.env.JWT_SECRET =
-  "test-jwt-secret-that-is-at-least-32-characters-long";
+process.env.JWT_SECRET = "test-jwt-secret-that-is-at-least-32-characters-long";
 process.env.ENCRYPTION_KEY = Buffer.from(
   "0123456789abcdef0123456789abcdef",
 ).toString("base64");
@@ -72,12 +71,7 @@ const postgres = (await import("postgres")).default;
 const migrationClient = postgres(migrationUrl, { max: 1 });
 const migrationDb = drizzle(migrationClient);
 
-const migrationsFolder = path.resolve(
-  import.meta.dir,
-  "..",
-  "..",
-  "drizzle",
-);
+const migrationsFolder = path.resolve(import.meta.dir, "..", "..", "drizzle");
 
 await migrate(migrationDb, { migrationsFolder });
 await migrationClient.end();

@@ -8,8 +8,7 @@
  */
 
 process.env.DATABASE_URL = "postgresql://fake:fake@localhost:5432/fake";
-process.env.JWT_SECRET =
-  "test-jwt-secret-that-is-at-least-32-characters-long";
+process.env.JWT_SECRET = "test-jwt-secret-that-is-at-least-32-characters-long";
 process.env.ENCRYPTION_KEY = Buffer.from(
   "0123456789abcdef0123456789abcdef",
 ).toString("base64");
