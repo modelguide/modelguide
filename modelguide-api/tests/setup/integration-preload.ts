@@ -62,6 +62,8 @@ process.env.ENCRYPTION_KEY = Buffer.from(
   "0123456789abcdef0123456789abcdef",
 ).toString("base64");
 process.env.APP_URL = "http://localhost:3000";
+process.env.MAGIC_LINK_SECRET =
+  "test-magic-link-secret-that-is-at-least-32-characters-long";
 
 // Run Drizzle migrations as superuser
 const { drizzle } = await import("drizzle-orm/postgres-js");
