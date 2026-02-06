@@ -130,7 +130,9 @@ const listRoute = createRoute({
   },
 });
 
-router.use("/", requirePermission("secrets:read"), requireOrganization());
+router.get("/", requirePermission("secrets:read"), requireOrganization());
+router.post("/", requirePermission("secrets:create"), requireOrganization());
+
 router.openapi(listRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { page, pageSize } = c.req.valid("query");
@@ -213,7 +215,17 @@ const updateRoute = createRoute({
   },
 });
 
-router.use("/:id", requirePermission("secrets:update"), requireOrganization());
+router.patch(
+  "/:id",
+  requirePermission("secrets:update"),
+  requireOrganization(),
+);
+router.delete(
+  "/:id",
+  requirePermission("secrets:delete"),
+  requireOrganization(),
+);
+
 router.openapi(updateRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");

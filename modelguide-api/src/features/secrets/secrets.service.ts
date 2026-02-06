@@ -26,7 +26,7 @@ const secretColumns = {
 export async function listSecrets(
   orgId: string,
   pagination: { page: number; pageSize: number },
-): Promise<{ items: (typeof secretColumns)[]; total: number }> {
+) {
   const { page, pageSize } = pagination;
   const offset = getOffset(page, pageSize);
 
@@ -69,27 +69,17 @@ export async function createSecret(
   return created;
 }
 
-export async function getSecretById(orgId: string, secretId: string) {
-  const [secret] = await forOrg(orgId, (tx) =>
-    tx
-      .select(secretColumns)
-      .from(secrets)
-      .where(eq(secrets.id, secretId))
-      .limit(1),
-  );
-
-  if (!secret) {
-    throw Errors.notFound("Secret", secretId);
-  }
-
-  return secret;
-}
-
 export async function updateSecret(
   orgId: string,
   secretId: string,
   data: { name?: string; value?: string },
 ) {
+  if (data.name === undefined && data.value === undefined) {
+    throw Errors.validationError(
+      "At least one of 'name' or 'value' must be provided",
+    );
+  }
+
   const updateData: { name?: string; encryptedValue?: string } = {};
 
   if (data.name !== undefined) {
