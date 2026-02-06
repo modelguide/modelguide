@@ -1,0 +1,18 @@
+/**
+ * Agents feature exports
+ */
+
+export { default as agentRoutes } from "./agents.routes";
+export {
+  listAgents,
+  getAgentById,
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  setAgentActive,
+  regenerateApiKey,
+  listAgentConnectors,
+  assignConnectorToAgent,
+  updateAgentConnectorTools,
+  removeConnectorFromAgent,
+} from "./agents.service";
