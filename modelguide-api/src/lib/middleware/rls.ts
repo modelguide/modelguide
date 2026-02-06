@@ -1,94 +1,32 @@
 /**
  * Row-Level Security (RLS) middleware
- * Sets PostgreSQL session variables for RLS policies
+ *
+ * Uses a Drizzle proxy that wraps every query in a short-lived transaction
+ * with SET LOCAL config. This is safe with connection pooling because the
+ * config and query always execute on the same connection.
  */
 
 import type { AppBindings } from "@/types";
 import { db } from "@db/client";
-import { sql } from "drizzle-orm";
+import { createRLSDrizzle } from "@db/rls-proxy";
 import type { MiddlewareHandler } from "hono";
 
-/**
- * Set RLS context for the current database connection
- * This sets app.organization_id as a session variable that RLS policies can use
- * Uses set_config() function for proper parameterized value passing
- * The third parameter `false` means session-level (persists for connection lifetime)
- */
-export async function setRLSContext(organizationId: string): Promise<void> {
-  await db.execute(
-    sql`SELECT set_config('app.organization_id', ${organizationId}, false)`,
-  );
-}
+const rls = createRLSDrizzle(db);
 
 /**
- * Clear RLS context by setting it to empty string
- * Uses set_config() for consistency
- */
-export async function clearRLSContext(): Promise<void> {
-  await db.execute(sql`SELECT set_config('app.organization_id', '', false)`);
-}
-
-/**
- * Execute a function with RLS context set
- * Ensures context is cleared even if function throws
- */
-export async function withRLSContext<T>(
-  organizationId: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  await setRLSContext(organizationId);
-  try {
-    return await fn();
-  } finally {
-    await clearRLSContext();
-  }
-}
-
-/**
- * Middleware that sets RLS context from organization ID
- * Note: This should be used after authMiddleware which sets organizationId
- *
- * IMPORTANT: RLS context is set at session level (persists for connection lifetime).
- * The context is cleared after each request in the finally block.
+ * Middleware that sets RLS-scoped db on the Hono context.
+ * Must run after authMiddleware which sets organizationId.
  */
 export function rlsMiddleware(): MiddlewareHandler<AppBindings> {
   return async (c, next) => {
     const organizationId = c.get("organizationId");
 
-    if (!organizationId) {
-      return next();
+    if (organizationId) {
+      c.set("db", rls.attach(organizationId));
+    } else {
+      c.set("db", db);
     }
 
-    await withRLSContext(organizationId, () => next());
+    await next();
   };
-}
-
-/**
- * Utility to check if RLS context is currently set
- * Useful for debugging
- */
-export async function getRLSContext(): Promise<string | null> {
-  try {
-    const result = await db.execute(
-      sql`SELECT current_setting('app.organization_id', true)`,
-    );
-    const row = result as unknown as Array<{ current_setting: string | null }>;
-    return row[0]?.current_setting ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Execute a function with RLS bypass enabled within a transaction
- * The bypass is transaction-scoped so it doesn't leak to other connections
- * Use for auth operations that need to access users before org context is established
- */
-export async function withRLSBypass<T>(
-  fn: (tx: typeof db) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`);
-    return fn(tx as unknown as typeof db);
-  });
 }

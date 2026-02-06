@@ -5,12 +5,15 @@
 
 import type { AppBindings, AuthAgent, AuthContext } from "@/types";
 import { db } from "@db/client";
+import { createRLSDrizzle } from "@db/rls-proxy";
 import { agents, apiKeys } from "@db/schema";
 import { hashApiKey, isValidApiKeyFormat } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import { verifyJWT } from "@lib/jwt";
 import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
+
+const bypassDb = createRLSDrizzle(db).bypass();
 
 const ORGANIZATION_HEADER = "X-Organization-ID";
 const AUTHORIZATION_HEADER = "Authorization";
@@ -41,7 +44,7 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
 
   const keyHash = hashApiKey(key);
 
-  const result = await db
+  const result = await bypassDb
     .select({
       apiKey: apiKeys,
       agent: agents,
@@ -70,11 +73,12 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
     return null;
   }
 
-  db.update(apiKeys)
+  bypassDb
+    .update(apiKeys)
     .set({ lastUsedAt: new Date() })
     .where(eq(apiKeys.id, apiKey.id))
-    .execute()
-    .catch((err) => {
+    .then(() => {})
+    .catch((err: Error) => {
       if (process.env.NODE_ENV === "development") {
         console.warn("Failed to update API key lastUsedAt:", err.message);
       }

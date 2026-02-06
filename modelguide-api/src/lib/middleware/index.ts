@@ -15,13 +15,7 @@ export {
 } from "./auth";
 
 // RLS middleware
-export {
-  rlsMiddleware,
-  setRLSContext,
-  clearRLSContext,
-  withRLSContext,
-  getRLSContext,
-} from "./rls";
+export { rlsMiddleware } from "./rls";
 
 // RBAC middleware
 export {

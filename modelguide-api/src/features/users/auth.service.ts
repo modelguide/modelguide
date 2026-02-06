@@ -4,6 +4,7 @@
 
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
+import { createRLSDrizzle } from "@db/rls-proxy";
 import { magicTokens, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { Errors } from "@lib/errors";
@@ -14,19 +15,18 @@ import {
   isMagicTokenUsed,
   sendMagicLink,
 } from "@lib/magic-link";
-import { withRLSBypass } from "@lib/middleware/rls";
 import { and, eq, isNull, lt } from "drizzle-orm";
+
+const bypassDb = createRLSDrizzle(db).bypass();
 
 /**
  * Request a magic link for login
  * Returns success even if user doesn't exist (to prevent enumeration)
  */
 export async function requestMagicLink(email: string): Promise<void> {
-  const user = await withRLSBypass((tx) =>
-    tx.query.users.findFirst({
-      where: eq(users.email, email.toLowerCase()),
-    }),
-  );
+  const user = await bypassDb.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase()),
+  });
 
   // Silently succeed for non-existent/inactive users to prevent email enumeration
   if (!user || !user.isActive) {
@@ -70,11 +70,9 @@ export async function verifyMagicToken(token: string): Promise<{
     throw Errors.magicTokenExpired();
   }
 
-  const user = await withRLSBypass((tx) =>
-    tx.query.users.findFirst({
-      where: eq(users.id, magicToken.userId),
-    }),
-  );
+  const user = await bypassDb.query.users.findFirst({
+    where: eq(users.id, magicToken.userId),
+  });
 
   if (!user) {
     throw Errors.magicTokenInvalid();
@@ -95,12 +93,10 @@ export async function verifyMagicToken(token: string): Promise<{
     throw Errors.magicTokenUsed();
   }
 
-  await withRLSBypass((tx) =>
-    tx
-      .update(users)
-      .set({ lastLoginAt: new Date() })
-      .where(eq(users.id, user.id)),
-  );
+  await bypassDb
+    .update(users)
+    .set({ lastLoginAt: new Date() })
+    .where(eq(users.id, user.id));
 
   const authUser: AuthUser = {
     id: user.id,
@@ -122,7 +118,7 @@ export async function verifyMagicToken(token: string): Promise<{
  * Get current user information
  */
 export async function getUserById(userId: string): Promise<AuthUser | null> {
-  const user = await db.query.users.findFirst({
+  const user = await bypassDb.query.users.findFirst({
     where: eq(users.id, userId),
   });
 
