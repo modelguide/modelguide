@@ -23,7 +23,11 @@ import {
   users,
 } from "@db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
-import { withRLSTransaction, withoutRLSTransaction } from "../helpers/rls";
+import {
+  closeAppDb,
+  withRLSTransaction,
+  withoutRLSTransaction,
+} from "../helpers/rls";
 
 // Test fixtures
 let orgAId: string;
@@ -249,6 +253,8 @@ afterAll(async () => {
   await db
     .delete(organizations)
     .where(inArray(organizations.id, [orgAId, orgBId]));
+
+  await closeAppDb();
 });
 
 // ============================================================================

@@ -4,7 +4,7 @@
  */
 
 import type { AppBindings, AuthAgent, AuthContext } from "@/types";
-import { db } from "@db/client";
+import { forApp } from "@db/rls";
 import { agents, apiKeys } from "@db/schema";
 import { hashApiKey, isValidApiKeyFormat } from "@lib/crypto";
 import { Errors } from "@lib/errors";
@@ -40,15 +40,17 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
 
   const keyHash = hashApiKey(key);
 
-  const result = await db
-    .select({
-      apiKey: apiKeys,
-      agent: agents,
-    })
-    .from(apiKeys)
-    .leftJoin(agents, eq(apiKeys.agentId, agents.id))
-    .where(eq(apiKeys.keyHash, keyHash))
-    .limit(1);
+  const result = await forApp((tx) =>
+    tx
+      .select({
+        apiKey: apiKeys,
+        agent: agents,
+      })
+      .from(apiKeys)
+      .leftJoin(agents, eq(apiKeys.agentId, agents.id))
+      .where(eq(apiKeys.keyHash, keyHash))
+      .limit(1),
+  );
 
   if (result.length === 0) {
     return null;
@@ -69,15 +71,17 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
     return null;
   }
 
-  db.update(apiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(apiKeys.id, apiKey.id))
-    .execute()
-    .catch((err) => {
-      if (process.env.NODE_ENV === "development") {
-        console.warn("Failed to update API key lastUsedAt:", err.message);
-      }
-    });
+  // Fire-and-forget: update lastUsedAt (bypasses RLS)
+  forApp((tx) =>
+    tx
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, apiKey.id)),
+  ).catch((err: Error) => {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("Failed to update API key lastUsedAt:", err.message);
+    }
+  });
 
   if (agent) {
     return {
