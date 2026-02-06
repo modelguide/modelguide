@@ -32,7 +32,6 @@ beforeAll(async () => {
 afterAll(async () => {
   if (createdAgentIds.length > 0) {
     await forApp(async (tx) => {
-      // Clean up agent_connector_tools first (no cascade from agents for test-created ones)
       await tx
         .delete(agentConnectorTools)
         .where(inArray(agentConnectorTools.agentId, createdAgentIds));
@@ -298,7 +297,6 @@ describe("PATCH /api/agents/:id", () => {
 
 describe("DELETE /api/agents/:id", () => {
   test("deletes agent (204)", async () => {
-    // Create an agent to delete
     const createResponse = await request("/api/agents", {
       method: "POST",
       headers: pizzaAdminHeaders,
@@ -313,7 +311,6 @@ describe("DELETE /api/agents/:id", () => {
 
     expect(response.status).toBe(204);
 
-    // Verify it's gone
     const getResponse = await request(`/api/agents/${id}`, {
       headers: pizzaAdminHeaders,
     });
@@ -377,6 +374,16 @@ describe("POST /api/agents/:id/activate", () => {
 
     expect(response.status).toBe(403);
   });
+
+  test("returns 404 for non-existent agent", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const response = await request(`/api/agents/${fakeId}/activate`, {
+      method: "POST",
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(404);
+  });
 });
 
 // ============================================================================
@@ -427,6 +434,16 @@ describe("POST /api/agents/:id/deactivate", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  test("returns 404 for non-existent agent", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const response = await request(`/api/agents/${fakeId}/deactivate`, {
+      method: "POST",
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(404);
   });
 });
 
@@ -515,7 +532,6 @@ describe("Agent Connector Tools", () => {
   let toolSlugs: string[];
 
   beforeAll(async () => {
-    // Create a fresh agent for connector tests
     const response = await request("/api/agents", {
       method: "POST",
       headers: pizzaAdminHeaders,
@@ -525,7 +541,6 @@ describe("Agent Connector Tools", () => {
     connectorAgentId = body.id;
     createdAgentIds.push(connectorAgentId);
 
-    // Get tool slugs from the pizza connector
     const toolsResponse = await request(
       `/api/connectors/${s.pizzaConnectorId}/tools`,
       { headers: pizzaAdminHeaders },
@@ -544,11 +559,15 @@ describe("Agent Connector Tools", () => {
           connectorId: s.pizzaConnectorId,
           tools: [
             {
-              name: toolSlugs[0],
+              slug: toolSlugs[0],
               isEnabled: true,
               requiresConfirmation: false,
             },
-            { name: toolSlugs[1], isEnabled: true, requiresConfirmation: true },
+            {
+              slug: toolSlugs[1],
+              isEnabled: true,
+              requiresConfirmation: true,
+            },
           ],
         }),
       },
@@ -588,7 +607,7 @@ describe("Agent Connector Tools", () => {
         body: JSON.stringify({
           tools: [
             {
-              name: toolSlugs[0],
+              slug: toolSlugs[0],
               isEnabled: false,
               requiresConfirmation: true,
             },
@@ -610,7 +629,7 @@ describe("Agent Connector Tools", () => {
         headers: pizzaAdminHeaders,
         body: JSON.stringify({
           connectorId: s.pizzaConnectorId,
-          tools: [{ name: toolSlugs[0], isEnabled: true }],
+          tools: [{ slug: toolSlugs[0], isEnabled: true }],
         }),
       },
     );
@@ -627,7 +646,7 @@ describe("Agent Connector Tools", () => {
         headers: pizzaAdminHeaders,
         body: JSON.stringify({
           connectorId: fakeId,
-          tools: [{ name: "add_to_cart" }],
+          tools: [{ slug: "add_to_cart" }],
         }),
       },
     );
@@ -643,7 +662,7 @@ describe("Agent Connector Tools", () => {
         headers: pizzaSupportHeaders,
         body: JSON.stringify({
           connectorId: s.pizzaConnectorId,
-          tools: [{ name: toolSlugs[2] }],
+          tools: [{ slug: toolSlugs[2] }],
         }),
       },
     );
@@ -662,7 +681,6 @@ describe("Agent Connector Tools", () => {
 
     expect(response.status).toBe(204);
 
-    // Verify tools removed
     const listResponse = await request(
       `/api/agents/${connectorAgentId}/connectors`,
       { headers: pizzaAdminHeaders },
@@ -755,7 +773,7 @@ describe("RLS isolation", () => {
       headers: burgerAdminHeaders,
       body: JSON.stringify({
         connectorId: s.pizzaConnectorId,
-        tools: [{ name: "add_to_cart" }],
+        tools: [{ slug: "add_to_cart" }],
       }),
     });
 
@@ -765,6 +783,20 @@ describe("RLS isolation", () => {
   test("Burger Barn cannot see Pizza Palace agent connectors (404)", async () => {
     const response = await request(`/api/agents/${s.pizzaAgentId}/connectors`, {
       headers: burgerAdminHeaders,
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  test("cannot assign cross-org connector to own agent (404)", async () => {
+    // Pizza Palace admin tries to assign Burger Barn's connector
+    const response = await request(`/api/agents/${s.pizzaAgentId}/connectors`, {
+      method: "POST",
+      headers: pizzaAdminHeaders,
+      body: JSON.stringify({
+        connectorId: s.burgerConnectorId,
+        tools: [{ slug: "add_to_cart" }],
+      }),
     });
 
     expect(response.status).toBe(404);

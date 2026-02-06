@@ -3,6 +3,7 @@
  */
 
 import { forOrg } from "@db/rls";
+import type { Transaction } from "@db/rls";
 import {
   agentConnectorTools,
   agents,
@@ -19,6 +20,26 @@ import {
 } from "@lib/pagination";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 
+type AgentType = (typeof agents.agentType.enumValues)[number];
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Verify agent exists within a forOrg transaction. Returns the agent row.
+ * Use inside an existing `forOrg` call to avoid TOCTOU races.
+ */
+async function requireAgent(tx: Transaction, agentId: string) {
+  const [agent] = await tx.select().from(agents).where(eq(agents.id, agentId));
+
+  if (!agent) {
+    throw Errors.agentNotFound(agentId);
+  }
+
+  return agent;
+}
+
 // ============================================================================
 // Core Agent CRUD
 // ============================================================================
@@ -26,7 +47,7 @@ import { and, asc, count, eq, inArray } from "drizzle-orm";
 export async function listAgents(
   orgId: string,
   pagination: PaginationParams,
-  filters?: { isActive?: boolean; agentType?: string },
+  filters?: { isActive?: boolean; agentType?: AgentType },
 ) {
   const { page, pageSize } = pagination;
   const offset = getOffset(page, pageSize);
@@ -37,7 +58,7 @@ export async function listAgents(
       conditions.push(eq(agents.isActive, filters.isActive));
     }
     if (filters?.agentType) {
-      conditions.push(eq(agents.agentType, filters.agentType as "voice"));
+      conditions.push(eq(agents.agentType, filters.agentType));
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -77,7 +98,7 @@ export async function createAgent(
   data: {
     name: string;
     description?: string;
-    agentType?: "voice";
+    agentType?: AgentType;
     systemPrompt?: string;
     tags?: string[];
     metadata?: Record<string, unknown>;
@@ -187,9 +208,9 @@ export async function regenerateApiKey(
   agentId: string,
   createdBy: string,
 ) {
-  await getAgentById(orgId, agentId);
-
   return forOrg(orgId, async (tx) => {
+    await requireAgent(tx, agentId);
+
     await tx
       .update(apiKeys)
       .set({ isActive: false })
@@ -213,13 +234,18 @@ export async function regenerateApiKey(
 
 // ============================================================================
 // Agent Connector Tools (Junction Table)
+//
+// agent_connector_tools has NO RLS and NO organizationId column.
+// Access control is enforced by verifying the agent belongs to the org
+// (via the RLS-protected agents table) within the same forOrg transaction.
+// Never query this table without joining through an RLS-scoped parent.
 // ============================================================================
 
 export async function listAgentConnectors(orgId: string, agentId: string) {
-  await getAgentById(orgId, agentId);
+  return forOrg(orgId, async (tx) => {
+    await requireAgent(tx, agentId);
 
-  const rows = await forOrg(orgId, (tx) =>
-    tx
+    const rows = await tx
       .select({
         id: agentConnectorTools.id,
         connectorToolId: agentConnectorTools.connectorToolId,
@@ -238,44 +264,44 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
       )
       .innerJoin(connectors, eq(connectorTools.connectorId, connectors.id))
       .where(eq(agentConnectorTools.agentId, agentId))
-      .orderBy(asc(connectors.name), asc(connectorTools.name)),
-  );
+      .orderBy(asc(connectors.name), asc(connectorTools.name));
 
-  const grouped = new Map<
-    string,
-    {
-      connectorId: string;
-      connectorSlug: string;
-      connectorName: string;
-      tools: {
-        id: string;
-        name: string;
-        slug: string;
-        isEnabled: boolean;
-        requiresConfirmation: boolean;
-      }[];
-    }
-  >();
+    const grouped = new Map<
+      string,
+      {
+        connectorId: string;
+        connectorSlug: string;
+        connectorName: string;
+        tools: {
+          id: string;
+          name: string;
+          slug: string;
+          isEnabled: boolean;
+          requiresConfirmation: boolean;
+        }[];
+      }
+    >();
 
-  for (const row of rows) {
-    if (!grouped.has(row.connectorId)) {
-      grouped.set(row.connectorId, {
-        connectorId: row.connectorId,
-        connectorSlug: row.connectorSlug,
-        connectorName: row.connectorName,
-        tools: [],
+    for (const row of rows) {
+      if (!grouped.has(row.connectorId)) {
+        grouped.set(row.connectorId, {
+          connectorId: row.connectorId,
+          connectorSlug: row.connectorSlug,
+          connectorName: row.connectorName,
+          tools: [],
+        });
+      }
+      grouped.get(row.connectorId)!.tools.push({
+        id: row.id,
+        name: row.toolName,
+        slug: row.toolSlug,
+        isEnabled: row.isEnabled,
+        requiresConfirmation: row.requiresConfirmation,
       });
     }
-    grouped.get(row.connectorId)!.tools.push({
-      id: row.id,
-      name: row.toolName,
-      slug: row.toolSlug,
-      isEnabled: row.isEnabled,
-      requiresConfirmation: row.requiresConfirmation,
-    });
-  }
 
-  return Array.from(grouped.values());
+    return Array.from(grouped.values());
+  });
 }
 
 export async function assignConnectorToAgent(
@@ -284,15 +310,15 @@ export async function assignConnectorToAgent(
   data: {
     connectorId: string;
     tools: {
-      name: string;
+      slug: string;
       isEnabled?: boolean;
       requiresConfirmation?: boolean;
     }[];
   },
 ) {
-  await getAgentById(orgId, agentId);
-
   return forOrg(orgId, async (tx) => {
+    await requireAgent(tx, agentId);
+
     const [connector] = await tx
       .select()
       .from(connectors)
@@ -302,7 +328,7 @@ export async function assignConnectorToAgent(
       throw Errors.connectorNotFound(data.connectorId);
     }
 
-    const toolSlugs = data.tools.map((t) => t.name);
+    const toolSlugs = data.tools.map((t) => t.slug);
     const existingTools = await tx
       .select()
       .from(connectorTools)
@@ -319,7 +345,7 @@ export async function assignConnectorToAgent(
       throw Errors.notFound("Connector tools", missing.join(", "));
     }
 
-    const settingsBySlug = new Map(data.tools.map((t) => [t.name, t]));
+    const settingsBySlug = new Map(data.tools.map((t) => [t.slug, t]));
 
     const values = existingTools.map((tool) => {
       const settings = settingsBySlug.get(tool.slug)!;
@@ -353,15 +379,15 @@ export async function updateAgentConnectorTools(
   connectorId: string,
   data: {
     tools: {
-      name: string;
+      slug: string;
       isEnabled?: boolean;
       requiresConfirmation?: boolean;
     }[];
   },
 ) {
-  await getAgentById(orgId, agentId);
-
   return forOrg(orgId, async (tx) => {
+    await requireAgent(tx, agentId);
+
     const cTools = await tx
       .select()
       .from(connectorTools)
@@ -371,9 +397,9 @@ export async function updateAgentConnectorTools(
     let updatedCount = 0;
 
     for (const tool of data.tools) {
-      const connectorToolId = slugToId.get(tool.name);
+      const connectorToolId = slugToId.get(tool.slug);
       if (!connectorToolId) {
-        throw Errors.toolNotFound(tool.name);
+        throw Errors.toolNotFound(tool.slug);
       }
 
       const setValues: { isEnabled?: boolean; requiresConfirmation?: boolean } =
@@ -383,7 +409,7 @@ export async function updateAgentConnectorTools(
         setValues.requiresConfirmation = tool.requiresConfirmation;
 
       if (Object.keys(setValues).length > 0) {
-        await tx
+        const [result] = await tx
           .update(agentConnectorTools)
           .set(setValues)
           .where(
@@ -391,7 +417,12 @@ export async function updateAgentConnectorTools(
               eq(agentConnectorTools.agentId, agentId),
               eq(agentConnectorTools.connectorToolId, connectorToolId),
             ),
-          );
+          )
+          .returning({ id: agentConnectorTools.id });
+
+        if (!result) {
+          throw Errors.notFound("Agent connector tool assignment", tool.slug);
+        }
         updatedCount++;
       }
     }
@@ -405,24 +436,33 @@ export async function removeConnectorFromAgent(
   agentId: string,
   connectorId: string,
 ): Promise<void> {
-  await getAgentById(orgId, agentId);
-
   await forOrg(orgId, async (tx) => {
+    await requireAgent(tx, agentId);
+
     const cTools = await tx
       .select({ id: connectorTools.id })
       .from(connectorTools)
       .where(eq(connectorTools.connectorId, connectorId));
 
-    if (cTools.length === 0) return;
+    if (cTools.length === 0) {
+      throw Errors.connectorNotFound(connectorId);
+    }
 
-    await tx.delete(agentConnectorTools).where(
-      and(
-        eq(agentConnectorTools.agentId, agentId),
-        inArray(
-          agentConnectorTools.connectorToolId,
-          cTools.map((t) => t.id),
+    const deleted = await tx
+      .delete(agentConnectorTools)
+      .where(
+        and(
+          eq(agentConnectorTools.agentId, agentId),
+          inArray(
+            agentConnectorTools.connectorToolId,
+            cTools.map((t) => t.id),
+          ),
         ),
-      ),
-    );
+      )
+      .returning({ id: agentConnectorTools.id });
+
+    if (deleted.length === 0) {
+      throw Errors.notFound("Agent connector assignment");
+    }
   });
 }

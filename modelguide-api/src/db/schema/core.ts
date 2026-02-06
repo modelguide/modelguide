@@ -444,6 +444,9 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
 
 // ============================================================================
 // Agent Connector Tools (Junction Table)
+// No RLS or organizationId: always queried via agents (RLS-protected) and
+// connectorTools (RLS-protected). Never query this table directly without
+// joining through an RLS-scoped parent.
 // ============================================================================
 
 export const agentConnectorTools = pgTable(

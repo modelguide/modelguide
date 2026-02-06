@@ -13,7 +13,7 @@ import {
   requireUser,
 } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
-import { errorResponseSchema } from "@lib/schemas";
+import { errorResponse } from "@lib/schemas";
 import {
   assignConnectorToAgent,
   createAgent,
@@ -106,7 +106,7 @@ const assignConnectorSchema = z.object({
   connectorId: z.string().uuid().openapi({ description: "Connector ID" }),
   tools: z.array(
     z.object({
-      name: z.string().openapi({ description: "Tool slug" }),
+      slug: z.string().openapi({ description: "Tool slug" }),
       isEnabled: z.boolean().optional().default(true),
       requiresConfirmation: z.boolean().optional().default(false),
     }),
@@ -116,7 +116,7 @@ const assignConnectorSchema = z.object({
 const updateConnectorToolsSchema = z.object({
   tools: z.array(
     z.object({
-      name: z.string().openapi({ description: "Tool slug" }),
+      slug: z.string().openapi({ description: "Tool slug" }),
       isEnabled: z.boolean().optional(),
       requiresConfirmation: z.boolean().optional(),
     }),
@@ -146,13 +146,6 @@ const agentConnectorParams = z.object({
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function errorResponse(description: string) {
-  return {
-    description,
-    content: { "application/json": { schema: errorResponseSchema } },
-  };
-}
 
 function formatAgent(agent: Agent) {
   return {
@@ -667,7 +660,7 @@ const removeConnectorRoute = createRoute({
     204: { description: "Connector removed from agent" },
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
-    404: errorResponse("Agent not found"),
+    404: errorResponse("Agent or connector not found"),
   },
 });
 
