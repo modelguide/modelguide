@@ -49,8 +49,7 @@ export const api = ky.create({
         }
 
         // 401 received — attempt refresh
-        const { isAuthenticated, refreshAccessToken, logout } =
-          useAuthStore.getState()
+        const { isAuthenticated, refreshAccessToken, logout } = useAuthStore.getState()
 
         if (!isAuthenticated) {
           return response
