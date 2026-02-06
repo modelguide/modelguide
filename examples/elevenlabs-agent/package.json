@@ -1,0 +1,13 @@
+{
+  "name": "elevenlabs-agent",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.34.0"
+  }
+}
