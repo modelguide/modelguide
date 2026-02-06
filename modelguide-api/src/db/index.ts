@@ -1,2 +1,2 @@
 export { db, closeDatabase } from "./client";
-export { createRLSDrizzle } from "./rls-proxy";
+export { createOrgProxy, createBypassProxy } from "./rls-proxy";

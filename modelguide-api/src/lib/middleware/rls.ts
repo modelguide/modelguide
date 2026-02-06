@@ -8,10 +8,8 @@
 
 import type { AppBindings } from "@/types";
 import { db } from "@db/client";
-import { createRLSDrizzle } from "@db/rls-proxy";
+import { createOrgProxy } from "@db/rls-proxy";
 import type { MiddlewareHandler } from "hono";
-
-const rls = createRLSDrizzle(db);
 
 /**
  * Middleware that sets RLS-scoped db on the Hono context.
@@ -22,7 +20,7 @@ export function rlsMiddleware(): MiddlewareHandler<AppBindings> {
     const organizationId = c.get("organizationId");
 
     if (organizationId) {
-      c.set("db", rls.attach(organizationId));
+      c.set("db", createOrgProxy(db, organizationId));
     } else {
       c.set("db", db);
     }

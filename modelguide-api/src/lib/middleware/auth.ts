@@ -5,7 +5,7 @@
 
 import type { AppBindings, AuthAgent, AuthContext } from "@/types";
 import { db } from "@db/client";
-import { createRLSDrizzle } from "@db/rls-proxy";
+import { createBypassProxy } from "@db/rls-proxy";
 import { agents, apiKeys } from "@db/schema";
 import { hashApiKey, isValidApiKeyFormat } from "@lib/crypto";
 import { Errors } from "@lib/errors";
@@ -13,7 +13,7 @@ import { verifyJWT } from "@lib/jwt";
 import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 
-const bypassDb = createRLSDrizzle(db).bypass();
+const bypassDb = createBypassProxy(db);
 
 const AUTHORIZATION_HEADER = "Authorization";
 
@@ -72,8 +72,7 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
     return null;
   }
 
-  // Fire-and-forget: api_keys has RLS, so bypass is needed.
-  // .then() triggers the proxy's thenable to execute the query.
+  // Fire-and-forget: update lastUsedAt (bypasses RLS)
   bypassDb
     .update(apiKeys)
     .set({ lastUsedAt: new Date() })

@@ -4,7 +4,7 @@
 
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
-import { createRLSDrizzle } from "@db/rls-proxy";
+import { createBypassProxy } from "@db/rls-proxy";
 import { magicTokens, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { Errors } from "@lib/errors";
@@ -17,10 +17,9 @@ import {
 } from "@lib/magic-link";
 import { and, eq, isNull, lt } from "drizzle-orm";
 
-// bypassDb: used for RLS-protected tables (users, agents, etc.) during auth
-// flows where organization context is not yet established.
+// Bypass RLS for auth flows where organization context is not yet established.
 // magicTokens has no RLS policies, so bare `db` is used for those operations.
-const bypassDb = createRLSDrizzle(db).bypass();
+const bypassDb = createBypassProxy(db);
 
 /**
  * Request a magic link for login

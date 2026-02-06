@@ -6,32 +6,19 @@
  * always run on the same connection, making it safe with connection pooling.
  */
 
+import type { SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import type { Database } from "./client";
 
-type SetConfigSQL = ReturnType<typeof sql>;
-
-function buildSetConfig(key: string, value: string): SetConfigSQL {
-  return sql`SELECT set_config(${key}, ${value}, true)`;
-}
+const QUERY_METHODS = new Set(["select", "insert", "update", "delete"]);
 
 /**
- * Query methods that return a thenable builder chain.
- * We intercept these to replay the chain inside a transaction.
- */
-const QUERY_METHODS = ["select", "insert", "update", "delete"] as const;
-
-/**
- * Create a proxy that records method calls on a builder chain,
- * then replays them inside a transaction when awaited.
- *
- * Note: each await of the proxy calls replay(), executing the query in a new
- * transaction. This matches Drizzle's standard builder behavior (not cached).
- * Builders should be awaited once — do not reuse a chain after awaiting it.
+ * Records method calls on a Drizzle builder chain, then replays them
+ * inside a transaction when the chain is awaited.
  */
 function createChainRecorder(
   db: Database,
-  configSql: SetConfigSQL,
+  configSql: SQL,
   method: string,
   args: unknown[],
 ): unknown {
@@ -40,10 +27,8 @@ function createChainRecorder(
   const replay = () =>
     db.transaction(async (tx) => {
       await tx.execute(configSql);
-      // Start the chain: tx.select(...), tx.insert(...), etc.
       // biome-ignore lint/suspicious/noExplicitAny: dynamic proxy requires runtime method dispatch
       let chain: any = (tx as any)[method](...args);
-      // Replay recorded calls: .from(...), .where(...), .values(...), etc.
       for (const call of calls) {
         chain = chain[call.prop](...call.args);
       }
@@ -55,13 +40,9 @@ function createChainRecorder(
     {},
     {
       get(_target, prop) {
-        // Ignore Symbol properties (devtools, serialization, iterators)
-        // to prevent accidental corruption of the calls array
-        if (typeof prop === "symbol") {
-          return undefined;
-        }
+        if (typeof prop === "symbol") return undefined;
+
         if (prop === "then") {
-          // When awaited, execute the chain inside a transaction
           // biome-ignore lint/suspicious/noExplicitAny: thenable protocol requires untyped resolve/reject
           return (resolve: any, reject: any) => replay().then(resolve, reject);
         }
@@ -73,7 +54,7 @@ function createChainRecorder(
           // biome-ignore lint/suspicious/noExplicitAny: thenable protocol
           return (cb: any) => replay().finally(cb);
         }
-        // Record the chained call and return the proxy for further chaining
+
         return (...callArgs: unknown[]) => {
           calls.push({ prop: prop as string, args: callArgs });
           return proxy;
@@ -89,12 +70,11 @@ function createChainRecorder(
  * Create a proxied Drizzle instance where every operation runs inside
  * a transaction with the given SET LOCAL config.
  */
-function createProxy(db: Database, configSql: SetConfigSQL): Database {
+function createProxy(db: Database, configSql: SQL): Database {
   let cachedQueryProxy: typeof db.query | null = null;
 
   return new Proxy(db, {
     get(target, prop, receiver) {
-      // Intercept transaction() — inject config before user callback
       if (prop === "transaction") {
         // biome-ignore lint/suspicious/noExplicitAny: must match Drizzle's transaction signature
         return (fn: (tx: any) => Promise<any>, ...rest: any[]) =>
@@ -107,16 +87,11 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
           );
       }
 
-      // Intercept select/insert/update/delete — return chain recorder
-      if (
-        typeof prop === "string" &&
-        QUERY_METHODS.includes(prop as (typeof QUERY_METHODS)[number])
-      ) {
+      if (typeof prop === "string" && QUERY_METHODS.has(prop)) {
         return (...args: unknown[]) =>
           createChainRecorder(target, configSql, prop, args);
       }
 
-      // Intercept execute() — wrap raw SQL in transaction
       if (prop === "execute") {
         // biome-ignore lint/suspicious/noExplicitAny: accepts any SQL query
         return (query: any) =>
@@ -126,7 +101,6 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
           });
       }
 
-      // Intercept query (relational API) — return cached nested proxy
       if (prop === "query") {
         if (cachedQueryProxy) return cachedQueryProxy;
         const queryObj = target.query;
@@ -134,16 +108,13 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
           get(qTarget, tableName) {
             // biome-ignore lint/suspicious/noExplicitAny: dynamic table access by name
             const tableApi = (qTarget as any)[tableName];
-            if (!tableApi || typeof tableApi !== "object") {
-              return tableApi;
-            }
-            // Proxy each table's findFirst/findMany
+            if (!tableApi || typeof tableApi !== "object") return tableApi;
+
             return new Proxy(tableApi, {
               get(tTarget, methodName) {
                 const original = tTarget[methodName];
-                if (typeof original !== "function") {
-                  return original;
-                }
+                if (typeof original !== "function") return original;
+
                 return (...args: unknown[]) =>
                   target.transaction(async (tx) => {
                     await tx.execute(configSql);
@@ -162,33 +133,15 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
   }) as Database;
 }
 
-export interface RLSDrizzle {
-  /** Returns a proxied db scoped to the given organization */
-  attach(organizationId: string): Database;
-  /** Returns a proxied db that bypasses RLS */
-  bypass(): Database;
+/** Returns a proxied db scoped to the given organization. */
+export function createOrgProxy(db: Database, organizationId: string): Database {
+  return createProxy(
+    db,
+    sql`SELECT set_config('app.organization_id', ${organizationId}, true)`,
+  );
 }
 
-/**
- * Factory that creates an RLS-aware Drizzle wrapper.
- *
- * Usage:
- * ```ts
- * const rls = createRLSDrizzle(db);
- * const scopedDb = rls.attach(orgId);   // queries scoped to org
- * const bypassDb = rls.bypass();        // queries bypass RLS
- * ```
- */
-export function createRLSDrizzle(db: Database): RLSDrizzle {
-  return {
-    attach(organizationId: string): Database {
-      return createProxy(
-        db,
-        buildSetConfig("app.organization_id", organizationId),
-      );
-    },
-    bypass(): Database {
-      return createProxy(db, buildSetConfig("app.bypass_rls", "on"));
-    },
-  };
+/** Returns a proxied db that bypasses RLS. */
+export function createBypassProxy(db: Database): Database {
+  return createProxy(db, sql`SELECT set_config('app.bypass_rls', 'on', true)`);
 }
