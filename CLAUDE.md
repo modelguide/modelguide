@@ -67,7 +67,7 @@ modelguide-api/src/
 
 ### Authentication Model
 
-- **Admin/Support:** JWT tokens with `X-Organization-ID` header
+- **Admin/Support:** JWT tokens (organization derived from token claims)
 - **Agents:** API keys (`mgk_xxx` prefix), key hash stored, shown only on creation
 
 ### Key Concepts

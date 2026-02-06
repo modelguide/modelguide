@@ -123,8 +123,9 @@ GET /api/auth/verify?token=<magic_token>
 #### 3. Use JWT for Authenticated Requests
 ```
 Authorization: Bearer <jwt_token>
-X-Organization-ID: <organization_uuid>
 ```
+
+*Note: The organization context is derived from the JWT token claims. No separate organization header is needed.*
 
 #### 4. Get Current User
 ```http
