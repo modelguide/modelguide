@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  api-lint-typecheck:
-    name: "API: Lint & Typecheck"
+  api:
+    name: API
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,32 +22,12 @@ jobs:
       - run: make api-install
       - run: make api-lint-check
       - run: make api-typecheck
-
-  api-unit-tests:
-    name: "API: Unit Tests"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: make api-install
       - run: make api-test-unit
-
-  api-integration-tests:
-    name: "API: Integration Tests"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: make api-install
       - run: make api-test-integration
         timeout-minutes: 5
 
-  ui-lint-typecheck:
-    name: "UI: Lint & Typecheck"
+  ui:
+    name: UI
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,16 +39,4 @@ jobs:
       - run: make ui-install
       - run: make ui-lint
       - run: make ui-typecheck
-
-  ui-unit-tests:
-    name: "UI: Unit Tests"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: modelguide-ui/package-lock.json
-      - run: make ui-install
       - run: make ui-test
