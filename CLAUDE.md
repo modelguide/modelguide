@@ -17,6 +17,12 @@ ModelGuide is an AI agent management platform that connects external AI agents (
 - **Database:** PostgreSQL 16 with Drizzle ORM
 - **Documentation:** Scalar (@scalar/hono-api-reference)
 
+## Documentation
+
+- `docs/PRD.md` - Product requirements, personas, use cases, permissions matrix
+- `docs/api-spec.md` - Complete REST API and MCP specification
+- `docs/DB_SCHEMA.md` - Database schema
+
 ## Commands
 
 ```bash

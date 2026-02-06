@@ -6,15 +6,15 @@ Admin and support dashboard for ModelGuide — an AI agent management platform. 
 
 ---
 
-## Design Direction: "Terminal Luxe"
+## Design Direction: "Atmospheric Dark"
 
-A fusion of developer-tool rawness with refined, editorial precision. The interface should feel like a high-end terminal emulator meets Linear — technical, precise, and unmistakably designed.
+Modern SaaS aesthetics with warm ember accents and depth. The interface balances editorial precision with atmospheric richness — distinctive typography, layered backgrounds, and purposeful motion.
 
 **Core principles:**
-- **Monospace-forward** — JetBrains Mono isn't just for code, it's the UI voice
-- **High contrast, low chrome** — near-black backgrounds, crisp text, surgical orange accents
-- **Data as texture** — transcripts, tool calls, and metrics create visual rhythm
-- **Purposeful motion** — staggered reveals, mechanical transitions, breathing indicators
+- **Distinctive typography** — Syne for display headings, IBM Plex Sans for body, JetBrains Mono for code/data
+- **Atmospheric depth** — layered dark backgrounds with subtle radial gradients and noise textures
+- **Warm ember accents** — orange brand color used surgically for focus, active states, and emphasis
+- **Purposeful motion** — staggered reveals, breathing indicators, smooth transitions
 
 **Avoid:**
 - Generic shadcn/ui defaults without customization
@@ -47,20 +47,23 @@ A fusion of developer-tool rawness with refined, editorial precision. The interf
 
 ```css
 @theme {
-  /* Primary UI — technical, precise */
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace;
+  /* Display headings — distinctive, editorial */
+  --font-display: 'Syne', 'SF Pro Display', system-ui, sans-serif;
 
   /* Body text — warm, readable */
-  --font-sans: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+
+  /* Code & data — technical, precise */
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
 }
 ```
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
+| Page titles | Syne (display) | 24px | 600 |
 | Logo | JetBrains Mono | 16px | 500 |
-| Navigation | JetBrains Mono | 13px | 400 |
-| Section headers | JetBrains Mono | 11px uppercase | 500 |
-| Page titles | JetBrains Mono | 24px | 600 |
+| Navigation | IBM Plex Sans | 13px | 400 |
+| Section headers | IBM Plex Sans | 11px uppercase | 500 |
 | Body text | IBM Plex Sans | 14px | 400 |
 | Data/metrics | JetBrains Mono | 32px | 500 |
 | Table cells | JetBrains Mono | 13px | 400 |
@@ -75,29 +78,28 @@ A fusion of developer-tool rawness with refined, editorial precision. The interf
 ```css
 @theme {
   /* Backgrounds */
-  --color-bg-base: #09090b;        /* page background */
-  --color-bg-elevated: #18181b;    /* cards, sidebar */
-  --color-bg-subtle: #27272a;      /* hover, inputs */
-  --color-bg-muted: #3f3f46;       /* disabled states */
+  --color-bg-base: #0a0a0b;        /* page background */
+  --color-bg-elevated: #141416;    /* cards, sidebar */
+  --color-bg-subtle: #1c1c1f;      /* hover, inputs */
+  --color-bg-muted: #28282c;       /* disabled states */
 
   /* Foreground */
   --color-fg-primary: #fafafa;     /* primary text */
-  --color-fg-secondary: #a1a1aa;   /* secondary text */
-  --color-fg-muted: #71717a;       /* placeholders */
-  --color-fg-subtle: #52525b;      /* borders, dividers */
+  --color-fg-secondary: #a8a8b3;   /* secondary text */
+  --color-fg-muted: #6b6b76;       /* placeholders */
+  --color-fg-subtle: #45454d;      /* borders, dividers */
 
-  /* Brand — the ember */
-  --color-brand: #f97316;          /* primary orange */
-  --color-brand-hover: #fb923c;    /* hover state */
-  --color-brand-active: #ea580c;   /* pressed state */
-  --color-brand-muted: #431407;    /* subtle backgrounds */
-  --color-brand-glow: rgba(249, 115, 22, 0.15);
+  /* Brand — the ember (full scale) */
+  --color-brand-500: #f97316;      /* primary orange */
+  --color-brand-400: #fb923c;      /* hover state */
+  --color-brand-600: #ea580c;      /* pressed state */
+  --color-brand-950: #431407;      /* subtle backgrounds */
 
   /* Semantic */
-  --color-success: #22c55e;
-  --color-success-muted: #14532d;
-  --color-warning: #eab308;
-  --color-warning-muted: #422006;
+  --color-success: #10b981;
+  --color-success-muted: #064e3b;
+  --color-warning: #f59e0b;
+  --color-warning-muted: #451a03;
   --color-error: #ef4444;
   --color-error-muted: #450a0a;
   --color-info: #3b82f6;
