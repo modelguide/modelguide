@@ -17,6 +17,9 @@ import {
 } from "@lib/magic-link";
 import { and, eq, isNull, lt } from "drizzle-orm";
 
+// bypassDb: used for RLS-protected tables (users, agents, etc.) during auth
+// flows where organization context is not yet established.
+// magicTokens has no RLS policies, so bare `db` is used for those operations.
 const bypassDb = createRLSDrizzle(db).bypass();
 
 /**

@@ -24,6 +24,10 @@ const QUERY_METHODS = ["select", "insert", "update", "delete"] as const;
 /**
  * Create a proxy that records method calls on a builder chain,
  * then replays them inside a transaction when awaited.
+ *
+ * Note: each await of the proxy calls replay(), executing the query in a new
+ * transaction. This matches Drizzle's standard builder behavior (not cached).
+ * Builders should be awaited once — do not reuse a chain after awaiting it.
  */
 function createChainRecorder(
   db: Database,
@@ -51,6 +55,11 @@ function createChainRecorder(
     {},
     {
       get(_target, prop) {
+        // Ignore Symbol properties (devtools, serialization, iterators)
+        // to prevent accidental corruption of the calls array
+        if (typeof prop === "symbol") {
+          return undefined;
+        }
         if (prop === "then") {
           // When awaited, execute the chain inside a transaction
           // biome-ignore lint/suspicious/noExplicitAny: thenable protocol requires untyped resolve/reject
@@ -81,6 +90,8 @@ function createChainRecorder(
  * a transaction with the given SET LOCAL config.
  */
 function createProxy(db: Database, configSql: SetConfigSQL): Database {
+  let cachedQueryProxy: typeof db.query | null = null;
+
   return new Proxy(db, {
     get(target, prop, receiver) {
       // Intercept transaction() — inject config before user callback
@@ -115,10 +126,11 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
           });
       }
 
-      // Intercept query (relational API) — return nested proxy
+      // Intercept query (relational API) — return cached nested proxy
       if (prop === "query") {
+        if (cachedQueryProxy) return cachedQueryProxy;
         const queryObj = target.query;
-        return new Proxy(queryObj, {
+        cachedQueryProxy = new Proxy(queryObj, {
           get(qTarget, tableName) {
             // biome-ignore lint/suspicious/noExplicitAny: dynamic table access by name
             const tableApi = (qTarget as any)[tableName];
@@ -141,7 +153,8 @@ function createProxy(db: Database, configSql: SetConfigSQL): Database {
               },
             });
           },
-        });
+        }) as typeof db.query;
+        return cachedQueryProxy;
       }
 
       return Reflect.get(target, prop, receiver);

@@ -72,6 +72,8 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
     return null;
   }
 
+  // Fire-and-forget: api_keys has RLS, so bypass is needed.
+  // .then() triggers the proxy's thenable to execute the query.
   bypassDb
     .update(apiKeys)
     .set({ lastUsedAt: new Date() })
