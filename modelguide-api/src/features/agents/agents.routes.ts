@@ -40,10 +40,6 @@ const agentResponseSchema = z.object({
   description: z.string().nullable(),
   agentType: z.enum(["voice"]),
   isActive: z.boolean(),
-  systemPrompt: z.string().nullable(),
-  tags: z.array(z.string()).nullable(),
-  metadata: z.record(z.unknown()),
-  createdBy: z.string().uuid().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });
@@ -82,22 +78,10 @@ const updateAgentSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     description: z.string().optional(),
-    systemPrompt: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    metadata: z.record(z.unknown()).optional(),
   })
-  .refine(
-    (data) =>
-      data.name !== undefined ||
-      data.description !== undefined ||
-      data.systemPrompt !== undefined ||
-      data.tags !== undefined ||
-      data.metadata !== undefined,
-    {
-      message:
-        "At least one of 'name', 'description', 'systemPrompt', 'tags', or 'metadata' must be provided",
-    },
-  );
+  .refine((data) => data.name !== undefined || data.description !== undefined, {
+    message: "At least one of 'name' or 'description' must be provided",
+  });
 
 const assignConnectorSchema = z.object({
   connectorId: z.string().uuid().openapi({ description: "Connector ID" }),
@@ -151,10 +135,6 @@ function formatAgent(agent: Agent) {
     description: agent.description,
     agentType: agent.agentType,
     isActive: agent.isActive,
-    systemPrompt: agent.systemPrompt,
-    tags: agent.tags,
-    metadata: agent.metadata ?? {},
-    createdBy: agent.createdBy,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
   };
@@ -316,8 +296,7 @@ const updateAgentRoute = createRoute({
   path: "/{id}",
   tags: ["Agents"],
   summary: "Update agent",
-  description:
-    "Updates agent name, description, system prompt, tags, or metadata.",
+  description: "Updates agent name or description.",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,

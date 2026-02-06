@@ -360,9 +360,6 @@ export const agents = pgTable(
     description: text("description"),
     agentType: agentTypeEnum("agent_type").notNull().default("voice"),
     isActive: boolean("is_active").notNull().default(true),
-    systemPrompt: text("system_prompt"),
-    tags: text("tags").array().default([]),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

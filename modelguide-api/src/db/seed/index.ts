@@ -251,19 +251,6 @@ async function seedOrgData(
       description: `Voice agent for handling ${orgSlug} orders`,
       agentType: "voice",
       isActive: true,
-      systemPrompt: `You are a helpful ordering assistant for ${orgSlug}.
-You can help customers:
-- Browse the menu
-- Add items to their cart
-- Check out and place orders
-- Track existing orders
-
-Always be friendly and helpful. If you're unsure about something, ask for clarification.`,
-      tags: [orgSlug, "orders", "voice"],
-      metadata: {
-        version: "1.0.0",
-        language: "en",
-      },
       createdBy: admin.id,
     })
     .onConflictDoNothing()

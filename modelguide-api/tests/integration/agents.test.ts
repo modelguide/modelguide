@@ -209,7 +209,7 @@ describe("GET /api/agents/:id", () => {
     expect(body.id).toBe(s.pizzaAgentId);
     expect(body.name).toBeDefined();
     expect(body.agentType).toBeDefined();
-    expect(body.systemPrompt).toBeDefined();
+    expect(body.systemPrompt).toBeUndefined();
   });
 
   test("returns 404 for non-existent agent", async () => {

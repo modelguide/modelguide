@@ -137,9 +137,6 @@ export async function updateAgent(
   data: {
     name?: string;
     description?: string;
-    systemPrompt?: string;
-    tags?: string[];
-    metadata?: Record<string, unknown>;
   },
 ) {
   const [updated] = await forOrg(orgId, (tx) =>
