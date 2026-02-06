@@ -104,6 +104,25 @@ describe("POST /api/secrets", () => {
     expect(parsed.iv).toBeDefined();
   });
 
+  test("rejects non-existent ownerId (404)", async () => {
+    const fakeConnectorId = "00000000-0000-0000-0000-000000000000";
+    const response = await request("/api/secrets", {
+      method: "POST",
+      headers: pizzaAdminHeaders,
+      body: JSON.stringify({
+        name: "Bad Owner",
+        value: "some_value",
+        secretType: "api_key",
+        ownerType: "connector",
+        ownerId: fakeConnectorId,
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe("NOT_FOUND");
+  });
+
   test("validates required fields (422)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
@@ -217,6 +236,74 @@ describe("GET /api/secrets", () => {
 });
 
 // ============================================================================
+// GET /api/secrets/:id - Get secret
+// ============================================================================
+
+describe("GET /api/secrets/:id", () => {
+  let testSecretId: string;
+
+  beforeAll(async () => {
+    const response = await request("/api/secrets", {
+      method: "POST",
+      headers: pizzaAdminHeaders,
+      body: JSON.stringify({
+        name: "Get Target",
+        value: "get_me",
+        secretType: "api_key",
+        ownerType: "connector",
+        ownerId: s.pizzaConnectorId,
+      }),
+    });
+    const body = await response.json();
+    testSecretId = body.id;
+    createdSecretIds.push(testSecretId);
+  });
+
+  test("returns secret metadata without value (200)", async () => {
+    const response = await request(`/api/secrets/${testSecretId}`, {
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(testSecretId);
+    expect(body.name).toBe("Get Target");
+    expect(body.secretType).toBe("api_key");
+    expect(body.ownerType).toBe("connector");
+    expect(body.ownerId).toBe(s.pizzaConnectorId);
+    expect(body.createdAt).toBeDefined();
+    expect(body.value).toBeUndefined();
+    expect(body.encryptedValue).toBeUndefined();
+  });
+
+  test("returns 404 for non-existent secret", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const response = await request(`/api/secrets/${fakeId}`, {
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe("NOT_FOUND");
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request(`/api/secrets/${testSecretId}`);
+
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects support role (403)", async () => {
+    const response = await request(`/api/secrets/${testSecretId}`, {
+      headers: pizzaSupportHeaders,
+    });
+
+    expect(response.status).toBe(403);
+  });
+});
+
+// ============================================================================
 // PATCH /api/secrets/:id - Update secret
 // ============================================================================
 
@@ -250,6 +337,7 @@ describe("PATCH /api/secrets/:id", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.name).toBe("Updated Name");
+    expect(body.updatedAt).not.toBeNull();
     expect(body.value).toBeUndefined();
     expect(body.encryptedValue).toBeUndefined();
   });
@@ -275,6 +363,11 @@ describe("PATCH /api/secrets/:id", () => {
   });
 
   test("updates both name and value", async () => {
+    const beforeResponse = await request(`/api/secrets/${updateSecretId}`, {
+      headers: pizzaAdminHeaders,
+    });
+    const before = await beforeResponse.json();
+
     const response = await request(`/api/secrets/${updateSecretId}`, {
       method: "PATCH",
       headers: pizzaAdminHeaders,
@@ -284,6 +377,8 @@ describe("PATCH /api/secrets/:id", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.name).toBe("Both Updated");
+    // updatedAt should change
+    expect(body.updatedAt).not.toBe(before.updatedAt);
   });
 
   test("returns 404 for non-existent secret", async () => {
@@ -390,6 +485,14 @@ describe("RLS isolation", () => {
 
     const ids = body.data.map((s: { id: string }) => s.id);
     expect(ids).not.toContain(pizzaSecretId);
+  });
+
+  test("Burger Barn cannot get Pizza Palace secret (404 due to RLS)", async () => {
+    const response = await request(`/api/secrets/${pizzaSecretId}`, {
+      headers: burgerAdminHeaders,
+    });
+
+    expect(response.status).toBe(404);
   });
 
   test("Burger Barn cannot update Pizza Palace secret (404 due to RLS)", async () => {

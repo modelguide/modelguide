@@ -6,6 +6,7 @@ import {
   requirePermission,
   requireUser,
 } from "@lib/middleware";
+import { errorResponseSchema } from "@lib/schemas";
 import { getOrganizationById } from "./organizations.service";
 
 const router = createRouter();
@@ -21,11 +22,6 @@ const organizationResponseSchema = z.object({
   settings: z.record(z.unknown()).nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
-});
-
-const errorResponseSchema = z.object({
-  code: z.string(),
-  message: z.string(),
 });
 
 function formatOrganization(org: {

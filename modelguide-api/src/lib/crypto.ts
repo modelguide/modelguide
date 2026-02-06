@@ -85,15 +85,14 @@ export function isValidApiKeyFormat(key: string): boolean {
 }
 
 /**
- * Encryption result containing the encrypted value and IV
+ * Encryption result containing the encrypted value and IV.
+ * The GCM authentication tag is appended to the ciphertext by Web Crypto API.
  */
 interface EncryptedData {
-  /** Base64-encoded encrypted data */
+  /** Base64-encoded encrypted data (includes GCM auth tag) */
   encrypted: string;
   /** Base64-encoded initialization vector */
   iv: string;
-  /** Authentication tag for GCM */
-  tag: string;
 }
 
 /**
@@ -124,11 +123,9 @@ export async function encryptSecret(value: string): Promise<string> {
   const encrypted = Buffer.from(encryptedBuffer).toString("base64");
   const ivBase64 = Buffer.from(iv).toString("base64");
 
-  // Store as JSON string with iv and encrypted data
   const result: EncryptedData = {
     encrypted,
     iv: ivBase64,
-    tag: "", // Tag is included in the encrypted data for Web Crypto API
   };
 
   return JSON.stringify(result);

@@ -3,11 +3,15 @@
  */
 
 import { forOrg } from "@db/rls";
-import { secrets } from "@db/schema";
+import { connectors, secrets } from "@db/schema";
 import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
-import { getOffset } from "@lib/pagination";
-import { count, eq } from "drizzle-orm";
+import {
+  type PaginationParams,
+  buildPaginationMeta,
+  getOffset,
+} from "@lib/pagination";
+import { asc, count, eq } from "drizzle-orm";
 
 /**
  * Metadata columns returned for all secret queries.
@@ -23,21 +27,38 @@ const secretColumns = {
   updatedAt: secrets.updatedAt,
 } as const;
 
-export async function listSecrets(
-  orgId: string,
-  pagination: { page: number; pageSize: number },
-) {
+export async function listSecrets(orgId: string, pagination: PaginationParams) {
   const { page, pageSize } = pagination;
   const offset = getOffset(page, pageSize);
 
   return forOrg(orgId, async (tx) => {
     const [items, [{ total }]] = await Promise.all([
-      tx.select(secretColumns).from(secrets).limit(pageSize).offset(offset),
+      tx
+        .select(secretColumns)
+        .from(secrets)
+        .orderBy(asc(secrets.createdAt))
+        .limit(pageSize)
+        .offset(offset),
       tx.select({ total: count() }).from(secrets),
     ]);
 
-    return { items, total };
+    return {
+      data: items,
+      pagination: buildPaginationMeta(page, pageSize, total),
+    };
   });
+}
+
+export async function getSecretById(orgId: string, secretId: string) {
+  const [secret] = await forOrg(orgId, (tx) =>
+    tx.select(secretColumns).from(secrets).where(eq(secrets.id, secretId)),
+  );
+
+  if (!secret) {
+    throw Errors.notFound("Secret", secretId);
+  }
+
+  return secret;
 }
 
 export async function createSecret(
@@ -52,8 +73,19 @@ export async function createSecret(
 ) {
   const encryptedValue = await encryptSecret(data.value);
 
-  const [created] = await forOrg(orgId, (tx) =>
-    tx
+  const [created] = await forOrg(orgId, async (tx) => {
+    // Validate that the referenced owner exists within the same org (RLS-scoped)
+    if (data.ownerType === "connector") {
+      const [owner] = await tx
+        .select({ id: connectors.id })
+        .from(connectors)
+        .where(eq(connectors.id, data.ownerId));
+      if (!owner) {
+        throw Errors.notFound("Connector", data.ownerId);
+      }
+    }
+
+    return tx
       .insert(secrets)
       .values({
         organizationId: orgId,
@@ -63,8 +95,8 @@ export async function createSecret(
         ownerType: data.ownerType,
         ownerId: data.ownerId,
       })
-      .returning(secretColumns),
-  );
+      .returning(secretColumns);
+  });
 
   return created;
 }
