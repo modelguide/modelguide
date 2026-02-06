@@ -43,6 +43,11 @@ export const api = ky.create({
           return response
         }
 
+        // Prevent infinite retry loop — don't retry a request that already retried
+        if (request.headers.get('X-Retry-After-Refresh')) {
+          return response
+        }
+
         // 401 received — attempt refresh
         const { isAuthenticated, refreshAccessToken, logout } =
           useAuthStore.getState()
@@ -70,6 +75,7 @@ export const api = ky.create({
         if (newToken) {
           request.headers.set('Authorization', `Bearer ${newToken}`)
         }
+        request.headers.set('X-Retry-After-Refresh', '1')
 
         return ky(request, options)
       },

@@ -3,7 +3,7 @@ import type { AuthUser, UserRole } from "@/types";
 import { sign, verify } from "hono/jwt";
 
 export function parseDuration(duration: string): number {
-  const match = duration.match(/^(\d+)([hdm])$/);
+  const match = duration.match(/^(\d+)([shdm])$/);
   if (!match) {
     throw new Error(`Invalid duration format: ${duration}`);
   }
@@ -12,6 +12,8 @@ export function parseDuration(duration: string): number {
   const unit = match[2];
 
   switch (unit) {
+    case "s":
+      return value;
     case "h":
       return value * 60 * 60;
     case "d":
@@ -29,6 +31,7 @@ export async function generateJWT(user: AuthUser): Promise<string> {
 
   return sign(
     {
+      type: "access",
       sub: user.id,
       email: user.email,
       name: user.name,
@@ -46,7 +49,13 @@ export async function verifyJWT(token: string): Promise<AuthUser | null> {
   try {
     const payload = await verify(token, env.JWT_SECRET, "HS256");
 
-    if (!payload.sub || !payload.email || !payload.role || !payload.org) {
+    if (
+      payload.type !== "access" ||
+      !payload.sub ||
+      !payload.email ||
+      !payload.role ||
+      !payload.org
+    ) {
       return null;
     }
 
@@ -93,9 +102,11 @@ export async function verifyRefreshJWT(
 
     if (
       payload.type !== "refresh" ||
-      !payload.fid ||
-      payload.gen === undefined ||
-      !payload.sub
+      typeof payload.fid !== "string" ||
+      typeof payload.gen !== "number" ||
+      !Number.isInteger(payload.gen) ||
+      payload.gen < 0 ||
+      typeof payload.sub !== "string"
     ) {
       return null;
     }

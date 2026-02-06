@@ -15,10 +15,7 @@ import {
   sendMagicLink,
 } from "@lib/magic-link";
 import { and, eq, isNull, lt } from "drizzle-orm";
-import {
-  cleanupExpiredSessions,
-  createSession,
-} from "./refresh-token.service";
+import { cleanupExpiredSessions, createSession } from "./refresh-token.service";
 
 /**
  * Request a magic link for login

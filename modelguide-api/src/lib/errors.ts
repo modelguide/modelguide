@@ -270,7 +270,9 @@ export const Errors = {
     return new AppError(ErrorCode.REFRESH_TOKEN_EXPIRED, message);
   },
 
-  refreshTokenReused(message = "Refresh token reuse detected — session revoked") {
+  refreshTokenReused(
+    message = "Refresh token reuse detected — session revoked",
+  ) {
     return new AppError(ErrorCode.REFRESH_TOKEN_REUSED, message);
   },
 

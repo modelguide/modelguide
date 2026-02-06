@@ -2,14 +2,14 @@
  * Authentication routes for magic link login with refresh token rotation
  */
 
+import { env } from "@/env";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
-import { getCurrentUser, requireUser, csrfProtection } from "@lib/middleware";
-import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { env } from "@/env";
 import { parseDuration, verifyRefreshJWT } from "@lib/jwt";
+import { csrfProtection, getCurrentUser, requireUser } from "@lib/middleware";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { requestMagicLink, verifyMagicToken } from "./auth.service";
-import { rotateRefreshToken, revokeSession } from "./refresh-token.service";
+import { revokeSession, rotateRefreshToken } from "./refresh-token.service";
 
 const router = createRouter();
 
@@ -18,15 +18,15 @@ const router = createRouter();
 // ============================================================================
 
 const REFRESH_COOKIE = "__Host-refresh_token";
-const REFRESH_COOKIE_MAX_AGE = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
 
 function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
+  const maxAge = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
   setCookie(c, REFRESH_COOKIE, token, {
     httpOnly: true,
     secure: true,
     sameSite: "Strict",
     path: "/",
-    maxAge: REFRESH_COOKIE_MAX_AGE,
+    maxAge,
   });
 }
 
@@ -323,7 +323,7 @@ router.openapi(logoutRoute, async (c) => {
   if (rawToken) {
     const payload = await verifyRefreshJWT(rawToken);
     if (payload) {
-      await revokeSession(payload.familyId, payload.generation);
+      await revokeSession(payload.familyId);
     }
   }
 

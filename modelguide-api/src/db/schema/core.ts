@@ -130,6 +130,8 @@ export const magicTokensRelations = relations(magicTokens, ({ one }) => ({
 
 // ============================================================================
 // Security Tokens (Refresh token sessions)
+// No RLS: refresh sessions are looked up by familyId across tenants.
+// The userId FK to users provides ownership semantics instead.
 // ============================================================================
 
 export const securityTokens = pgTable(
@@ -152,15 +154,12 @@ export const securityTokens = pgTable(
   ],
 );
 
-export const securityTokensRelations = relations(
-  securityTokens,
-  ({ one }) => ({
-    user: one(users, {
-      fields: [securityTokens.userId],
-      references: [users.id],
-    }),
+export const securityTokensRelations = relations(securityTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [securityTokens.userId],
+    references: [users.id],
   }),
-);
+}));
 
 // ============================================================================
 // Connectors Catalog (Global Registry)

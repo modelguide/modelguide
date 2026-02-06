@@ -12,6 +12,10 @@ interface AuthState {
   refreshAccessToken: () => Promise<boolean>
 }
 
+// Store-level deduplication: prevents concurrent refreshes from
+// beforeLoad and afterResponse hooks from racing each other
+let storeRefreshPromise: Promise<boolean> | null = null
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -57,26 +61,36 @@ export const useAuthStore = create<AuthState>()(
       },
 
       refreshAccessToken: async () => {
-        try {
-          const response = await fetch('/api/auth/refresh', {
-            method: 'POST',
-            credentials: 'include',
-          })
+        if (storeRefreshPromise) {
+          return storeRefreshPromise
+        }
 
-          if (!response.ok) {
+        storeRefreshPromise = (async () => {
+          try {
+            const response = await fetch('/api/auth/refresh', {
+              method: 'POST',
+              credentials: 'include',
+            })
+
+            if (!response.ok) {
+              return false
+            }
+
+            const data: LoginResponse = await response.json()
+            set({
+              user: data.user,
+              token: data.token,
+              isAuthenticated: true,
+            })
+            return true
+          } catch {
             return false
           }
+        })().finally(() => {
+          storeRefreshPromise = null
+        })
 
-          const data: LoginResponse = await response.json()
-          set({
-            user: data.user,
-            token: data.token,
-            isAuthenticated: true,
-          })
-          return true
-        } catch {
-          return false
-        }
+        return storeRefreshPromise
       },
     }),
     {
