@@ -43,11 +43,7 @@ export function RatingBadge({ rating, label, showAddButton, size = 'md' }: Ratin
         isPositive ? 'bg-success/15 text-success' : 'bg-error/15 text-error',
       )}
     >
-      {isPositive ? (
-        <ThumbsUp className={iconClasses} />
-      ) : (
-        <ThumbsDown className={iconClasses} />
-      )}
+      {isPositive ? <ThumbsUp className={iconClasses} /> : <ThumbsDown className={iconClasses} />}
     </span>
   )
 

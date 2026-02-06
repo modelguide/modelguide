@@ -3,7 +3,7 @@
  * Uses migration connection (superuser) to bypass RLS
  */
 
-import { generateApiKey } from "@lib/crypto";
+import { encryptSecret, generateApiKey } from "@lib/crypto";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -336,13 +336,14 @@ Always be friendly and helpful. If you're unsure about something, ask for clarif
 
   // 9. Create test secret
   console.log("\nSeeding test secret...");
+  const encryptedValue = await encryptSecret(`placeholder_token_${orgSlug}`);
   await db
     .insert(secrets)
     .values({
       organizationId,
       name: `${orgSlug} API Token`,
       secretType: "api_key",
-      encryptedValue: `encrypted_placeholder_${orgSlug}`,
+      encryptedValue,
       ownerType: "connector",
       ownerId: testConnector.id,
     })

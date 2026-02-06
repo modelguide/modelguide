@@ -8,6 +8,7 @@ import {
   requireUser,
 } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
+import { errorResponseSchema } from "@lib/schemas";
 import {
   createUser,
   deactivateUser,
@@ -48,11 +49,6 @@ const updateUserSchema = z
   .refine((data) => data.name !== undefined || data.role !== undefined, {
     message: "At least one field must be provided",
   });
-
-const errorResponseSchema = z.object({
-  code: z.string(),
-  message: z.string(),
-});
 
 function formatUser(user: {
   id: string;

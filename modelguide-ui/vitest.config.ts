@@ -9,6 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    passWithNoTests: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
