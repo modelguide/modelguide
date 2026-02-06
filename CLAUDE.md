@@ -23,6 +23,25 @@ ModelGuide is an AI agent management platform that connects external AI agents (
 - `docs/api-spec.md` - Complete REST API and MCP specification
 - `docs/DB_SCHEMA.md` - Database schema
 
+## Local Workspace
+
+`.claude/local/` is a git-ignored directory for session artifacts — plans, research notes, scratch files, generated outputs. Use it to:
+- Store implementation plans and design notes before/during work
+- Keep research and exploration results for reuse across sessions
+- Save intermediate artifacts that support the current task
+
+This directory persists locally and is shared across tools. Do not commit its contents.
+
+## Architecture Decision Records
+
+For significant architectural or design decisions, create an ADR in `docs/decisions/`:
+
+- **When:** New patterns, security model changes, technology choices, non-obvious tradeoffs
+- **Format:** `NNN-short-title.md` (e.g., `001-refresh-token-rotation.md`)
+- **Sections:** Status, Context, Decision (with rationale), Consequences (positive, negative, risks)
+
+Do not create ADRs for routine feature work — only for decisions where "why" matters to future contributors.
+
 ## Commands
 
 ```bash
