@@ -9,252 +9,55 @@
  * because PostgreSQL superusers bypass RLS even with FORCE ROW LEVEL SECURITY.
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { db } from "@db/client";
 import {
   agents,
   apiKeys,
   connectorTools,
   connectors,
-  connectorsCatalog,
   organizations,
   secrets,
   sessions,
   users,
 } from "@db/schema";
-import { eq, inArray, sql } from "drizzle-orm";
-import {
-  closeAppDb,
-  withRLSTransaction,
-  withoutRLSTransaction,
-} from "../helpers/rls";
+import { eq, sql } from "drizzle-orm";
+import { withRLSTransaction, withoutRLSTransaction } from "../helpers/rls";
+import { type TestSeed, getTestSeed } from "../helpers/seed";
 
-// Test fixtures
-let orgAId: string;
-let orgBId: string;
-let _orgAUserId: string;
-let orgBUserId: string;
-let catalogId: string;
-let orgAConnectorId: string;
-let orgBConnectorId: string;
-let orgAAgentId: string;
-let orgBAgentId: string;
+let s: TestSeed;
 
 beforeAll(async () => {
-  // Create test organizations (organizations table has no RLS)
-  const [orgA] = await db
-    .insert(organizations)
-    .values({
-      name: `RLS Test Org A ${Date.now()}`,
-      slug: `rls-test-org-a-${Date.now()}`,
-    })
-    .returning();
-  orgAId = orgA.id;
-
-  const [orgB] = await db
-    .insert(organizations)
-    .values({
-      name: `RLS Test Org B ${Date.now()}`,
-      slug: `rls-test-org-b-${Date.now()}`,
-    })
-    .returning();
-  orgBId = orgB.id;
-
-  // Create a connector catalog entry (global, no RLS)
-  const [catalog] = await db
-    .insert(connectorsCatalog)
-    .values({
-      name: "Test Connector",
-      slug: `test-connector-${Date.now()}`,
-      connectorType: "api",
-    })
-    .returning();
-  catalogId = catalog.id;
-
-  // Create users for each org using RLS context
-  const [userA] = await withRLSTransaction(orgAId, async (tx) => {
-    return tx
-      .insert(users)
-      .values({
-        organizationId: orgAId,
-        email: `rls_user_a_${Date.now()}@test.com`,
-        name: "RLS Test User A",
-        role: "admin",
-      })
-      .returning();
-  });
-  _orgAUserId = userA.id;
-
-  const [userB] = await withRLSTransaction(orgBId, async (tx) => {
-    return tx
-      .insert(users)
-      .values({
-        organizationId: orgBId,
-        email: `rls_user_b_${Date.now()}@test.com`,
-        name: "RLS Test User B",
-        role: "admin",
-      })
-      .returning();
-  });
-  orgBUserId = userB.id;
-
-  // Create connectors for each org
-  const [connectorA] = await withRLSTransaction(orgAId, async (tx) => {
-    return tx
-      .insert(connectors)
-      .values({
-        organizationId: orgAId,
-        connectorCatalogId: catalogId,
-        name: "Org A Connector",
-        slug: `org-a-connector-${Date.now()}`,
-      })
-      .returning();
-  });
-  orgAConnectorId = connectorA.id;
-
-  const [connectorB] = await withRLSTransaction(orgBId, async (tx) => {
-    return tx
-      .insert(connectors)
-      .values({
-        organizationId: orgBId,
-        connectorCatalogId: catalogId,
-        name: "Org B Connector",
-        slug: `org-b-connector-${Date.now()}`,
-      })
-      .returning();
-  });
-  orgBConnectorId = connectorB.id;
-
-  // Create agents for each org
-  const [agentA] = await withRLSTransaction(orgAId, async (tx) => {
-    return tx
-      .insert(agents)
-      .values({
-        organizationId: orgAId,
-        name: "Org A Agent",
-        agentType: "voice",
-      })
-      .returning();
-  });
-  orgAAgentId = agentA.id;
-
-  const [agentB] = await withRLSTransaction(orgBId, async (tx) => {
-    return tx
-      .insert(agents)
-      .values({
-        organizationId: orgBId,
-        name: "Org B Agent",
-        agentType: "voice",
-      })
-      .returning();
-  });
-  orgBAgentId = agentB.id;
-
-  // Create connector tools for each org
-  await withRLSTransaction(orgAId, async (tx) => {
-    return tx.insert(connectorTools).values({
-      organizationId: orgAId,
-      connectorId: orgAConnectorId,
-      name: "Org A Tool",
-      slug: `org-a-tool-${Date.now()}`,
-    });
-  });
-
-  await withRLSTransaction(orgBId, async (tx) => {
-    return tx.insert(connectorTools).values({
-      organizationId: orgBId,
-      connectorId: orgBConnectorId,
-      name: "Org B Tool",
-      slug: `org-b-tool-${Date.now()}`,
-    });
-  });
-
-  // Create secrets for each org
-  await withRLSTransaction(orgAId, async (tx) => {
-    return tx.insert(secrets).values({
-      organizationId: orgAId,
-      name: "Org A Secret",
-      secretType: "api_key",
-      encryptedValue: "encrypted_value_a",
-      ownerType: "connector",
-      ownerId: orgAConnectorId,
-    });
-  });
-
-  await withRLSTransaction(orgBId, async (tx) => {
-    return tx.insert(secrets).values({
-      organizationId: orgBId,
-      name: "Org B Secret",
-      secretType: "api_key",
-      encryptedValue: "encrypted_value_b",
-      ownerType: "connector",
-      ownerId: orgBConnectorId,
-    });
-  });
-
-  // Create API keys for each org
-  await withRLSTransaction(orgAId, async (tx) => {
-    return tx.insert(apiKeys).values({
-      organizationId: orgAId,
-      agentId: orgAAgentId,
-      name: "Org A API Key",
-      keyHash: `hash_a_${Date.now()}`,
-      keyPrefix: "mgk_a",
-    });
-  });
-
-  await withRLSTransaction(orgBId, async (tx) => {
-    return tx.insert(apiKeys).values({
-      organizationId: orgBId,
-      agentId: orgBAgentId,
-      name: "Org B API Key",
-      keyHash: `hash_b_${Date.now()}`,
-      keyPrefix: "mgk_b",
-    });
-  });
-
-  // Create sessions for each org
-  await withRLSTransaction(orgAId, async (tx) => {
-    return tx.insert(sessions).values({
-      organizationId: orgAId,
-      agentId: orgAAgentId,
-      channelType: "voice",
-    });
-  });
-
-  await withRLSTransaction(orgBId, async (tx) => {
-    return tx.insert(sessions).values({
-      organizationId: orgBId,
-      agentId: orgBAgentId,
-      channelType: "voice",
-    });
-  });
+  s = await getTestSeed();
 });
 
-async function cleanupOrgData(orgId: string): Promise<void> {
-  await withRLSTransaction(orgId, async (tx) => {
-    await tx.delete(sessions).where(eq(sessions.organizationId, orgId));
-    await tx.delete(apiKeys).where(eq(apiKeys.organizationId, orgId));
-    await tx.delete(secrets).where(eq(secrets.organizationId, orgId));
-    await tx
-      .delete(connectorTools)
-      .where(eq(connectorTools.organizationId, orgId));
-    await tx.delete(agents).where(eq(agents.organizationId, orgId));
-    await tx.delete(connectors).where(eq(connectors.organizationId, orgId));
-    await tx.delete(users).where(eq(users.organizationId, orgId));
+// ============================================================================
+// Organizations table RLS tests
+// ============================================================================
+
+describe("Organizations RLS", () => {
+  test("Org A can only see Org A organization", async () => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
+      return tx.select().from(organizations);
+    });
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe(s.pizzaOrg.id);
   });
-}
 
-afterAll(async () => {
-  await cleanupOrgData(orgAId);
-  await cleanupOrgData(orgBId);
+  test("Org B can only see Org B organization", async () => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
+      return tx.select().from(organizations);
+    });
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe(s.burgerOrg.id);
+  });
 
-  await db.delete(connectorsCatalog).where(eq(connectorsCatalog.id, catalogId));
-  await db
-    .delete(organizations)
-    .where(inArray(organizations.id, [orgAId, orgBId]));
-
-  await closeAppDb();
+  test("Without RLS context, no organizations returned", async () => {
+    const result = await withoutRLSTransaction(async (tx) => {
+      return tx.select().from(organizations);
+    });
+    expect(result.length).toBe(0);
+  });
 });
 
 // ============================================================================
@@ -263,26 +66,28 @@ afterAll(async () => {
 
 describe("Users RLS", () => {
   test("Org A can only see Org A users", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(users);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((u) => u.organizationId === orgAId)).toBe(true);
+    expect(result.every((u) => u.organizationId === s.pizzaOrg.id)).toBe(true);
   });
 
   test("Org B can only see Org B users", async () => {
-    const result = await withRLSTransaction(orgBId, async (tx) => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(users);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((u) => u.organizationId === orgBId)).toBe(true);
+    expect(result.every((u) => u.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 
   test("Cannot insert user for different organization", async () => {
     await expect(
-      withRLSTransaction(orgAId, async (tx) => {
+      withRLSTransaction(s.pizzaOrg.id, async (tx) => {
         return tx.insert(users).values({
-          organizationId: orgBId, // Trying to insert for Org B while in Org A context
+          organizationId: s.burgerOrg.id,
           email: `forbidden_${Date.now()}@test.com`,
           name: "Forbidden User",
           role: "support",
@@ -305,27 +110,29 @@ describe("Users RLS", () => {
 
 describe("Connectors RLS", () => {
   test("Org A can only see Org A connectors", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(connectors);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((c) => c.organizationId === orgAId)).toBe(true);
+    expect(result.every((c) => c.organizationId === s.pizzaOrg.id)).toBe(true);
   });
 
   test("Org B can only see Org B connectors", async () => {
-    const result = await withRLSTransaction(orgBId, async (tx) => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(connectors);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((c) => c.organizationId === orgBId)).toBe(true);
+    expect(result.every((c) => c.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 
   test("Cannot insert connector for different organization", async () => {
     await expect(
-      withRLSTransaction(orgAId, async (tx) => {
+      withRLSTransaction(s.pizzaOrg.id, async (tx) => {
         return tx.insert(connectors).values({
-          organizationId: orgBId,
-          connectorCatalogId: catalogId,
+          organizationId: s.burgerOrg.id,
+          connectorCatalogId: s.catalogId,
           name: "Forbidden Connector",
           slug: `forbidden-connector-${Date.now()}`,
         });
@@ -347,19 +154,21 @@ describe("Connectors RLS", () => {
 
 describe("Connector Tools RLS", () => {
   test("Org A can only see Org A connector tools", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(connectorTools);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((t) => t.organizationId === orgAId)).toBe(true);
+    expect(result.every((t) => t.organizationId === s.pizzaOrg.id)).toBe(true);
   });
 
   test("Org B can only see Org B connector tools", async () => {
-    const result = await withRLSTransaction(orgBId, async (tx) => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(connectorTools);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((t) => t.organizationId === orgBId)).toBe(true);
+    expect(result.every((t) => t.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 
   test("Without RLS context, no connector tools returned", async () => {
@@ -376,31 +185,33 @@ describe("Connector Tools RLS", () => {
 
 describe("Secrets RLS", () => {
   test("Org A can only see Org A secrets", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(secrets);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((s) => s.organizationId === orgAId)).toBe(true);
+    expect(result.every((r) => r.organizationId === s.pizzaOrg.id)).toBe(true);
   });
 
   test("Org B can only see Org B secrets", async () => {
-    const result = await withRLSTransaction(orgBId, async (tx) => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(secrets);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((s) => s.organizationId === orgBId)).toBe(true);
+    expect(result.every((r) => r.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 
   test("Cannot insert secret for different organization", async () => {
     await expect(
-      withRLSTransaction(orgAId, async (tx) => {
+      withRLSTransaction(s.pizzaOrg.id, async (tx) => {
         return tx.insert(secrets).values({
-          organizationId: orgBId,
+          organizationId: s.burgerOrg.id,
           name: "Forbidden Secret",
           secretType: "api_key",
           encryptedValue: "forbidden_value",
           ownerType: "connector",
-          ownerId: orgBConnectorId,
+          ownerId: s.burgerConnectorId,
         });
       }),
     ).rejects.toThrow();
@@ -420,26 +231,28 @@ describe("Secrets RLS", () => {
 
 describe("Agents RLS", () => {
   test("Org A can only see Org A agents", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(agents);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((a) => a.organizationId === orgAId)).toBe(true);
+    expect(result.every((a) => a.organizationId === s.pizzaOrg.id)).toBe(true);
   });
 
   test("Org B can only see Org B agents", async () => {
-    const result = await withRLSTransaction(orgBId, async (tx) => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(agents);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((a) => a.organizationId === orgBId)).toBe(true);
+    expect(result.every((a) => a.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 
   test("Cannot insert agent for different organization", async () => {
     await expect(
-      withRLSTransaction(orgAId, async (tx) => {
+      withRLSTransaction(s.pizzaOrg.id, async (tx) => {
         return tx.insert(agents).values({
-          organizationId: orgBId,
+          organizationId: s.burgerOrg.id,
           name: "Forbidden Agent",
           agentType: "voice",
         });
@@ -461,27 +274,29 @@ describe("Agents RLS", () => {
 
 describe("API Keys RLS", () => {
   test("Org A can only see Org A API keys", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(apiKeys);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((k) => k.organizationId === orgAId)).toBe(true);
+    expect(result.every((k) => k.organizationId === s.pizzaOrg.id)).toBe(true);
   });
 
   test("Org B can only see Org B API keys", async () => {
-    const result = await withRLSTransaction(orgBId, async (tx) => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(apiKeys);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((k) => k.organizationId === orgBId)).toBe(true);
+    expect(result.every((k) => k.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 
   test("Cannot insert API key for different organization", async () => {
     await expect(
-      withRLSTransaction(orgAId, async (tx) => {
+      withRLSTransaction(s.pizzaOrg.id, async (tx) => {
         return tx.insert(apiKeys).values({
-          organizationId: orgBId,
-          agentId: orgBAgentId,
+          organizationId: s.burgerOrg.id,
+          agentId: s.burgerAgentId,
           name: "Forbidden API Key",
           keyHash: `forbidden_hash_${Date.now()}`,
           keyPrefix: "mgk_x",
@@ -504,27 +319,29 @@ describe("API Keys RLS", () => {
 
 describe("Sessions RLS", () => {
   test("Org A can only see Org A sessions", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(sessions);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((s) => s.organizationId === orgAId)).toBe(true);
+    expect(result.every((r) => r.organizationId === s.pizzaOrg.id)).toBe(true);
   });
 
   test("Org B can only see Org B sessions", async () => {
-    const result = await withRLSTransaction(orgBId, async (tx) => {
+    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(sessions);
     });
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.every((s) => s.organizationId === orgBId)).toBe(true);
+    expect(result.every((r) => r.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 
   test("Cannot insert session for different organization", async () => {
     await expect(
-      withRLSTransaction(orgAId, async (tx) => {
+      withRLSTransaction(s.pizzaOrg.id, async (tx) => {
         return tx.insert(sessions).values({
-          organizationId: orgBId,
-          agentId: orgBAgentId,
+          organizationId: s.burgerOrg.id,
+          agentId: s.burgerAgentId,
           channelType: "voice",
         });
       }),
@@ -545,28 +362,35 @@ describe("Sessions RLS", () => {
 
 describe("Cross-org isolation", () => {
   test("Org A cannot update Org B data", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
-      // Try to update Org B's user - should affect 0 rows
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx
         .update(users)
         .set({ name: "Hacked Name" })
-        .where(eq(users.id, orgBUserId))
+        .where(eq(users.id, s.burgerAdmin.id))
         .returning();
     });
     expect(result.length).toBe(0);
   });
 
   test("Org A cannot delete Org B data", async () => {
-    const result = await withRLSTransaction(orgAId, async (tx) => {
-      // Try to delete Org B's user - should affect 0 rows
-      return tx.delete(users).where(eq(users.id, orgBUserId)).returning();
+    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
+      return tx
+        .delete(users)
+        .where(eq(users.id, s.burgerAdmin.id))
+        .returning();
     });
     expect(result.length).toBe(0);
 
     // Verify Org B user still exists
-    const verifyResult = await withRLSTransaction(orgBId, async (tx) => {
-      return tx.select().from(users).where(eq(users.id, orgBUserId));
-    });
+    const verifyResult = await withRLSTransaction(
+      s.burgerOrg.id,
+      async (tx) => {
+        return tx
+          .select()
+          .from(users)
+          .where(eq(users.id, s.burgerAdmin.id));
+      },
+    );
     expect(verifyResult.length).toBe(1);
   });
 });
@@ -579,7 +403,7 @@ describe("RLS context management", () => {
   test("set_config correctly sets the session variable within transaction", async () => {
     const orgId = await db.transaction(async (tx) => {
       await tx.execute(
-        sql`SELECT set_config('app.organization_id', ${orgAId}, true)`,
+        sql`SELECT set_config('app.organization_id', ${s.pizzaOrg.id}, true)`,
       );
       const result = await tx.execute(
         sql`SELECT current_setting('app.organization_id', true) as org_id`,
@@ -587,20 +411,22 @@ describe("RLS context management", () => {
       const rows = result as unknown as Array<{ org_id: string }>;
       return rows[0].org_id;
     });
-    expect(orgId).toBe(orgAId);
+    expect(orgId).toBe(s.pizzaOrg.id);
   });
 
   test("Switching RLS context changes visible data", async () => {
-    // First, check Org A
-    const orgAUsers = await withRLSTransaction(orgAId, async (tx) => {
+    const orgAUsers = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
       return tx.select().from(users);
     });
-    expect(orgAUsers.every((u) => u.organizationId === orgAId)).toBe(true);
+    expect(orgAUsers.every((u) => u.organizationId === s.pizzaOrg.id)).toBe(
+      true,
+    );
 
-    // Then check Org B
-    const orgBUsers = await withRLSTransaction(orgBId, async (tx) => {
+    const orgBUsers = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
       return tx.select().from(users);
     });
-    expect(orgBUsers.every((u) => u.organizationId === orgBId)).toBe(true);
+    expect(orgBUsers.every((u) => u.organizationId === s.burgerOrg.id)).toBe(
+      true,
+    );
   });
 });

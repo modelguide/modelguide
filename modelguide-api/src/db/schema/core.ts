@@ -47,7 +47,7 @@ export const organizations = pgTable(
     ),
   },
   (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)],
-);
+).enableRLS();
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   users: many(users),
