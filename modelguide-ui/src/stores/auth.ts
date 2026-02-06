@@ -7,13 +7,18 @@ interface AuthState {
   token: string | null
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   setAuth: (user: User, token: string) => void
+  refreshAccessToken: () => Promise<boolean>
 }
+
+// Store-level deduplication: prevents concurrent refreshes from
+// beforeLoad and afterResponse hooks from racing each other
+let storeRefreshPromise: Promise<boolean> | null = null
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
@@ -23,6 +28,7 @@ export const useAuthStore = create<AuthState>()(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
+          credentials: 'include',
         })
 
         if (!response.ok) {
@@ -38,19 +44,59 @@ export const useAuthStore = create<AuthState>()(
         })
       },
 
-      logout: () => {
+      logout: async () => {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include',
+          })
+        } catch {
+          // Best-effort — clear local state regardless
+        }
         set({ user: null, token: null, isAuthenticated: false })
       },
 
       setAuth: (user: User, token: string) => {
         set({ user, token, isAuthenticated: true })
       },
+
+      refreshAccessToken: async () => {
+        if (storeRefreshPromise) {
+          return storeRefreshPromise
+        }
+
+        storeRefreshPromise = (async () => {
+          try {
+            const response = await fetch('/api/auth/refresh', {
+              method: 'POST',
+              credentials: 'include',
+            })
+
+            if (!response.ok) {
+              return false
+            }
+
+            const data: LoginResponse = await response.json()
+            set({
+              user: data.user,
+              token: data.token,
+              isAuthenticated: true,
+            })
+            return true
+          } catch {
+            return false
+          }
+        })().finally(() => {
+          storeRefreshPromise = null
+        })
+
+        return storeRefreshPromise
+      },
     }),
     {
       name: 'modelguide-auth',
       partialize: (state) => ({
         user: state.user,
-        token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
     },

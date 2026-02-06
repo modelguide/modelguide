@@ -14,6 +14,9 @@ export {
   getOrganizationId,
 } from "./auth";
 
+// CSRF middleware
+export { csrfProtection } from "./csrf";
+
 // RBAC middleware
 export {
   requirePermission,

@@ -58,6 +58,8 @@ process.env.DATABASE_URL = appUrl;
 process.env.DATABASE_MIGRATION_URL = migrationUrl;
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-jwt-secret-that-is-at-least-32-characters-long";
+process.env.REFRESH_JWT_SECRET =
+  "test-refresh-jwt-secret-at-least-32-chars-long";
 process.env.ENCRYPTION_KEY = Buffer.from(
   "0123456789abcdef0123456789abcdef",
 ).toString("base64");

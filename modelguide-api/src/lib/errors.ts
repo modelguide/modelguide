@@ -2,12 +2,23 @@
  * Application error codes and error handling utilities
  */
 
+// INVARIANT: 401 = authentication failures ONLY. Authorization/policy failures
+// MUST use 403. The UI refresh interceptor triggers on 401 — misuse causes
+// refresh loops.
 export const ErrorCode = {
   // Authentication
   UNAUTHORIZED: "UNAUTHORIZED",
   FORBIDDEN: "FORBIDDEN",
   INVALID_TOKEN: "INVALID_TOKEN",
   TOKEN_EXPIRED: "TOKEN_EXPIRED",
+
+  // Refresh tokens
+  REFRESH_TOKEN_INVALID: "REFRESH_TOKEN_INVALID",
+  REFRESH_TOKEN_EXPIRED: "REFRESH_TOKEN_EXPIRED",
+  REFRESH_TOKEN_REUSED: "REFRESH_TOKEN_REUSED",
+
+  // CSRF
+  CSRF_REJECTED: "CSRF_REJECTED",
 
   // Agent errors
   AGENT_NOT_FOUND: "AGENT_NOT_FOUND",
@@ -73,8 +84,14 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.MAGIC_TOKEN_EXPIRED]: 401,
   [ErrorCode.MAGIC_TOKEN_USED]: 401,
 
+  // 401 Unauthorized (refresh tokens)
+  [ErrorCode.REFRESH_TOKEN_INVALID]: 401,
+  [ErrorCode.REFRESH_TOKEN_EXPIRED]: 401,
+  [ErrorCode.REFRESH_TOKEN_REUSED]: 401,
+
   // 403 Forbidden
   [ErrorCode.FORBIDDEN]: 403,
+  [ErrorCode.CSRF_REJECTED]: 403,
   [ErrorCode.AGENT_INACTIVE]: 403,
   [ErrorCode.USER_INACTIVE]: 403,
 
@@ -242,6 +259,25 @@ export const Errors = {
       ErrorCode.ORGANIZATION_REQUIRED,
       "Organization context is required. Authenticate with a valid JWT or API key.",
     );
+  },
+
+  // Refresh token
+  refreshTokenInvalid(message = "Invalid refresh token") {
+    return new AppError(ErrorCode.REFRESH_TOKEN_INVALID, message);
+  },
+
+  refreshTokenExpired(message = "Refresh token has expired") {
+    return new AppError(ErrorCode.REFRESH_TOKEN_EXPIRED, message);
+  },
+
+  refreshTokenReused(
+    message = "Refresh token reuse detected — session revoked",
+  ) {
+    return new AppError(ErrorCode.REFRESH_TOKEN_REUSED, message);
+  },
+
+  csrfRejected(message = "CSRF validation failed") {
+    return new AppError(ErrorCode.CSRF_REJECTED, message);
   },
 
   // Magic link
