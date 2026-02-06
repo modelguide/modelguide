@@ -1,5 +1,5 @@
-import type { Database } from "@db/client";
 import { env } from "@/env";
+import type { Database } from "@db/client";
 import * as schema from "@db/schema";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
