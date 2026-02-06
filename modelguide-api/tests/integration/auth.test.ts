@@ -10,7 +10,7 @@ import { db } from "@db/client";
 import { magicTokens, organizations, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { generateJWT } from "@lib/jwt";
-import { and, eq, desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { withRLSTransaction } from "../helpers/rls";
 
 // Test fixtures
