@@ -1,2 +1,2 @@
 export { db, closeDatabase } from "./client";
-export { createOrgProxy, createBypassProxy } from "./rls-proxy";
+export { forOrg, forApp, type Transaction } from "./rls";

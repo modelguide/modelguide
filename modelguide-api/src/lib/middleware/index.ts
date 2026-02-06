@@ -14,9 +14,6 @@ export {
   getOrganizationId,
 } from "./auth";
 
-// RLS middleware
-export { rlsMiddleware } from "./rls";
-
 // RBAC middleware
 export {
   requirePermission,

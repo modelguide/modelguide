@@ -4,16 +4,13 @@
  */
 
 import type { AppBindings, AuthAgent, AuthContext } from "@/types";
-import { db } from "@db/client";
-import { createBypassProxy } from "@db/rls-proxy";
+import { forApp } from "@db/rls";
 import { agents, apiKeys } from "@db/schema";
 import { hashApiKey, isValidApiKeyFormat } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import { verifyJWT } from "@lib/jwt";
 import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
-
-const bypassDb = createBypassProxy(db);
 
 const AUTHORIZATION_HEADER = "Authorization";
 
@@ -43,15 +40,17 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
 
   const keyHash = hashApiKey(key);
 
-  const result = await bypassDb
-    .select({
-      apiKey: apiKeys,
-      agent: agents,
-    })
-    .from(apiKeys)
-    .leftJoin(agents, eq(apiKeys.agentId, agents.id))
-    .where(eq(apiKeys.keyHash, keyHash))
-    .limit(1);
+  const result = await forApp((tx) =>
+    tx
+      .select({
+        apiKey: apiKeys,
+        agent: agents,
+      })
+      .from(apiKeys)
+      .leftJoin(agents, eq(apiKeys.agentId, agents.id))
+      .where(eq(apiKeys.keyHash, keyHash))
+      .limit(1),
+  );
 
   if (result.length === 0) {
     return null;
@@ -73,16 +72,16 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
   }
 
   // Fire-and-forget: update lastUsedAt (bypasses RLS)
-  bypassDb
-    .update(apiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(apiKeys.id, apiKey.id))
-    .then(() => {})
-    .catch((err: Error) => {
-      if (process.env.NODE_ENV === "development") {
-        console.warn("Failed to update API key lastUsedAt:", err.message);
-      }
-    });
+  forApp((tx) =>
+    tx
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, apiKey.id)),
+  ).catch((err: Error) => {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("Failed to update API key lastUsedAt:", err.message);
+    }
+  });
 
   if (agent) {
     return {

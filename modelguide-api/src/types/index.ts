@@ -1,5 +1,4 @@
 import type { Env } from "@/env";
-import type { Database } from "@db/client";
 
 /**
  * User roles for platform access
@@ -50,8 +49,6 @@ export interface AppBindings {
     auth: AuthContext;
     /** Current organization ID (from header or auth) */
     organizationId: string | null;
-    /** RLS-scoped database instance */
-    db: Database;
   };
   Bindings: Env;
 }
