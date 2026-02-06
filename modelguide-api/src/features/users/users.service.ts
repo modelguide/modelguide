@@ -63,7 +63,7 @@ export async function createUser(
   } catch (error: unknown) {
     if (
       error instanceof Error &&
-      ((error as any).code === "23505" ||
+      ((error as Error & { code?: string }).code === "23505" ||
         error.message.includes("users_org_email_unique"))
     ) {
       throw Errors.userEmailExists(data.email);
@@ -78,11 +78,7 @@ export async function updateUser(
   data: { name?: string; role?: "admin" | "support" },
 ) {
   const result = await forOrg(orgId, async (tx) => {
-    return tx
-      .update(users)
-      .set(data)
-      .where(eq(users.id, userId))
-      .returning();
+    return tx.update(users).set(data).where(eq(users.id, userId)).returning();
   });
 
   if (result.length === 0) {

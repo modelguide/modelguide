@@ -281,7 +281,12 @@ router.openapi(updateUserRoute, async (c) => {
   }
 
   // Prevent admin self-demotion (could lock out the org)
-  if (isAdmin && currentUser.id === id && data.role && data.role !== currentUser.role) {
+  if (
+    isAdmin &&
+    currentUser.id === id &&
+    data.role &&
+    data.role !== currentUser.role
+  ) {
     throw Errors.forbidden("Cannot change your own role");
   }
 
