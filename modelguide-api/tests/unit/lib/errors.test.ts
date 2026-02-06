@@ -67,7 +67,7 @@ describe("Error status codes", () => {
     expect(new AppError(ErrorCode.VALIDATION_ERROR, "").status).toBe(400);
     expect(new AppError(ErrorCode.INVALID_INPUT, "").status).toBe(400);
     expect(
-      new AppError(ErrorCode.ORGANIZATION_HEADER_REQUIRED, "").status,
+      new AppError(ErrorCode.ORGANIZATION_REQUIRED, "").status,
     ).toBe(400);
   });
 

@@ -2,7 +2,7 @@
  * Cryptographic utilities for API keys, hashing, and encryption
  */
 
-import { getEncryptionKey } from "@/env";
+import { env, getEncryptionKey } from "@/env";
 
 const API_KEY_PREFIX = "mgk_";
 const API_KEY_LENGTH = 32;
@@ -51,6 +51,15 @@ function sha256Hex(input: string): string {
   const sha256 = new Bun.CryptoHasher("sha256");
   sha256.update(data);
   return sha256.digest("hex");
+}
+
+/**
+ * Computes HMAC-SHA256 hex digest of input string with a secret key
+ */
+function hmacSha256Hex(key: string, data: string): string {
+  const hmac = new Bun.CryptoHasher("sha256", key);
+  hmac.update(data);
+  return hmac.digest("hex");
 }
 
 /**
@@ -176,8 +185,8 @@ export function generateMagicToken(): string {
 }
 
 /**
- * Hashes a magic token for storage
+ * Hashes a magic token for storage using HMAC-SHA256
  */
 export function hashMagicToken(token: string): string {
-  return sha256Hex(token);
+  return hmacSha256Hex(env.MAGIC_LINK_SECRET, token);
 }

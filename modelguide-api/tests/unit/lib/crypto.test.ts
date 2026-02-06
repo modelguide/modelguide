@@ -137,9 +137,25 @@ describe("hashMagicToken", () => {
     expect(hash1).not.toBe(hash2);
   });
 
-  test("hash length is 64 chars (SHA-256 hex)", () => {
+  test("hash length is 64 chars (HMAC-SHA256 hex)", () => {
     const hash = hashMagicToken("test-token");
     expect(hash.length).toBe(64);
     expect(/^[a-f0-9]+$/.test(hash)).toBe(true);
+  });
+
+  test("hash differs from plain SHA-256", () => {
+    const token = "test-magic-token";
+    const hmacHash = hashMagicToken(token);
+    const plainSha256 = new Bun.CryptoHasher("sha256")
+      .update(token)
+      .digest("hex");
+    expect(hmacHash).not.toBe(plainSha256);
+  });
+
+  test("generated token round-trips through hash", () => {
+    const token = generateMagicToken();
+    const hash = hashMagicToken(token);
+    expect(hash.length).toBe(64);
+    expect(hashMagicToken(token)).toBe(hash);
   });
 });

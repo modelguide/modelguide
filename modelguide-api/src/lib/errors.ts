@@ -22,7 +22,7 @@ export const ErrorCode = {
 
   // Organization errors
   ORGANIZATION_NOT_FOUND: "ORGANIZATION_NOT_FOUND",
-  ORGANIZATION_HEADER_REQUIRED: "ORGANIZATION_HEADER_REQUIRED",
+  ORGANIZATION_REQUIRED: "ORGANIZATION_REQUIRED",
 
   // Resource errors
   NOT_FOUND: "NOT_FOUND",
@@ -96,7 +96,7 @@ const statusCodeMap: Record<ErrorCode, number> = {
   // 400 Bad Request
   [ErrorCode.VALIDATION_ERROR]: 400,
   [ErrorCode.INVALID_INPUT]: 400,
-  [ErrorCode.ORGANIZATION_HEADER_REQUIRED]: 400,
+  [ErrorCode.ORGANIZATION_REQUIRED]: 400,
   [ErrorCode.CONNECTOR_NOT_CONFIGURED]: 400,
   [ErrorCode.CONNECTOR_INACTIVE]: 400,
   [ErrorCode.TOOL_INACTIVE]: 400,
@@ -237,10 +237,10 @@ export const Errors = {
     );
   },
 
-  organizationHeaderRequired() {
+  organizationRequired() {
     return new AppError(
-      ErrorCode.ORGANIZATION_HEADER_REQUIRED,
-      "X-Organization-ID header is required",
+      ErrorCode.ORGANIZATION_REQUIRED,
+      "Organization context is required. Authenticate with a valid JWT or API key.",
     );
   },
 

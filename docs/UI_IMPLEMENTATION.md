@@ -1154,8 +1154,9 @@ Display tools from `connector.tools`:
 ### Authentication Header
 ```
 Authorization: Bearer <jwt_token>
-X-Organization-ID: <organization_uuid>
 ```
+
+*Organization context is derived from the JWT token claims.*
 
 ### Common Response Formats
 
