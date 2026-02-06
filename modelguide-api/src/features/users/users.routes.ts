@@ -217,11 +217,7 @@ router.get(
   requirePermission("users:read"),
   requireOrganization(),
 );
-router.patch(
-  "/:id",
-  requireUser(),
-  requireOrganization(),
-);
+router.patch("/:id", requireUser(), requireOrganization());
 router.delete(
   "/:id",
   requireUser(),
