@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiReference } from "@scalar/hono-api-reference";
 
 import { env } from "@/env";
+import { agentRoutes } from "@features/agents";
 import { connectorRoutes } from "@features/connectors";
 import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
@@ -40,6 +41,7 @@ apiRouter.openapi(healthRoute, (c) => {
   );
 });
 
+apiRouter.route("/agents", agentRoutes);
 apiRouter.route("/auth", authRoutes);
 apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);

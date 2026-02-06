@@ -11,7 +11,7 @@ import {
   requireUser,
 } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
-import { errorResponseSchema } from "@lib/schemas";
+import { errorResponse } from "@lib/schemas";
 import {
   createSecret,
   deleteSecret,
@@ -93,13 +93,6 @@ const secretIdParams = z.object({
 // ============================================================================
 // Shared helpers
 // ============================================================================
-
-function errorResponse(description: string) {
-  return {
-    description,
-    content: { "application/json": { schema: errorResponseSchema } },
-  };
-}
 
 function formatSecret(secret: {
   id: string;

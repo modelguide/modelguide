@@ -12,7 +12,7 @@ import {
   requireUser,
 } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
-import { errorResponseSchema } from "@lib/schemas";
+import { errorResponse } from "@lib/schemas";
 import {
   createConnector,
   deleteConnector,
@@ -150,13 +150,6 @@ const toolIdParams = z.object({
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function errorResponse(description: string) {
-  return {
-    description,
-    content: { "application/json": { schema: errorResponseSchema } },
-  };
-}
 
 function formatCatalog(entry: ConnectorCatalog) {
   return {

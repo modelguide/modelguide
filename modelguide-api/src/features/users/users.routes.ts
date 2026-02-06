@@ -4,6 +4,7 @@ import { Errors } from "@lib/errors";
 import {
   getCurrentUser,
   getOrganizationId,
+  requireOrganization,
   requirePermission,
   requireUser,
 } from "@lib/middleware";
@@ -99,7 +100,19 @@ const listUsersRoute = createRoute({
   },
 });
 
-router.use("/", requireUser(), requirePermission("users:read"));
+router.get(
+  "/",
+  requireUser(),
+  requirePermission("users:read"),
+  requireOrganization(),
+);
+router.post(
+  "/",
+  requireUser(),
+  requirePermission("users:create"),
+  requireOrganization(),
+);
+
 router.openapi(listUsersRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const query = c.req.valid("query");
@@ -155,13 +168,6 @@ const createUserRoute = createRoute({
 });
 
 router.openapi(createUserRoute, async (c) => {
-  const currentUser = getCurrentUser(c);
-  if (currentUser.role !== "admin") {
-    throw Errors.forbidden(
-      "Permission denied: users:create requires admin role",
-    );
-  }
-
   const orgId = getOrganizationId(c);
   const data = c.req.valid("json");
 
@@ -205,7 +211,20 @@ const getUserRoute = createRoute({
   },
 });
 
-router.use("/:id", requireUser(), requirePermission("users:read"));
+router.get(
+  "/:id",
+  requireUser(),
+  requirePermission("users:read"),
+  requireOrganization(),
+);
+router.patch("/:id", requireUser(), requireOrganization());
+router.delete(
+  "/:id",
+  requireUser(),
+  requirePermission("users:delete"),
+  requireOrganization(),
+);
+
 router.openapi(getUserRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
@@ -323,12 +342,6 @@ const deleteUserRoute = createRoute({
 
 router.openapi(deleteUserRoute, async (c) => {
   const currentUser = getCurrentUser(c);
-  if (currentUser.role !== "admin") {
-    throw Errors.forbidden(
-      "Permission denied: users:delete requires admin role",
-    );
-  }
-
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
 
