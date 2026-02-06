@@ -51,7 +51,7 @@ make db-up            # Start PostgreSQL container (port 5434)
 make dev              # Start dev server with hot reload (port 3000)
 
 # Database
-make db-generate      # Generate Drizzle migrations
+make db-generate      # Generate Drizzle migrations (always use: drizzle-kit generate --name <descriptive-name>)
 make db-migrate       # Run migrations
 make db-push          # Push schema changes (dev only)
 make db-studio        # Open Drizzle Studio
