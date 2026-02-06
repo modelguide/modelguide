@@ -6,7 +6,8 @@ import { useAuthStore } from '~/stores/auth'
 export const Route = createFileRoute('/_authenticated')({
   // Guard for initial navigation - runs before route renders
   beforeLoad: async ({ location }) => {
-    const { isAuthenticated } = useAuthStore.getState()
+    const { isAuthenticated, token, refreshAccessToken } = useAuthStore.getState()
+
     if (!isAuthenticated) {
       throw redirect({
         to: '/login',
@@ -14,6 +15,21 @@ export const Route = createFileRoute('/_authenticated')({
           redirect: location.pathname,
         },
       })
+    }
+
+    // Authenticated but no in-memory token (page reload) — attempt silent refresh
+    if (!token) {
+      const success = await refreshAccessToken()
+      if (!success) {
+        // Refresh failed — clear auth state and redirect to login
+        useAuthStore.setState({ user: null, token: null, isAuthenticated: false })
+        throw redirect({
+          to: '/login',
+          search: {
+            redirect: location.pathname,
+          },
+        })
+      }
     }
   },
   component: AuthenticatedLayout,

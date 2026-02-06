@@ -298,6 +298,32 @@ API keys for agent authentication.
 
 ---
 
+### security_tokens
+
+Refresh token sessions for UI authentication. One row per login session — no row-per-rotation bloat.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| family_id | UUID (PK) | Session identifier, carried in refresh JWT as `fid` |
+| user_id | UUID | FK → users (CASCADE) |
+| generation | INTEGER | Rotation counter for reuse detection |
+| is_revoked | BOOLEAN | Set true on reuse detection or logout |
+| expires_at | TIMESTAMP | Sliding expiry (extended on each rotation) |
+| created_at | TIMESTAMP | |
+
+**Constraints:**
+- `family_id` PK (no separate `id` column)
+- Index on `user_id` for bulk revocation
+- Index on `expires_at` for cleanup queries
+
+**Notes:**
+- The refresh JWT payload is `{ type: "refresh", fid, gen, sub }` — no `exp` claim
+- Expiry is enforced by DB `expires_at` only (single source of truth)
+- Reuse detection: if `token.generation < db.generation - 1`, the session is revoked
+- See `docs/decisions/001-refresh-token-rotation.md` for full security rationale
+
+---
+
 ### agent_connector_tools
 
 Links agents to specific tools they can use.
@@ -489,3 +515,5 @@ Organization                 │
 | session_messages | `session_id` | Message retrieval |
 | session_messages | `(session_id, sequence_number)` | Message ordering |
 | session_feedback | `session_id` | Feedback retrieval |
+| security_tokens | `user_id` | Bulk session revocation |
+| security_tokens | `expires_at` | Expired session cleanup |

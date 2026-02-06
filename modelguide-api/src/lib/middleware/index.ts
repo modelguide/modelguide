@@ -14,6 +14,18 @@ export {
   getOrganizationId,
 } from "./auth";
 
+// RLS middleware
+export {
+  rlsMiddleware,
+  setRLSContext,
+  clearRLSContext,
+  withRLSContext,
+  getRLSContext,
+} from "./rls";
+
+// CSRF middleware
+export { csrfProtection } from "./csrf";
+
 // RBAC middleware
 export {
   requirePermission,

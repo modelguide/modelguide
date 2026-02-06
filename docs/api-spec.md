@@ -156,7 +156,45 @@ POST /api/auth/logout
 }
 ```
 
-*Note: JWTs are stateless, so logout is primarily for client-side cleanup.*
+*Note: Logout revokes the refresh token session in the database and clears the httpOnly cookie. Requires CSRF Origin header.*
+
+#### 6. Refresh Access Token
+```http
+POST /api/auth/refresh
+Origin: https://yourapp.com
+Cookie: __Host-refresh_token=<refresh_jwt>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "token": "<new_access_jwt>",
+  "user": {
+    "id": "uuid",
+    "email": "admin@test-org.com",
+    "name": "Admin User",
+    "role": "admin",
+    "organizationId": "uuid"
+  }
+}
+```
+
+The response also sets a new `__Host-refresh_token` httpOnly cookie (token rotation).
+
+**Error responses:**
+- `401 REFRESH_TOKEN_INVALID` — token missing, revoked, or benign race
+- `401 REFRESH_TOKEN_EXPIRED` — session expired (DB `expires_at` passed)
+- `401 REFRESH_TOKEN_REUSED` — reuse detected, session revoked
+- `403 CSRF_REJECTED` — Origin/Referer missing or mismatched
+
+#### Token Lifecycle
+
+- **Access token**: Short-lived (15 min default), stored in memory only, used as Bearer token
+- **Refresh token**: 7-day sliding window, httpOnly cookie, rotated on each use
+- **On page reload**: UI attempts silent refresh via `POST /auth/refresh` before any API calls
+- **On 401**: UI interceptor attempts one refresh, then retries the failed request
+
+See `docs/decisions/001-refresh-token-rotation.md` for full security rationale.
 
 #### Magic Link Security Features
 - Tokens are single-use (marked as used after verification)

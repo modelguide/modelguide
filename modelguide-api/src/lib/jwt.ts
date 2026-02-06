@@ -2,7 +2,7 @@ import { env } from "@/env";
 import type { AuthUser, UserRole } from "@/types";
 import { sign, verify } from "hono/jwt";
 
-function parseDuration(duration: string): number {
+export function parseDuration(duration: string): number {
   const match = duration.match(/^(\d+)([hdm])$/);
   if (!match) {
     throw new Error(`Invalid duration format: ${duration}`);
@@ -38,6 +38,7 @@ export async function generateJWT(user: AuthUser): Promise<string> {
       exp: now + expiresIn,
     },
     env.JWT_SECRET,
+    "HS256",
   );
 }
 
@@ -55,6 +56,54 @@ export async function verifyJWT(token: string): Promise<AuthUser | null> {
       name: (payload.name as string) || "",
       role: payload.role as UserRole,
       organizationId: payload.org as string,
+    };
+  } catch {
+    return null;
+  }
+}
+
+interface RefreshTokenPayload {
+  familyId: string;
+  generation: number;
+  userId: string;
+}
+
+export async function generateRefreshJWT(
+  familyId: string,
+  generation: number,
+  userId: string,
+): Promise<string> {
+  return sign(
+    {
+      type: "refresh",
+      fid: familyId,
+      gen: generation,
+      sub: userId,
+    },
+    env.REFRESH_JWT_SECRET,
+    "HS256",
+  );
+}
+
+export async function verifyRefreshJWT(
+  token: string,
+): Promise<RefreshTokenPayload | null> {
+  try {
+    const payload = await verify(token, env.REFRESH_JWT_SECRET, "HS256");
+
+    if (
+      payload.type !== "refresh" ||
+      !payload.fid ||
+      payload.gen === undefined ||
+      !payload.sub
+    ) {
+      return null;
+    }
+
+    return {
+      familyId: payload.fid as string,
+      generation: payload.gen as number,
+      userId: payload.sub as string,
     };
   } catch {
     return null;

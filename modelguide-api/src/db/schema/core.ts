@@ -94,6 +94,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   createdAgents: many(agents),
   createdApiKeys: many(apiKeys),
   magicTokens: many(magicTokens),
+  securityTokens: many(securityTokens),
 }));
 
 // ============================================================================
@@ -126,6 +127,40 @@ export const magicTokensRelations = relations(magicTokens, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+// ============================================================================
+// Security Tokens (Refresh token sessions)
+// ============================================================================
+
+export const securityTokens = pgTable(
+  "security_tokens",
+  {
+    familyId: uuid("family_id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    generation: integer("generation").notNull().default(0),
+    isRevoked: boolean("is_revoked").notNull().default(false),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("security_tokens_user_idx").on(table.userId),
+    index("security_tokens_expires_idx").on(table.expiresAt),
+  ],
+);
+
+export const securityTokensRelations = relations(
+  securityTokens,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [securityTokens.userId],
+      references: [users.id],
+    }),
+  }),
+);
 
 // ============================================================================
 // Connectors Catalog (Global Registry)
