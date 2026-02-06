@@ -321,16 +321,27 @@ describe("GET /api/auth/me", () => {
 
 describe("POST /api/auth/logout", () => {
   test("returns success message", async () => {
-    const response = await request("/api/auth/logout", { method: "POST" });
+    const response = await request("/api/auth/logout", {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000" },
+    });
 
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({ message: "Logged out successfully" });
   });
 
-  test("returns success even without auth (stateless)", async () => {
-    const response = await request("/api/auth/logout", { method: "POST" });
+  test("returns success even without refresh cookie", async () => {
+    const response = await request("/api/auth/logout", {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000" },
+    });
     expect(response.status).toBe(200);
+  });
+
+  test("returns 403 without Origin header (CSRF)", async () => {
+    const response = await request("/api/auth/logout", { method: "POST" });
+    expect(response.status).toBe(403);
   });
 });
 

@@ -12,6 +12,7 @@ import type {
   magicTokens,
   organizations,
   secrets,
+  securityTokens,
   sessionFeedback,
   sessionMessages,
   sessions,
@@ -26,6 +27,9 @@ export type NewUser = InferInsertModel<typeof users>;
 
 export type MagicToken = InferSelectModel<typeof magicTokens>;
 export type NewMagicToken = InferInsertModel<typeof magicTokens>;
+
+export type SecurityToken = InferSelectModel<typeof securityTokens>;
+export type NewSecurityToken = InferInsertModel<typeof securityTokens>;
 
 export type ConnectorCatalog = InferSelectModel<typeof connectorsCatalog>;
 export type NewConnectorCatalog = InferInsertModel<typeof connectorsCatalog>;

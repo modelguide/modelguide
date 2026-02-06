@@ -1,13 +1,43 @@
 /**
- * Authentication routes for magic link login
+ * Authentication routes for magic link login with refresh token rotation
  */
 
+import { env } from "@/env";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
-import { getCurrentUser, requireUser } from "@lib/middleware";
+import { parseDuration, verifyRefreshJWT } from "@lib/jwt";
+import { csrfProtection, getCurrentUser, requireUser } from "@lib/middleware";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { requestMagicLink, verifyMagicToken } from "./auth.service";
+import { revokeSession, rotateRefreshToken } from "./refresh-token.service";
 
 const router = createRouter();
+
+// ============================================================================
+// Cookie helpers
+// ============================================================================
+
+const REFRESH_COOKIE = "__Host-refresh_token";
+
+function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
+  const maxAge = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
+  setCookie(c, REFRESH_COOKIE, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+    maxAge,
+  });
+}
+
+function clearRefreshCookie(c: Parameters<typeof deleteCookie>[0]) {
+  deleteCookie(c, REFRESH_COOKIE, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    path: "/",
+  });
+}
 
 // ============================================================================
 // Schemas
@@ -29,7 +59,7 @@ const loginResponseSchema = z.object({
 
 const verifyResponseSchema = z.object({
   token: z.string().openapi({
-    description: "JWT token for authentication",
+    description: "Short-lived JWT access token (15 min default)",
     example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   }),
   user: z
@@ -80,7 +110,7 @@ const errorResponseSchema = z.object({
   code: z.string().openapi({
     example: "UNAUTHORIZED",
     description:
-      "Error codes: UNAUTHORIZED, MAGIC_TOKEN_INVALID, MAGIC_TOKEN_EXPIRED, MAGIC_TOKEN_USED",
+      "Error codes: UNAUTHORIZED, MAGIC_TOKEN_INVALID, MAGIC_TOKEN_EXPIRED, MAGIC_TOKEN_USED, REFRESH_TOKEN_INVALID, REFRESH_TOKEN_EXPIRED, REFRESH_TOKEN_REUSED, CSRF_REJECTED",
   }),
   message: z.string().openapi({
     example: "Authentication required",
@@ -146,7 +176,8 @@ const verifyRoute = createRoute({
   path: "/verify",
   tags: ["Authentication"],
   summary: "Verify magic link token",
-  description: `Verifies the magic link token and returns a JWT for authentication.
+  description: `Verifies the magic link token and returns a short-lived JWT access token.
+A refresh token is also set as an httpOnly cookie for silent token renewal.
 
 **Testing flow:**
 1. Call POST /api/auth/login with a seed user email
@@ -164,7 +195,8 @@ const verifyRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Token verified, JWT returned",
+      description:
+        "Token verified, JWT returned. Refresh token set as httpOnly cookie.",
       content: {
         "application/json": {
           schema: verifyResponseSchema,
@@ -187,8 +219,73 @@ router.openapi(verifyRoute, async (c) => {
 
   const result = await verifyMagicToken(token);
 
-  return c.json(result, 200);
+  setRefreshCookie(c, result.refreshToken);
+
+  return c.json({ token: result.accessToken, user: result.user }, 200);
 });
+
+// ============================================================================
+// Refresh token endpoint (CSRF-protected)
+// ============================================================================
+
+const refreshRoute = createRoute({
+  method: "post",
+  path: "/refresh",
+  tags: ["Authentication"],
+  summary: "Refresh access token",
+  description: `Rotates the refresh token and issues a new short-lived access token.
+The refresh token is read from the \`__Host-refresh_token\` httpOnly cookie.
+Requires Origin header for CSRF protection.`,
+  responses: {
+    200: {
+      description:
+        "New access token issued. New refresh token set as httpOnly cookie.",
+      content: {
+        "application/json": {
+          schema: verifyResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Invalid, expired, or reused refresh token",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: "CSRF validation failed",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+router.use("/refresh", csrfProtection());
+router.openapi(refreshRoute, async (c) => {
+  const rawToken = getCookie(c, REFRESH_COOKIE);
+
+  if (!rawToken) {
+    return c.json(
+      { code: "REFRESH_TOKEN_INVALID", message: "No refresh token" },
+      401,
+    );
+  }
+
+  const result = await rotateRefreshToken(rawToken);
+
+  setRefreshCookie(c, result.refreshToken);
+
+  return c.json({ token: result.accessToken, user: result.user }, 200);
+});
+
+// ============================================================================
+// Logout (CSRF-protected)
+// ============================================================================
 
 const logoutRoute = createRoute({
   method: "post",
@@ -196,7 +293,7 @@ const logoutRoute = createRoute({
   tags: ["Authentication"],
   summary: "Logout",
   description:
-    "Logout endpoint. Since JWTs are stateless, this is mainly for client-side cleanup",
+    "Revokes the refresh token session and clears the cookie. Requires generation match to prevent stale-token logout attacks.",
   responses: {
     200: {
       description: "Logged out successfully",
@@ -208,12 +305,36 @@ const logoutRoute = createRoute({
         },
       },
     },
+    403: {
+      description: "CSRF validation failed",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema,
+        },
+      },
+    },
   },
 });
 
+router.use("/logout", csrfProtection());
 router.openapi(logoutRoute, async (c) => {
+  const rawToken = getCookie(c, REFRESH_COOKIE);
+
+  if (rawToken) {
+    const payload = await verifyRefreshJWT(rawToken);
+    if (payload) {
+      await revokeSession(payload.familyId);
+    }
+  }
+
+  clearRefreshCookie(c);
+
   return c.json({ message: "Logged out successfully" }, 200);
 });
+
+// ============================================================================
+// Current user
+// ============================================================================
 
 const meRoute = createRoute({
   method: "get",

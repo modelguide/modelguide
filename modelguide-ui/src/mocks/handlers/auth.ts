@@ -23,9 +23,32 @@ export const authHandlers = [
     })
   }),
 
+  http.post('*/api/auth/refresh', async () => {
+    await delay(100)
+
+    // In MSW mode, always return the first mock user with a fresh token
+    const { mockUsers } = await import('~/mocks/data/users')
+    const user = mockUsers[0]
+
+    if (!user) {
+      return HttpResponse.json(
+        { code: 'REFRESH_TOKEN_INVALID', message: 'No refresh token' },
+        { status: 401 },
+      )
+    }
+
+    const { password: _, ...userWithoutPassword } = user
+    const token = generateMockToken(user.id)
+
+    return HttpResponse.json({
+      user: userWithoutPassword,
+      token,
+    })
+  }),
+
   http.post('*/api/auth/logout', async () => {
     await delay(100)
-    return HttpResponse.json({ success: true })
+    return HttpResponse.json({ message: 'Logged out successfully' })
   }),
 
   http.get('*/api/auth/me', async ({ request }) => {

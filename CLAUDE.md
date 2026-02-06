@@ -92,7 +92,7 @@ modelguide-api/src/
 
 ### Authentication Model
 
-- **Admin/Support:** JWT tokens (organization derived from token claims)
+- **Admin/Support:** Short-lived JWT access tokens (15 min) + refresh token rotation via `__Host-refresh_token` httpOnly cookie (7-day sliding). Refresh uses `REFRESH_JWT_SECRET` (separate from `JWT_SECRET`). CSRF protection via Origin header validation on `/auth/refresh` and `/auth/logout`. See `docs/decisions/001-refresh-token-rotation.md`.
 - **Agents:** API keys (`mgk_xxx` prefix), key hash stored, shown only on creation
 
 ### Key Concepts
