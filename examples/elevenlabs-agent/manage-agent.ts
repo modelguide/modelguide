@@ -5,23 +5,24 @@
  * - Fetch agent config
  * - Update prompt, tools, and dynamic variables
  *
- * Usage:
- *   bun run examples/elevenlabs-agent/manage-agent.ts get
- *   bun run examples/elevenlabs-agent/manage-agent.ts update
+ * Usage (from examples/elevenlabs-agent/):
+ *   bun run manage-agent.ts get
+ *   bun run manage-agent.ts update
+ *
+ * Reads .env from the script's directory automatically.
  */
 
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import type * as ElevenLabs from "@elevenlabs/elevenlabs-js/api";
 
-const client = new ElevenLabsClient();
+const client = new ElevenLabsClient({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+});
 
 const AGENT_ID = "agent_3501kgq8y9nre61vhwb60nyc0fnt";
 
-// Your ngrok URL — update this each time you restart ngrok
-const WEBHOOK_BASE_URL =
-  process.env.WEBHOOK_URL ?? "https://YOUR_NGROK_URL_HERE";
-
-// The ModelGuide API key for the Pizza Palace agent (from seed data)
-const MG_API_KEY = process.env.MG_API_KEY ?? "mgk_REPLACE_WITH_YOUR_KEY";
+const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL;
+const MG_API_KEY = process.env.MG_API_KEY ?? "";
 
 // ============================================================================
 // Agent prompt
@@ -47,42 +48,49 @@ You have access to tools prefixed with "pizzapalace_". Use them to:
 // Tool definitions — webhook tools pointing at ModelGuide
 // ============================================================================
 
+type PropType = "string" | "number" | "integer" | "boolean";
+
 function webhookTool(
   name: string,
   description: string,
-  properties: Record<string, unknown>,
+  properties: Record<
+    string,
+    { type: PropType; description?: string; enum?: string[] }
+  >,
   required: string[],
-) {
+): ElevenLabs.PromptAgentApiModelInputToolsItem {
   return {
-    type: "webhook" as const,
+    type: "webhook",
     name,
     description,
     responseTimeoutSecs: 30,
     apiSchema: {
       url: `${WEBHOOK_BASE_URL}/webhooks/elevenlabs/tool`,
-      method: "POST" as const,
+      method: "POST",
       requestBodySchema: {
-        type: "object" as const,
-        properties: Object.fromEntries(
-          Object.entries(properties).map(([key, val]) => [
-            key,
-            val as { type: string; description?: string },
-          ]),
-        ),
+        type: "object",
+        properties,
         required,
       },
     },
   };
 }
 
-const TOOLS = [
+const TOOLS: ElevenLabs.PromptAgentApiModelInputToolsItem[] = [
   webhookTool(
     "pizzapalace_add_to_cart",
     "Add an item to the customer's shopping cart",
     {
-      item: { type: "string", description: "Item name (e.g. 'large pepperoni pizza')" },
+      item: {
+        type: "string",
+        description: "Item name (e.g. 'large pepperoni pizza')",
+      },
       quantity: { type: "number", description: "Number of items" },
-      size: { type: "string", description: "Size: small, medium, or large" },
+      size: {
+        type: "string",
+        description: "Size variant",
+        enum: ["small", "medium", "large"],
+      },
       toppings: { type: "string", description: "Comma-separated toppings" },
     },
     ["item", "quantity"],
@@ -97,7 +105,10 @@ const TOOLS = [
     "pizzapalace_confirm_order",
     "Confirm and place the order. Always ask the customer to confirm first.",
     {
-      delivery_address: { type: "string", description: "Full delivery address" },
+      delivery_address: {
+        type: "string",
+        description: "Full delivery address",
+      },
     },
     ["delivery_address"],
   ),
@@ -122,9 +133,15 @@ async function getAgent() {
 }
 
 async function updateAgent() {
+  if (!WEBHOOK_BASE_URL) {
+    console.error("ERROR: WEBHOOK_BASE_URL is not set in .env");
+    process.exit(1);
+  }
+
   console.log(`Updating agent ${AGENT_ID}...`);
   console.log(`  Webhook URL: ${WEBHOOK_BASE_URL}/webhooks/elevenlabs/tool`);
-  console.log(`  Tools: ${TOOLS.map((t) => t.name).join(", ")}`);
+  console.log(`  mg_api_key: ${MG_API_KEY.slice(0, 8)}...`);
+  console.log(`  Tools: ${TOOLS.map((t) => ("name" in t ? t.name : "?")).join(", ")}`);
 
   const agent = await client.conversationalAi.agents.update(AGENT_ID, {
     name: "Pizza Palace Agent",
@@ -138,9 +155,9 @@ async function updateAgent() {
           "Hi, welcome to Pizza Palace! What can I get for you today?",
         language: "en",
         dynamicVariables: {
-          dynamic_variables: [
-            { name: "mg_api_key", value: MG_API_KEY },
-          ],
+          dynamicVariablePlaceholders: {
+            mg_api_key: MG_API_KEY,
+          },
         },
       },
     },
@@ -165,12 +182,12 @@ switch (command) {
     await updateAgent();
     break;
   default:
-    console.log("Usage:");
-    console.log("  bun run examples/elevenlabs-agent/manage-agent.ts get      # Fetch current config");
-    console.log("  bun run examples/elevenlabs-agent/manage-agent.ts update   # Push new config");
+    console.log("Usage (run from examples/elevenlabs-agent/):");
+    console.log("  bun run manage-agent.ts get      # Fetch current config");
+    console.log("  bun run manage-agent.ts update   # Push new config");
     console.log("");
-    console.log("Env vars:");
+    console.log("Configure via .env:");
     console.log("  ELEVENLABS_API_KEY  — your ElevenLabs API key (required)");
-    console.log("  WEBHOOK_URL         — your ngrok base URL (e.g. https://abc123.ngrok.io)");
+    console.log("  WEBHOOK_BASE_URL    — your ngrok base URL (required for update)");
     console.log("  MG_API_KEY          — ModelGuide API key for the agent (mgk_xxx)");
 }

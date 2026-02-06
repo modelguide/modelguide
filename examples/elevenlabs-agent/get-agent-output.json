@@ -1,0 +1,295 @@
+=== Agent Config ===
+{
+  "agentId": "agent_3501kgq8y9nre61vhwb60nyc0fnt",
+  "name": "piotr-elevenlabs-summit",
+  "conversationConfig": {
+    "asr": {
+      "quality": "high",
+      "provider": "scribe_realtime",
+      "userInputAudioFormat": "pcm_16000",
+      "keywords": []
+    },
+    "turn": {
+      "turnTimeout": 7,
+      "silenceEndCallTimeout": -1,
+      "softTimeoutConfig": {
+        "timeoutSeconds": -1,
+        "message": "Hhmmmm...yeah.",
+        "useLlmGeneratedMessage": false
+      },
+      "mode": "turn",
+      "turnEagerness": "normal",
+      "spellingPatience": "auto",
+      "speculativeTurn": true,
+      "turn_model": "turn_v2"
+    },
+    "tts": {
+      "modelId": "eleven_v3_conversational",
+      "voiceId": "xfMUKeTJXYYX6U76STYv",
+      "supportedVoices": [],
+      "suggested_audio_tags": [],
+      "agentOutputAudioFormat": "pcm_16000",
+      "optimizeStreamingLatency": 3,
+      "stability": 0.5,
+      "speed": 1,
+      "similarityBoost": 0.8,
+      "textNormalisationType": "system_prompt",
+      "pronunciationDictionaryLocators": []
+    },
+    "conversation": {
+      "textOnly": false,
+      "maxDurationSeconds": 600,
+      "clientEvents": [
+        "audio",
+        "interruption",
+        "agent_response",
+        "user_transcript",
+        "agent_response_correction",
+        "agent_tool_response"
+      ],
+      "monitoringEnabled": false,
+      "monitoringEvents": [
+        "user_transcript",
+        "agent_response",
+        "agent_response_correction"
+      ]
+    },
+    "languagePresets": {},
+    "vad": {
+      "background_voice_detection": false
+    },
+    "agent": {
+      "firstMessage": "Hi there! How can I help?",
+      "language": "en",
+      "hinglishMode": false,
+      "dynamicVariables": {
+        "dynamicVariablePlaceholders": {}
+      },
+      "disableFirstMessageInterruptions": false,
+      "prompt": {
+        "prompt": "# Personality\n\nYou are a helpful and efficient virtual assistant for an online retail store.\nYou are friendly, patient, and knowledgeable about the store's products and website functionality.\nYou assist customers with adding items to their shopping cart, navigating the website, and completing their purchases.\n\n# Environment\n\nYou are interacting with customers through a voice interface on the retail store's website.\nThe customer may be using a variety of devices, such as a computer, smartphone, or smart speaker.\nYou have access to the store's product catalog, inventory information, and customer account details.\n\n# Tone\n\nYour responses are clear, concise, and professional.\nYou use a friendly and helpful tone, and avoid using jargon or technical terms that customers may not understand.\nYou speak at a moderate pace and enunciate clearly.\nYou use positive language and avoid negative or discouraging phrases.\n\n# Goal\n\nYour primary goal is to help customers successfully add items to their shopping cart and complete their online purchases.\n\n1.  **Item Identification:**\n    *   Accurately identify the item the customer wants to add to their cart based on their description or name.\n    *   If the item is not found, offer alternative suggestions or clarify the customer's request.\n2.  **Cart Addition:**\n    *   Guide the customer through the process of adding the item to their shopping cart, including selecting the correct size, color, and quantity.\n    *   Confirm that the item has been successfully added to the cart.\n3.  **Navigation Assistance:**\n    *   Help the customer navigate the website to find other items they may be interested in.\n    *   Provide information about product categories, search functionality, and promotional offers.\n4.  **Troubleshooting:**\n    *   Assist the customer with any issues they may encounter while adding items to their cart, such as website errors or payment problems.\n    *   Provide clear and concise instructions for resolving these issues.\n5.  **Checkout Guidance:**\n    *   Guide the customer through the checkout process, including providing information about shipping options, payment methods, and order confirmation.\n    *   Answer any questions the customer may have about the checkout process.\n\n# Guardrails\n\nDo not provide information about products or services that are not offered by the retail store.\nDo not ask for sensitive personal information, such as credit card numbers or social security numbers.\nDo not engage in any behavior that is discriminatory, offensive, or harmful.\nIf you are unable to assist the customer with their request, politely explain why and offer alternative solutions.\nMaintain a professional and respectful demeanor at all times.\n\n# Tools\n\nNone\n",
+        "llm": "glm-45-air-fp8",
+        "reasoningEffort": "low",
+        "temperature": 0,
+        "maxTokens": -1,
+        "toolIds": [],
+        "builtInTools": {},
+        "enable_parallel_tool_calls": false,
+        "mcpServerIds": [],
+        "nativeMcpServerIds": [],
+        "knowledgeBase": [],
+        "ignoreDefaultPersonality": false,
+        "rag": {
+          "enabled": false,
+          "embeddingModel": "e5_mistral_7b_instruct",
+          "maxVectorDistance": 0.6,
+          "maxDocumentsLength": 50000,
+          "maxRetrievedRagChunksCount": 20
+        },
+        "timezone": "Europe/London",
+        "backupLlmConfig": {
+          "preference": "default"
+        },
+        "cascadeTimeoutSeconds": 8,
+        "tools": []
+      }
+    }
+  },
+  "metadata": {
+    "createdAtUnixSecs": 1770307660,
+    "updatedAtUnixSecs": 1770373864
+  },
+  "platformSettings": {
+    "evaluation": {
+      "criteria": []
+    },
+    "widget": {
+      "variant": "full",
+      "placement": "bottom-right",
+      "expandable": "never",
+      "avatar": {
+        "type": "orb",
+        "color1": "#2792dc",
+        "color2": "#9ce6e6"
+      },
+      "feedbackMode": "during",
+      "endFeedback": {
+        "type": "rating"
+      },
+      "bgColor": "#ffffff",
+      "textColor": "#000000",
+      "btnColor": "#000000",
+      "btnTextColor": "#ffffff",
+      "borderColor": "#e1e1e1",
+      "focusColor": "#000000",
+      "shareablePageShowTerms": true,
+      "termsText": "#### Terms and conditions\n\nBy clicking \"Agree,\" and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\nIf you do not wish to have your conversations recorded, please refrain from using this service.",
+      "termsHtml": "<h4>Terms and conditions</h4>\n<p>By clicking &quot;Agree,&quot; and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\nIf you do not wish to have your conversations recorded, please refrain from using this service.</p>\n",
+      "showAvatarWhenCollapsed": false,
+      "disableBanner": false,
+      "markdownLinkAllowedHosts": [],
+      "markdownLinkIncludeWww": true,
+      "markdownLinkAllowHttp": true,
+      "micMutingEnabled": false,
+      "transcriptEnabled": false,
+      "textInputEnabled": true,
+      "conversationModeToggleEnabled": false,
+      "defaultExpanded": false,
+      "alwaysExpanded": false,
+      "textContents": {},
+      "styles": {},
+      "languageSelector": false,
+      "supportsTextOnly": true,
+      "languagePresets": {}
+    },
+    "dataCollection": {},
+    "overrides": {
+      "conversationConfigOverride": {
+        "turn": {
+          "softTimeoutConfig": {
+            "message": false
+          }
+        },
+        "tts": {
+          "voiceId": false,
+          "stability": false,
+          "speed": false,
+          "similarityBoost": false
+        },
+        "conversation": {
+          "textOnly": true
+        },
+        "agent": {
+          "firstMessage": false,
+          "language": false,
+          "prompt": {
+            "prompt": false,
+            "llm": false,
+            "nativeMcpServerIds": false
+          }
+        }
+      },
+      "customLlmExtraBody": false,
+      "enableConversationInitiationClientDataFromWebhook": false
+    },
+    "workspaceOverrides": {
+      "webhooks": {
+        "events": [
+          "transcript"
+        ],
+        "sendAudio": false
+      }
+    },
+    "testing": {
+      "attachedTests": [],
+      "referenced_tests_ids": []
+    },
+    "archived": false,
+    "guardrails": {
+      "version": "1",
+      "alignment": {
+        "is_enabled": false
+      },
+      "moderation": {
+        "config": {
+          "sexual": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "violence": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "violence_graphic": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "harassment": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "harassment_threatening": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "hate": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "hate_threatening": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "self_harm_instructions": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "self_harm": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "self_harm_intent": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "sexual_minors": {
+            "is_enabled": false,
+            "threshold": 0.3
+          }
+        }
+      }
+    },
+    "auth": {
+      "enableAuth": false,
+      "allowlist": [],
+      "require_origin_header": false
+    },
+    "callLimits": {
+      "agentConcurrencyLimit": -1,
+      "dailyLimit": 100000,
+      "burstingEnabled": true
+    },
+    "ban": null,
+    "privacy": {
+      "recordVoice": true,
+      "retentionDays": -1,
+      "deleteTranscriptAndPii": false,
+      "deleteAudio": false,
+      "applyToExistingConversations": false,
+      "zeroRetentionMode": false
+    },
+    "safety": {
+      "isBlockedIvc": false,
+      "isBlockedNonIvc": false,
+      "ignoreSafetyEvaluation": false
+    }
+  },
+  "phoneNumbers": [],
+  "whatsappAccounts": [],
+  "workflow": {
+    "edges": {},
+    "nodes": {
+      "start_node": {
+        "type": "start",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "edgeOrder": []
+      }
+    },
+    "preventSubagentLoops": false
+  },
+  "accessInfo": {
+    "isCreator": true,
+    "creatorName": "sammy@modelguide.ai",
+    "creatorEmail": "sammy@modelguide.ai",
+    "role": "admin"
+  },
+  "tags": [],
+  "versionId": "agtvrsn_3601kgs82pyrf8avvqxcgjfj4z3w",
+  "branchId": "agtbrch_6501kgq8yaj3fc9vz7t4354c0zhm",
+  "mainBranchId": "agtbrch_6501kgq8yaj3fc9vz7t4354c0zhm",
+  "procedure_versions": [],
+  "procedures_enabled": false
+}

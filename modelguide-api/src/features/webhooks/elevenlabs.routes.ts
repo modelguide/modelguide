@@ -47,8 +47,27 @@ async function verifySignature(rawBody: string, signature: string) {
  * Resolve an mg_api_key to its agent + organization context.
  * Reuses the same lookup logic as the auth middleware.
  */
+// TODO: Remove dev bypass — always resolve from DB in production
+const DEV_BYPASS_AGENT =
+  env.NODE_ENV === "development"
+    ? {
+        id: "00000000-0000-0000-0000-000000000000",
+        name: "dev-agent",
+        organizationId: "00000000-0000-0000-0000-000000000000",
+        agentType: "voice" as const,
+        isActive: true,
+      }
+    : null;
+
 async function resolveAgent(vars: DynamicVariables) {
   const key = vars.mg_api_key;
+
+  // Dev bypass: skip DB lookup when key is not a real mgk_ key
+  if (DEV_BYPASS_AGENT && !isValidApiKeyFormat(key)) {
+    console.warn("[webhook] Dev bypass: using fake agent context");
+    return DEV_BYPASS_AGENT;
+  }
+
   if (!isValidApiKeyFormat(key)) return null;
 
   const keyHash = hashApiKey(key);
@@ -59,7 +78,15 @@ async function resolveAgent(vars: DynamicVariables) {
     .where(eq(apiKeys.keyHash, keyHash))
     .limit(1);
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    if (DEV_BYPASS_AGENT) {
+      console.warn(
+        "[webhook] Dev bypass: API key not found in DB, using fake agent context",
+      );
+      return DEV_BYPASS_AGENT;
+    }
+    return null;
+  }
 
   const { apiKey, agent } = rows[0];
   if (!apiKey.isActive || !agent?.isActive) return null;
