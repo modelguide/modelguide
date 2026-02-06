@@ -1,4 +1,4 @@
-.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
+.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
 
 .DEFAULT_GOAL := help
 
@@ -43,6 +43,9 @@ api-lint-check: ## [API] Run linter (check only)
 
 api-format: ## [API] Format code
 	cd modelguide-api && bun run format
+
+sync-connectors: ## [API] Sync connector catalog from code to database
+	cd modelguide-api && bun run sync:connectors
 
 # =============================================================================
 # UI
