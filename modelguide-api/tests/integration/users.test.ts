@@ -2,12 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
 import { users } from "@db/schema";
-import { and, eq, notInArray } from "drizzle-orm";
-import {
-  type TestSeed,
-  authHeadersFor,
-  getTestSeed,
-} from "../helpers/seed";
+import { eq } from "drizzle-orm";
+import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
 let s: TestSeed;
 /** IDs of users created during tests (for cleanup) */

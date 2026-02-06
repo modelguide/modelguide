@@ -1,8 +1,11 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
-import { getOrganizationId, requireUser } from "@lib/middleware";
-import { requirePermission } from "@lib/middleware";
+import {
+  getOrganizationId,
+  requirePermission,
+  requireUser,
+} from "@lib/middleware";
 import { getOrganizationById } from "./organizations.service";
 
 const router = createRouter();
@@ -24,6 +27,24 @@ const errorResponseSchema = z.object({
   code: z.string(),
   message: z.string(),
 });
+
+function formatOrganization(org: {
+  id: string;
+  name: string;
+  slug: string;
+  settings: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date | null;
+}) {
+  return {
+    id: org.id,
+    name: org.name,
+    slug: org.slug,
+    settings: org.settings,
+    createdAt: org.createdAt.toISOString(),
+    updatedAt: org.updatedAt?.toISOString() ?? null,
+  };
+}
 
 // ============================================================================
 // Routes
@@ -71,17 +92,7 @@ router.openapi(getOrganizationRoute, async (c) => {
 
   const org = await getOrganizationById(orgId);
 
-  return c.json(
-    {
-      id: org.id,
-      name: org.name,
-      slug: org.slug,
-      settings: org.settings,
-      createdAt: org.createdAt.toISOString(),
-      updatedAt: org.updatedAt?.toISOString() ?? null,
-    },
-    200,
-  );
+  return c.json(formatOrganization(org), 200);
 });
 
 export default router;

@@ -4,9 +4,9 @@ import { Errors } from "@lib/errors";
 import {
   getCurrentUser,
   getOrganizationId,
+  requirePermission,
   requireUser,
 } from "@lib/middleware";
-import { requirePermission } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
 import {
   createUser,
@@ -152,11 +152,8 @@ const createUserRoute = createRoute({
 });
 
 router.openapi(createUserRoute, async (c) => {
-  const auth = c.get("auth");
-  if (auth.type !== "user") {
-    throw Errors.unauthorized("User authentication required");
-  }
-  if (auth.user.role !== "admin") {
+  const currentUser = getCurrentUser(c);
+  if (currentUser.role !== "admin") {
     throw Errors.forbidden(
       "Permission denied: users:create requires admin role",
     );
@@ -263,29 +260,21 @@ router.openapi(updateUserRoute, async (c) => {
   const { id } = c.req.valid("param");
   const data = c.req.valid("json");
 
-  const isSelf = currentUser.id === id;
   const isAdmin = currentUser.role === "admin";
 
-  if (!isAdmin && !isSelf) {
+  if (!isAdmin && currentUser.id !== id) {
     throw Errors.forbidden(
       "Permission denied: users:update requires admin role",
     );
   }
 
-  // Support users can only update their own name
-  if (!isAdmin && isSelf) {
-    if (data.role) {
-      throw Errors.forbidden("Only admins can change user roles");
-    }
-    const updateData: { name?: string } = {};
-    if (data.name) {
-      updateData.name = data.name;
-    }
-    const user = await updateUser(orgId, id, updateData);
-    return c.json(formatUser(user), 200);
+  // Non-admin users cannot change roles
+  if (!isAdmin && data.role) {
+    throw Errors.forbidden("Only admins can change user roles");
   }
 
-  const user = await updateUser(orgId, id, data);
+  const updateData = isAdmin ? data : { name: data.name };
+  const user = await updateUser(orgId, id, updateData);
   return c.json(formatUser(user), 200);
 });
 
@@ -320,11 +309,8 @@ const deleteUserRoute = createRoute({
 });
 
 router.openapi(deleteUserRoute, async (c) => {
-  const auth = c.get("auth");
-  if (auth.type !== "user") {
-    throw Errors.unauthorized("User authentication required");
-  }
-  if (auth.user.role !== "admin") {
+  const currentUser = getCurrentUser(c);
+  if (currentUser.role !== "admin") {
     throw Errors.forbidden(
       "Permission denied: users:delete requires admin role",
     );
