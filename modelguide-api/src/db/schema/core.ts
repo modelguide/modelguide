@@ -19,7 +19,6 @@ import {
 import {
   agentTypeEnum,
   channelTypeEnum,
-  confirmationStatusEnum,
   connectorTypeEnum,
   feedbackSourceEnum,
   messageRoleEnum,
@@ -624,51 +623,3 @@ export const sessionFeedbackRelations = relations(
     }),
   }),
 );
-
-// ============================================================================
-// Confirmations (Tool execution confirmations)
-// ============================================================================
-
-export const confirmations = pgTable(
-  "confirmations",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    agentId: uuid("agent_id")
-      .notNull()
-      .references(() => agents.id, { onDelete: "cascade" }),
-    connectorId: uuid("connector_id")
-      .notNull()
-      .references(() => connectors.id, { onDelete: "cascade" }),
-    mcpToolName: varchar("mcp_tool_name", { length: 255 }).notNull(),
-    args: jsonb("args"),
-    status: confirmationStatusEnum("status").notNull().default("pending"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    consumedAt: timestamp("consumed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("confirmations_org_idx").on(table.organizationId),
-    index("confirmations_agent_idx").on(table.agentId),
-    index("confirmations_status_expires_idx").on(table.status, table.expiresAt),
-  ],
-).enableRLS();
-
-export const confirmationsRelations = relations(confirmations, ({ one }) => ({
-  organization: one(organizations, {
-    fields: [confirmations.organizationId],
-    references: [organizations.id],
-  }),
-  agent: one(agents, {
-    fields: [confirmations.agentId],
-    references: [agents.id],
-  }),
-  connector: one(connectors, {
-    fields: [confirmations.connectorId],
-    references: [connectors.id],
-  }),
-}));

@@ -4,7 +4,7 @@
  */
 
 import type { AppBindings } from "@/types";
-import { addMessage, validateActiveSession } from "@features/sessions";
+import { validateActiveSession } from "@features/sessions";
 import { Errors } from "@lib/errors";
 import {
   McpServer,
@@ -13,11 +13,6 @@ import {
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Context } from "hono";
 import { z } from "zod";
-import {
-  CONFIRMATION_TTL_SECONDS,
-  consumeConfirmation,
-  createConfirmation,
-} from "./confirmation.service";
 import { CORE_TOOL_COUNT, registerCoreTools } from "./core-tools";
 import {
   executeTool,
@@ -155,62 +150,12 @@ function registerConnectorTools(
       .string()
       .describe("Active session ID (from core_create_session)");
 
-    if (tool.requiresConfirmation) {
-      zodShape._confirmation_id = z
-        .string()
-        .optional()
-        .describe(
-          "Confirmation ID from a previous confirmation_required response",
-        );
-    }
-
     server.tool(tool.mcpName, tool.description, zodShape, async (args) => {
       try {
-        const { session_id, _confirmation_id, ...toolInput } = args as Record<
-          string,
-          unknown
-        >;
+        const { session_id, ...toolInput } = args as Record<string, unknown>;
         const sessionId = session_id as string;
 
         await validateActiveSession(orgId, sessionId, agentId);
-
-        if (tool.requiresConfirmation) {
-          const confirmationId = _confirmation_id as string | undefined;
-
-          if (!confirmationId) {
-            const confirmation = await createConfirmation(orgId, {
-              agentId,
-              connectorId: tool.connectorId,
-              mcpToolName: tool.mcpName,
-              args: args as Record<string, unknown>,
-            });
-
-            return mcpResponse({
-              status: "confirmation_required",
-              confirmation_id: confirmation.id,
-              tool_name: tool.mcpName,
-              message: `This action requires confirmation. Re-call this tool with _confirmation_id: "${confirmation.id}" to proceed.`,
-              expires_in_seconds: CONFIRMATION_TTL_SECONDS,
-            });
-          }
-
-          const consumed = await consumeConfirmation(
-            orgId,
-            confirmationId,
-            tool.mcpName,
-            agentId,
-          );
-
-          if (!consumed) {
-            return mcpResponse(
-              {
-                error: "Confirmation invalid, expired, or already consumed.",
-                tool_name: tool.mcpName,
-              },
-              true,
-            );
-          }
-        }
 
         const config = await resolveConnectorConfig(orgId, tool.connectorId);
         const result = await executeTool(
@@ -221,19 +166,6 @@ function registerConnectorTools(
           config,
           toolInput,
         );
-
-        // Best-effort: log tool call to session transcript
-        addMessage(orgId, sessionId, agentId, {
-          role: "assistant",
-          toolCalls: [
-            {
-              toolCallId: crypto.randomUUID(),
-              toolName: tool.mcpName,
-              toolInput: toolInput as Record<string, unknown>,
-              toolOutput: result as unknown as Record<string, unknown>,
-            },
-          ],
-        }).catch(() => {});
 
         return mcpResponse(result as unknown as Record<string, unknown>);
       } catch (err) {

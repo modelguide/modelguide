@@ -1,5 +1,5 @@
 {
-  "id": "e122701b-b18e-4afc-98ea-641b436d7f18",
+  "id": "6c84230c-190f-4335-aa6a-73062aa1ed89",
   "prevId": "197933a1-e93e-46d3-9729-e2a54f84dfba",
   "version": "7",
   "dialect": "postgresql",
@@ -431,175 +431,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "public.confirmations": {
-      "name": "confirmations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "connector_id": {
-          "name": "connector_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mcp_tool_name": {
-          "name": "mcp_tool_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "args": {
-          "name": "args",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "confirmation_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "confirmations_org_idx": {
-          "name": "confirmations_org_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "confirmations_agent_idx": {
-          "name": "confirmations_agent_idx",
-          "columns": [
-            {
-              "expression": "agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "confirmations_status_expires_idx": {
-          "name": "confirmations_status_expires_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "confirmations_organization_id_organizations_id_fk": {
-          "name": "confirmations_organization_id_organizations_id_fk",
-          "tableFrom": "confirmations",
-          "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "confirmations_agent_id_agents_id_fk": {
-          "name": "confirmations_agent_id_agents_id_fk",
-          "tableFrom": "confirmations",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "confirmations_connector_id_connectors_id_fk": {
-          "name": "confirmations_connector_id_connectors_id_fk",
-          "tableFrom": "confirmations",
-          "tableTo": "connectors",
-          "columnsFrom": [
-            "connector_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -1640,8 +1471,8 @@
           "method": "btree",
           "with": {}
         },
-        "session_messages_sequence_idx": {
-          "name": "session_messages_sequence_idx",
+        "session_messages_session_sequence_unique": {
+          "name": "session_messages_session_sequence_unique",
           "columns": [
             {
               "expression": "session_id",
@@ -1656,7 +1487,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1999,15 +1830,6 @@
         "sms",
         "whatsapp",
         "email"
-      ]
-    },
-    "public.confirmation_status": {
-      "name": "confirmation_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "consumed",
-        "expired"
       ]
     },
     "public.connector_type": {
