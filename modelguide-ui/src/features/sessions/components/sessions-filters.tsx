@@ -8,8 +8,8 @@ import type { ChannelType, SessionStatus } from '~/schemas/sessions'
 
 export interface SessionFilters {
   status?: SessionStatus
-  channel_type?: ChannelType
-  agent_id?: string
+  channelType?: ChannelType
+  agentId?: string
   search?: string
 }
 
@@ -35,6 +35,7 @@ const channelOptions: Array<{ value: ChannelType | ''; label: string }> = [
   { value: 'sms', label: 'SMS' },
   { value: 'api', label: 'API' },
   { value: 'slack', label: 'Slack' },
+  { value: 'email', label: 'Email' },
 ]
 
 export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersProps) {
@@ -45,7 +46,7 @@ export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersPro
 
   const agentOptions = [
     { value: '', label: 'All Agents' },
-    ...(agentsData?.items.map((agent) => ({ value: agent.id, label: agent.name })) || []),
+    ...(agentsData?.data.map((agent) => ({ value: agent.id, label: agent.name })) || []),
   ]
 
   return (
@@ -82,11 +83,11 @@ export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersPro
       </div>
       <div className="w-36">
         <Select
-          value={filters.channel_type || ''}
+          value={filters.channelType || ''}
           onChange={(e) =>
             onFiltersChange({
               ...filters,
-              channel_type: e.target.value ? (e.target.value as ChannelType) : undefined,
+              channelType: e.target.value ? (e.target.value as ChannelType) : undefined,
             })
           }
         >
@@ -99,11 +100,11 @@ export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersPro
       </div>
       <div className="w-40">
         <Select
-          value={filters.agent_id || ''}
+          value={filters.agentId || ''}
           onChange={(e) =>
             onFiltersChange({
               ...filters,
-              agent_id: e.target.value || undefined,
+              agentId: e.target.value || undefined,
             })
           }
         >

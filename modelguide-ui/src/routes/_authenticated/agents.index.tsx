@@ -41,7 +41,7 @@ function AgentsPage() {
         }
       />
 
-      <AgentsTable agents={data?.items ?? []} isLoading={isLoading} isAdmin={isAdmin} />
+      <AgentsTable agents={data?.data ?? []} isLoading={isLoading} isAdmin={isAdmin} />
     </div>
   )
 }

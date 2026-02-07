@@ -43,7 +43,7 @@ export function createMagicLink(): GeneratedMagicLink {
  */
 export function buildMagicLinkUrl(token: string): string {
   const baseUrl = env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
-  return `${baseUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
+  return `${baseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Globe, MessageCircle, Phone, Send, Slack } from 'lucide-react'
+import { Globe, Mail, MessageCircle, Phone, Send, Slack } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { ChannelType } from '~/schemas/sessions'
 
@@ -10,4 +10,5 @@ export const channelConfig: Record<ChannelType, { icon: ReactNode; label: string
   widget: { icon: <MessageCircle className="h-4 w-4" />, label: 'Widget' },
   sms: { icon: <MessageCircle className="h-4 w-4" />, label: 'SMS' },
   whatsapp: { icon: <MessageCircle className="h-4 w-4" />, label: 'WhatsApp' },
+  email: { icon: <Mail className="h-4 w-4" />, label: 'Email' },
 }

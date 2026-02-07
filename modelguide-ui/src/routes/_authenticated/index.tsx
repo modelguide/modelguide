@@ -6,8 +6,9 @@ import { PageHeader } from '~/components/ui/page-header'
 import { StatsGrid } from '~/features/dashboard/components/stats-grid'
 import { SessionsTable } from '~/features/sessions/components/sessions-table'
 import { api } from '~/lib/api'
+import type { PaginatedResponse } from '~/lib/pagination'
 import type { AnalyticsSummary } from '~/schemas/analytics'
-import type { SessionListResponse } from '~/schemas/sessions'
+import type { SessionListItem } from '~/schemas/sessions'
 
 export const Route = createFileRoute('/_authenticated/')({
   component: DashboardPage,
@@ -24,9 +25,9 @@ function DashboardPage() {
     queryFn: () =>
       api
         .get('sessions', {
-          searchParams: { page: 1, page_size: 5 },
+          searchParams: { page: 1, pageSize: 5 },
         })
-        .json<SessionListResponse>(),
+        .json<PaginatedResponse<SessionListItem>>(),
   })
 
   return (
@@ -71,7 +72,7 @@ function DashboardPage() {
             </Button>
           </Link>
         </div>
-        <SessionsTable sessions={sessionsData?.items ?? []} isLoading={sessionsLoading} />
+        <SessionsTable sessions={sessionsData?.data ?? []} isLoading={sessionsLoading} />
       </div>
     </div>
   )

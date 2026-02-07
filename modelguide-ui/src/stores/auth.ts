@@ -1,12 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { LoginResponse, User } from '~/schemas/auth'
+import { getApiBaseUrl } from '~/lib/api-base'
+import type { AuthResponse, User } from '~/schemas/auth'
 
 interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<void>
+  requestMagicLink: (email: string) => Promise<void>
+  verifyToken: (token: string) => Promise<void>
   logout: () => Promise<void>
   setAuth: (user: User, token: string) => void
   refreshAccessToken: () => Promise<boolean>
@@ -18,25 +20,54 @@ let storeRefreshPromise: Promise<boolean> | null = null
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       token: null,
       isAuthenticated: false,
 
-      login: async (email: string, password: string) => {
-        const response = await fetch('/api/auth/login', {
+      requestMagicLink: async (email: string) => {
+        const baseUrl = getApiBaseUrl()
+        const response = await fetch(`${baseUrl}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email }),
           credentials: 'include',
         })
 
         if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Login failed')
+          let message = 'Failed to send magic link'
+          try {
+            const error = await response.json()
+            message = error.message || message
+          } catch {
+            // Non-JSON error response (e.g., 502 gateway timeout)
+          }
+          throw new Error(message)
+        }
+      },
+
+      verifyToken: async (magicToken: string) => {
+        const baseUrl = getApiBaseUrl()
+        const response = await fetch(
+          `${baseUrl}/auth/verify?token=${encodeURIComponent(magicToken)}`,
+          {
+            method: 'GET',
+            credentials: 'include',
+          },
+        )
+
+        if (!response.ok) {
+          let message = 'Verification failed'
+          try {
+            const error = await response.json()
+            message = error.message || message
+          } catch {
+            // Non-JSON error response (e.g., 502 gateway timeout)
+          }
+          throw new Error(message)
         }
 
-        const data: LoginResponse = await response.json()
+        const data: AuthResponse = await response.json()
         set({
           user: data.user,
           token: data.token,
@@ -45,8 +76,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
+        const baseUrl = getApiBaseUrl()
         try {
-          await fetch('/api/auth/logout', {
+          await fetch(`${baseUrl}/auth/logout`, {
             method: 'POST',
             credentials: 'include',
           })
@@ -67,7 +99,8 @@ export const useAuthStore = create<AuthState>()(
 
         storeRefreshPromise = (async () => {
           try {
-            const response = await fetch('/api/auth/refresh', {
+            const baseUrl = getApiBaseUrl()
+            const response = await fetch(`${baseUrl}/auth/refresh`, {
               method: 'POST',
               credentials: 'include',
             })
@@ -76,7 +109,7 @@ export const useAuthStore = create<AuthState>()(
               return false
             }
 
-            const data: LoginResponse = await response.json()
+            const data: AuthResponse = await response.json()
             set({
               user: data.user,
               token: data.token,

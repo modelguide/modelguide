@@ -2,14 +2,29 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { HTTPError } from 'ky'
 import { useEffect, useState } from 'react'
+import { Toaster, toast } from 'sonner'
 import appCss from '~/styles/app.css?url'
+
+function handleGlobalError(error: unknown) {
+  if (error instanceof HTTPError) {
+    if (error.response.status === 403) {
+      toast.error("You don't have permission to perform this action")
+    } else if (error.response.status >= 500) {
+      toast.error('Something went wrong. Please try again.')
+    }
+  }
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60, // 1 minute
       retry: 1,
+    },
+    mutations: {
+      onError: handleGlobalError,
     },
   },
 })
@@ -86,6 +101,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        <Toaster theme="dark" position="bottom-right" richColors />
         <TanStackRouterDevtools position="bottom-right" />
         <Scripts />
       </body>

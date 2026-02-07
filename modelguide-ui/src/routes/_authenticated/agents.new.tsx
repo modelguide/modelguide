@@ -8,7 +8,7 @@ import { Input } from '~/components/ui/input'
 import { Select } from '~/components/ui/select'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { api } from '~/lib/api'
-import type { Agent, AgentCreate } from '~/schemas/agents'
+import type { AgentCreate, AgentWithKey } from '~/schemas/agents'
 
 export const Route = createFileRoute('/_authenticated/agents/new')({
   component: NewAgentPage,
@@ -19,11 +19,10 @@ function NewAgentPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [agentType, setAgentType] = useState<'voice'>('voice')
-  const [newAgent, setNewAgent] = useState<(Agent & { api_key: string }) | null>(null)
+  const [newAgent, setNewAgent] = useState<AgentWithKey | null>(null)
 
   const createMutation = useMutation({
-    mutationFn: (data: AgentCreate) =>
-      api.post('agents', { json: data }).json<Agent & { api_key: string }>(),
+    mutationFn: (data: AgentCreate) => api.post('agents', { json: data }).json<AgentWithKey>(),
     onSuccess: (data) => {
       setNewAgent(data)
     },
@@ -34,7 +33,7 @@ function NewAgentPage() {
     createMutation.mutate({
       name,
       description: description || undefined,
-      agent_type: agentType,
+      agentType: agentType,
     })
   }
 
@@ -106,7 +105,7 @@ function NewAgentPage() {
         <ApiKeyModal
           open={!!newAgent}
           onClose={() => navigate({ to: '/agents/$id', params: { id: newAgent.id } })}
-          apiKey={newAgent.api_key}
+          apiKey={newAgent.apiKey}
           title="Agent Created Successfully"
         />
       ) : null}

@@ -18,6 +18,10 @@ export default defineConfig({
       srcDirectory: 'src',
     }),
     viteReact(),
-    nitro(),
+    nitro({
+      devProxy: {
+        '/api/**': { target: 'http://localhost:3000' },
+      },
+    }),
   ],
 })

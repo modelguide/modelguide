@@ -10,7 +10,8 @@ import {
 } from '~/features/sessions/components/sessions-filters'
 import { SessionsTable } from '~/features/sessions/components/sessions-table'
 import { api } from '~/lib/api'
-import type { SessionListResponse } from '~/schemas/sessions'
+import type { PaginatedResponse } from '~/lib/pagination'
+import type { SessionListItem } from '~/schemas/sessions'
 
 export const Route = createFileRoute('/_authenticated/sessions/')({
   component: SessionsPage,
@@ -26,13 +27,15 @@ function SessionsPage() {
     queryFn: () => {
       const params: Record<string, string | number> = {
         page,
-        page_size: pageSize,
+        pageSize,
       }
       if (filters.status) params.status = filters.status
-      if (filters.channel_type) params.channel_type = filters.channel_type
-      if (filters.agent_id) params.agent_id = filters.agent_id
+      if (filters.channelType) params.channelType = filters.channelType
+      if (filters.agentId) params.agentId = filters.agentId
 
-      return api.get('sessions', { searchParams: params }).json<SessionListResponse>()
+      return api
+        .get('sessions', { searchParams: params })
+        .json<PaginatedResponse<SessionListItem>>()
     },
   })
 
@@ -55,10 +58,19 @@ function SessionsPage() {
         <SessionsFilters filters={filters} onFiltersChange={handleFiltersChange} />
       </div>
 
-      <SessionsTable sessions={data?.items ?? []} isLoading={isLoading} total={data?.total} />
+      <SessionsTable
+        sessions={data?.data ?? []}
+        isLoading={isLoading}
+        total={data?.pagination.totalItems}
+      />
 
       {data && (
-        <Pagination page={page} pageSize={pageSize} total={data.total} onPageChange={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={data.pagination.totalItems}
+          onPageChange={setPage}
+        />
       )}
     </div>
   )

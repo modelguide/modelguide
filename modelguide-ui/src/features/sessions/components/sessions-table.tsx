@@ -1,13 +1,10 @@
 import { useNavigate } from '@tanstack/react-router'
 import { MessageSquare } from 'lucide-react'
-import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
-import { RatingBadge } from '~/components/ui/rating-badge'
-import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Tooltip } from '~/components/ui/tooltip'
 import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
-import type { Session, SessionStatus } from '~/schemas/sessions'
+import type { SessionListItem, SessionStatus } from '~/schemas/sessions'
 
 const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated' | 'abandoned'> = {
   active: 'active',
@@ -17,14 +14,12 @@ const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated'
 }
 
 export interface SessionsTableProps {
-  sessions: Session[]
+  sessions: SessionListItem[]
   isLoading?: boolean
   total?: number
 }
 
 export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps) {
-  const [ratingSession, setRatingSession] = useState<Session | null>(null)
-
   if (isLoading) {
     return (
       <div className="overflow-hidden rounded-2xl border border-fg-subtle/10 bg-bg-elevated">
@@ -75,66 +70,50 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
         <table className="w-full">
           <thead>
             <tr className="border-b border-fg-subtle/10 bg-bg-subtle/30">
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Time
               </th>
-              <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[18%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Agent
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Channel
               </th>
-              <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[16%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Duration
               </th>
-              <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                User Rating
+              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                Msgs
               </th>
-              <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                Expert Rating
+              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                Feedback
               </th>
             </tr>
           </thead>
           <tbody>
             {sessions.map((session, index) => (
-              <SessionRow
-                key={session.id}
-                session={session}
-                onRate={() => setRatingSession(session)}
-                index={index}
-              />
+              <SessionRow key={session.id} session={session} index={index} />
             ))}
           </tbody>
         </table>
       </div>
-
-      {ratingSession && (
-        <RatingDialog
-          sessionId={ratingSession.id}
-          open={!!ratingSession}
-          onClose={() => setRatingSession(null)}
-        />
-      )}
     </>
   )
 }
 
 interface SessionRowProps {
-  session: Session
-  onRate: () => void
+  session: SessionListItem
   index: number
 }
 
-function SessionRow({ session, onRate, index }: SessionRowProps) {
+function SessionRow({ session, index }: SessionRowProps) {
   const navigate = useNavigate()
-  const supportFeedback = session.feedback?.find((f) => f.feedback_source === 'support')
-  const customerFeedback = session.feedback?.find((f) => f.feedback_source === 'customer')
 
   const handleRowClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) {
@@ -166,18 +145,16 @@ function SessionRow({ session, onRate, index }: SessionRowProps) {
         <Tooltip
           content={
             <div className="text-center">
-              <div className="font-medium">
-                {formatDate(session.started_at, { format: 'date' })}
-              </div>
+              <div className="font-medium">{formatDate(session.startedAt, { format: 'date' })}</div>
               <div className="text-fg-muted">
-                {formatDate(session.started_at, { format: 'time' })}
+                {formatDate(session.startedAt, { format: 'time' })}
               </div>
             </div>
           }
           side="top"
         >
           <span className="cursor-default text-sm text-fg-secondary">
-            {formatDate(session.started_at, { format: 'relative' })}
+            {formatDate(session.startedAt, { format: 'relative' })}
           </span>
         </Tooltip>
       </td>
@@ -187,33 +164,31 @@ function SessionRow({ session, onRate, index }: SessionRowProps) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-2 text-fg-secondary">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-bg-subtle">
-            {channelConfig[session.channel_type].icon}
+            {channelConfig[session.channelType].icon}
           </span>
-          <span className="text-sm">{channelConfig[session.channel_type].label}</span>
+          <span className="text-sm">{channelConfig[session.channelType].label}</span>
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className="text-sm text-fg-secondary">{session.user_identifier}</span>
+        <span className="text-sm text-fg-secondary">{session.userIdentifier}</span>
       </td>
       <td className="px-4 py-3">
         <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
       </td>
       <td className="px-4 py-3">
         <span className="font-mono text-sm text-fg-secondary">
-          {session.duration_seconds ? formatDuration(session.duration_seconds) : '—'}
+          {session.durationSeconds ? formatDuration(session.durationSeconds) : '\u2014'}
         </span>
       </td>
       <td className="px-4 py-3">
-        <RatingBadge rating={customerFeedback?.rating} label="User" />
+        <span className="font-mono text-sm text-fg-secondary">{session.messageCount}</span>
       </td>
       <td className="px-4 py-3">
-        <button type="button" onClick={onRate} className="group flex items-center">
-          <RatingBadge
-            rating={supportFeedback?.rating}
-            label="Expert"
-            showAddButton={!supportFeedback}
-          />
-        </button>
+        {session.feedbackSummary.hasFeedback ? (
+          <Badge variant="completed">Yes</Badge>
+        ) : (
+          <span className="text-sm text-fg-muted">{'\u2014'}</span>
+        )}
       </td>
     </tr>
   )

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Copy, Key, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Key, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -9,7 +9,7 @@ import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Spinner } from '~/components/ui/spinner'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { api } from '~/lib/api'
-import type { Agent } from '~/schemas/agents'
+import type { Agent, RegenerateKeyResponse } from '~/schemas/agents'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated/agents/$id')({
@@ -36,28 +36,22 @@ function AgentDetailPage() {
 
   const activateMutation = useMutation({
     mutationFn: () => api.post(`agents/${id}/activate`).json<Agent>(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents', id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
   })
 
   const deactivateMutation = useMutation({
     mutationFn: () => api.post(`agents/${id}/deactivate`).json<Agent>(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents', id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
   })
 
   const regenerateKeyMutation = useMutation({
-    mutationFn: () => api.post(`agents/${id}/regenerate-key`).json<{ api_key: string }>(),
+    mutationFn: () => api.post(`agents/${id}/regenerate-key`).json<RegenerateKeyResponse>(),
     onSuccess: (data) => {
-      setNewApiKey(data.api_key)
+      setNewApiKey(data.apiKey)
       setShowRegenerateDialog(false)
       queryClient.invalidateQueries({ queryKey: ['agents', id] })
     },
   })
-
-  const handleCopyPrefix = () => {
-    if (agent?.key_prefix) {
-      navigator.clipboard.writeText(agent.key_prefix)
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -76,7 +70,7 @@ function AgentDetailPage() {
         </div>
         {isAdmin && agent ? (
           <div className="flex items-center gap-2">
-            {agent.is_active ? (
+            {agent.isActive ? (
               <Button
                 variant="secondary"
                 onClick={() => deactivateMutation.mutate()}
@@ -116,14 +110,14 @@ function AgentDetailPage() {
                 <div>
                   <dt className="text-xs font-medium text-fg-muted">Status</dt>
                   <dd className="mt-1">
-                    <Badge variant={agent.is_active ? 'success' : 'default'} dot>
-                      {agent.is_active ? 'active' : 'inactive'}
+                    <Badge variant={agent.isActive ? 'success' : 'default'} dot>
+                      {agent.isActive ? 'active' : 'inactive'}
                     </Badge>
                   </dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium text-fg-muted">Type</dt>
-                  <dd className="mt-1 text-sm text-fg-primary capitalize">{agent.agent_type}</dd>
+                  <dd className="mt-1 text-sm text-fg-primary capitalize">{agent.agentType}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium text-fg-muted">ID</dt>
@@ -142,12 +136,7 @@ function AgentDetailPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3">
                   <Key className="h-4 w-4 text-fg-muted" />
-                  <code className="flex-1 font-mono text-sm text-fg-secondary">
-                    {agent.key_prefix}••••••••••••••••••••
-                  </code>
-                  <Button variant="ghost" size="icon-sm" onClick={handleCopyPrefix}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  <span className="flex-1 text-sm text-fg-secondary">API key configured</span>
                 </div>
 
                 {isAdmin ? (
