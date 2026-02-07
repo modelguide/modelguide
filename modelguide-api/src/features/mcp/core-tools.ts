@@ -4,7 +4,7 @@
 
 import {
   addFeedback,
-  addMessage,
+  addMessages,
   createSession,
   updateSession,
 } from "@features/sessions";
@@ -12,7 +12,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
-export const CORE_TOOL_COUNT = 4;
+export const CORE_TOOL_COUNT = 5;
 
 export function registerCoreTools(
   server: McpServer,
@@ -74,17 +74,9 @@ export function registerCoreTools(
     "End an active conversation session",
     {
       session_id: z.string().describe("Session ID to end"),
-      summary: z.string().optional().describe("Session summary"),
     },
-    async ({ session_id, summary }) => {
+    async ({ session_id }) => {
       try {
-        if (summary) {
-          await addMessage(orgId, session_id, agentId, {
-            role: "system",
-            content: summary,
-          });
-        }
-
         const updated = await updateSession(orgId, session_id, agentId, {
           status: "completed",
         });
@@ -105,24 +97,11 @@ export function registerCoreTools(
     "Escalate a session to a human agent",
     {
       session_id: z.string().describe("Session ID to escalate"),
-      reason: z.string().optional().describe("Reason for escalation"),
-      priority: z
-        .string()
-        .optional()
-        .describe("Escalation priority (low, medium, high)"),
     },
-    async ({ session_id, reason, priority }) => {
+    async ({ session_id }) => {
       try {
-        if (reason) {
-          await addMessage(orgId, session_id, agentId, {
-            role: "system",
-            content: reason,
-          });
-        }
-
         const updated = await updateSession(orgId, session_id, agentId, {
           status: "escalated",
-          escalationRef: priority,
         });
 
         return mcpResponse({
@@ -131,6 +110,72 @@ export function registerCoreTools(
         });
       } catch (err) {
         return mcpErrorResponse(err, "Failed to escalate session");
+      }
+    },
+  );
+
+  // ── core_add_messages ────────────────────────────────────────────────
+  server.tool(
+    "core_add_messages",
+    "Add conversation messages to a session",
+    {
+      session_id: z.string().describe("Session ID to add messages to"),
+      messages: z
+        .array(
+          z.object({
+            role: z
+              .enum(["user", "assistant", "system", "tool"])
+              .describe("Message role"),
+            content: z.string().optional().describe("Message text content"),
+            occurred_at: z
+              .string()
+              .describe("ISO 8601 timestamp of when the message occurred"),
+            tool_calls: z
+              .array(
+                z.object({
+                  tool_call_id: z.string().describe("Tool call identifier"),
+                  tool_name: z.string().describe("Name of the tool called"),
+                  tool_input: z
+                    .record(z.unknown())
+                    .optional()
+                    .describe("Input passed to the tool"),
+                  tool_output: z
+                    .record(z.unknown())
+                    .optional()
+                    .describe("Output returned by the tool"),
+                }),
+              )
+              .optional()
+              .describe("Tool calls associated with this message"),
+          }),
+        )
+        .describe("Messages to add"),
+    },
+    async ({ session_id, messages }) => {
+      try {
+        const rows = await addMessages(
+          orgId,
+          session_id,
+          agentId,
+          messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+            occurredAt: new Date(msg.occurred_at),
+            toolCalls: msg.tool_calls?.map((tc) => ({
+              toolCallId: tc.tool_call_id,
+              toolName: tc.tool_name,
+              toolInput: tc.tool_input as Record<string, unknown> | undefined,
+              toolOutput: tc.tool_output as Record<string, unknown> | undefined,
+            })),
+          })),
+        );
+
+        return mcpResponse({
+          session_id,
+          messages_added: rows.length,
+        });
+      } catch (err) {
+        return mcpErrorResponse(err, "Failed to add messages");
       }
     },
   );

@@ -71,7 +71,6 @@ const messageResponseSchema = z.object({
   modelUsed: z.string().nullable(),
   tokensUsed: z.number().nullable(),
   latencyMs: z.number().nullable(),
-  sequenceNumber: z.number(),
   createdAt: z.string(),
 });
 
@@ -303,7 +302,6 @@ function formatMessage(message: SessionMessage) {
     modelUsed: message.modelUsed,
     tokensUsed: message.tokensUsed,
     latencyMs: message.latencyMs,
-    sequenceNumber: message.sequenceNumber,
     createdAt: message.createdAt.toISOString(),
   };
 }
@@ -535,7 +533,7 @@ const addMessageRoute = createRoute({
   tags: ["Sessions"],
   summary: "Add message",
   description:
-    "Adds a message to an active session. Auto-increments sequence number. If role is assistant with toolCalls, creates tool messages.",
+    "Adds a message to an active session. If role is assistant with toolCalls, creates tool messages.",
   security: [{ bearerAuth: [] }],
   request: {
     params: sessionIdParams,

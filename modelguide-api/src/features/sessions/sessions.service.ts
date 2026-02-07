@@ -11,7 +11,7 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, asc, count, desc, eq, gt, gte, lte, max, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
 
 // ============================================================================
 // Types
@@ -186,7 +186,7 @@ export async function getSessionById(orgId: string, sessionId: string) {
         .select()
         .from(sessionMessages)
         .where(eq(sessionMessages.sessionId, sessionId))
-        .orderBy(asc(sessionMessages.sequenceNumber)),
+        .orderBy(asc(sessionMessages.occurredAt)),
       tx
         .select()
         .from(sessionFeedback)
@@ -304,6 +304,7 @@ export async function addMessage(
     role: string;
     content?: string;
     audioUrl?: string;
+    occurredAt?: Date;
     toolCalls?: Array<{
       toolCallId: string;
       toolName: string;
@@ -312,85 +313,109 @@ export async function addMessage(
     }>;
   },
 ) {
-  const maxAttempts = 3;
+  return forOrg(orgId, async (tx) => {
+    // Validate session exists and belongs to agent
+    const [session] = await tx
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)));
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      return await forOrg(orgId, async (tx) => {
-        // Validate session exists and belongs to agent
-        const [session] = await tx
-          .select()
-          .from(sessions)
-          .where(
-            and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)),
-          );
-
-        if (!session) {
-          throw Errors.sessionNotFound(sessionId);
-        }
-
-        if (isTerminalStatus(session.status)) {
-          throw Errors.sessionAlreadyEnded(sessionId);
-        }
-
-        // Get the current max sequence number
-        const [maxSeq] = await tx
-          .select({ max: max(sessionMessages.sequenceNumber) })
-          .from(sessionMessages)
-          .where(eq(sessionMessages.sessionId, sessionId));
-
-        let nextSequence = (maxSeq?.max ?? 0) + 1;
-
-        const createdMessages = [];
-
-        // Insert the main message
-        const [mainMessage] = await tx
-          .insert(sessionMessages)
-          .values({
-            sessionId,
-            role: data.role as (typeof sessionMessages.role.enumValues)[number],
-            content: data.content ?? null,
-            audioUrl: data.audioUrl ?? null,
-            sequenceNumber: nextSequence,
-          })
-          .returning();
-
-        createdMessages.push(mainMessage);
-        nextSequence++;
-
-        // If assistant message has tool calls, create tool messages
-        if (data.role === "assistant" && data.toolCalls?.length) {
-          for (const toolCall of data.toolCalls) {
-            const [toolMessage] = await tx
-              .insert(sessionMessages)
-              .values({
-                sessionId,
-                role: "tool",
-                content: null,
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                toolInput: toolCall.toolInput ?? null,
-                toolOutput: toolCall.toolOutput ?? null,
-                sequenceNumber: nextSequence,
-              })
-              .returning();
-
-            createdMessages.push(toolMessage);
-            nextSequence++;
-          }
-        }
-
-        return createdMessages;
-      });
-    } catch (error: unknown) {
-      if (isSequenceConflict(error) && attempt < maxAttempts - 1) {
-        continue;
-      }
-      throw error;
+    if (!session) {
+      throw Errors.sessionNotFound(sessionId);
     }
-  }
 
-  throw new Error("Failed to add message after retries.");
+    if (isTerminalStatus(session.status)) {
+      throw Errors.sessionAlreadyEnded(sessionId);
+    }
+
+    const rows: (typeof sessionMessages.$inferInsert)[] = [
+      {
+        sessionId,
+        role: data.role as (typeof sessionMessages.role.enumValues)[number],
+        content: data.content ?? null,
+        audioUrl: data.audioUrl ?? null,
+        occurredAt: data.occurredAt ?? null,
+      },
+    ];
+
+    // If assistant message has tool calls, create tool messages
+    if (data.role === "assistant" && data.toolCalls?.length) {
+      for (const toolCall of data.toolCalls) {
+        rows.push({
+          sessionId,
+          role: "tool",
+          content: null,
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          toolInput: toolCall.toolInput ?? null,
+          toolOutput: toolCall.toolOutput ?? null,
+          occurredAt: data.occurredAt ?? null,
+        });
+      }
+    }
+
+    return tx.insert(sessionMessages).values(rows).returning();
+  });
+}
+
+export type MessageData = {
+  role: string;
+  content?: string;
+  occurredAt?: Date;
+  toolCalls?: Array<{
+    toolCallId: string;
+    toolName: string;
+    toolInput?: Record<string, unknown>;
+    toolOutput?: Record<string, unknown>;
+  }>;
+};
+
+export async function addMessages(
+  orgId: string,
+  sessionId: string,
+  agentId: string,
+  messages: MessageData[],
+) {
+  return forOrg(orgId, async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)));
+
+    if (!session) throw Errors.sessionNotFound(sessionId);
+    if (isTerminalStatus(session.status)) {
+      throw Errors.sessionAlreadyEnded(sessionId);
+    }
+
+    // Flatten messages + their tool calls into a single values array
+    const rows: (typeof sessionMessages.$inferInsert)[] = [];
+
+    for (const msg of messages) {
+      rows.push({
+        sessionId,
+        role: msg.role as (typeof sessionMessages.role.enumValues)[number],
+        content: msg.content ?? null,
+        occurredAt: msg.occurredAt ?? null,
+      });
+
+      if (msg.role === "assistant" && msg.toolCalls?.length) {
+        for (const tc of msg.toolCalls) {
+          rows.push({
+            sessionId,
+            role: "tool",
+            content: null,
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            toolInput: tc.toolInput ?? null,
+            toolOutput: tc.toolOutput ?? null,
+            occurredAt: msg.occurredAt ?? null,
+          });
+        }
+      }
+    }
+
+    return tx.insert(sessionMessages).values(rows).returning();
+  });
 }
 
 // ============================================================================
@@ -400,13 +425,6 @@ export async function addMessage(
 function computeDuration(startedAt: Date, endedAt: Date | null): number | null {
   if (!endedAt) return null;
   return Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
-}
-
-function isSequenceConflict(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const code = (error as Error & { code?: string }).code;
-  if (code !== "23505") return false;
-  return error.message.includes("session_messages_session_sequence_unique");
 }
 
 // ============================================================================
