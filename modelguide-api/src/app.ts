@@ -6,6 +6,7 @@ import { agentRoutes } from "@features/agents";
 import { connectorRoutes } from "@features/connectors";
 import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
+import { sessionRoutes } from "@features/sessions";
 import { authRoutes, userRoutes } from "@features/users";
 import { createApp, createRouter } from "@lib/create-app";
 
@@ -46,6 +47,7 @@ apiRouter.route("/auth", authRoutes);
 apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
 apiRouter.route("/secrets", secretsRoutes);
+apiRouter.route("/sessions", sessionRoutes);
 apiRouter.route("/users", userRoutes);
 
 const app = createApp();

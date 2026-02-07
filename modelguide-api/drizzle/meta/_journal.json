@@ -36,6 +36,13 @@
       "when": 1770414792944,
       "tag": "0004_wealthy_wrecker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770414800000,
+      "tag": "0005_session_message_sequence_unique",
+      "breakpoints": true
     }
   ]
 }

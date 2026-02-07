@@ -45,25 +45,40 @@ Do not create ADRs for routine feature work — only for decisions where "why" m
 ## Commands
 
 ```bash
-# Development
-make install          # Install dependencies
-make db-up            # Start PostgreSQL container (port 5434)
-make dev              # Start dev server with hot reload (port 3000)
+# Setup
+cp modelguide-api/.env.example modelguide-api/.env  # Create local env config
+
+# API
+make api-install              # Install API dependencies
+make api-dev                  # Start API dev server with hot reload (port 3000)
+make api-build                # Build API for production
+make api-start                # Run API production build
+make api-test                 # Run all API tests
+make api-test-unit            # Run API unit tests
+make api-test-integration     # Run API integration tests (requires Docker)
+make api-typecheck            # TypeScript type checking
+make api-lint                 # Lint with auto-fix
+make api-lint-check           # Lint check only
+
+# UI
+make ui-install               # Install UI dependencies
+make ui-dev                   # Start UI dev server (port 3001)
+make ui-test                  # Run UI tests
+make ui-typecheck             # TypeScript type checking
+make ui-lint                  # Lint UI code
 
 # Database
-make db-generate      # Generate Drizzle migrations (always use: drizzle-kit generate --name <descriptive-name>)
-make db-migrate       # Run migrations
-make db-push          # Push schema changes (dev only)
-make db-studio        # Open Drizzle Studio
+make db-up                    # Start PostgreSQL container (port 5434)
+make db-down                  # Stop PostgreSQL container
+make db-generate              # Generate Drizzle migrations (always use: drizzle-kit generate --name <descriptive-name>)
+make db-migrate               # Run migrations
+make db-push                  # Push schema changes (dev only)
+make db-studio                # Open Drizzle Studio
+make db-seed                  # Seed database with test data
 
-# Production
-make build            # Build for production
-make start            # Run production build
-
-# Utilities
-make db-down          # Stop PostgreSQL
-make reset            # Stop containers and remove volumes
-make logs             # View container logs
+# General
+make reset                    # Stop containers and remove volumes
+make logs                     # View container logs
 ```
 
 ## Architecture
