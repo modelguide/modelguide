@@ -263,7 +263,9 @@ describe("Medusa handlers", () => {
     });
 
     test("returns error when baseUrl is missing", async () => {
-      const result = await listProducts(makeCtx({}, { publishableKey: "pk_test" }));
+      const result = await listProducts(
+        makeCtx({}, { publishableKey: "pk_test" }),
+      );
       expect(result.success).toBe(false);
       expect(result.error).toContain("baseUrl");
     });
