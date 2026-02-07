@@ -37,9 +37,6 @@ export function createMedusaFetcher(
     Accept: "application/json",
   };
 
-  if (config.apiToken) {
-    headers.Authorization = `Bearer ${config.apiToken}`;
-  }
   if (config.publishableKey) {
     headers["x-publishable-api-key"] = config.publishableKey;
   }

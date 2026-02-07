@@ -43,6 +43,20 @@
       "when": 1770414800000,
       "tag": "0005_session_message_sequence_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1770489152256,
+      "tag": "0006_simplify-session-messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770494139240,
+      "tag": "0007_add-session-messages-occurred-idx",
+      "breakpoints": true
     }
   ]
 }

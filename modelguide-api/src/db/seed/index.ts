@@ -192,7 +192,7 @@ async function seedOrgData(
       slug: connectorSlug,
       config: {
         baseUrl: `https://api.${orgSlug}.example.com`,
-        apiToken: "placeholder-secret-uuid",
+        publishableKey: "pk_placeholder_key",
       },
       isActive: true,
     })
@@ -212,6 +212,23 @@ async function seedOrgData(
   }
 
   console.log("  Created/found connector:", testConnector.name);
+
+  // 4b. Create test secret for connector
+  console.log("\nSeeding test secret...");
+  const encrypted = await encryptSecret(`sk_test_${orgSlug}_placeholder`);
+  const [secret] = await db
+    .insert(secrets)
+    .values({
+      organizationId,
+      name: `${orgSlug} API Key`,
+      secretType: "api_key",
+      encryptedValue: encrypted,
+      ownerType: "connector",
+      ownerId: testConnector.id,
+    })
+    .onConflictDoNothing()
+    .returning();
+  console.log(`  Created${secret ? "" : "/found"} secret`);
 
   // 5. Create connector tools (from catalog)
   console.log("\nSeeding connector tools...");
@@ -322,23 +339,7 @@ async function seedOrgData(
 
   console.log(`  Linked ${linkedTools.length} tools to agent`);
 
-  // 9. Create test secret
-  console.log("\nSeeding test secret...");
-  const encryptedValue = await encryptSecret(`placeholder_token_${orgSlug}`);
-  await db
-    .insert(secrets)
-    .values({
-      organizationId,
-      name: `${orgSlug} API Token`,
-      secretType: "api_key",
-      encryptedValue,
-      ownerType: "connector",
-      ownerId: testConnector.id,
-    })
-    .onConflictDoNothing();
-  console.log("  Created/found secret");
-
-  // 10. Create test session
+  // 9. Create test session
   console.log("\nSeeding test session...");
   await db
     .insert(sessions)

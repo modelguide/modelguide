@@ -559,16 +559,16 @@ export const sessionMessages = pgTable(
     modelUsed: varchar("model_used", { length: 100 }),
     tokensUsed: integer("tokens_used"),
     latencyMs: integer("latency_ms"),
-    sequenceNumber: integer("sequence_number").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }),
   },
   (table) => [
     index("session_messages_session_idx").on(table.sessionId),
-    uniqueIndex("session_messages_session_sequence_unique").on(
+    index("session_messages_session_occurred_idx").on(
       table.sessionId,
-      table.sequenceNumber,
+      table.occurredAt,
     ),
   ],
 );

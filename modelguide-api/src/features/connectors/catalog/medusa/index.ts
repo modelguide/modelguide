@@ -209,14 +209,9 @@ const medusaManifest: ConnectorManifest = {
       required: true,
       description: "Medusa API base URL",
     },
-    apiToken: {
-      type: "secret",
-      required: true,
-      description: "API authentication token",
-    },
     publishableKey: {
       type: "string",
-      required: false,
+      required: true,
       description: "Publishable API key for storefront",
     },
   },

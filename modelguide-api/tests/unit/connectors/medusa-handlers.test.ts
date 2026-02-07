@@ -18,7 +18,6 @@ import type { ToolExecutionContext } from "@features/connectors/catalog/types";
 
 const BASE_CONFIG: Record<string, string> = {
   baseUrl: "https://api.test-store.com",
-  apiToken: "test-token-123",
   publishableKey: "pk_test_abc",
 };
 
@@ -86,13 +85,13 @@ describe("Medusa handlers", () => {
       expect(url).toContain("offset=10");
     });
 
-    test("includes auth headers", async () => {
+    test("includes publishable key header", async () => {
       mockFetchSuccess({ products: [] });
       await listProducts(makeCtx());
 
       const [, opts] = fetchMock.mock.calls[0];
-      expect(opts.headers.Authorization).toBe("Bearer test-token-123");
       expect(opts.headers["x-publishable-api-key"]).toBe("pk_test_abc");
+      expect(opts.headers.Authorization).toBeUndefined();
     });
   });
 
@@ -264,7 +263,9 @@ describe("Medusa handlers", () => {
     });
 
     test("returns error when baseUrl is missing", async () => {
-      const result = await listProducts(makeCtx({}, { apiToken: "token" }));
+      const result = await listProducts(
+        makeCtx({}, { publishableKey: "pk_test" }),
+      );
       expect(result.success).toBe(false);
       expect(result.error).toContain("baseUrl");
     });
