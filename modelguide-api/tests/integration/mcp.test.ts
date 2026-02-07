@@ -503,14 +503,16 @@ describe("core_rate_session", () => {
     expect(data.session_id).toBe(sessionId);
   });
 
-  test("returns error for invalid rating (5)", async () => {
-    const result = await client.callTool({
-      name: "core_rate_session",
-      arguments: { session_id: sessionId, rating: 5 },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.error).toBeDefined();
+  test("rejects invalid rating (5) at schema level", async () => {
+    try {
+      await client.callTool({
+        name: "core_rate_session",
+        arguments: { session_id: sessionId, rating: 5 },
+      });
+      expect(true).toBe(false); // should not reach here
+    } catch (err) {
+      expect(err).toBeDefined();
+    }
   });
 });
 

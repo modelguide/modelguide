@@ -50,6 +50,13 @@
       "when": 1770489152256,
       "tag": "0006_simplify-session-messages",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770494139240,
+      "tag": "0007_add-session-messages-occurred-idx",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { mcpErrorResponse, mcpResponse } from "@features/mcp/mcp.types";
+import { AppError, ErrorCode } from "@lib/errors";
 
 describe("mcpResponse", () => {
   test("wraps data as JSON text content", () => {
@@ -54,15 +55,24 @@ describe("mcpResponse", () => {
 });
 
 describe("mcpErrorResponse", () => {
-  test("extracts message from Error instances", () => {
-    const result = mcpErrorResponse(
-      new Error("Session not found"),
-      "Fallback message",
-    );
+  test("extracts message from AppError instances", () => {
+    const err = new AppError(ErrorCode.SESSION_NOT_FOUND, "Session not found");
+    const result = mcpErrorResponse(err, "Fallback message");
 
     expect(result.isError).toBe(true);
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.error).toBe("Session not found");
+  });
+
+  test("uses fallback for plain Error (prevents internal detail leakage)", () => {
+    const result = mcpErrorResponse(
+      new Error('relation "sessions" does not exist'),
+      "Operation failed",
+    );
+
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.error).toBe("Operation failed");
   });
 
   test("uses fallback for non-Error values", () => {
@@ -88,7 +98,8 @@ describe("mcpErrorResponse", () => {
   });
 
   test("merges extra fields into response", () => {
-    const result = mcpErrorResponse(new Error("Not found"), "Fallback", {
+    const err = new AppError(ErrorCode.NOT_FOUND, "Not found");
+    const result = mcpErrorResponse(err, "Fallback", {
       tool_name: "core_end_session",
       session_id: "abc",
     });
@@ -100,7 +111,8 @@ describe("mcpErrorResponse", () => {
   });
 
   test("works without extra fields", () => {
-    const result = mcpErrorResponse(new Error("Oops"), "Fallback");
+    const err = new AppError(ErrorCode.SESSION_NOT_FOUND, "Oops");
+    const result = mcpErrorResponse(err, "Fallback");
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.error).toBe("Oops");

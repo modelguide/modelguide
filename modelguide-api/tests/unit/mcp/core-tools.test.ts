@@ -122,6 +122,23 @@ describe("registerCoreTools", () => {
     expect(tool.schema.rating).toBeDefined();
   });
 
+  test("core_rate_session rating schema rejects out-of-range values", () => {
+    const { server, registeredTools } = createMockServer();
+    registerCoreTools(server as never, "org-1", "agent-1");
+
+    const tool = registeredTools.find((t) => t.name === "core_rate_session")!;
+    const rating = tool.schema.rating as {
+      safeParse: (v: unknown) => { success: boolean };
+    };
+
+    expect(rating.safeParse(1).success).toBe(true);
+    expect(rating.safeParse(2).success).toBe(true);
+    expect(rating.safeParse(0).success).toBe(false);
+    expect(rating.safeParse(3).success).toBe(false);
+    expect(rating.safeParse(1.5).success).toBe(false);
+    expect(rating.safeParse(-1).success).toBe(false);
+  });
+
   test("CORE_TOOL_COUNT matches actual registered count", () => {
     const { server, registeredTools } = createMockServer();
     registerCoreTools(server as never, "org-1", "agent-1");

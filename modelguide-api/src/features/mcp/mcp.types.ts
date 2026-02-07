@@ -1,3 +1,5 @@
+import { isAppError } from "@lib/errors";
+
 export interface ResolvedTool {
   /** MCP tool name: "{connectorSlug}_{toolSlug}" */
   mcpName: string;
@@ -39,12 +41,13 @@ export function mcpResponse(
 
 /**
  * Build an MCP error response from a caught exception.
+ * Only exposes messages from known AppErrors; raw Drizzle/Postgres errors use the fallback.
  */
 export function mcpErrorResponse(
   err: unknown,
   fallback: string,
   extra?: Record<string, unknown>,
 ): McpToolResponse {
-  const message = err instanceof Error ? err.message : fallback;
+  const message = isAppError(err) ? err.message : fallback;
   return mcpResponse({ error: message, ...extra }, true);
 }

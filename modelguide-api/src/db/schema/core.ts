@@ -564,7 +564,13 @@ export const sessionMessages = pgTable(
       .notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }),
   },
-  (table) => [index("session_messages_session_idx").on(table.sessionId)],
+  (table) => [
+    index("session_messages_session_idx").on(table.sessionId),
+    index("session_messages_session_occurred_idx").on(
+      table.sessionId,
+      table.occurredAt,
+    ),
+  ],
 );
 
 export const sessionMessagesRelations = relations(

@@ -124,6 +124,7 @@ export function registerCoreTools(
             content: z.string().optional().describe("Message text content"),
             occurred_at: z
               .string()
+              .datetime()
               .describe("ISO 8601 timestamp of when the message occurred"),
             tool_calls: z
               .array(
@@ -181,16 +182,14 @@ export function registerCoreTools(
     "Record a customer satisfaction rating for a session",
     {
       session_id: z.string().describe("Session ID to rate"),
-      rating: z.number().describe("Rating value (1 = negative, 2 = positive)"),
+      rating: z
+        .number()
+        .int()
+        .min(1)
+        .max(2)
+        .describe("Rating (1 = negative, 2 = positive)"),
     },
     async ({ session_id, rating }) => {
-      if (rating !== 1 && rating !== 2) {
-        return mcpResponse(
-          { error: "Invalid rating. Must be 1 (negative) or 2 (positive)." },
-          true,
-        );
-      }
-
       try {
         await addFeedback(orgId, session_id, {
           rating,
