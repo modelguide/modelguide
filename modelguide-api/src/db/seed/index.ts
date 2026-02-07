@@ -310,7 +310,8 @@ async function seedOrgData(
     isEnabled: true,
     requiresConfirmation:
       tool.name.toLowerCase().includes("confirm") ||
-      tool.name.toLowerCase().includes("cancel"),
+      tool.name.toLowerCase().includes("cancel") ||
+      tool.name.toLowerCase().includes("complete"),
   }));
 
   const linkedTools = await db
