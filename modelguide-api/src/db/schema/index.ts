@@ -6,6 +6,7 @@ import type {
   agentConnectorTools,
   agents,
   apiKeys,
+  confirmations,
   connectorTools,
   connectors,
   connectorsCatalog,
@@ -62,3 +63,6 @@ export type NewSessionMessage = InferInsertModel<typeof sessionMessages>;
 
 export type SessionFeedback = InferSelectModel<typeof sessionFeedback>;
 export type NewSessionFeedback = InferInsertModel<typeof sessionFeedback>;
+
+export type Confirmation = InferSelectModel<typeof confirmations>;
+export type NewConfirmation = InferInsertModel<typeof confirmations>;

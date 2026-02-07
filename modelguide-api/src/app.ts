@@ -4,6 +4,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { env } from "@/env";
 import { agentRoutes } from "@features/agents";
 import { connectorRoutes } from "@features/connectors";
+import { mcpHandler } from "@features/mcp";
 import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
 import { sessionRoutes } from "@features/sessions";
@@ -93,8 +94,7 @@ app.get(
   }),
 );
 
-app.post("/mcp", async (c) => {
-  return c.json({ message: "MCP endpoint - implementation pending" }, 501);
-});
+// MCP endpoint — separate from API router (different protocol, not REST)
+app.on(["POST", "GET", "DELETE"], "/mcp", mcpHandler);
 
 export default app;

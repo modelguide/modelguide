@@ -80,3 +80,12 @@ export const feedbackSourceEnum = pgEnum("feedback_source", [
   "support",
   "system",
 ]);
+
+/**
+ * Confirmation status for tool execution confirmations
+ */
+export const confirmationStatusEnum = pgEnum("confirmation_status", [
+  "pending",
+  "consumed",
+  "expired",
+]);

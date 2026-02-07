@@ -1,6 +1,9 @@
 import { env } from "@/env";
 import { closeDatabase } from "@db/index";
+import { loadAllManifests } from "@features/connectors/catalog/registry";
 import app from "./app";
+
+await loadAllManifests();
 
 const server = Bun.serve({
   port: env.PORT,

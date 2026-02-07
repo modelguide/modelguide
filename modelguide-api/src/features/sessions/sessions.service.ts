@@ -416,3 +416,41 @@ function isSequenceConflict(error: unknown): boolean {
   if (code !== "23505") return false;
   return error.message.includes("session_messages_session_sequence_unique");
 }
+
+// ============================================================================
+// Feedback
+// ============================================================================
+
+export async function addFeedback(
+  orgId: string,
+  sessionId: string,
+  data: {
+    rating: number;
+    comment?: string;
+    feedbackSource: "customer" | "support" | "system";
+    userIdentifier?: string;
+  },
+) {
+  return forOrg(orgId, async (tx) => {
+    // Verify session exists and belongs to this org
+    const [session] = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+
+    if (!session) throw Errors.sessionNotFound(sessionId);
+
+    const [feedback] = await tx
+      .insert(sessionFeedback)
+      .values({
+        sessionId,
+        rating: data.rating,
+        comment: data.comment ?? null,
+        feedbackSource: data.feedbackSource,
+        userIdentifier: data.userIdentifier ?? null,
+      })
+      .returning();
+
+    return feedback;
+  });
+}
