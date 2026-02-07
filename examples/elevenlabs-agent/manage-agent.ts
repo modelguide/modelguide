@@ -1,4 +1,5 @@
 /**
+ * import
  * Ad-hoc script to manage the ElevenLabs agent configuration.
  *
  * Simulates what a ModelGuide client (e.g. Pizza Palace) would do:
@@ -14,6 +15,7 @@
 
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import type * as ElevenLabs from "@elevenlabs/elevenlabs-js/api";
+import fs from "fs";
 
 const client = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
@@ -130,6 +132,7 @@ async function getAgent() {
   const agent = await client.conversationalAi.agents.get(AGENT_ID);
   console.log("\n=== Agent Config ===");
   console.log(JSON.stringify(agent, null, 2));
+	fs.writeFileSync('get-agent-output.json', JSON.stringify(agent, null, 2));
 }
 
 async function updateAgent() {
@@ -147,10 +150,10 @@ async function updateAgent() {
     name: "Pizza Palace Agent",
     conversationConfig: {
       agent: {
-        prompt: {
-          prompt: SYSTEM_PROMPT,
-          tools: TOOLS,
-        },
+        // prompt: {
+        //   prompt: SYSTEM_PROMPT,
+        //   tools: TOOLS,
+        // },
         firstMessage:
           "Hi, welcome to Pizza Palace! What can I get for you today?",
         language: "en",

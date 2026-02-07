@@ -157,7 +157,10 @@ app.post("/post-call", async (c) => {
   // 1. Verify webhook signature
   try {
     await verifySignature(rawBody, signature);
-  } catch {
+  } catch (err) {
+    console.error("[webhook/post-call] Signature verification failed:", err);
+    console.error("[webhook/post-call] Signature header:", signature ? signature.slice(0, 30) + "..." : "(empty)");
+    console.error("[webhook/post-call] Secret configured:", env.ELEVENLABS_WEBHOOK_SECRET ? env.ELEVENLABS_WEBHOOK_SECRET.slice(0, 10) + "..." : "(empty)");
     return c.json({ error: "Invalid signature" }, 401);
   }
 

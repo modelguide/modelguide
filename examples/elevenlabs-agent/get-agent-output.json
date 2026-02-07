@@ -1,7 +1,6 @@
-=== Agent Config ===
 {
   "agentId": "agent_3501kgq8y9nre61vhwb60nyc0fnt",
-  "name": "piotr-elevenlabs-summit",
+  "name": "Pizza Palace Agent",
   "conversationConfig": {
     "asr": {
       "quality": "high",
@@ -59,7 +58,7 @@
       "background_voice_detection": false
     },
     "agent": {
-      "firstMessage": "Hi there! How can I help?",
+      "firstMessage": "Hi, welcome to Pizza Palace! What can I get for you today?",
       "language": "en",
       "hinglishMode": false,
       "dynamicVariables": {
@@ -67,12 +66,17 @@
       },
       "disableFirstMessageInterruptions": false,
       "prompt": {
-        "prompt": "# Personality\n\nYou are a helpful and efficient virtual assistant for an online retail store.\nYou are friendly, patient, and knowledgeable about the store's products and website functionality.\nYou assist customers with adding items to their shopping cart, navigating the website, and completing their purchases.\n\n# Environment\n\nYou are interacting with customers through a voice interface on the retail store's website.\nThe customer may be using a variety of devices, such as a computer, smartphone, or smart speaker.\nYou have access to the store's product catalog, inventory information, and customer account details.\n\n# Tone\n\nYour responses are clear, concise, and professional.\nYou use a friendly and helpful tone, and avoid using jargon or technical terms that customers may not understand.\nYou speak at a moderate pace and enunciate clearly.\nYou use positive language and avoid negative or discouraging phrases.\n\n# Goal\n\nYour primary goal is to help customers successfully add items to their shopping cart and complete their online purchases.\n\n1.  **Item Identification:**\n    *   Accurately identify the item the customer wants to add to their cart based on their description or name.\n    *   If the item is not found, offer alternative suggestions or clarify the customer's request.\n2.  **Cart Addition:**\n    *   Guide the customer through the process of adding the item to their shopping cart, including selecting the correct size, color, and quantity.\n    *   Confirm that the item has been successfully added to the cart.\n3.  **Navigation Assistance:**\n    *   Help the customer navigate the website to find other items they may be interested in.\n    *   Provide information about product categories, search functionality, and promotional offers.\n4.  **Troubleshooting:**\n    *   Assist the customer with any issues they may encounter while adding items to their cart, such as website errors or payment problems.\n    *   Provide clear and concise instructions for resolving these issues.\n5.  **Checkout Guidance:**\n    *   Guide the customer through the checkout process, including providing information about shipping options, payment methods, and order confirmation.\n    *   Answer any questions the customer may have about the checkout process.\n\n# Guardrails\n\nDo not provide information about products or services that are not offered by the retail store.\nDo not ask for sensitive personal information, such as credit card numbers or social security numbers.\nDo not engage in any behavior that is discriminatory, offensive, or harmful.\nIf you are unable to assist the customer with their request, politely explain why and offer alternative solutions.\nMaintain a professional and respectful demeanor at all times.\n\n# Tools\n\nNone\n",
+        "prompt": "You are a friendly Pizza Palace voice assistant. You help customers place orders, check order status, and modify existing orders.\n\n## Rules\n- Be concise and natural — this is a voice conversation.\n- Always confirm before placing or modifying an order.\n- If you can't find an item, suggest alternatives.\n- If something goes wrong with a tool call, apologize and try once more.\n\n## Available tools\nYou have access to tools prefixed with \"pizzapalace_\". Use them to:\n- Add items to cart\n- View cart contents  \n- Create and confirm orders\n- Check order status\n- Update delivery addresses",
         "llm": "glm-45-air-fp8",
         "reasoningEffort": "low",
         "temperature": 0,
         "maxTokens": -1,
-        "toolIds": [],
+        "toolIds": [
+          "tool_7001kgshkaj5fyv8xsjcvt5bpy01",
+          "tool_9801kgshkaj4eh5r0xn2e3q8xfyt",
+          "tool_9801kgshkaj6fzpbfw8fj1ndj5rz",
+          "tool_8801kgshkaj7fff96q9w6q7m6bs5"
+        ],
         "builtInTools": {},
         "enable_parallel_tool_calls": false,
         "mcpServerIds": [],
@@ -91,13 +95,179 @@
           "preference": "default"
         },
         "cascadeTimeoutSeconds": 8,
-        "tools": []
+        "tools": [
+          {
+            "type": "webhook",
+            "name": "pizzapalace_get_cart",
+            "description": "View the current cart contents and total",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [],
+                "description": "",
+                "properties": {}
+              },
+              "contentType": "application/json"
+            }
+          },
+          {
+            "type": "webhook",
+            "name": "pizzapalace_add_to_cart",
+            "description": "Add an item to the customer's shopping cart",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [
+                  "item",
+                  "quantity"
+                ],
+                "description": "",
+                "properties": {
+                  "item": {
+                    "type": "string",
+                    "description": "Item name (e.g. 'large pepperoni pizza')",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  },
+                  "quantity": {
+                    "type": "number",
+                    "description": "Number of items",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  },
+                  "size": {
+                    "type": "string",
+                    "description": "Size variant",
+                    "enum": [
+                      "small",
+                      "medium",
+                      "large"
+                    ],
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  },
+                  "toppings": {
+                    "type": "string",
+                    "description": "Comma-separated toppings",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  }
+                }
+              },
+              "contentType": "application/json"
+            }
+          },
+          {
+            "type": "webhook",
+            "name": "pizzapalace_confirm_order",
+            "description": "Confirm and place the order. Always ask the customer to confirm first.",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [
+                  "delivery_address"
+                ],
+                "description": "",
+                "properties": {
+                  "delivery_address": {
+                    "type": "string",
+                    "description": "Full delivery address",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  }
+                }
+              },
+              "contentType": "application/json"
+            }
+          },
+          {
+            "type": "webhook",
+            "name": "pizzapalace_get_order",
+            "description": "Get details of an existing order by order ID",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [
+                  "order_id"
+                ],
+                "description": "",
+                "properties": {
+                  "order_id": {
+                    "type": "string",
+                    "description": "The order ID",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  }
+                }
+              },
+              "contentType": "application/json"
+            }
+          }
+        ]
       }
     }
   },
   "metadata": {
     "createdAtUnixSecs": 1770307660,
-    "updatedAtUnixSecs": 1770373864
+    "updatedAtUnixSecs": 1770384353
   },
   "platformSettings": {
     "evaluation": {
@@ -174,6 +344,7 @@
     },
     "workspaceOverrides": {
       "webhooks": {
+        "postCallWebhookId": "0628a754e9d843969f2af6fab6c7967c",
         "events": [
           "transcript"
         ],
@@ -287,7 +458,7 @@
     "role": "admin"
   },
   "tags": [],
-  "versionId": "agtvrsn_3601kgs82pyrf8avvqxcgjfj4z3w",
+  "versionId": "agtvrsn_9101kgsj2t8hf5ntxr2q0sf5rmeg",
   "branchId": "agtbrch_6501kgq8yaj3fc9vz7t4354c0zhm",
   "mainBranchId": "agtbrch_6501kgq8yaj3fc9vz7t4354c0zhm",
   "procedure_versions": [],
