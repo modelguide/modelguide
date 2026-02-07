@@ -32,9 +32,7 @@ describe("createMagicLink", () => {
 
   test("generates valid link URL", () => {
     const result = createMagicLink();
-    expect(result.link).toContain(
-      "http://localhost:3000/api/auth/verify?token=",
-    );
+    expect(result.link).toContain("http://localhost:3000/auth/verify?token=");
     expect(result.link).toContain(encodeURIComponent(result.token));
   });
 
@@ -54,9 +52,7 @@ describe("createMagicLink", () => {
 describe("buildMagicLinkUrl", () => {
   test("builds correct URL with token", () => {
     const url = buildMagicLinkUrl("test-token-123");
-    expect(url).toBe(
-      "http://localhost:3000/api/auth/verify?token=test-token-123",
-    );
+    expect(url).toBe("http://localhost:3000/auth/verify?token=test-token-123");
   });
 
   test("encodes special characters in token", () => {
@@ -69,7 +65,7 @@ describe("buildMagicLinkUrl", () => {
     process.env.APP_URL = "http://localhost:3000/";
 
     const url = buildMagicLinkUrl("test-token");
-    expect(url).toBe("http://localhost:3000/api/auth/verify?token=test-token");
+    expect(url).toBe("http://localhost:3000/auth/verify?token=test-token");
 
     process.env.APP_URL = originalUrl;
   });
