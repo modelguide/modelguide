@@ -11,6 +11,61 @@ import type { CatalogTool, NewConnectorCatalog } from "../schema";
 
 const medusaTools: CatalogTool[] = [
   {
+    name: "List Products",
+    description:
+      "Browse available products with optional search and pagination",
+    inputSchema: {
+      type: "object",
+      properties: {
+        q: { type: "string", description: "Search query to filter products" },
+        limit: {
+          type: "integer",
+          description: "Maximum number of products to return (default 20)",
+          minimum: 1,
+          maximum: 100,
+        },
+        offset: {
+          type: "integer",
+          description: "Number of products to skip for pagination",
+          minimum: 0,
+        },
+      },
+      required: [],
+    },
+    defaultRequiresConfirmation: false,
+    defaultTimeoutSeconds: 30,
+  },
+  {
+    name: "Get Product",
+    description: "Get detailed information about a specific product",
+    inputSchema: {
+      type: "object",
+      properties: {
+        productId: { type: "string", description: "Product ID" },
+      },
+      required: ["productId"],
+    },
+    defaultRequiresConfirmation: false,
+    defaultTimeoutSeconds: 30,
+  },
+  {
+    name: "Create Cart",
+    description: "Create a new shopping cart",
+    inputSchema: {
+      type: "object",
+      properties: {
+        regionId: { type: "string", description: "Region ID for the cart" },
+        currencyCode: {
+          type: "string",
+          description: "Currency code (e.g., usd, eur)",
+        },
+      },
+      required: [],
+    },
+    defaultRequiresConfirmation: false,
+    defaultTimeoutSeconds: 30,
+  },
+  {
     name: "Add to Cart",
     description: "Add an item to the customer's shopping cart",
     inputSchema: {
@@ -41,19 +96,6 @@ const medusaTools: CatalogTool[] = [
     },
     defaultRequiresConfirmation: false,
     defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Create Draft Order",
-    description: "Create a draft order from the cart",
-    inputSchema: {
-      type: "object",
-      properties: {
-        cartId: { type: "string", description: "Cart ID to convert to order" },
-      },
-      required: ["cartId"],
-    },
-    defaultRequiresConfirmation: true,
-    defaultTimeoutSeconds: 60,
   },
   {
     name: "Set Delivery Address",
@@ -90,14 +132,17 @@ const medusaTools: CatalogTool[] = [
     defaultTimeoutSeconds: 30,
   },
   {
-    name: "Confirm Order",
-    description: "Confirm and finalize an order",
+    name: "Complete Cart",
+    description: "Complete the cart checkout and create an order from the cart",
     inputSchema: {
       type: "object",
       properties: {
-        orderId: { type: "string", description: "Order ID to confirm" },
+        cartId: {
+          type: "string",
+          description: "Cart ID to complete checkout",
+        },
       },
-      required: ["orderId"],
+      required: ["cartId"],
     },
     defaultRequiresConfirmation: true,
     defaultTimeoutSeconds: 60,
@@ -114,46 +159,6 @@ const medusaTools: CatalogTool[] = [
     },
     defaultRequiresConfirmation: false,
     defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Update Order Address",
-    description: "Update the shipping address of an existing order",
-    inputSchema: {
-      type: "object",
-      properties: {
-        orderId: { type: "string", description: "Order ID" },
-        address: {
-          type: "object",
-          properties: {
-            firstName: { type: "string" },
-            lastName: { type: "string" },
-            address1: { type: "string" },
-            address2: { type: "string" },
-            city: { type: "string" },
-            postalCode: { type: "string" },
-            countryCode: { type: "string" },
-            phone: { type: "string" },
-          },
-        },
-      },
-      required: ["orderId", "address"],
-    },
-    defaultRequiresConfirmation: true,
-    defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Cancel Order",
-    description: "Cancel an existing order",
-    inputSchema: {
-      type: "object",
-      properties: {
-        orderId: { type: "string", description: "Order ID to cancel" },
-        reason: { type: "string", description: "Reason for cancellation" },
-      },
-      required: ["orderId"],
-    },
-    defaultRequiresConfirmation: true,
-    defaultTimeoutSeconds: 60,
   },
 ];
 

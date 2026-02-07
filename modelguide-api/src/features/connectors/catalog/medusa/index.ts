@@ -1,21 +1,89 @@
 /**
  * Medusa E-commerce connector module.
- * Provides cart, order, and address management tools.
+ * Provides product browsing, cart management, checkout, and order tools
+ * via the Medusa v2 Store API.
  */
 
 import type { ConnectorManifest, ConnectorToolDefinition } from "../types";
-
-function stubHandler(toolName: string): ConnectorToolDefinition["handler"] {
-  return async (ctx) => ({
-    success: true,
-    data: {
-      message: `${toolName} executed (stub)`,
-      input: ctx.input,
-    },
-  });
-}
+import {
+  addToCart,
+  completeCart,
+  createCart,
+  getCart,
+  getOrder,
+  getProduct,
+  listProducts,
+  setDeliveryAddress,
+} from "./handlers";
 
 const tools: ConnectorToolDefinition[] = [
+  {
+    catalog: {
+      name: "List Products",
+      description:
+        "Browse available products with optional search and pagination",
+      inputSchema: {
+        type: "object",
+        properties: {
+          q: { type: "string", description: "Search query to filter products" },
+          limit: {
+            type: "integer",
+            description: "Maximum number of products to return (default 20)",
+            minimum: 1,
+            maximum: 100,
+          },
+          offset: {
+            type: "integer",
+            description: "Number of products to skip for pagination",
+            minimum: 0,
+          },
+        },
+        required: [],
+      },
+      defaultRequiresConfirmation: false,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: listProducts,
+  },
+  {
+    catalog: {
+      name: "Get Product",
+      description: "Get detailed information about a specific product",
+      inputSchema: {
+        type: "object",
+        properties: {
+          productId: { type: "string", description: "Product ID" },
+        },
+        required: ["productId"],
+      },
+      defaultRequiresConfirmation: false,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: getProduct,
+  },
+  {
+    catalog: {
+      name: "Create Cart",
+      description: "Create a new shopping cart",
+      inputSchema: {
+        type: "object",
+        properties: {
+          regionId: {
+            type: "string",
+            description: "Region ID for the cart",
+          },
+          currencyCode: {
+            type: "string",
+            description: "Currency code (e.g., usd, eur)",
+          },
+        },
+        required: [],
+      },
+      defaultRequiresConfirmation: false,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: createCart,
+  },
   {
     catalog: {
       name: "Add to Cart",
@@ -36,7 +104,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultRequiresConfirmation: false,
       defaultTimeoutSeconds: 30,
     },
-    handler: stubHandler("Add to Cart"),
+    handler: addToCart,
   },
   {
     catalog: {
@@ -52,26 +120,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultRequiresConfirmation: false,
       defaultTimeoutSeconds: 30,
     },
-    handler: stubHandler("Get Cart"),
-  },
-  {
-    catalog: {
-      name: "Create Draft Order",
-      description: "Create a draft order from the cart",
-      inputSchema: {
-        type: "object",
-        properties: {
-          cartId: {
-            type: "string",
-            description: "Cart ID to convert to order",
-          },
-        },
-        required: ["cartId"],
-      },
-      defaultRequiresConfirmation: true,
-      defaultTimeoutSeconds: 60,
-    },
-    handler: stubHandler("Create Draft Order"),
+    handler: getCart,
   },
   {
     catalog: {
@@ -108,23 +157,27 @@ const tools: ConnectorToolDefinition[] = [
       defaultRequiresConfirmation: false,
       defaultTimeoutSeconds: 30,
     },
-    handler: stubHandler("Set Delivery Address"),
+    handler: setDeliveryAddress,
   },
   {
     catalog: {
-      name: "Confirm Order",
-      description: "Confirm and finalize an order",
+      name: "Complete Cart",
+      description:
+        "Complete the cart checkout and create an order from the cart",
       inputSchema: {
         type: "object",
         properties: {
-          orderId: { type: "string", description: "Order ID to confirm" },
+          cartId: {
+            type: "string",
+            description: "Cart ID to complete checkout",
+          },
         },
-        required: ["orderId"],
+        required: ["cartId"],
       },
       defaultRequiresConfirmation: true,
       defaultTimeoutSeconds: 60,
     },
-    handler: stubHandler("Confirm Order"),
+    handler: completeCart,
   },
   {
     catalog: {
@@ -140,53 +193,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultRequiresConfirmation: false,
       defaultTimeoutSeconds: 30,
     },
-    handler: stubHandler("Get Order"),
-  },
-  {
-    catalog: {
-      name: "Update Order Address",
-      description: "Update the shipping address of an existing order",
-      inputSchema: {
-        type: "object",
-        properties: {
-          orderId: { type: "string", description: "Order ID" },
-          address: {
-            type: "object",
-            properties: {
-              firstName: { type: "string" },
-              lastName: { type: "string" },
-              address1: { type: "string" },
-              address2: { type: "string" },
-              city: { type: "string" },
-              postalCode: { type: "string" },
-              countryCode: { type: "string" },
-              phone: { type: "string" },
-            },
-          },
-        },
-        required: ["orderId", "address"],
-      },
-      defaultRequiresConfirmation: true,
-      defaultTimeoutSeconds: 30,
-    },
-    handler: stubHandler("Update Order Address"),
-  },
-  {
-    catalog: {
-      name: "Cancel Order",
-      description: "Cancel an existing order",
-      inputSchema: {
-        type: "object",
-        properties: {
-          orderId: { type: "string", description: "Order ID to cancel" },
-          reason: { type: "string", description: "Reason for cancellation" },
-        },
-        required: ["orderId"],
-      },
-      defaultRequiresConfirmation: true,
-      defaultTimeoutSeconds: 60,
-    },
-    handler: stubHandler("Cancel Order"),
+    handler: getOrder,
   },
 ];
 
