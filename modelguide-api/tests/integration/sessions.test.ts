@@ -436,7 +436,7 @@ describe("POST /api/sessions/:id/messages", () => {
     createdSessionIds.push(messageSessionId);
   });
 
-  test("adds message with auto-incremented sequence number (201)", async () => {
+  test("adds messages to an active session (201)", async () => {
     // First message
     const res1 = await request(`/api/sessions/${messageSessionId}/messages`, {
       method: "POST",

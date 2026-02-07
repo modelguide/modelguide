@@ -296,71 +296,10 @@ export async function updateSession(
   });
 }
 
-export async function addMessage(
-  orgId: string,
-  sessionId: string,
-  agentId: string,
-  data: {
-    role: string;
-    content?: string;
-    audioUrl?: string;
-    occurredAt?: Date;
-    toolCalls?: Array<{
-      toolCallId: string;
-      toolName: string;
-      toolInput?: Record<string, unknown>;
-      toolOutput?: Record<string, unknown>;
-    }>;
-  },
-) {
-  return forOrg(orgId, async (tx) => {
-    // Validate session exists and belongs to agent
-    const [session] = await tx
-      .select()
-      .from(sessions)
-      .where(and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)));
-
-    if (!session) {
-      throw Errors.sessionNotFound(sessionId);
-    }
-
-    if (isTerminalStatus(session.status)) {
-      throw Errors.sessionAlreadyEnded(sessionId);
-    }
-
-    const rows: (typeof sessionMessages.$inferInsert)[] = [
-      {
-        sessionId,
-        role: data.role as (typeof sessionMessages.role.enumValues)[number],
-        content: data.content ?? null,
-        audioUrl: data.audioUrl ?? null,
-        occurredAt: data.occurredAt ?? null,
-      },
-    ];
-
-    // If assistant message has tool calls, create tool messages
-    if (data.role === "assistant" && data.toolCalls?.length) {
-      for (const toolCall of data.toolCalls) {
-        rows.push({
-          sessionId,
-          role: "tool",
-          content: null,
-          toolCallId: toolCall.toolCallId,
-          toolName: toolCall.toolName,
-          toolInput: toolCall.toolInput ?? null,
-          toolOutput: toolCall.toolOutput ?? null,
-          occurredAt: data.occurredAt ?? null,
-        });
-      }
-    }
-
-    return tx.insert(sessionMessages).values(rows).returning();
-  });
-}
-
-export type MessageData = {
+export interface MessageData {
   role: string;
   content?: string;
+  audioUrl?: string;
   occurredAt?: Date;
   toolCalls?: Array<{
     toolCallId: string;
@@ -368,7 +307,16 @@ export type MessageData = {
     toolInput?: Record<string, unknown>;
     toolOutput?: Record<string, unknown>;
   }>;
-};
+}
+
+export async function addMessage(
+  orgId: string,
+  sessionId: string,
+  agentId: string,
+  data: MessageData,
+) {
+  return addMessages(orgId, sessionId, agentId, [data]);
+}
 
 export async function addMessages(
   orgId: string,
@@ -395,6 +343,7 @@ export async function addMessages(
         sessionId,
         role: msg.role as (typeof sessionMessages.role.enumValues)[number],
         content: msg.content ?? null,
+        audioUrl: msg.audioUrl ?? null,
         occurredAt: msg.occurredAt ?? null,
       });
 

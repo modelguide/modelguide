@@ -72,6 +72,7 @@ const messageResponseSchema = z.object({
   tokensUsed: z.number().nullable(),
   latencyMs: z.number().nullable(),
   createdAt: z.string(),
+  occurredAt: z.string().nullable(),
 });
 
 const feedbackResponseSchema = z.object({
@@ -303,6 +304,7 @@ function formatMessage(message: SessionMessage) {
     tokensUsed: message.tokensUsed,
     latencyMs: message.latencyMs,
     createdAt: message.createdAt.toISOString(),
+    occurredAt: message.occurredAt?.toISOString() ?? null,
   };
 }
 

@@ -68,17 +68,15 @@ export function registerCoreTools(
     },
   );
 
-  // ── core_end_session ─────────────────────────────────────────────────
-  server.tool(
-    "core_end_session",
-    "End an active conversation session",
-    {
-      session_id: z.string().describe("Session ID to end"),
-    },
-    async ({ session_id }) => {
+  // Shared handler for status-transition tools (end, escalate)
+  function sessionStatusHandler(
+    targetStatus: "completed" | "escalated",
+    errorLabel: string,
+  ) {
+    return async ({ session_id }: { session_id: string }) => {
       try {
         const updated = await updateSession(orgId, session_id, agentId, {
-          status: "completed",
+          status: targetStatus,
         });
 
         return mcpResponse({
@@ -86,9 +84,19 @@ export function registerCoreTools(
           status: updated.status,
         });
       } catch (err) {
-        return mcpErrorResponse(err, "Failed to end session");
+        return mcpErrorResponse(err, errorLabel);
       }
+    };
+  }
+
+  // ── core_end_session ─────────────────────────────────────────────────
+  server.tool(
+    "core_end_session",
+    "End an active conversation session",
+    {
+      session_id: z.string().describe("Session ID to end"),
     },
+    sessionStatusHandler("completed", "Failed to end session"),
   );
 
   // ── core_escalate_session ────────────────────────────────────────────
@@ -98,20 +106,7 @@ export function registerCoreTools(
     {
       session_id: z.string().describe("Session ID to escalate"),
     },
-    async ({ session_id }) => {
-      try {
-        const updated = await updateSession(orgId, session_id, agentId, {
-          status: "escalated",
-        });
-
-        return mcpResponse({
-          session_id: updated.id,
-          status: updated.status,
-        });
-      } catch (err) {
-        return mcpErrorResponse(err, "Failed to escalate session");
-      }
-    },
+    sessionStatusHandler("escalated", "Failed to escalate session"),
   );
 
   // ── core_add_messages ────────────────────────────────────────────────
