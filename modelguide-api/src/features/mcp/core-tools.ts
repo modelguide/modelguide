@@ -10,7 +10,7 @@ import {
 } from "@features/sessions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { mcpResponse } from "./mcp.types";
+import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
 export const CORE_TOOL_COUNT = 4;
 
@@ -63,9 +63,7 @@ export function registerCoreTools(
           channel_type: session.channelType,
         });
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to create session";
-        return mcpResponse({ error: message }, true);
+        return mcpErrorResponse(err, "Failed to create session");
       }
     },
   );
@@ -96,9 +94,7 @@ export function registerCoreTools(
           status: updated.status,
         });
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to end session";
-        return mcpResponse({ error: message }, true);
+        return mcpErrorResponse(err, "Failed to end session");
       }
     },
   );
@@ -134,9 +130,7 @@ export function registerCoreTools(
           status: updated.status,
         });
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to escalate session";
-        return mcpResponse({ error: message }, true);
+        return mcpErrorResponse(err, "Failed to escalate session");
       }
     },
   );
@@ -169,9 +163,7 @@ export function registerCoreTools(
           recorded: true,
         });
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to record rating";
-        return mcpResponse({ error: message }, true);
+        return mcpErrorResponse(err, "Failed to record rating");
       }
     },
   );

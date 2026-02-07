@@ -4,6 +4,7 @@
  */
 
 import type { AppBindings } from "@/types";
+import { addMessage, validateActiveSession } from "@features/sessions";
 import { Errors } from "@lib/errors";
 import {
   McpServer,
@@ -23,7 +24,7 @@ import {
   getAgentTools,
   resolveConnectorConfig,
 } from "./mcp.service";
-import { type ResolvedTool, mcpResponse } from "./mcp.types";
+import { type ResolvedTool, mcpErrorResponse, mcpResponse } from "./mcp.types";
 import { jsonSchemaToZod } from "./schema-utils";
 
 export async function mcpHandler(c: Context<AppBindings>): Promise<Response> {
@@ -149,6 +150,11 @@ function registerConnectorTools(
   for (const tool of tools) {
     const zodShape = jsonSchemaToZod(tool.inputSchema);
 
+    // Every connector tool requires an active session
+    zodShape.session_id = z
+      .string()
+      .describe("Active session ID (from core_create_session)");
+
     if (tool.requiresConfirmation) {
       zodShape._confirmation_id = z
         .string()
@@ -160,8 +166,16 @@ function registerConnectorTools(
 
     server.tool(tool.mcpName, tool.description, zodShape, async (args) => {
       try {
+        const { session_id, _confirmation_id, ...toolInput } = args as Record<
+          string,
+          unknown
+        >;
+        const sessionId = session_id as string;
+
+        await validateActiveSession(orgId, sessionId, agentId);
+
         if (tool.requiresConfirmation) {
-          const confirmationId = args._confirmation_id as string | undefined;
+          const confirmationId = _confirmation_id as string | undefined;
 
           if (!confirmationId) {
             const confirmation = await createConfirmation(orgId, {
@@ -198,11 +212,6 @@ function registerConnectorTools(
           }
         }
 
-        const { _confirmation_id: _, ...toolInput } = args as Record<
-          string,
-          unknown
-        >;
-
         const config = await resolveConnectorConfig(orgId, tool.connectorId);
         const result = await executeTool(
           orgId,
@@ -213,11 +222,24 @@ function registerConnectorTools(
           toolInput,
         );
 
+        // Best-effort: log tool call to session transcript
+        addMessage(orgId, sessionId, agentId, {
+          role: "assistant",
+          toolCalls: [
+            {
+              toolCallId: crypto.randomUUID(),
+              toolName: tool.mcpName,
+              toolInput: toolInput as Record<string, unknown>,
+              toolOutput: result as unknown as Record<string, unknown>,
+            },
+          ],
+        }).catch(() => {});
+
         return mcpResponse(result as unknown as Record<string, unknown>);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Tool execution failed";
-        return mcpResponse({ error: message, tool_name: tool.mcpName }, true);
+        return mcpErrorResponse(err, "Tool execution failed", {
+          tool_name: tool.mcpName,
+        });
       }
     });
   }

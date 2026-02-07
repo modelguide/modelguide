@@ -36,3 +36,15 @@ export function mcpResponse(
   }
   return response;
 }
+
+/**
+ * Build an MCP error response from a caught exception.
+ */
+export function mcpErrorResponse(
+  err: unknown,
+  fallback: string,
+  extra?: Record<string, unknown>,
+): McpToolResponse {
+  const message = err instanceof Error ? err.message : fallback;
+  return mcpResponse({ error: message, ...extra }, true);
+}

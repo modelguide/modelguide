@@ -30,6 +30,12 @@ interface SessionFilters extends PaginationParams {
 
 const TERMINAL_STATUSES = ["completed", "escalated", "abandoned"] as const;
 
+function isTerminalStatus(status: string): boolean {
+  return TERMINAL_STATUSES.includes(
+    status as (typeof TERMINAL_STATUSES)[number],
+  );
+}
+
 // ============================================================================
 // Session queries (RLS via forOrg)
 // ============================================================================
@@ -260,24 +266,14 @@ export async function updateSession(
       throw Errors.sessionNotFound(sessionId);
     }
 
-    // Check if session is already in a terminal state
-    if (
-      TERMINAL_STATUSES.includes(
-        existing.status as (typeof TERMINAL_STATUSES)[number],
-      )
-    ) {
+    if (isTerminalStatus(existing.status)) {
       throw Errors.sessionAlreadyEnded(sessionId);
     }
 
     const updateData: Partial<typeof sessions.$inferInsert> = {};
 
     if (data.status) {
-      // Only allow transitions from active to terminal states
-      if (
-        !TERMINAL_STATUSES.includes(
-          data.status as (typeof TERMINAL_STATUSES)[number],
-        )
-      ) {
+      if (!isTerminalStatus(data.status)) {
         throw Errors.validationError(
           `Invalid status transition. Allowed: ${TERMINAL_STATUSES.join(", ")}`,
         );
@@ -333,11 +329,7 @@ export async function addMessage(
           throw Errors.sessionNotFound(sessionId);
         }
 
-        if (
-          TERMINAL_STATUSES.includes(
-            session.status as (typeof TERMINAL_STATUSES)[number],
-          )
-        ) {
+        if (isTerminalStatus(session.status)) {
           throw Errors.sessionAlreadyEnded(sessionId);
         }
 
@@ -415,6 +407,29 @@ function isSequenceConflict(error: unknown): boolean {
   const code = (error as Error & { code?: string }).code;
   if (code !== "23505") return false;
   return error.message.includes("session_messages_session_sequence_unique");
+}
+
+// ============================================================================
+// Session validation (for MCP connector tools)
+// ============================================================================
+
+export async function validateActiveSession(
+  orgId: string,
+  sessionId: string,
+  agentId: string,
+) {
+  return forOrg(orgId, async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)));
+
+    if (!session) throw Errors.sessionNotFound(sessionId);
+    if (isTerminalStatus(session.status)) {
+      throw Errors.sessionAlreadyEnded(sessionId);
+    }
+    return session;
+  });
 }
 
 // ============================================================================

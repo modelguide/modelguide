@@ -6,4 +6,5 @@ export {
   updateSession,
   addMessage,
   addFeedback,
+  validateActiveSession,
 } from "./sessions.service";
