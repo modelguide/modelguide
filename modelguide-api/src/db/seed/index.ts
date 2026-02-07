@@ -3,7 +3,7 @@
  * Uses migration connection (superuser) to bypass RLS
  */
 
-import { encryptSecret, generateApiKey } from "@lib/crypto";
+import { generateApiKey } from "@lib/crypto";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -17,7 +17,6 @@ import {
   connectors,
   connectorsCatalog,
   organizations,
-  secrets,
   sessions,
   users,
 } from "../schema";
@@ -192,7 +191,7 @@ async function seedOrgData(
       slug: connectorSlug,
       config: {
         baseUrl: `https://api.${orgSlug}.example.com`,
-        apiToken: "placeholder-secret-uuid",
+        publishableKey: "pk_placeholder_key",
       },
       isActive: true,
     })
@@ -322,23 +321,7 @@ async function seedOrgData(
 
   console.log(`  Linked ${linkedTools.length} tools to agent`);
 
-  // 9. Create test secret
-  console.log("\nSeeding test secret...");
-  const encryptedValue = await encryptSecret(`placeholder_token_${orgSlug}`);
-  await db
-    .insert(secrets)
-    .values({
-      organizationId,
-      name: `${orgSlug} API Token`,
-      secretType: "api_key",
-      encryptedValue,
-      ownerType: "connector",
-      ownerId: testConnector.id,
-    })
-    .onConflictDoNothing();
-  console.log("  Created/found secret");
-
-  // 10. Create test session
+  // 9. Create test session
   console.log("\nSeeding test session...");
   await db
     .insert(sessions)

@@ -50,9 +50,9 @@ describe("Medusa manifest", () => {
     expect(medusaManifest.configSchema.baseUrl.required).toBe(true);
     expect(medusaManifest.configSchema.baseUrl.type).toBe("string");
 
-    expect(medusaManifest.configSchema.apiToken).toBeDefined();
-    expect(medusaManifest.configSchema.apiToken.required).toBe(true);
-    expect(medusaManifest.configSchema.apiToken.type).toBe("secret");
+    expect(medusaManifest.configSchema.publishableKey).toBeDefined();
+    expect(medusaManifest.configSchema.publishableKey.required).toBe(true);
+    expect(medusaManifest.configSchema.publishableKey.type).toBe("string");
   });
 
   test("tool names match expected set", () => {
