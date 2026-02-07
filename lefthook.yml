@@ -13,8 +13,10 @@ pre-push:
   commands:
     ui-typecheck:
       root: modelguide-ui/
+      glob: "*.{ts,tsx}"
       run: npm run typecheck
 
     api-typecheck:
       root: modelguide-api/
+      glob: "*.{ts,tsx}"
       run: bun tsc --noEmit

@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
-import { sessions } from "@db/schema";
+import { sessionFeedback, sessions } from "@db/schema";
 import { eq } from "drizzle-orm";
 import {
   type TestSeed,
@@ -654,5 +654,248 @@ describe("RLS isolation", () => {
     });
 
     expect(response.status).toBe(404);
+  });
+});
+
+// ============================================================================
+// PATCH /api/sessions/:id - Additional update tests
+// ============================================================================
+
+describe("PATCH /api/sessions/:id (additional)", () => {
+  test("updates status from active to abandoned (200)", async () => {
+    const createRes = await request("/api/sessions", {
+      method: "POST",
+      headers: pizzaAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        userIdentifier: "abandon-test@test.com",
+      }),
+    });
+    const created = await createRes.json();
+    createdSessionIds.push(created.id);
+
+    const response = await request(`/api/sessions/${created.id}`, {
+      method: "PATCH",
+      headers: pizzaAgentHeaders,
+      body: JSON.stringify({ status: "abandoned" }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe("abandoned");
+    expect(body.endedAt).not.toBeNull();
+  });
+
+  test("returns 404 for non-existent session", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const response = await request(`/api/sessions/${fakeId}`, {
+      method: "PATCH",
+      headers: pizzaAgentHeaders,
+      body: JSON.stringify({ status: "completed" }),
+    });
+
+    expect(response.status).toBe(404);
+  });
+});
+
+// ============================================================================
+// POST /api/sessions/:id/messages - Additional message tests
+// ============================================================================
+
+describe("POST /api/sessions/:id/messages (additional)", () => {
+  test("creates message with audioUrl (201)", async () => {
+    const createRes = await request("/api/sessions", {
+      method: "POST",
+      headers: pizzaAgentHeaders,
+      body: JSON.stringify({
+        channelType: "voice",
+        userIdentifier: "+4444444444",
+      }),
+    });
+    const created = await createRes.json();
+    createdSessionIds.push(created.id);
+
+    const response = await request(`/api/sessions/${created.id}/messages`, {
+      method: "POST",
+      headers: pizzaAgentHeaders,
+      body: JSON.stringify({
+        role: "user",
+        content: "Voice message",
+        audioUrl: "https://storage.example.com/recordings/abc123.mp3",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.data[0].audioUrl).toBe(
+      "https://storage.example.com/recordings/abc123.mp3",
+    );
+    expect(body.data[0].content).toBe("Voice message");
+  });
+});
+
+// ============================================================================
+// GET /api/sessions - Filtering, sorting, pagination
+// ============================================================================
+
+describe("GET /api/sessions (filtering & sorting)", () => {
+  /** IDs of sessions created specifically for filter tests */
+  const filterSessionIds: string[] = [];
+
+  beforeAll(async () => {
+    // Create several sessions with different channels to test filters
+    for (const channel of ["web", "sms", "sms"]) {
+      const res = await request("/api/sessions", {
+        method: "POST",
+        headers: pizzaAgentHeaders,
+        body: JSON.stringify({
+          channelType: channel,
+          userIdentifier: `filter-${channel}-${Date.now()}@test.com`,
+        }),
+      });
+      const body = await res.json();
+      filterSessionIds.push(body.id);
+      createdSessionIds.push(body.id);
+    }
+
+    // Complete one session so we can test date-range and status filters
+    await request(`/api/sessions/${filterSessionIds[0]}`, {
+      method: "PATCH",
+      headers: pizzaAgentHeaders,
+      body: JSON.stringify({ status: "completed" }),
+    });
+
+    // Add feedback to the completed session so we can test hasFeedback
+    await forApp(async (tx) => {
+      await tx.insert(sessionFeedback).values({
+        sessionId: filterSessionIds[0],
+        rating: 2,
+        feedbackSource: "customer",
+        userIdentifier: "filter-tester",
+      });
+    });
+  });
+
+  test("filters by startedAfter (200)", async () => {
+    // Use a date far in the past — should return all sessions
+    const response = await request(
+      "/api/sessions?startedAfter=2020-01-01T00:00:00Z",
+      { headers: pizzaAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("filters by startedBefore (200)", async () => {
+    // Use a date far in the past — should return zero sessions
+    const response = await request(
+      "/api/sessions?startedBefore=2020-01-01T00:00:00Z",
+      { headers: pizzaAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.length).toBe(0);
+  });
+
+  test("filters by hasFeedback=true (200)", async () => {
+    const response = await request("/api/sessions?hasFeedback=true", {
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+    for (const session of body.data) {
+      expect(session.feedbackSummary.hasFeedback).toBe(true);
+    }
+  });
+
+  test("filters by hasFeedback=false (200)", async () => {
+    const response = await request("/api/sessions?hasFeedback=false", {
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    for (const session of body.data) {
+      expect(session.feedbackSummary.hasFeedback).toBe(false);
+    }
+  });
+
+  test("sorts by started_at ascending (200)", async () => {
+    const response = await request(
+      "/api/sessions?sortBy=started_at&sortOrder=asc",
+      { headers: pizzaAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    for (let i = 1; i < body.data.length; i++) {
+      expect(new Date(body.data[i].startedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(body.data[i - 1].startedAt).getTime(),
+      );
+    }
+  });
+
+  test("sorts by status (200)", async () => {
+    const response = await request(
+      "/api/sessions?sortBy=status&sortOrder=asc",
+      { headers: pizzaAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("paginates with pageSize=1 and returns correct totalPages (200)", async () => {
+    const response = await request("/api/sessions?page=1&pageSize=1", {
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.data.length).toBe(1);
+    expect(body.pagination.pageSize).toBe(1);
+    expect(body.pagination.totalItems).toBeGreaterThan(1);
+    expect(body.pagination.totalPages).toBeGreaterThan(1);
+    expect(body.pagination.hasNextPage).toBe(true);
+    expect(body.pagination.hasPreviousPage).toBe(false);
+  });
+
+  test("returns page 2 results (200)", async () => {
+    const response = await request("/api/sessions?page=2&pageSize=1", {
+      headers: pizzaAdminHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.data.length).toBe(1);
+    expect(body.pagination.page).toBe(2);
+    expect(body.pagination.hasPreviousPage).toBe(true);
+  });
+
+  test("page 1 and page 2 return different sessions (200)", async () => {
+    const [res1, res2] = await Promise.all([
+      request("/api/sessions?page=1&pageSize=1", {
+        headers: pizzaAdminHeaders,
+      }),
+      request("/api/sessions?page=2&pageSize=1", {
+        headers: pizzaAdminHeaders,
+      }),
+    ]);
+
+    const body1 = await res1.json();
+    const body2 = await res2.json();
+
+    expect(body1.data[0].id).not.toBe(body2.data[0].id);
   });
 });

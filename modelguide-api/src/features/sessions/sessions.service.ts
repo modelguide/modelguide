@@ -30,7 +30,7 @@ interface SessionFilters extends PaginationParams {
 
 const TERMINAL_STATUSES = ["completed", "escalated", "abandoned"] as const;
 
-function isTerminalStatus(status: string): boolean {
+function isTerminal(status: string): boolean {
   return TERMINAL_STATUSES.includes(
     status as (typeof TERMINAL_STATUSES)[number],
   );
@@ -45,45 +45,10 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
   const offset = getOffset(page, pageSize);
 
   return forOrg(orgId, async (tx) => {
-    // Build where conditions
-    const conditions = [];
+    const conditions = buildFilterConditions(filters);
+    const { sortDir, sortColumn } = buildSort(filters);
 
-    if (filters.agentId) {
-      conditions.push(eq(sessions.agentId, filters.agentId));
-    }
-    if (filters.status) {
-      conditions.push(
-        eq(
-          sessions.status,
-          filters.status as (typeof sessions.status.enumValues)[number],
-        ),
-      );
-    }
-    if (filters.channelType) {
-      conditions.push(
-        eq(
-          sessions.channelType,
-          filters.channelType as (typeof sessions.channelType.enumValues)[number],
-        ),
-      );
-    }
-    if (filters.startedAfter) {
-      conditions.push(gte(sessions.startedAt, new Date(filters.startedAfter)));
-    }
-    if (filters.startedBefore) {
-      conditions.push(lte(sessions.startedAt, new Date(filters.startedBefore)));
-    }
-
-    // Determine sort
-    const sortColumn =
-      filters.sortBy === "ended_at"
-        ? sessions.endedAt
-        : filters.sortBy === "status"
-          ? sessions.status
-          : sessions.startedAt;
-    const sortDir = filters.sortOrder === "asc" ? asc : desc;
-
-    // Message count subquery
+    // Subqueries for aggregated data
     const messageCountSq = db
       .select({
         sessionId: sessionMessages.sessionId,
@@ -93,7 +58,6 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
       .groupBy(sessionMessages.sessionId)
       .as("msg_counts");
 
-    // Feedback summary subquery
     const feedbackSq = db
       .select({
         sessionId: sessionFeedback.sessionId,
@@ -103,7 +67,16 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
       .groupBy(sessionFeedback.sessionId)
       .as("fb_counts");
 
-    // Build base query for data
+    // Apply hasFeedback filter (depends on feedbackSq)
+    if (filters.hasFeedback === true) {
+      conditions.push(gt(sql`coalesce(${feedbackSq.feedbackCount}, 0)`, 0));
+    } else if (filters.hasFeedback === false) {
+      conditions.push(eq(sql`coalesce(${feedbackSq.feedbackCount}, 0)`, 0));
+    }
+
+    const finalWhere = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Data query
     let dataQuery = tx
       .select({
         session: sessions,
@@ -121,16 +94,7 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
       .leftJoin(messageCountSq, eq(sessions.id, messageCountSq.sessionId))
       .leftJoin(feedbackSq, eq(sessions.id, feedbackSq.sessionId));
 
-    // Apply hasFeedback filter
-    if (filters.hasFeedback === true) {
-      conditions.push(gt(sql`coalesce(${feedbackSq.feedbackCount}, 0)`, 0));
-    } else if (filters.hasFeedback === false) {
-      conditions.push(eq(sql`coalesce(${feedbackSq.feedbackCount}, 0)`, 0));
-    }
-
-    const finalWhere = conditions.length > 0 ? and(...conditions) : undefined;
-
-    // Count query
+    // Count query (joins feedbackSq only when hasFeedback filter is used)
     const countQuery = tx
       .select({ total: count() })
       .from(sessions)
@@ -146,21 +110,17 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
       countQuery,
     ]);
 
-    const data = items.map((row) => ({
-      ...row.session,
-      agent: { id: row.session.agentId, name: row.agentName ?? "Unknown" },
-      messageCount: Number(row.messageCount),
-      durationSeconds: computeDuration(
-        row.session.startedAt,
-        row.session.endedAt,
-      ),
-      feedbackSummary: {
-        hasFeedback: Number(row.feedbackCount) > 0,
-      },
-    }));
-
     return {
-      data,
+      data: items.map((row) => ({
+        ...row.session,
+        agent: { id: row.session.agentId, name: row.agentName ?? "Unknown" },
+        messageCount: Number(row.messageCount),
+        durationSeconds: computeDuration(
+          row.session.startedAt,
+          row.session.endedAt,
+        ),
+        feedbackSummary: { hasFeedback: Number(row.feedbackCount) > 0 },
+      })),
       pagination: buildPaginationMeta(page, pageSize, total),
     };
   });
@@ -218,7 +178,6 @@ export async function createSession(
   },
 ) {
   return forOrg(orgId, async (tx) => {
-    // Validate agent exists and belongs to org
     const [agent] = await tx
       .select({ id: agents.id })
       .from(agents)
@@ -258,7 +217,7 @@ export async function updateSession(
 ) {
   return forOrg(orgId, async (tx) => {
     const [existing] = await tx
-      .select()
+      .select({ id: sessions.id, status: sessions.status })
       .from(sessions)
       .where(and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)));
 
@@ -266,14 +225,14 @@ export async function updateSession(
       throw Errors.sessionNotFound(sessionId);
     }
 
-    if (isTerminalStatus(existing.status)) {
+    if (isTerminal(existing.status)) {
       throw Errors.sessionAlreadyEnded(sessionId);
     }
 
     const updateData: Partial<typeof sessions.$inferInsert> = {};
 
     if (data.status) {
-      if (!isTerminalStatus(data.status)) {
+      if (!isTerminal(data.status)) {
         throw Errors.validationError(
           `Invalid status transition. Allowed: ${TERMINAL_STATUSES.join(", ")}`,
         );
@@ -326,12 +285,12 @@ export async function addMessages(
 ) {
   return forOrg(orgId, async (tx) => {
     const [session] = await tx
-      .select()
+      .select({ id: sessions.id, status: sessions.status })
       .from(sessions)
       .where(and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)));
 
     if (!session) throw Errors.sessionNotFound(sessionId);
-    if (isTerminalStatus(session.status)) {
+    if (isTerminal(session.status)) {
       throw Errors.sessionAlreadyEnded(sessionId);
     }
 
@@ -371,6 +330,49 @@ export async function addMessages(
 // Helpers
 // ============================================================================
 
+function buildFilterConditions(filters: SessionFilters) {
+  const conditions = [];
+
+  if (filters.agentId) {
+    conditions.push(eq(sessions.agentId, filters.agentId));
+  }
+  if (filters.status) {
+    conditions.push(
+      eq(
+        sessions.status,
+        filters.status as (typeof sessions.status.enumValues)[number],
+      ),
+    );
+  }
+  if (filters.channelType) {
+    conditions.push(
+      eq(
+        sessions.channelType,
+        filters.channelType as (typeof sessions.channelType.enumValues)[number],
+      ),
+    );
+  }
+  if (filters.startedAfter) {
+    conditions.push(gte(sessions.startedAt, new Date(filters.startedAfter)));
+  }
+  if (filters.startedBefore) {
+    conditions.push(lte(sessions.startedAt, new Date(filters.startedBefore)));
+  }
+
+  return conditions;
+}
+
+function buildSort(filters: SessionFilters) {
+  const sortColumn =
+    filters.sortBy === "ended_at"
+      ? sessions.endedAt
+      : filters.sortBy === "status"
+        ? sessions.status
+        : sessions.startedAt;
+  const sortDir = filters.sortOrder === "asc" ? asc : desc;
+  return { sortDir, sortColumn };
+}
+
 function computeDuration(startedAt: Date, endedAt: Date | null): number | null {
   if (!endedAt) return null;
   return Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
@@ -392,7 +394,7 @@ export async function validateActiveSession(
       .where(and(eq(sessions.id, sessionId), eq(sessions.agentId, agentId)));
 
     if (!session) throw Errors.sessionNotFound(sessionId);
-    if (isTerminalStatus(session.status)) {
+    if (isTerminal(session.status)) {
       throw Errors.sessionAlreadyEnded(sessionId);
     }
     return session;
