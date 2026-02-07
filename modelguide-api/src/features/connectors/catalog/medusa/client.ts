@@ -19,7 +19,14 @@ export class MedusaApiError extends Error {
   }
 }
 
-export function createMedusaFetcher(config: Record<string, string>) {
+export type MedusaFetcher = <T = unknown>(
+  path: string,
+  options?: MedusaFetchOptions,
+) => Promise<T>;
+
+export function createMedusaFetcher(
+  config: Record<string, string>,
+): MedusaFetcher {
   const baseUrl = config.baseUrl?.replace(/\/+$/, "");
   if (!baseUrl) {
     throw new Error("Medusa baseUrl is required");
@@ -45,14 +52,9 @@ export function createMedusaFetcher(config: Record<string, string>) {
 
     let url = `${baseUrl}${path}`;
     if (params) {
-      const searchParams = new URLSearchParams();
-      for (const [key, value] of Object.entries(params)) {
-        if (value !== undefined) {
-          searchParams.set(key, String(value));
-        }
-      }
-      const qs = searchParams.toString();
-      if (qs) {
+      const entries = Object.entries(params).filter(([, v]) => v !== undefined);
+      if (entries.length > 0) {
+        const qs = new URLSearchParams(entries.map(([k, v]) => [k, String(v)]));
         url += `?${qs}`;
       }
     }

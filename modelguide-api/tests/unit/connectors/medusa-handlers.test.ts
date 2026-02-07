@@ -3,7 +3,7 @@
  * Mocks globalThis.fetch to verify correct API calls without a real Medusa server.
  */
 
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 import {
   addToCart,
   completeCart,
@@ -53,10 +53,6 @@ function mockFetchError(status: number, body: string) {
   fetchMock = mock(() => Promise.resolve(new Response(body, { status })));
   globalThis.fetch = fetchMock as typeof fetch;
 }
-
-beforeAll(() => {
-  // Will be overridden per test
-});
 
 afterAll(() => {
   globalThis.fetch = originalFetch;

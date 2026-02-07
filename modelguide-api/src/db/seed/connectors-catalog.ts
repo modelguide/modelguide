@@ -1,195 +1,39 @@
 /**
- * Seed data for connectors catalog
- * These are the global connector templates available to all organizations
+ * Seed data for connectors catalog.
+ * These are the global connector templates available to all organizations.
+ *
+ * Connector modules that have a manifest (in features/connectors/catalog/)
+ * are converted via manifestToSeed to avoid duplicating tool definitions.
  */
 
+import medusaManifest from "@features/connectors/catalog/medusa/index";
+import type { ConnectorManifest } from "@features/connectors/catalog/types";
 import type { CatalogTool, NewConnectorCatalog } from "../schema";
 
+/**
+ * Derives a seed-ready catalog entry from a connector manifest,
+ * stripping handler functions and keeping only catalog metadata.
+ */
+function manifestToSeed(manifest: ConnectorManifest): NewConnectorCatalog {
+  return {
+    name: manifest.name,
+    slug: manifest.slug,
+    description: manifest.description,
+    connectorType: manifest.connectorType,
+    configSchema: manifest.configSchema,
+    tools: manifest.tools.map((t) => t.catalog),
+    authMethods: manifest.authMethods,
+    iconUrl: manifest.iconUrl,
+    isActive: true,
+  };
+}
+
 // ============================================================================
-// Medusa E-commerce Connector
+// Medusa E-commerce Connector (derived from manifest)
 // ============================================================================
 
-const medusaTools: CatalogTool[] = [
-  {
-    name: "List Products",
-    description:
-      "Browse available products with optional search and pagination",
-    inputSchema: {
-      type: "object",
-      properties: {
-        q: { type: "string", description: "Search query to filter products" },
-        limit: {
-          type: "integer",
-          description: "Maximum number of products to return (default 20)",
-          minimum: 1,
-          maximum: 100,
-        },
-        offset: {
-          type: "integer",
-          description: "Number of products to skip for pagination",
-          minimum: 0,
-        },
-      },
-      required: [],
-    },
-    defaultRequiresConfirmation: false,
-    defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Get Product",
-    description: "Get detailed information about a specific product",
-    inputSchema: {
-      type: "object",
-      properties: {
-        productId: { type: "string", description: "Product ID" },
-      },
-      required: ["productId"],
-    },
-    defaultRequiresConfirmation: false,
-    defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Create Cart",
-    description: "Create a new shopping cart",
-    inputSchema: {
-      type: "object",
-      properties: {
-        regionId: { type: "string", description: "Region ID for the cart" },
-        currencyCode: {
-          type: "string",
-          description: "Currency code (e.g., usd, eur)",
-        },
-      },
-      required: [],
-    },
-    defaultRequiresConfirmation: false,
-    defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Add to Cart",
-    description: "Add an item to the customer's shopping cart",
-    inputSchema: {
-      type: "object",
-      properties: {
-        cartId: { type: "string", description: "Cart ID" },
-        variantId: { type: "string", description: "Product variant ID" },
-        quantity: {
-          type: "integer",
-          description: "Quantity to add",
-          minimum: 1,
-        },
-      },
-      required: ["cartId", "variantId", "quantity"],
-    },
-    defaultRequiresConfirmation: false,
-    defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Get Cart",
-    description: "Retrieve the current contents of a shopping cart",
-    inputSchema: {
-      type: "object",
-      properties: {
-        cartId: { type: "string", description: "Cart ID" },
-      },
-      required: ["cartId"],
-    },
-    defaultRequiresConfirmation: false,
-    defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Set Delivery Address",
-    description: "Set or update the delivery address for a cart",
-    inputSchema: {
-      type: "object",
-      properties: {
-        cartId: { type: "string", description: "Cart ID" },
-        address: {
-          type: "object",
-          properties: {
-            firstName: { type: "string" },
-            lastName: { type: "string" },
-            address1: { type: "string" },
-            address2: { type: "string" },
-            city: { type: "string" },
-            postalCode: { type: "string" },
-            countryCode: { type: "string" },
-            phone: { type: "string" },
-          },
-          required: [
-            "firstName",
-            "lastName",
-            "address1",
-            "city",
-            "postalCode",
-            "countryCode",
-          ],
-        },
-      },
-      required: ["cartId", "address"],
-    },
-    defaultRequiresConfirmation: false,
-    defaultTimeoutSeconds: 30,
-  },
-  {
-    name: "Complete Cart",
-    description: "Complete the cart checkout and create an order from the cart",
-    inputSchema: {
-      type: "object",
-      properties: {
-        cartId: {
-          type: "string",
-          description: "Cart ID to complete checkout",
-        },
-      },
-      required: ["cartId"],
-    },
-    defaultRequiresConfirmation: true,
-    defaultTimeoutSeconds: 60,
-  },
-  {
-    name: "Get Order",
-    description: "Retrieve details of an existing order",
-    inputSchema: {
-      type: "object",
-      properties: {
-        orderId: { type: "string", description: "Order ID" },
-      },
-      required: ["orderId"],
-    },
-    defaultRequiresConfirmation: false,
-    defaultTimeoutSeconds: 30,
-  },
-];
-
-export const medusaConnector: NewConnectorCatalog = {
-  name: "Medusa",
-  slug: "medusa",
-  description:
-    "E-commerce platform connector for managing carts, orders, and customers",
-  connectorType: "api",
-  configSchema: {
-    baseUrl: {
-      type: "string",
-      required: true,
-      description: "Medusa API base URL",
-    },
-    apiToken: {
-      type: "secret",
-      required: true,
-      description: "API authentication token",
-    },
-    publishableKey: {
-      type: "string",
-      required: false,
-      description: "Publishable API key for storefront",
-    },
-  },
-  tools: medusaTools,
-  authMethods: ["api_key"],
-  iconUrl: "https://medusajs.com/images/logo.svg",
-  isActive: true,
-};
+export const medusaConnector: NewConnectorCatalog =
+  manifestToSeed(medusaManifest);
 
 // ============================================================================
 // Zendesk Helpdesk Connector
