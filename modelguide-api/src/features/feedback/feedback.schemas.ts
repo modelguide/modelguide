@@ -22,6 +22,7 @@ export const feedbackResponseSchema = z.object({
   feedbackTags: z.array(z.string()).nullable(),
   userIdentifier: z.string().nullable(),
   createdAt: z.string(),
+  updatedAt: z.string().nullable(),
 });
 
 export function formatFeedback(feedback: SessionFeedback) {
@@ -36,5 +37,6 @@ export function formatFeedback(feedback: SessionFeedback) {
     feedbackTags: feedback.feedbackTags,
     userIdentifier: feedback.userIdentifier,
     createdAt: feedback.createdAt.toISOString(),
+    updatedAt: feedback.updatedAt?.toISOString() ?? null,
   };
 }

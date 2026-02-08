@@ -50,6 +50,7 @@ export const Permissions = {
   // Feedback management
   "feedback:read": ["admin", "support"],
   "feedback:create": ["admin", "support"],
+  "feedback:update": ["admin", "support"],
 
   // Analytics
   "analytics:read": ["admin", "support"],

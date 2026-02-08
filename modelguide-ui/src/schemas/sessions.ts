@@ -49,6 +49,7 @@ export const sessionFeedbackSchema = z.object({
   feedbackTags: z.array(z.string()).nullable(),
   userIdentifier: z.string().nullable(),
   createdAt: z.string(),
+  updatedAt: z.string().nullable(),
 })
 
 export type SessionFeedback = z.infer<typeof sessionFeedbackSchema>

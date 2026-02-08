@@ -25,6 +25,10 @@ function SessionDetailPage() {
     queryFn: () => api.get(`sessions/${id}`).json<SessionDetailType>(),
   })
 
+  const supportFeedback = [...(session?.feedback ?? [])]
+    .reverse()
+    .find((f) => f.feedbackSource === 'support')
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 animate-fade-up">
@@ -51,7 +55,20 @@ function SessionDetailPage() {
       ) : session ? (
         <>
           <SessionDetail session={session} onRate={() => setRatingOpen(true)} />
-          <RatingDialog sessionId={id} open={ratingOpen} onClose={() => setRatingOpen(false)} />
+          <RatingDialog
+            sessionId={id}
+            open={ratingOpen}
+            onClose={() => setRatingOpen(false)}
+            existingFeedback={
+              supportFeedback
+                ? {
+                    id: supportFeedback.id,
+                    rating: supportFeedback.rating,
+                    comment: supportFeedback.comment,
+                  }
+                : undefined
+            }
+          />
         </>
       ) : null}
     </div>

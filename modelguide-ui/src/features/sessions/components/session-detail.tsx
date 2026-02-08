@@ -22,8 +22,12 @@ export interface SessionDetailProps {
 }
 
 export function SessionDetail({ session, onRate }: SessionDetailProps) {
-  const supportFeedback = session.feedback?.find((f) => f.feedbackSource === 'support')
-  const customerFeedback = session.feedback?.find((f) => f.feedbackSource === 'customer')
+  const latestSupport = [...(session.feedback ?? [])]
+    .reverse()
+    .find((f) => f.feedbackSource === 'support')
+  const latestCustomer = [...(session.feedback ?? [])]
+    .reverse()
+    .find((f) => f.feedbackSource === 'customer')
 
   return (
     <div className="space-y-6">
@@ -87,12 +91,18 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
             </InfoItem>
 
             <InfoItem label="User Rating">
-              <RatingBadge rating={customerFeedback?.rating} size="sm" />
+              <RatingBadge rating={latestCustomer?.rating} size="sm" />
             </InfoItem>
 
             <InfoItem label="Expert Rating">
-              {supportFeedback ? (
-                <RatingBadge rating={supportFeedback.rating} size="sm" />
+              {latestSupport ? (
+                onRate ? (
+                  <button type="button" onClick={onRate} className="group cursor-pointer">
+                    <RatingBadge rating={latestSupport.rating} size="sm" />
+                  </button>
+                ) : (
+                  <RatingBadge rating={latestSupport.rating} size="sm" />
+                )
               ) : onRate ? (
                 <button type="button" onClick={onRate} className="group cursor-pointer">
                   <RatingBadge showAddButton size="sm" />
@@ -121,30 +131,34 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Feedback Comments */}
-      {session.feedback?.some((f) => f.comment) && (
+      {/* All Feedback */}
+      {session.feedback && session.feedback.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Feedback Notes</CardTitle>
+            <CardTitle>Feedback</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {session.feedback
-                .filter((fb) => fb.comment)
-                .map((fb) => (
-                  <div
-                    key={fb.id}
-                    className="flex items-start gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle p-3"
-                  >
-                    <RatingBadge rating={fb.rating} size="xs" />
-                    <div>
-                      <p className="text-xs font-medium text-fg-muted capitalize">
+              {session.feedback.map((fb) => (
+                <div
+                  key={fb.id}
+                  className="flex items-start gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle p-3"
+                >
+                  <RatingBadge rating={fb.rating} size="xs" />
+                  <div>
+                    <p className="text-xs font-medium text-fg-muted">
+                      <span className="capitalize">
                         {fb.feedbackSource === 'customer' ? 'User' : 'Expert'}
-                      </p>
-                      <p className="mt-1 text-sm text-fg-primary">{fb.comment}</p>
-                    </div>
+                      </span>
+                      {fb.userIdentifier && (
+                        <span className="text-fg-subtle"> &middot; {fb.userIdentifier}</span>
+                      )}
+                      {fb.updatedAt && <span className="text-fg-subtle"> &middot; edited</span>}
+                    </p>
+                    {fb.comment && <p className="mt-1 text-sm text-fg-primary">{fb.comment}</p>}
                   </div>
-                ))}
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

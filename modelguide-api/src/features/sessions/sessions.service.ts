@@ -64,12 +64,12 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
         feedbackCount: count().as("feedback_count"),
         customerRating: sql<
           number | null
-        >`max(case when ${sessionFeedback.feedbackSource} = 'customer' then ${sessionFeedback.rating} end)`.as(
+        >`(array_agg(${sessionFeedback.rating} order by coalesce(${sessionFeedback.updatedAt}, ${sessionFeedback.createdAt}) desc) filter (where ${sessionFeedback.feedbackSource} = 'customer'))[1]`.as(
           "customer_rating",
         ),
         supportRating: sql<
           number | null
-        >`max(case when ${sessionFeedback.feedbackSource} = 'support' then ${sessionFeedback.rating} end)`.as(
+        >`(array_agg(${sessionFeedback.rating} order by coalesce(${sessionFeedback.updatedAt}, ${sessionFeedback.createdAt}) desc) filter (where ${sessionFeedback.feedbackSource} = 'support'))[1]`.as(
           "support_rating",
         ),
       })
