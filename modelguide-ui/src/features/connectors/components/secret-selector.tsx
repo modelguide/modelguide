@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Key, Lock } from 'lucide-react'
 import { api } from '~/lib/api'
-import type { SecretListResponse } from '~/schemas/secrets'
+import type { PaginatedResponse } from '~/lib/pagination'
+import type { Secret } from '~/schemas/secrets'
 
 interface SecretSelectorProps {
   value: string
@@ -18,10 +19,10 @@ export function SecretSelector({
 }: SecretSelectorProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['secrets'],
-    queryFn: () => api.get('secrets').json<SecretListResponse>(),
+    queryFn: () => api.get('secrets').json<PaginatedResponse<Secret>>(),
   })
 
-  const secrets = data?.items ?? []
+  const secrets = data?.data ?? []
 
   return (
     <label className="block space-y-1.5">

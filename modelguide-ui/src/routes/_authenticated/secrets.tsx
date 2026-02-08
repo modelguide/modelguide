@@ -9,7 +9,8 @@ import { DeleteSecretDialog } from '~/features/secrets/components/delete-secret-
 import { SecretForm } from '~/features/secrets/components/secret-form'
 import { SecretsTable } from '~/features/secrets/components/secrets-table'
 import { api } from '~/lib/api'
-import type { Secret, SecretCreate, SecretListResponse } from '~/schemas/secrets'
+import type { PaginatedResponse } from '~/lib/pagination'
+import type { Secret, SecretCreate } from '~/schemas/secrets'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated/secrets')({
@@ -26,7 +27,7 @@ function SecretsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['secrets'],
-    queryFn: () => api.get('secrets').json<SecretListResponse>(),
+    queryFn: () => api.get('secrets').json<PaginatedResponse<Secret>>(),
   })
 
   const createMutation = useMutation({
@@ -79,7 +80,7 @@ function SecretsPage() {
       ) : null}
 
       <SecretsTable
-        secrets={data?.items ?? []}
+        secrets={data?.data ?? []}
         isLoading={isLoading}
         isAdmin={isAdmin}
         onDelete={(secret) => setSecretToDelete(secret)}

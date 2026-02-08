@@ -8,6 +8,7 @@ export const channelTypeSchema = z.enum([
   'widget',
   'sms',
   'whatsapp',
+  'email',
 ])
 
 export type ChannelType = z.infer<typeof channelTypeSchema>
@@ -18,58 +19,64 @@ export type SessionStatus = z.infer<typeof sessionStatusSchema>
 
 export const sessionMessageSchema = z.object({
   id: z.string(),
+  sessionId: z.string(),
   role: z.enum(['user', 'assistant', 'tool']),
   content: z.string().optional(),
-  audio_url: z.string().optional(),
-  tool_call_id: z.string().optional(),
-  tool_name: z.string().optional(),
-  tool_input: z.record(z.unknown()).optional(),
-  tool_output: z.record(z.unknown()).optional(),
+  audioUrl: z.string().optional(),
+  toolCallId: z.string().optional(),
+  toolName: z.string().optional(),
+  toolInput: z.record(z.unknown()).optional(),
+  toolOutput: z.record(z.unknown()).optional(),
   status: z.enum(['success', 'error']).optional(),
-  latency_ms: z.number().optional(),
-  created_at: z.string(),
+  latencyMs: z.number().optional(),
+  audioDurationMs: z.number().optional(),
+  modelUsed: z.string().optional(),
+  tokensUsed: z.number().optional(),
+  sequenceNumber: z.number().optional(),
+  createdAt: z.string(),
 })
 
 export type SessionMessage = z.infer<typeof sessionMessageSchema>
 
 export const sessionFeedbackSchema = z.object({
   id: z.string(),
+  sessionId: z.string(),
+  messageId: z.string().nullable(),
   rating: z.number().min(1).max(2),
   comment: z.string().nullable(),
-  feedback_source: z.enum(['customer', 'support']),
-  feedback_tags: z.array(z.string()).nullable(),
-  created_at: z.string(),
+  feedbackSource: z.enum(['customer', 'support']),
+  feedbackRef: z.string().nullable(),
+  feedbackTags: z.array(z.string()).nullable(),
+  userIdentifier: z.string().nullable(),
+  createdAt: z.string(),
 })
 
 export type SessionFeedback = z.infer<typeof sessionFeedbackSchema>
 
-export const sessionSchema = z.object({
+// List endpoint item — no inline messages/feedback arrays
+export const sessionListItemSchema = z.object({
   id: z.string(),
-  external_id: z.string(),
-  agent: z.object({
-    id: z.string(),
-    name: z.string(),
-  }),
-  channel_type: channelTypeSchema,
+  externalId: z.string(),
+  agent: z.object({ id: z.string(), name: z.string() }),
+  channelType: channelTypeSchema,
   status: sessionStatusSchema,
-  user_identifier: z.string(),
-  user_metadata: z.record(z.unknown()).optional(),
-  escalation_ref: z.string().nullable(),
-  started_at: z.string(),
-  ended_at: z.string().nullable(),
-  duration_seconds: z.number().nullable(),
+  userIdentifier: z.string(),
+  userMetadata: z.record(z.unknown()).optional(),
+  escalationRef: z.string().nullable(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  durationSeconds: z.number().nullable(),
   metadata: z.record(z.unknown()).optional(),
-  messages: z.array(sessionMessageSchema).optional(),
-  feedback: z.array(sessionFeedbackSchema).optional(),
+  messageCount: z.number(),
+  feedbackSummary: z.object({ hasFeedback: z.boolean() }),
 })
 
-export type Session = z.infer<typeof sessionSchema>
+export type SessionListItem = z.infer<typeof sessionListItemSchema>
 
-export const sessionListResponseSchema = z.object({
-  items: z.array(sessionSchema),
-  total: z.number(),
-  page: z.number(),
-  page_size: z.number(),
+// Detail endpoint — includes messages + feedback
+export const sessionDetailSchema = sessionListItemSchema.extend({
+  messages: z.array(sessionMessageSchema),
+  feedback: z.array(sessionFeedbackSchema),
 })
 
-export type SessionListResponse = z.infer<typeof sessionListResponseSchema>
+export type SessionDetail = z.infer<typeof sessionDetailSchema>

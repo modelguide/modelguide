@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Spinner } from '~/components/ui/spinner'
 import { SessionDetail } from '~/features/sessions/components/session-detail'
 import { api } from '~/lib/api'
-import type { Session } from '~/schemas/sessions'
+import type { SessionDetail as SessionDetailType } from '~/schemas/sessions'
 
 export const Route = createFileRoute('/_authenticated/sessions/$id')({
   component: SessionDetailPage,
@@ -19,7 +19,7 @@ function SessionDetailPage() {
     error,
   } = useQuery({
     queryKey: ['sessions', id],
-    queryFn: () => api.get(`sessions/${id}`).json<Session>(),
+    queryFn: () => api.get(`sessions/${id}`).json<SessionDetailType>(),
   })
 
   return (

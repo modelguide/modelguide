@@ -76,16 +76,16 @@ export function AgentsTable({ agents, isLoading, isAdmin, onDelete }: AgentsTabl
                 ) : null}
               </td>
               <td className="px-4 py-3">
-                <Badge variant="default">{agent.agent_type}</Badge>
+                <Badge variant="default">{agent.agentType}</Badge>
               </td>
               <td className="px-4 py-3">
-                <Badge variant={agent.is_active ? 'success' : 'default'} dot>
-                  {agent.is_active ? 'active' : 'inactive'}
+                <Badge variant={agent.isActive ? 'success' : 'default'} dot>
+                  {agent.isActive ? 'active' : 'inactive'}
                 </Badge>
               </td>
               <td className="px-4 py-3">
                 <span className="text-sm text-fg-secondary">
-                  {formatDate(agent.created_at, { format: 'date' })}
+                  {formatDate(agent.createdAt, { format: 'date' })}
                 </span>
               </td>
               {isAdmin ? (

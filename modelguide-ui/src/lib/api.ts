@@ -1,4 +1,5 @@
 import ky from 'ky'
+import { getApiBaseUrl } from '~/lib/api-base'
 import { useAuthStore } from '~/stores/auth'
 
 let refreshPromise: Promise<boolean> | null = null
@@ -26,7 +27,7 @@ async function getValidToken(): Promise<string | null> {
 }
 
 export const api = ky.create({
-  prefixUrl: '/api',
+  prefixUrl: getApiBaseUrl(),
   credentials: 'include',
   hooks: {
     beforeRequest: [

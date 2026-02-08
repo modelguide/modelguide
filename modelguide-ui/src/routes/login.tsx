@@ -40,31 +40,24 @@ function LoginPage() {
           {/* Form */}
           <LoginForm redirectTo={redirectTo} />
 
-          {/* Forgot Password */}
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              className="text-sm text-fg-muted hover:text-fg-secondary transition-colors"
-            >
-              Forgot your password?
-            </button>
-          </div>
-
-          {/* Demo Credentials */}
+          {/* Dev Credentials */}
           <div className="mt-8 rounded-xl border border-fg-subtle/20 bg-bg-elevated p-4">
             <p className="mb-3 font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-              Demo Credentials
+              Dev Accounts (seed data)
             </p>
             <div className="space-y-2 font-mono text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-fg-primary">admin@modelguide.ai</span>
-                <span className="text-fg-muted">admin123</span>
+                <span className="text-fg-primary">admin@pizza-palace.com</span>
+                <span className="text-fg-muted">admin</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-fg-primary">support@modelguide.ai</span>
-                <span className="text-fg-muted">support123</span>
+                <span className="text-fg-primary">support@pizza-palace.com</span>
+                <span className="text-fg-muted">support</span>
               </div>
             </div>
+            <p className="mt-3 text-xs text-fg-muted">
+              Magic link token prints to the API server console
+            </p>
           </div>
         </div>
       </div>

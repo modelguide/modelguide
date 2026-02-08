@@ -1,14 +1,12 @@
 import { AlertTriangle } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
-import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { RatingBadge } from '~/components/ui/rating-badge'
-import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Tooltip } from '~/components/ui/tooltip'
 import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
-import type { Session, SessionStatus } from '~/schemas/sessions'
+import type { SessionDetail as SessionDetailType, SessionStatus } from '~/schemas/sessions'
 import { Transcript } from './transcript'
 
 const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated' | 'abandoned'> = {
@@ -19,24 +17,23 @@ const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated'
 }
 
 export interface SessionDetailProps {
-  session: Session
+  session: SessionDetailType
 }
 
 export function SessionDetail({ session }: SessionDetailProps) {
-  const [showRatingDialog, setShowRatingDialog] = useState(false)
-  const supportFeedback = session.feedback?.find((f) => f.feedback_source === 'support')
-  const customerFeedback = session.feedback?.find((f) => f.feedback_source === 'customer')
+  const supportFeedback = session.feedback?.find((f) => f.feedbackSource === 'support')
+  const customerFeedback = session.feedback?.find((f) => f.feedbackSource === 'customer')
 
   return (
     <div className="space-y-6">
       {/* Escalation Banner */}
-      {session.status === 'escalated' && session.escalation_ref && (
+      {session.status === 'escalated' && session.escalationRef && (
         <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning-muted p-4">
           <AlertTriangle className="h-5 w-5 text-warning" />
           <div>
             <p className="text-sm font-semibold text-warning">Session Escalated</p>
             <p className="mt-0.5 text-xs text-fg-secondary">
-              Reference: <span className="font-mono">{session.escalation_ref}</span>
+              Reference: <span className="font-mono">{session.escalationRef}</span>
             </p>
           </div>
         </div>
@@ -50,15 +47,15 @@ export function SessionDetail({ session }: SessionDetailProps) {
               <Tooltip
                 content={
                   <div className="text-center">
-                    <div>{formatDate(session.started_at, { format: 'date' })}</div>
+                    <div>{formatDate(session.startedAt, { format: 'date' })}</div>
                     <div className="text-fg-muted">
-                      {formatDate(session.started_at, { format: 'time' })}
+                      {formatDate(session.startedAt, { format: 'time' })}
                     </div>
                   </div>
                 }
               >
                 <span className="cursor-default text-sm text-fg-primary">
-                  {formatDate(session.started_at, { format: 'relative' })}
+                  {formatDate(session.startedAt, { format: 'relative' })}
                 </span>
               </Tooltip>
             </InfoItem>
@@ -69,13 +66,13 @@ export function SessionDetail({ session }: SessionDetailProps) {
 
             <InfoItem label="Channel">
               <div className="flex items-center gap-2 text-fg-primary">
-                {channelConfig[session.channel_type].icon}
-                <span className="text-sm">{channelConfig[session.channel_type].label}</span>
+                {channelConfig[session.channelType].icon}
+                <span className="text-sm">{channelConfig[session.channelType].label}</span>
               </div>
             </InfoItem>
 
             <InfoItem label="User">
-              <span className="text-sm text-fg-primary">{session.user_identifier}</span>
+              <span className="text-sm text-fg-primary">{session.userIdentifier}</span>
             </InfoItem>
 
             <InfoItem label="Status">
@@ -84,7 +81,7 @@ export function SessionDetail({ session }: SessionDetailProps) {
 
             <InfoItem label="Duration">
               <span className="text-sm text-fg-primary">
-                {session.duration_seconds ? formatDuration(session.duration_seconds) : 'Ongoing'}
+                {session.durationSeconds ? formatDuration(session.durationSeconds) : 'Ongoing'}
               </span>
             </InfoItem>
 
@@ -93,21 +90,14 @@ export function SessionDetail({ session }: SessionDetailProps) {
             </InfoItem>
 
             <InfoItem label="Expert Rating">
-              <div className="flex items-center gap-2">
-                <RatingBadge rating={supportFeedback?.rating} size="sm" />
-                {!supportFeedback && (
-                  <Button variant="secondary" size="sm" onClick={() => setShowRatingDialog(true)}>
-                    Rate
-                  </Button>
-                )}
-              </div>
+              <RatingBadge rating={supportFeedback?.rating} size="sm" />
             </InfoItem>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-fg-subtle/10 pt-4 text-xs text-fg-muted">
-            <span>Started: {formatDate(session.started_at)}</span>
-            {session.ended_at && <span>Ended: {formatDate(session.ended_at)}</span>}
-            <span>External ID: {session.external_id}</span>
+            <span>Started: {formatDate(session.startedAt)}</span>
+            {session.endedAt && <span>Ended: {formatDate(session.endedAt)}</span>}
+            <span>External ID: {session.externalId}</span>
           </div>
         </CardContent>
       </Card>
@@ -140,7 +130,7 @@ export function SessionDetail({ session }: SessionDetailProps) {
                     <RatingBadge rating={fb.rating} size="xs" />
                     <div>
                       <p className="text-xs font-medium text-fg-muted capitalize">
-                        {fb.feedback_source === 'customer' ? 'User' : 'Expert'}
+                        {fb.feedbackSource === 'customer' ? 'User' : 'Expert'}
                       </p>
                       <p className="mt-1 text-sm text-fg-primary">{fb.comment}</p>
                     </div>
@@ -149,14 +139,6 @@ export function SessionDetail({ session }: SessionDetailProps) {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {showRatingDialog && (
-        <RatingDialog
-          sessionId={session.id}
-          open={showRatingDialog}
-          onClose={() => setShowRatingDialog(false)}
-        />
       )}
     </div>
   )

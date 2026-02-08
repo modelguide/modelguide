@@ -1,5 +1,6 @@
 import { Key, MoreVertical, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Spinner } from '~/components/ui/spinner'
 import { formatDate } from '~/lib/utils'
@@ -10,6 +11,12 @@ interface SecretsTableProps {
   isLoading: boolean
   isAdmin: boolean
   onDelete: (secret: Secret) => void
+}
+
+const secretTypeLabels: Record<string, string> = {
+  api_key: 'API Key',
+  oauth_token: 'OAuth Token',
+  credentials: 'Credentials',
 }
 
 export function SecretsTable({ secrets, isLoading, isAdmin, onDelete }: SecretsTableProps) {
@@ -40,6 +47,9 @@ export function SecretsTable({ secrets, isLoading, isAdmin, onDelete }: SecretsT
           <tr className="border-b border-fg-subtle/20 bg-bg-subtle/50">
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
               Name
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Type
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
               Created
@@ -94,10 +104,13 @@ function SecretRow({ secret, isAdmin, onDelete, style }: SecretRowProps) {
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className="text-xs text-fg-secondary">{formatDate(secret.created_at)}</span>
+        <Badge variant="default">{secretTypeLabels[secret.secretType] ?? secret.secretType}</Badge>
       </td>
       <td className="px-4 py-3">
-        <span className="text-xs text-fg-secondary">{formatDate(secret.updated_at)}</span>
+        <span className="text-xs text-fg-secondary">{formatDate(secret.createdAt)}</span>
+      </td>
+      <td className="px-4 py-3">
+        <span className="text-xs text-fg-secondary">{formatDate(secret.updatedAt)}</span>
       </td>
       {isAdmin ? (
         <td className="px-4 py-3 text-right">

@@ -11,11 +11,11 @@ export function TranscriptMessage({ message }: TranscriptMessageProps) {
   if (message.role === 'tool') {
     return (
       <ToolCallBlock
-        toolName={message.tool_name || 'unknown'}
-        input={message.tool_input || {}}
-        output={message.tool_output || {}}
+        toolName={message.toolName || 'unknown'}
+        input={message.toolInput || {}}
+        output={message.toolOutput || {}}
         status={message.status || 'success'}
-        latencyMs={message.latency_ms || 0}
+        latencyMs={message.latencyMs || 0}
       />
     )
   }

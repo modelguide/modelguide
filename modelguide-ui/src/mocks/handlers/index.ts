@@ -1,17 +1,5 @@
-import { agentHandlers } from './agents'
+// Temporary MSW handlers — kept until backend endpoints are implemented
+// Analytics: deferred to follow-up PR
 import { analyticsHandlers } from './analytics'
-import { authHandlers } from './auth'
-import { connectorHandlers } from './connectors'
-import { secretHandlers } from './secrets'
-import { sessionHandlers } from './sessions'
-import { userHandlers } from './users'
 
-export const handlers = [
-  ...authHandlers,
-  ...analyticsHandlers,
-  ...sessionHandlers,
-  ...agentHandlers,
-  ...connectorHandlers,
-  ...secretHandlers,
-  ...userHandlers,
-]
+export const handlers = [...analyticsHandlers]

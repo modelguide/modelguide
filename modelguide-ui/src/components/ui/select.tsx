@@ -25,7 +25,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
               'flex h-10 w-full appearance-none rounded-lg border border-fg-subtle/20 bg-bg-subtle px-3 py-2 pr-10 text-sm text-fg-primary',
               'transition-colors duration-100 ease-out',
               'hover:border-fg-subtle',
-              'focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500',
+              'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500',
               'disabled:cursor-not-allowed disabled:opacity-50',
               error && 'border-error focus:border-error focus:ring-error',
               className,

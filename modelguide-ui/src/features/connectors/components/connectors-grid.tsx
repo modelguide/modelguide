@@ -1,13 +1,14 @@
 import { Spinner } from '~/components/ui/spinner'
-import type { Connector } from '~/schemas/connectors'
+import type { CatalogEntry, Connector } from '~/schemas/connectors'
 import { ConnectorCard } from './connector-card'
 
 interface ConnectorsGridProps {
   connectors: Connector[]
+  catalogMap?: Map<string, CatalogEntry>
   isLoading: boolean
 }
 
-export function ConnectorsGrid({ connectors, isLoading }: ConnectorsGridProps) {
+export function ConnectorsGrid({ connectors, catalogMap, isLoading }: ConnectorsGridProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -17,11 +18,7 @@ export function ConnectorsGrid({ connectors, isLoading }: ConnectorsGridProps) {
   }
 
   if (connectors.length === 0) {
-    return (
-      <div className="rounded-lg border border-fg-subtle/20 bg-bg-elevated p-12 text-center">
-        <p className="font-mono text-sm text-fg-secondary">No connectors available</p>
-      </div>
-    )
+    return null
   }
 
   return (
@@ -30,6 +27,7 @@ export function ConnectorsGrid({ connectors, isLoading }: ConnectorsGridProps) {
         <ConnectorCard
           key={connector.id}
           connector={connector}
+          catalogEntry={catalogMap?.get(connector.connectorCatalogId)}
           style={{ animationDelay: `${index * 50}ms` }}
         />
       ))}
