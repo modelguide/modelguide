@@ -56,7 +56,14 @@ export async function sendMagicLink(
   link: string,
   userName?: string,
 ): Promise<void> {
-  // TODO: integrate with email service (SendGrid, SES, etc.) for production
+  if (env.NODE_ENV === "production") {
+    // TODO: integrate with email service (SendGrid, SES, etc.)
+    console.warn(
+      `[magic-link] Email delivery not configured. Link generated for ${email} but NOT sent.`,
+    );
+    return;
+  }
+
   console.log("\n========================================");
   console.log("MAGIC LINK LOGIN");
   console.log("========================================");
