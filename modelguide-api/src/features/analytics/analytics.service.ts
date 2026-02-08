@@ -1,18 +1,34 @@
 /**
  * Analytics service - aggregation queries for sessions and feedback
+ *
+ * Note: sessionFeedback has no RLS. All feedback queries MUST join through
+ * the RLS-protected sessions table to ensure tenant isolation — never query
+ * sessionFeedback directly inside forOrg.
  */
 
 import { forOrg } from "@db/rls";
 import { sessionFeedback, sessions } from "@db/schema";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 type ChannelType = (typeof sessions.channelType.enumValues)[number];
+
+const VALID_GRANULARITIES = ["hour", "day", "week", "month"] as const;
+export type Granularity = (typeof VALID_GRANULARITIES)[number];
+
+const VALID_METRICS = [
+  "sessions",
+  "csat",
+  "resolution_rate",
+  "escalation_rate",
+  "duration",
+] as const;
+export type TrendMetric = (typeof VALID_METRICS)[number];
 
 export interface AnalyticsFilters {
   agentId?: string;
   channelType?: ChannelType;
-  fromDate: string;
-  toDate: string;
+  fromDate: Date;
+  toDate: Date;
 }
 
 export interface SummaryResult {
@@ -60,8 +76,8 @@ function roundTo(value: number, decimals: number): number {
 
 function buildSessionFilters(filters: AnalyticsFilters) {
   const conditions = [
-    gte(sessions.startedAt, new Date(filters.fromDate)),
-    lte(sessions.startedAt, new Date(filters.toDate)),
+    gte(sessions.startedAt, filters.fromDate),
+    lt(sessions.startedAt, filters.toDate),
   ];
 
   if (filters.agentId) {
@@ -81,43 +97,49 @@ export async function getSummary(
   return forOrg(orgId, async (tx) => {
     const where = buildSessionFilters(filters);
 
-    // Single aggregation query for session metrics
-    const [row] = await tx
-      .select({
-        total: sql<number>`count(*)::int`,
-        active: sql<number>`count(*) filter (where ${sessions.status} = 'active')::int`,
-        completed: sql<number>`count(*) filter (where ${sessions.status} = 'completed')::int`,
-        escalated: sql<number>`count(*) filter (where ${sessions.status} = 'escalated')::int`,
-        abandoned: sql<number>`count(*) filter (where ${sessions.status} = 'abandoned')::int`,
-        voice: sql<number>`count(*) filter (where ${sessions.channelType} = 'voice')::int`,
-        web: sql<number>`count(*) filter (where ${sessions.channelType} = 'web')::int`,
-        api: sql<number>`count(*) filter (where ${sessions.channelType} = 'api')::int`,
-        slack: sql<number>`count(*) filter (where ${sessions.channelType} = 'slack')::int`,
-        widget: sql<number>`count(*) filter (where ${sessions.channelType} = 'widget')::int`,
-        sms: sql<number>`count(*) filter (where ${sessions.channelType} = 'sms')::int`,
-        whatsapp: sql<number>`count(*) filter (where ${sessions.channelType} = 'whatsapp')::int`,
-        email: sql<number>`count(*) filter (where ${sessions.channelType} = 'email')::int`,
-        avgDuration: sql<number | null>`avg(extract(epoch from (${sessions.endedAt} - ${sessions.startedAt}))) filter (where ${sessions.endedAt} is not null)`,
-      })
-      .from(sessions)
-      .where(where);
+    const [
+      [row],
+      // Feedback aggregation joined through RLS-protected sessions table
+      [feedbackRow],
+    ] = await Promise.all([
+      // Session metrics aggregation
+      tx
+        .select({
+          total: sql<number>`count(*)::int`,
+          active: sql<number>`count(*) filter (where ${sessions.status} = 'active')::int`,
+          completed: sql<number>`count(*) filter (where ${sessions.status} = 'completed')::int`,
+          escalated: sql<number>`count(*) filter (where ${sessions.status} = 'escalated')::int`,
+          abandoned: sql<number>`count(*) filter (where ${sessions.status} = 'abandoned')::int`,
+          voice: sql<number>`count(*) filter (where ${sessions.channelType} = 'voice')::int`,
+          web: sql<number>`count(*) filter (where ${sessions.channelType} = 'web')::int`,
+          api: sql<number>`count(*) filter (where ${sessions.channelType} = 'api')::int`,
+          slack: sql<number>`count(*) filter (where ${sessions.channelType} = 'slack')::int`,
+          widget: sql<number>`count(*) filter (where ${sessions.channelType} = 'widget')::int`,
+          sms: sql<number>`count(*) filter (where ${sessions.channelType} = 'sms')::int`,
+          whatsapp: sql<number>`count(*) filter (where ${sessions.channelType} = 'whatsapp')::int`,
+          email: sql<number>`count(*) filter (where ${sessions.channelType} = 'email')::int`,
+          avgDuration: sql<number | null>`avg(extract(epoch from (${sessions.endedAt} - ${sessions.startedAt}))) filter (where ${sessions.endedAt} is not null)`,
+        })
+        .from(sessions)
+        .where(where),
+      tx
+        .select({
+          csatScore: sql<number | null>`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'customer')`,
+          supportScore: sql<number | null>`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'support')`,
+          customerCount: sql<number>`count(*) filter (where ${sessionFeedback.feedbackSource} = 'customer')::int`,
+          supportCount: sql<number>`count(*) filter (where ${sessionFeedback.feedbackSource} = 'support')::int`,
+        })
+        .from(sessionFeedback)
+        .innerJoin(sessions, eq(sessionFeedback.sessionId, sessions.id))
+        .where(where),
+    ]);
 
     const total = row.total;
-
-    // Feedback aggregation via subquery joined to sessions
-    const [feedbackRow] = await tx
-      .select({
-        csatScore: sql<number | null>`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'customer')`,
-        supportScore: sql<number | null>`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'support')`,
-        customerCount: sql<number>`count(*) filter (where ${sessionFeedback.feedbackSource} = 'customer')::int`,
-        supportCount: sql<number>`count(*) filter (where ${sessionFeedback.feedbackSource} = 'support')::int`,
-      })
-      .from(sessionFeedback)
-      .innerJoin(sessions, eq(sessionFeedback.sessionId, sessions.id))
-      .where(where);
+    const fromStr = filters.fromDate.toISOString().split("T")[0];
+    const toStr = filters.toDate.toISOString().split("T")[0];
 
     return {
-      period: { from: filters.fromDate, to: filters.toDate },
+      period: { from: fromStr, to: toStr },
       total_sessions: total,
       sessions_by_status: {
         active: row.active,
@@ -135,9 +157,9 @@ export async function getSummary(
         whatsapp: row.whatsapp,
         email: row.email,
       },
-      resolution_rate: total > 0 ? row.completed / total : 0,
-      escalation_rate: total > 0 ? row.escalated / total : 0,
-      abandonment_rate: total > 0 ? row.abandoned / total : 0,
+      resolution_rate: total > 0 ? roundTo(row.completed / total, 4) : 0,
+      escalation_rate: total > 0 ? roundTo(row.escalated / total, 4) : 0,
+      abandonment_rate: total > 0 ? roundTo(row.abandoned / total, 4) : 0,
       avg_duration_seconds: row.avgDuration
         ? roundTo(Number(row.avgDuration), 2)
         : null,
@@ -157,10 +179,15 @@ export async function getSummary(
 
 export async function getTrends(
   orgId: string,
-  metric: string,
-  granularity: string,
+  metric: TrendMetric,
+  granularity: Granularity,
   filters: AnalyticsFilters,
 ): Promise<TrendsResult> {
+  // Defense-in-depth: prevent raw SQL injection if called outside the route layer
+  if (!(VALID_GRANULARITIES as readonly string[]).includes(granularity)) {
+    throw new Error(`Invalid granularity: ${granularity}`);
+  }
+
   return forOrg(orgId, async (tx) => {
     const where = buildSessionFilters(filters);
     const bucket = sql`date_trunc(${sql.raw(`'${granularity}'`)}, ${sessions.startedAt})`;
@@ -200,7 +227,6 @@ export async function getTrends(
       return { metric, granularity, data: formatTrendRows(rows, 2) };
     }
 
-    // sessions, resolution_rate, escalation_rate
     let valueExpr: ReturnType<typeof sql<number>>;
     let precision: number;
 
@@ -210,9 +236,11 @@ export async function getTrends(
     } else if (metric === "resolution_rate") {
       valueExpr = sql<number>`case when count(*) > 0 then count(*) filter (where ${sessions.status} = 'completed')::float / count(*)::float else 0 end`;
       precision = 4;
-    } else {
+    } else if (metric === "escalation_rate") {
       valueExpr = sql<number>`case when count(*) > 0 then count(*) filter (where ${sessions.status} = 'escalated')::float / count(*)::float else 0 end`;
       precision = 4;
+    } else {
+      throw new Error(`Unsupported trend metric: ${metric satisfies never}`);
     }
 
     const rows = await tx

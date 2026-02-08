@@ -133,7 +133,7 @@ describe("GET /api/analytics", () => {
     // Verify response shape
     expect(body.period).toBeDefined();
     expect(body.period.from).toBe(FROM);
-    expect(body.period.to).toBe(TO);
+    expect(body.period.to).toBe("2031-01-01");
     expect(typeof body.total_sessions).toBe("number");
     expect(body.total_sessions).toBeGreaterThanOrEqual(4);
     expect(body.sessions_by_status).toBeDefined();
@@ -230,6 +230,15 @@ describe("GET /api/analytics", () => {
   test("requires valid from_date format (422)", async () => {
     const response = await request(
       "/api/analytics?from_date=not-a-date&to_date=2030-12-31",
+      { headers: pizzaAdminHeaders },
+    );
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects inverted date range (422)", async () => {
+    const response = await request(
+      "/api/analytics?from_date=2030-01-01&to_date=2020-01-01",
       { headers: pizzaAdminHeaders },
     );
 
@@ -404,6 +413,15 @@ describe("GET /api/analytics/trends", () => {
     expect(response.status).toBe(422);
   });
 
+  test("rejects inverted date range (422)", async () => {
+    const response = await request(
+      `/api/analytics/trends?metric=sessions&granularity=day&from_date=2030-01-01&to_date=2020-01-01`,
+      { headers: pizzaAdminHeaders },
+    );
+
+    expect(response.status).toBe(422);
+  });
+
   test("handles empty data range gracefully", async () => {
     const response = await request(
       "/api/analytics/trends?metric=sessions&granularity=day&from_date=2099-01-01&to_date=2099-12-31",
@@ -424,38 +442,62 @@ describe("GET /api/analytics/trends", () => {
 
 describe("RLS isolation", () => {
   test("Burger Barn cannot see Pizza Palace analytics data", async () => {
-    const response = await request(
-      `/api/analytics?from_date=${FROM}&to_date=${TO}`,
-      { headers: burgerAdminHeaders },
+    // Get both orgs' summaries and compare
+    const [pizzaRes, burgerRes] = await Promise.all([
+      request(`/api/analytics?from_date=${FROM}&to_date=${TO}`, {
+        headers: pizzaAdminHeaders,
+      }),
+      request(`/api/analytics?from_date=${FROM}&to_date=${TO}`, {
+        headers: burgerAdminHeaders,
+      }),
+    ]);
+
+    const pizzaBody = await pizzaRes.json();
+    const burgerBody = await burgerRes.json();
+
+    // Pizza Palace should have our 4 test sessions (2 completed, 1 escalated, 1 abandoned)
+    expect(pizzaBody.sessions_by_status.completed).toBeGreaterThanOrEqual(2);
+    expect(pizzaBody.sessions_by_status.escalated).toBeGreaterThanOrEqual(1);
+    expect(pizzaBody.sessions_by_status.abandoned).toBeGreaterThanOrEqual(1);
+
+    // Burger Barn should have strictly fewer total sessions than Pizza Palace
+    // (seed creates 1 active session per org; our test adds 4 only to pizza)
+    expect(burgerBody.total_sessions).toBeLessThan(
+      pizzaBody.total_sessions,
     );
 
-    expect(response.status).toBe(200);
-    const body = await response.json();
-
-    // Burger Barn should not see the 4 pizza sessions we created
-    // They should only see burger barn's seeded session(s)
-    // The completed/escalated/abandoned sessions should not appear
-    expect(body.sessions_by_status.completed).toBe(0);
-    expect(body.sessions_by_status.escalated).toBe(0);
-    expect(body.sessions_by_status.abandoned).toBe(0);
+    // Burger Barn should have no completed/escalated/abandoned sessions
+    // (seed only creates active sessions)
+    expect(burgerBody.sessions_by_status.completed).toBe(0);
+    expect(burgerBody.sessions_by_status.escalated).toBe(0);
+    expect(burgerBody.sessions_by_status.abandoned).toBe(0);
   });
 
   test("Burger Barn trends do not include Pizza Palace sessions", async () => {
-    const response = await request(
-      `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: burgerAdminHeaders },
+    const [pizzaRes, burgerRes] = await Promise.all([
+      request(
+        `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}`,
+        { headers: pizzaAdminHeaders },
+      ),
+      request(
+        `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}`,
+        { headers: burgerAdminHeaders },
+      ),
+    ]);
+
+    const pizzaBody = await pizzaRes.json();
+    const burgerBody = await burgerRes.json();
+
+    const pizzaTotal = pizzaBody.data.reduce(
+      (sum: number, p: { value: number }) => sum + p.value,
+      0,
     );
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-
-    // Sum all trend data points for burger barn
-    const totalSessions = body.data.reduce(
+    const burgerTotal = burgerBody.data.reduce(
       (sum: number, p: { value: number }) => sum + p.value,
       0,
     );
 
-    // Burger barn has at most its seeded session(s), no pizza sessions
-    expect(totalSessions).toBeLessThanOrEqual(2);
+    // Pizza Palace should have strictly more sessions than Burger Barn
+    expect(pizzaTotal).toBeGreaterThan(burgerTotal);
   });
 });

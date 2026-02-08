@@ -2,6 +2,7 @@
  * Analytics routes
  */
 
+import { channelTypeEnum } from "@db/schema";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import {
@@ -19,30 +20,26 @@ const router = createRouter();
 // Schemas
 // ============================================================================
 
-const channelTypes = [
-  "voice",
-  "web",
-  "api",
-  "slack",
-  "widget",
-  "sms",
-  "whatsapp",
-  "email",
-] as const;
+// Derive from schema enum — single source of truth
+const channelTypes = channelTypeEnum.enumValues;
 
-const summaryQuerySchema = z.object({
-  from_date: z.string().date().openapi({ description: "Start date (ISO)" }),
-  to_date: z.string().date().openapi({ description: "End date (ISO)" }),
-  agent_id: z
-    .string()
-    .uuid()
-    .optional()
-    .openapi({ description: "Filter by agent" }),
-  channel_type: z
-    .enum(channelTypes)
-    .optional()
-    .openapi({ description: "Filter by channel type" }),
-});
+const summaryQuerySchema = z
+  .object({
+    from_date: z.string().date().openapi({ description: "Start date (ISO)" }),
+    to_date: z.string().date().openapi({ description: "End date (ISO)" }),
+    agent_id: z
+      .string()
+      .uuid()
+      .optional()
+      .openapi({ description: "Filter by agent" }),
+    channel_type: z
+      .enum(channelTypes)
+      .optional()
+      .openapi({ description: "Filter by channel type" }),
+  })
+  .refine((data) => data.from_date <= data.to_date, {
+    message: "from_date must not be after to_date",
+  });
 
 const sessionsByStatusSchema = z.object({
   active: z.number(),
@@ -91,23 +88,27 @@ const trendMetrics = [
 
 const granularities = ["hour", "day", "week", "month"] as const;
 
-const trendsQuerySchema = z.object({
-  metric: z.enum(trendMetrics).openapi({ description: "Metric to trend" }),
-  granularity: z
-    .enum(granularities)
-    .openapi({ description: "Time bucket granularity" }),
-  from_date: z.string().date().openapi({ description: "Start date (ISO)" }),
-  to_date: z.string().date().openapi({ description: "End date (ISO)" }),
-  agent_id: z
-    .string()
-    .uuid()
-    .optional()
-    .openapi({ description: "Filter by agent" }),
-  channel_type: z
-    .enum(channelTypes)
-    .optional()
-    .openapi({ description: "Filter by channel type" }),
-});
+const trendsQuerySchema = z
+  .object({
+    metric: z.enum(trendMetrics).openapi({ description: "Metric to trend" }),
+    granularity: z
+      .enum(granularities)
+      .openapi({ description: "Time bucket granularity" }),
+    from_date: z.string().date().openapi({ description: "Start date (ISO)" }),
+    to_date: z.string().date().openapi({ description: "End date (ISO)" }),
+    agent_id: z
+      .string()
+      .uuid()
+      .optional()
+      .openapi({ description: "Filter by agent" }),
+    channel_type: z
+      .enum(channelTypes)
+      .optional()
+      .openapi({ description: "Filter by channel type" }),
+  })
+  .refine((data) => data.from_date <= data.to_date, {
+    message: "from_date must not be after to_date",
+  });
 
 const trendPointSchema = z.object({
   date: z.string(),
@@ -119,6 +120,17 @@ const trendsResponseSchema = z.object({
   granularity: z.string(),
   data: z.array(trendPointSchema),
 });
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/** Convert an ISO date string to a Date representing end-of-day (start of next day). */
+function endOfDay(dateStr: string): Date {
+  const d = new Date(dateStr);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}
 
 // ============================================================================
 // Middleware
@@ -147,7 +159,7 @@ const getSummaryRoute = createRoute({
   tags: ["Analytics"],
   summary: "Get analytics summary",
   description:
-    "Returns aggregated analytics metrics for sessions and feedback within the specified date range.",
+    "Returns aggregated analytics metrics for sessions and feedback within the specified date range. Both from_date and to_date are inclusive (full-day boundaries).",
   security: [{ bearerAuth: [] }],
   request: {
     query: summaryQuerySchema,
@@ -171,8 +183,8 @@ router.openapi(getSummaryRoute, async (c) => {
     c.req.valid("query");
 
   const result = await getSummary(orgId, {
-    fromDate: from_date,
-    toDate: to_date,
+    fromDate: new Date(from_date),
+    toDate: endOfDay(to_date),
     agentId: agent_id,
     channelType: channel_type,
   });
@@ -186,7 +198,9 @@ const getTrendsRoute = createRoute({
   tags: ["Analytics"],
   summary: "Get analytics trends",
   description:
-    "Returns time-series trend data for the specified metric and granularity.",
+    "Returns time-series trend data for the specified metric and granularity. " +
+    "Only buckets containing data are returned — the client should fill gaps with zero values for charting. " +
+    "Both from_date and to_date are inclusive (full-day boundaries).",
   security: [{ bearerAuth: [] }],
   request: {
     query: trendsQuerySchema,
@@ -210,8 +224,8 @@ router.openapi(getTrendsRoute, async (c) => {
     c.req.valid("query");
 
   const result = await getTrends(orgId, metric, granularity, {
-    fromDate: from_date,
-    toDate: to_date,
+    fromDate: new Date(from_date),
+    toDate: endOfDay(to_date),
     agentId: agent_id,
     channelType: channel_type,
   });
