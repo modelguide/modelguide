@@ -1,0 +1,11 @@
+:{$PORT} {
+    @api {
+        path /api/* /docs /openapi.json /mcp
+    }
+    handle @api {
+        reverse_proxy {$API_URL}
+    }
+    handle {
+        reverse_proxy {$UI_URL}
+    }
+}

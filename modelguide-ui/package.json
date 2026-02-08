@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build && tsc --noEmit",
@@ -14,7 +17,7 @@
     "test": "vitest",
     "test:ci": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install || true"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",

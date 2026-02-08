@@ -1,0 +1,23 @@
+name: Reset & Seed Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RESET to confirm database wipe"
+        required: true
+
+jobs:
+  reset-seed:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'RESET'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: cd modelguide-api && bun install
+      - name: Reset DB, run migrations, init role, seed
+        run: bash scripts/railway-db-reset.sh
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
