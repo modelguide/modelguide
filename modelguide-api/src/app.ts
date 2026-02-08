@@ -4,6 +4,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { env } from "@/env";
 import { agentRoutes } from "@features/agents";
 import { connectorRoutes } from "@features/connectors";
+import { feedbackRoutes } from "@features/feedback";
 import { mcpHandler } from "@features/mcp";
 import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
@@ -49,6 +50,7 @@ apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
 apiRouter.route("/secrets", secretsRoutes);
 apiRouter.route("/sessions", sessionRoutes);
+apiRouter.route("/sessions", feedbackRoutes);
 apiRouter.route("/users", userRoutes);
 
 const app = createApp();
