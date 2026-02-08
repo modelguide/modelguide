@@ -1,0 +1,8 @@
+node_modules
+dist
+tests
+coverage
+.env*
+.git
+*.log
+biome.json

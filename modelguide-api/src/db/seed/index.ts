@@ -4,6 +4,7 @@
  */
 
 import { encryptSecret, generateApiKey } from "@lib/crypto";
+import { getMigrationConnectionString } from "@lib/migration-url";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -356,16 +357,30 @@ async function seedOrgData(
 
 // CLI entry point
 if (import.meta.main) {
-  const connectionString =
-    process.env.DATABASE_MIGRATION_URL || process.env.DATABASE_URL;
+  console.log("Resolving connection string...");
+  const connectionString = getMigrationConnectionString();
 
   if (!connectionString) {
-    console.error("DATABASE_MIGRATION_URL or DATABASE_URL must be set");
+    console.error(
+      "Set DATABASE_MIGRATION_URL (or base URL + DATABASE_MIGRATION_USER + DATABASE_MIGRATION_PASSWORD), or DATABASE_URL",
+    );
     process.exit(1);
   }
 
-  runSeed(connectionString).catch((error) => {
-    console.error("Seed failed:", error);
-    process.exit(1);
-  });
+  const redacted = connectionString.replace(
+    /\/\/([^:]+):([^@]+)@/,
+    "//$1:***@",
+  );
+  console.log(`Connecting to: ${redacted}`);
+
+  const start = performance.now();
+  runSeed(connectionString)
+    .then(() => {
+      const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+      console.log(`\nDone in ${elapsed}s`);
+    })
+    .catch((error) => {
+      console.error("Seed failed:", error);
+      process.exit(1);
+    });
 }

@@ -2,10 +2,24 @@
  * Cryptographic utilities for API keys, hashing, and encryption
  */
 
-import { env, getEncryptionKey } from "@/env";
+import { env } from "@/env";
 
 const API_KEY_PREFIX = "mgk_";
 const API_KEY_LENGTH = 32;
+
+/**
+ * Derives a 32-byte AES-256 key from the ENCRYPTION_KEY env var via SHA-256.
+ * Result is cached after first call.
+ */
+let _derivedKey: Uint8Array | null = null;
+
+function deriveKey(): Uint8Array {
+  if (_derivedKey) return _derivedKey;
+  const hash = new Bun.CryptoHasher("sha256");
+  hash.update(env.ENCRYPTION_KEY);
+  _derivedKey = new Uint8Array(hash.digest());
+  return _derivedKey;
+}
 
 /**
  * Result of API key generation
@@ -99,7 +113,7 @@ interface EncryptedData {
  * Encrypts a secret value using AES-256-GCM
  */
 export async function encryptSecret(value: string): Promise<string> {
-  const encryptionKey = getEncryptionKey();
+  const encryptionKey = deriveKey();
   const iv = crypto.getRandomValues(new Uint8Array(12)); // 96 bits for GCM
 
   const encoder = new TextEncoder();
@@ -135,7 +149,7 @@ export async function encryptSecret(value: string): Promise<string> {
  * Decrypts a secret value using AES-256-GCM
  */
 export async function decryptSecret(encryptedValue: string): Promise<string> {
-  const encryptionKey = getEncryptionKey();
+  const encryptionKey = deriveKey();
 
   let parsed: EncryptedData;
   try {

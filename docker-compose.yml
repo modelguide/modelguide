@@ -18,5 +18,75 @@ services:
       retries: 5
     restart: unless-stopped
 
+  migrate:
+    image: modelguide-api
+    build:
+      context: ./modelguide-api
+    container_name: modelguide-migrate
+    command: ["bun", "run", "scripts/migrate.ts"]
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://postgres:5432/modelguide
+      DATABASE_MIGRATION_USER: modelguide
+      DATABASE_MIGRATION_PASSWORD: modelguide
+      APP_DB_PASSWORD: modelguide_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: modelguide-api
+    build:
+      context: ./modelguide-api
+    container_name: modelguide-api
+    environment:
+      PORT: "3000"
+      NODE_ENV: test
+      DATABASE_URL: postgresql://modelguide_app:modelguide_app@postgres:5432/modelguide
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars-long}
+      REFRESH_JWT_SECRET: ${REFRESH_JWT_SECRET:-change-me-refresh-secret-at-least-32-chars}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-modelguide-local-dev-encryption-key-32bytes}
+      MAGIC_LINK_SECRET: ${MAGIC_LINK_SECRET:-change-me-magic-link-secret-32-chars-long}
+      APP_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./modelguide-ui
+      args:
+        VITE_API_URL: /api
+    container_name: modelguide-ui
+    environment:
+      PORT: "3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:alpine
+    container_name: modelguide-caddy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      ui:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   modelguide_postgres_data:

@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset tunnel logs
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose
 
 .DEFAULT_GOAL := help
 
@@ -128,3 +128,28 @@ tunnel: ## Start ngrok tunnel to dev server
 
 logs: ## View Docker container logs
 	docker compose logs -f postgres
+
+# =============================================================================
+# Docker (full stack)
+# =============================================================================
+
+docker-up: ## [Docker] Build and start full stack (API + UI + Postgres + Caddy)
+	docker compose up -d --build
+
+docker-down: ## [Docker] Stop all containers
+	docker compose down
+
+docker-logs: ## [Docker] View all container logs
+	docker compose logs -f
+
+docker-rebuild: ## [Docker] Rebuild and restart API + UI (skip postgres)
+	docker compose up -d --build api ui caddy
+
+docker-reset: ## [Docker] Stop containers, remove volumes, rebuild
+	docker compose down -v
+	docker compose up -d --build
+
+docker-expose: ## [Docker] Show exposed ports
+	@echo "Caddy (reverse proxy): http://localhost:8080"
+	@echo "API (direct):          http://localhost:3000"
+	@echo "PostgreSQL:            localhost:5434"

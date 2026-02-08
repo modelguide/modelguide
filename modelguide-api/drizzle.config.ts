@@ -1,4 +1,5 @@
 import { defineConfig } from "drizzle-kit";
+import { getMigrationConnectionString } from "./src/lib/migration-url";
 
 export default defineConfig({
   dialect: "postgresql",
@@ -7,6 +8,6 @@ export default defineConfig({
   dbCredentials: {
     // Use migration URL (superuser) so tables are owned by migration user
     // App uses DATABASE_URL (modelguide_app) which is subject to RLS
-    url: process.env.DATABASE_MIGRATION_URL || process.env.DATABASE_URL!,
+    url: getMigrationConnectionString() || process.env.DATABASE_URL!,
   },
 });

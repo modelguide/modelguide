@@ -1,0 +1,9 @@
+node_modules
+tests
+coverage
+dist
+.output
+.vinxi
+.git
+.env*
+*.log

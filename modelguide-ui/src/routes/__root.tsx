@@ -28,31 +28,45 @@ export const Route = createRootRoute({
   component: RootComponent,
 })
 
+const MSW_READY_TIMEOUT_MS = 2000
+
 function RootComponent() {
-  const [mocksReady, setMocksReady] = useState(false)
+  const [mocksReady, setMocksReady] = useState(!import.meta.env.DEV)
 
   useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return
+
+    let cancelled = false
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setMocksReady(true)
+    }, MSW_READY_TIMEOUT_MS)
+
     async function initMocks() {
-      if (import.meta.env.DEV && typeof window !== 'undefined') {
-        try {
-          const { worker } = await import('~/mocks/browser')
-          await worker.start({
-            onUnhandledRequest: 'bypass',
-            serviceWorker: {
-              url: '/mockServiceWorker.js',
-            },
-          })
+      try {
+        const { worker } = await import('~/mocks/browser')
+        await worker.start({
+          onUnhandledRequest: 'bypass',
+          serviceWorker: {
+            url: '/mockServiceWorker.js',
+          },
+        })
+        if (!cancelled) {
           console.log('[MSW] Mock service worker started')
-        } catch (error) {
-          console.error('[MSW] Failed to start mock service worker:', error)
+          setMocksReady(true)
         }
+      } catch (error) {
+        console.warn('[MSW] Mock service worker failed (app will use real API):', error)
+        if (!cancelled) setMocksReady(true)
       }
-      setMocksReady(true)
     }
     initMocks()
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+    }
   }, [])
 
-  if (!mocksReady && import.meta.env.DEV) {
+  if (!mocksReady) {
     return (
       <RootDocument>
         <div className="flex min-h-screen items-center justify-center bg-bg-base">

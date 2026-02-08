@@ -1,0 +1,11 @@
+:{$PORT:80} {
+	@backend path /api/* /docs /docs/* /openapi.json /mcp
+
+	handle @backend {
+		reverse_proxy http://api.railway.internal:8080
+	}
+
+	handle {
+		reverse_proxy http://ui.railway.internal:8080
+	}
+}
