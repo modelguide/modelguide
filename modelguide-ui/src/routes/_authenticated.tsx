@@ -11,10 +11,23 @@ import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated')({
   // Guard for initial navigation - runs before route renders
-  beforeLoad: async ({ location }) => {
+  beforeLoad: async ({ location, context }) => {
     const { isAuthenticated, token, refreshAccessToken } = useAuthStore.getState()
 
-    if (!isAuthenticated) {
+    // Allow access during dev autologin flow (before Zustand rehydrates)
+    // Check for dev-autologin cookie on both server and client
+    let isDevAutologin = false
+    if (typeof document !== 'undefined') {
+      // Client-side cookie check
+      isDevAutologin = document.cookie.includes('__dev-login-done=1')
+    } else if (context && 'req' in context) {
+      // Server-side cookie check (Nitro/h3)
+      const req = context.req as { headers?: { cookie?: string } }
+      const cookies = req.headers?.cookie || ''
+      isDevAutologin = cookies.includes('__dev-login-done=1')
+    }
+
+    if (!isAuthenticated && !isDevAutologin) {
       throw redirect({
         to: '/login',
         search: {

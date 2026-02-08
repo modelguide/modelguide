@@ -1,4 +1,5 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { Logo } from '~/components/layout/logo'
 import { LoginForm } from '~/features/auth/components/login-form'
 import { useAuthStore } from '~/stores/auth'
@@ -18,6 +19,16 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const { redirect: redirectTo } = Route.useSearch()
+  const { isAuthenticated } = useAuthStore()
+  const navigate = useNavigate()
+
+  // Complements beforeLoad: after SSR hydration, zustand rehydrates from
+  // localStorage and may flip isAuthenticated — redirect when that happens.
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate({ to: redirectTo || '/', replace: true })
+    }
+  }, [isAuthenticated, redirectTo, navigate])
 
   return (
     <div className="flex min-h-screen">
