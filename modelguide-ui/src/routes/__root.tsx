@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+
 import { HTTPError } from 'ky'
 import { useEffect, useState } from 'react'
 import { Toaster, toast } from 'sonner'
@@ -102,7 +102,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         {children}
         <Toaster theme="dark" position="bottom-right" richColors />
-        <TanStackRouterDevtools position="bottom-right" />
         <Scripts />
       </body>
     </html>

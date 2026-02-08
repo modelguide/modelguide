@@ -62,6 +62,16 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
       .select({
         sessionId: sessionFeedback.sessionId,
         feedbackCount: count().as("feedback_count"),
+        customerRating: sql<
+          number | null
+        >`(array_agg(${sessionFeedback.rating} order by coalesce(${sessionFeedback.updatedAt}, ${sessionFeedback.createdAt}) desc) filter (where ${sessionFeedback.feedbackSource} = 'customer'))[1]`.as(
+          "customer_rating",
+        ),
+        supportRating: sql<
+          number | null
+        >`(array_agg(${sessionFeedback.rating} order by coalesce(${sessionFeedback.updatedAt}, ${sessionFeedback.createdAt}) desc) filter (where ${sessionFeedback.feedbackSource} = 'support'))[1]`.as(
+          "support_rating",
+        ),
       })
       .from(sessionFeedback)
       .groupBy(sessionFeedback.sessionId)
@@ -88,6 +98,8 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
         feedbackCount: sql<number>`coalesce(${feedbackSq.feedbackCount}, 0)`.as(
           "fb_count",
         ),
+        customerRating: feedbackSq.customerRating,
+        supportRating: feedbackSq.supportRating,
       })
       .from(sessions)
       .leftJoin(agents, eq(sessions.agentId, agents.id))
@@ -119,7 +131,11 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
           row.session.startedAt,
           row.session.endedAt,
         ),
-        feedbackSummary: { hasFeedback: Number(row.feedbackCount) > 0 },
+        feedbackSummary: {
+          hasFeedback: Number(row.feedbackCount) > 0,
+          customerRating: row.customerRating ?? null,
+          supportRating: row.supportRating ?? null,
+        },
       })),
       pagination: buildPaginationMeta(page, pageSize, total),
     };

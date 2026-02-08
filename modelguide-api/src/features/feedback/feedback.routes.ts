@@ -17,7 +17,7 @@ import {
   formatFeedback,
   sessionIdParams,
 } from "./feedback.schemas";
-import { addFeedback, listFeedback } from "./feedback.service";
+import { addFeedback, listFeedback, updateFeedback } from "./feedback.service";
 
 const router = createRouter();
 
@@ -139,6 +139,80 @@ router.openapi(createFeedbackRoute, async (c) => {
   });
 
   return c.json(formatFeedback(feedback), 201);
+});
+
+// PATCH /:id/feedback/:feedbackId — Update feedback (User auth)
+router.patch(
+  "/:id/feedback/:feedbackId",
+  requireUser(),
+  requirePermission("feedback:update"),
+  requireOrganization(),
+);
+
+const feedbackIdParams = z.object({
+  id: z.string().uuid().openapi({ description: "Session ID" }),
+  feedbackId: z.string().uuid().openapi({ description: "Feedback ID" }),
+});
+
+const updateFeedbackSchema = z
+  .object({
+    rating: z.number().int().min(1).max(2).optional().openapi({
+      description: "Feedback rating: 1 = negative, 2 = positive",
+    }),
+    comment: z.string().max(2000).optional().openapi({
+      description: "Optional feedback comment",
+    }),
+    feedbackTags: z
+      .array(z.string().max(50))
+      .max(10)
+      .optional()
+      .openapi({ description: "Optional tags" }),
+  })
+  .refine(
+    (data) =>
+      data.rating !== undefined ||
+      data.comment !== undefined ||
+      data.feedbackTags !== undefined,
+    { message: "At least one field must be provided" },
+  );
+
+const updateFeedbackRoute = createRoute({
+  method: "patch",
+  path: "/{id}/feedback/{feedbackId}",
+  tags: ["Feedback"],
+  summary: "Update session feedback",
+  description: "Updates an existing feedback entry on a session.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: feedbackIdParams,
+    body: {
+      content: {
+        "application/json": { schema: updateFeedbackSchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Feedback updated",
+      content: {
+        "application/json": { schema: feedbackResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Feedback not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(updateFeedbackRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const user = getCurrentUser(c);
+  const { id, feedbackId } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const feedback = await updateFeedback(orgId, id, feedbackId, user.id, body);
+
+  return c.json(formatFeedback(feedback), 200);
 });
 
 export default router;

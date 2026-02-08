@@ -4,4 +4,4 @@ export {
   formatFeedback,
   sessionIdParams,
 } from "./feedback.schemas";
-export { addFeedback, listFeedback } from "./feedback.service";
+export { addFeedback, listFeedback, updateFeedback } from "./feedback.service";

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "session_feedback_source_ref_uniq" ON "session_feedback" USING btree ("session_id","feedback_source","feedback_ref");

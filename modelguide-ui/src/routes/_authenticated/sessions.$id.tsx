@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
+import { useState } from 'react'
+import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Spinner } from '~/components/ui/spinner'
 import { SessionDetail } from '~/features/sessions/components/session-detail'
 import { api } from '~/lib/api'
@@ -12,6 +14,7 @@ export const Route = createFileRoute('/_authenticated/sessions/$id')({
 
 function SessionDetailPage() {
   const { id } = Route.useParams()
+  const [ratingOpen, setRatingOpen] = useState(false)
 
   const {
     data: session,
@@ -21,6 +24,10 @@ function SessionDetailPage() {
     queryKey: ['sessions', id],
     queryFn: () => api.get(`sessions/${id}`).json<SessionDetailType>(),
   })
+
+  const supportFeedback = [...(session?.feedback ?? [])]
+    .reverse()
+    .find((f) => f.feedbackSource === 'support')
 
   return (
     <div className="space-y-6">
@@ -46,7 +53,23 @@ function SessionDetailPage() {
           <p className="text-sm text-error">Failed to load session</p>
         </div>
       ) : session ? (
-        <SessionDetail session={session} />
+        <>
+          <SessionDetail session={session} onRate={() => setRatingOpen(true)} />
+          <RatingDialog
+            sessionId={id}
+            open={ratingOpen}
+            onClose={() => setRatingOpen(false)}
+            existingFeedback={
+              supportFeedback
+                ? {
+                    id: supportFeedback.id,
+                    rating: supportFeedback.rating,
+                    comment: supportFeedback.comment,
+                  }
+                : undefined
+            }
+          />
+        </>
       ) : null}
     </div>
   )

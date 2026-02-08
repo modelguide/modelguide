@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { MessageSquare } from 'lucide-react'
 import { Badge } from '~/components/ui/badge'
+import { RatingBadge } from '~/components/ui/rating-badge'
 import { Tooltip } from '~/components/ui/tooltip'
 import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
@@ -79,20 +80,23 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
               <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Channel
               </th>
-              <th className="w-[16%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[11%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[11%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Duration
               </th>
               <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Msgs
               </th>
-              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                Feedback
+              <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                User
+              </th>
+              <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                Expert
               </th>
             </tr>
           </thead>
@@ -184,11 +188,10 @@ function SessionRow({ session, index }: SessionRowProps) {
         <span className="font-mono text-sm text-fg-secondary">{session.messageCount}</span>
       </td>
       <td className="px-4 py-3">
-        {session.feedbackSummary.hasFeedback ? (
-          <Badge variant="completed">Yes</Badge>
-        ) : (
-          <span className="text-sm text-fg-muted">{'\u2014'}</span>
-        )}
+        <RatingBadge rating={session.feedbackSummary.customerRating ?? undefined} size="xs" />
+      </td>
+      <td className="px-4 py-3">
+        <RatingBadge rating={session.feedbackSummary.supportRating ?? undefined} size="xs" />
       </td>
     </tr>
   )

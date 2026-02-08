@@ -258,7 +258,7 @@ describe("POST /api/sessions/:id/feedback", () => {
     expect(body.userIdentifier).toBe(s.pizzaSupport.email);
   });
 
-  test("multiple feedback on same session (201)", async () => {
+  test("upserts when same user+source submits again (201)", async () => {
     const res1 = await request(
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
@@ -280,7 +280,7 @@ describe("POST /api/sessions/:id/feedback", () => {
         body: JSON.stringify({
           rating: 2,
           feedbackSource: "support",
-          comment: "Second feedback",
+          comment: "Updated feedback",
         }),
       },
     );
@@ -290,7 +290,45 @@ describe("POST /api/sessions/:id/feedback", () => {
 
     const body1 = await res1.json();
     const body2 = await res2.json();
-    expect(body1.id).not.toBe(body2.id);
+    // Same row updated (upsert), not a new row
+    expect(body2.id).toBe(body1.id);
+    expect(body2.rating).toBe(2);
+    expect(body2.comment).toBe("Updated feedback");
+    expect(body2.updatedAt).toBeDefined();
+  });
+
+  test("different sources create separate entries (201)", async () => {
+    const resSupport = await request(
+      `/api/sessions/${feedbackPostSessionId}/feedback`,
+      {
+        method: "POST",
+        headers: pizzaSupportHeaders,
+        body: JSON.stringify({
+          rating: 1,
+          feedbackSource: "system",
+        }),
+      },
+    );
+
+    const resSystem = await request(
+      `/api/sessions/${feedbackPostSessionId}/feedback`,
+      {
+        method: "POST",
+        headers: pizzaAdminHeaders,
+        body: JSON.stringify({
+          rating: 2,
+          feedbackSource: "system",
+        }),
+      },
+    );
+
+    expect(resSupport.status).toBe(201);
+    expect(resSystem.status).toBe(201);
+
+    const bodySupport = await resSupport.json();
+    const bodySystem = await resSystem.json();
+    // Different feedbackRef (different users) → separate rows
+    expect(bodySupport.id).not.toBe(bodySystem.id);
   });
 
   test("rejects rating above maximum (422)", async () => {

@@ -57,6 +57,20 @@
       "when": 1770494139240,
       "tag": "0007_add-session-messages-occurred-idx",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770562486561,
+      "tag": "0008_feedback_updated_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1770563127404,
+      "tag": "0009_feedback_upsert_unique",
+      "breakpoints": true
     }
   ]
 }

@@ -606,8 +606,16 @@ export const sessionFeedback = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
   },
-  (table) => [index("session_feedback_session_idx").on(table.sessionId)],
+  (table) => [
+    index("session_feedback_session_idx").on(table.sessionId),
+    uniqueIndex("session_feedback_source_ref_uniq").on(
+      table.sessionId,
+      table.feedbackSource,
+      table.feedbackRef,
+    ),
+  ],
 );
 
 export const sessionFeedbackRelations = relations(
