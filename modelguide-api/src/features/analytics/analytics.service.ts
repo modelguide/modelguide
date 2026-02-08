@@ -9,6 +9,7 @@
 import { forOrg } from "@db/rls";
 import { sessionFeedback, sessions } from "@db/schema";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { computeSummaryScores, formatTrendRows } from "./scoring.helpers";
 
 type ChannelType = (typeof sessions.channelType.enumValues)[number];
 
@@ -74,10 +75,6 @@ export interface TrendsResult {
   metric: TrendMetric;
   granularity: Granularity;
   data: TrendPoint[];
-}
-
-function roundTo(value: number, decimals: number): number {
-  return Number(value.toFixed(decimals));
 }
 
 function buildSessionFilters(filters: AnalyticsFilters) {
@@ -180,22 +177,7 @@ export async function getSummary(
         whatsapp: row.whatsapp,
         email: row.email,
       },
-      resolution_rate: total > 0 ? roundTo(row.completed / total, 4) : 0,
-      escalation_rate: total > 0 ? roundTo(row.escalated / total, 4) : 0,
-      abandonment_rate: total > 0 ? roundTo(row.abandoned / total, 4) : 0,
-      avg_duration_seconds: row.avgDuration
-        ? roundTo(Number(row.avgDuration), 2)
-        : null,
-      csat_score: feedbackRow.csatScore
-        ? roundTo(Number(feedbackRow.csatScore), 4)
-        : null,
-      support_evaluation_score: feedbackRow.supportScore
-        ? roundTo(Number(feedbackRow.supportScore), 4)
-        : null,
-      feedback_count: {
-        customer: feedbackRow.customerCount,
-        support: feedbackRow.supportCount,
-      },
+      ...computeSummaryScores(row, feedbackRow),
     };
   });
 }
@@ -284,13 +266,3 @@ export async function getTrends(
   });
 }
 
-function formatTrendRows(
-  rows: { date: unknown; value: number }[],
-  precision: number,
-): TrendPoint[] {
-  return rows.map((r) => ({
-    date: new Date(r.date as string).toISOString(),
-    value:
-      precision > 0 ? roundTo(Number(r.value), precision) : Number(r.value),
-  }));
-}
