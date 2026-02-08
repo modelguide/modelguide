@@ -4,6 +4,7 @@
 
 import { env } from "@/env";
 import { generateMagicToken, hashMagicToken } from "./crypto";
+import { getSender } from "./magic-link-sender";
 
 /**
  * Result of generating a magic link
@@ -47,33 +48,15 @@ export function buildMagicLinkUrl(token: string): string {
 }
 
 /**
- * Send magic link to user
- * In development: logs to console
- * In production: would send email (future implementation)
+ * Send magic link to user via the configured delivery strategy
  */
 export async function sendMagicLink(
   email: string,
   link: string,
   userName?: string,
 ): Promise<void> {
-  if (env.NODE_ENV === "production") {
-    // TODO: integrate with email service (SendGrid, SES, etc.)
-    console.warn(
-      `[magic-link] Email delivery not configured. Link generated for ${email} but NOT sent.`,
-    );
-    return;
-  }
-
-  console.log("\n========================================");
-  console.log("MAGIC LINK LOGIN");
-  console.log("========================================");
-  console.log(`Email: ${email}`);
-  if (userName) {
-    console.log(`User: ${userName}`);
-  }
-  console.log(`Link: ${link}`);
-  console.log(`Expires in: ${env.MAGIC_LINK_EXPIRES_IN_MINUTES} minutes`);
-  console.log("========================================\n");
+  const sender = getSender();
+  await sender.send(email, link, userName);
 }
 
 /**

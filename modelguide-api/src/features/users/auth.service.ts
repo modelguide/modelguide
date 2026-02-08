@@ -41,7 +41,12 @@ export async function requestMagicLink(email: string): Promise<void> {
     expiresAt,
   });
 
-  await sendMagicLink(user.email, link, user.name);
+  try {
+    await sendMagicLink(user.email, link, user.name);
+  } catch (err) {
+    console.error("[magic-link] Failed to send:", err);
+    // Swallow to preserve anti-enumeration — caller always returns 200
+  }
 }
 
 /**

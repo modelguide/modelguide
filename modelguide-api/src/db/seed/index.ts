@@ -122,8 +122,8 @@ async function seedAll(db: SeedDb) {
 
   console.log("\nSeed completed successfully!");
   console.log("\nTest credentials:");
-  console.log("  Pizza Palace: admin@pizza-palace.com");
-  console.log("  Burger Barn:  admin@burger-barn.com");
+  console.log("  Pizza Palace: delivered+admin-pizza-palace@resend.dev");
+  console.log("  Burger Barn:  delivered+admin-burger-barn@resend.dev");
 }
 
 async function seedOrgData(
@@ -134,9 +134,9 @@ async function seedOrgData(
 ) {
   // 3. Create test users
   console.log("\nSeeding test users...");
-  const adminEmail = `admin@${orgSlug}.com`;
-  const supportEmail = `support@${orgSlug}.com`;
-  const inactiveEmail = `inactive@${orgSlug}.com`;
+  const adminEmail = `delivered+admin-${orgSlug}@resend.dev`;
+  const supportEmail = `delivered+support-${orgSlug}@resend.dev`;
+  const inactiveEmail = `delivered+inactive-${orgSlug}@resend.dev`;
 
   const [adminUser] = await db
     .insert(users)
