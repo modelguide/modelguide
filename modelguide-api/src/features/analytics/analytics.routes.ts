@@ -23,21 +23,26 @@ const router = createRouter();
 // Derive from schema enum — single source of truth
 const channelTypes = channelTypeEnum.enumValues;
 
+const dateRangeFields = {
+  from_date: z.string().date().openapi({ description: "Start date (ISO)" }),
+  to_date: z.string().date().openapi({ description: "End date (ISO)" }),
+  agent_id: z
+    .string()
+    .uuid()
+    .optional()
+    .openapi({ description: "Filter by agent" }),
+  channel_type: z
+    .enum(channelTypes)
+    .optional()
+    .openapi({ description: "Filter by channel type" }),
+};
+
+const dateOrderRefinement = (data: { from_date: string; to_date: string }) =>
+  data.from_date <= data.to_date;
+
 const summaryQuerySchema = z
-  .object({
-    from_date: z.string().date().openapi({ description: "Start date (ISO)" }),
-    to_date: z.string().date().openapi({ description: "End date (ISO)" }),
-    agent_id: z
-      .string()
-      .uuid()
-      .optional()
-      .openapi({ description: "Filter by agent" }),
-    channel_type: z
-      .enum(channelTypes)
-      .optional()
-      .openapi({ description: "Filter by channel type" }),
-  })
-  .refine((data) => data.from_date <= data.to_date, {
+  .object(dateRangeFields)
+  .refine(dateOrderRefinement, {
     message: "from_date must not be after to_date",
   });
 
@@ -94,19 +99,9 @@ const trendsQuerySchema = z
     granularity: z
       .enum(granularities)
       .openapi({ description: "Time bucket granularity" }),
-    from_date: z.string().date().openapi({ description: "Start date (ISO)" }),
-    to_date: z.string().date().openapi({ description: "End date (ISO)" }),
-    agent_id: z
-      .string()
-      .uuid()
-      .optional()
-      .openapi({ description: "Filter by agent" }),
-    channel_type: z
-      .enum(channelTypes)
-      .optional()
-      .openapi({ description: "Filter by channel type" }),
+    ...dateRangeFields,
   })
-  .refine((data) => data.from_date <= data.to_date, {
+  .refine(dateOrderRefinement, {
     message: "from_date must not be after to_date",
   });
 
@@ -116,8 +111,8 @@ const trendPointSchema = z.object({
 });
 
 const trendsResponseSchema = z.object({
-  metric: z.string(),
-  granularity: z.string(),
+  metric: z.enum(trendMetrics),
+  granularity: z.enum(granularities),
   data: z.array(trendPointSchema),
 });
 
@@ -184,6 +179,8 @@ router.openapi(getSummaryRoute, async (c) => {
   const result = await getSummary(orgId, {
     fromDate: new Date(from_date),
     toDate: endOfDay(to_date),
+    originalFromDate: from_date,
+    originalToDate: to_date,
     agentId: agent_id,
     channelType: channel_type,
   });
