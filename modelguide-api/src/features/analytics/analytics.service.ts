@@ -6,9 +6,11 @@ import { forOrg } from "@db/rls";
 import { sessionFeedback, sessions } from "@db/schema";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 
+type ChannelType = (typeof sessions.channelType.enumValues)[number];
+
 export interface AnalyticsFilters {
   agentId?: string;
-  channelType?: string;
+  channelType?: ChannelType;
   fromDate: string;
   toDate: string;
 }
@@ -52,6 +54,10 @@ export interface TrendsResult {
   data: TrendPoint[];
 }
 
+function roundTo(value: number, decimals: number): number {
+  return Number(value.toFixed(decimals));
+}
+
 function buildSessionFilters(filters: AnalyticsFilters) {
   const conditions = [
     gte(sessions.startedAt, new Date(filters.fromDate)),
@@ -62,11 +68,7 @@ function buildSessionFilters(filters: AnalyticsFilters) {
     conditions.push(eq(sessions.agentId, filters.agentId));
   }
   if (filters.channelType) {
-    conditions.push(
-      sql`${sessions.channelType} = ${filters.channelType}` as ReturnType<
-        typeof eq
-      >,
-    );
+    conditions.push(eq(sessions.channelType, filters.channelType));
   }
 
   return and(...conditions)!;
@@ -137,13 +139,13 @@ export async function getSummary(
       escalation_rate: total > 0 ? row.escalated / total : 0,
       abandonment_rate: total > 0 ? row.abandoned / total : 0,
       avg_duration_seconds: row.avgDuration
-        ? Number(Number(row.avgDuration).toFixed(2))
+        ? roundTo(Number(row.avgDuration), 2)
         : null,
       csat_score: feedbackRow.csatScore
-        ? Number(Number(feedbackRow.csatScore).toFixed(2))
+        ? roundTo(Number(feedbackRow.csatScore), 2)
         : null,
       support_evaluation_score: feedbackRow.supportScore
-        ? Number(Number(feedbackRow.supportScore).toFixed(2))
+        ? roundTo(Number(feedbackRow.supportScore), 2)
         : null,
       feedback_count: {
         customer: feedbackRow.customerCount,
@@ -163,8 +165,6 @@ export async function getTrends(
     const where = buildSessionFilters(filters);
     const bucket = sql`date_trunc(${sql.raw(`'${granularity}'`)}, ${sessions.startedAt})`;
 
-    let data: TrendPoint[];
-
     if (metric === "csat") {
       const rows = await tx
         .select({
@@ -183,11 +183,10 @@ export async function getTrends(
         .groupBy(sql`bucket`)
         .orderBy(sql`bucket`);
 
-      data = rows.map((r) => ({
-        date: new Date(r.date as unknown as string).toISOString(),
-        value: Number(Number(r.value).toFixed(2)),
-      }));
-    } else if (metric === "duration") {
+      return { metric, granularity, data: formatTrendRows(rows, 2) };
+    }
+
+    if (metric === "duration") {
       const rows = await tx
         .select({
           date: bucket.as("bucket"),
@@ -198,38 +197,44 @@ export async function getTrends(
         .groupBy(sql`bucket`)
         .orderBy(sql`bucket`);
 
-      data = rows.map((r) => ({
-        date: new Date(r.date as unknown as string).toISOString(),
-        value: Number(Number(r.value).toFixed(2)),
-      }));
-    } else {
-      // sessions, resolution_rate, escalation_rate
-      const valueExpr =
-        metric === "sessions"
-          ? sql<number>`count(*)::int`
-          : metric === "resolution_rate"
-            ? sql<number>`case when count(*) > 0 then count(*) filter (where ${sessions.status} = 'completed')::float / count(*)::float else 0 end`
-            : sql<number>`case when count(*) > 0 then count(*) filter (where ${sessions.status} = 'escalated')::float / count(*)::float else 0 end`;
-
-      const rows = await tx
-        .select({
-          date: bucket.as("bucket"),
-          value: valueExpr,
-        })
-        .from(sessions)
-        .where(where)
-        .groupBy(sql`bucket`)
-        .orderBy(sql`bucket`);
-
-      data = rows.map((r) => ({
-        date: new Date(r.date as unknown as string).toISOString(),
-        value:
-          metric === "sessions"
-            ? Number(r.value)
-            : Number(Number(r.value).toFixed(4)),
-      }));
+      return { metric, granularity, data: formatTrendRows(rows, 2) };
     }
 
-    return { metric, granularity, data };
+    // sessions, resolution_rate, escalation_rate
+    let valueExpr: ReturnType<typeof sql<number>>;
+    let precision: number;
+
+    if (metric === "sessions") {
+      valueExpr = sql<number>`count(*)::int`;
+      precision = 0;
+    } else if (metric === "resolution_rate") {
+      valueExpr = sql<number>`case when count(*) > 0 then count(*) filter (where ${sessions.status} = 'completed')::float / count(*)::float else 0 end`;
+      precision = 4;
+    } else {
+      valueExpr = sql<number>`case when count(*) > 0 then count(*) filter (where ${sessions.status} = 'escalated')::float / count(*)::float else 0 end`;
+      precision = 4;
+    }
+
+    const rows = await tx
+      .select({
+        date: bucket.as("bucket"),
+        value: valueExpr,
+      })
+      .from(sessions)
+      .where(where)
+      .groupBy(sql`bucket`)
+      .orderBy(sql`bucket`);
+
+    return { metric, granularity, data: formatTrendRows(rows, precision) };
   });
+}
+
+function formatTrendRows(
+  rows: { date: unknown; value: number }[],
+  precision: number,
+): TrendPoint[] {
+  return rows.map((r) => ({
+    date: new Date(r.date as string).toISOString(),
+    value: precision > 0 ? roundTo(Number(r.value), precision) : Number(r.value),
+  }));
 }
