@@ -133,7 +133,7 @@ describe("GET /api/analytics", () => {
     // Verify response shape
     expect(body.period).toBeDefined();
     expect(body.period.from).toBe(FROM);
-    expect(body.period.to).toBe("2031-01-01");
+    expect(body.period.to).toBe(TO);
     expect(typeof body.total_sessions).toBe("number");
     expect(body.total_sessions).toBeGreaterThanOrEqual(4);
     expect(body.sessions_by_status).toBeDefined();
