@@ -313,6 +313,23 @@ export const Route = createFileRoute('/_authenticated')({
 - Admin: `admin@modelguide.ai` / `admin123`
 - Support: `support@modelguide.ai` / `support123`
 
+### Dev Auto-Login
+
+A Vite plugin (`modelguide-ui/plugins/dev-auto-login.ts`) that bypasses magic-link auth during local development. It connects directly to the database, creates a valid session, and signs JWTs with the same secrets as the API.
+
+**Setup:** Set `VITE_DEV_AUTO_LOGIN_EMAIL` in `modelguide-ui/.env` to a seeded user email:
+```
+VITE_DEV_AUTO_LOGIN_EMAIL=delivered+admin-pizza-palace@resend.dev
+```
+
+**How it works:**
+- `/__dev-login` endpoint generates tokens and sets localStorage auth state
+- Intercepts `POST /api/auth/refresh` to handle token refresh locally (the `__Host-` cookie requires HTTPS which dev doesn't have)
+- On first visit, redirects `/login` → `/__dev-login` → `/` automatically
+- Remove the env var to disable and use normal magic-link login
+
+**Files:** `plugins/dev-auto-login.ts` (Vite plugin), `.env` (config). Only production code change: a `useEffect` in `login.tsx` that redirects away if already authenticated after SSR hydration.
+
 ### UI Path Aliases
 
 Configured in modelguide-ui/tsconfig.json:
