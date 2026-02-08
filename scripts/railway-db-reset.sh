@@ -21,8 +21,8 @@ if [ -t 0 ] && [ "${CI:-}" != "true" ]; then
   [ "$confirm" = "yes" ] || { echo "Aborted."; exit 1; }
 fi
 
-echo "==> Dropping and recreating public schema..."
-psql "$DATABASE_MIGRATION_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+echo "==> Dropping and recreating schemas..."
+psql "$DATABASE_MIGRATION_URL" -c "DROP SCHEMA IF EXISTS drizzle CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 
 echo "==> Ensuring modelguide_app role exists..."
 psql "$DATABASE_MIGRATION_URL" -v app_password="$DATABASE_APP_PASSWORD" -f scripts/railway-db-init.sql 2>/dev/null || true
