@@ -56,25 +56,17 @@ export async function sendMagicLink(
   link: string,
   userName?: string,
 ): Promise<void> {
-  if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
-    console.log("\n========================================");
-    console.log("MAGIC LINK LOGIN");
-    console.log("========================================");
-    console.log(`Email: ${email}`);
-    if (userName) {
-      console.log(`User: ${userName}`);
-    }
-    console.log(`Link: ${link}`);
-    console.log(`Expires in: ${env.MAGIC_LINK_EXPIRES_IN_MINUTES} minutes`);
-    console.log("========================================\n");
-    return;
+  // TODO: integrate with email service (SendGrid, SES, etc.) for production
+  console.log("\n========================================");
+  console.log("MAGIC LINK LOGIN");
+  console.log("========================================");
+  console.log(`Email: ${email}`);
+  if (userName) {
+    console.log(`User: ${userName}`);
   }
-
-  // In production, integrate with email service (SendGrid, SES, etc.)
-  // For now, throw an error to indicate this needs implementation
-  throw new Error(
-    "Email sending not implemented. Configure email service for production.",
-  );
+  console.log(`Link: ${link}`);
+  console.log(`Expires in: ${env.MAGIC_LINK_EXPIRES_IN_MINUTES} minutes`);
+  console.log("========================================\n");
 }
 
 /**
