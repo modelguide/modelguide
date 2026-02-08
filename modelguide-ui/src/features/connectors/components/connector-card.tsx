@@ -17,7 +17,7 @@ export function ConnectorCard({ connector, catalogEntry, style }: ConnectorCardP
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-lg font-semibold text-brand">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/10 text-lg font-semibold text-brand-500">
                 {catalogEntry?.iconUrl ? (
                   <img
                     src={catalogEntry.iconUrl}

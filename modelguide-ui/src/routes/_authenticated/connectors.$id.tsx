@@ -7,9 +7,9 @@ import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Spinner } from '~/components/ui/spinner'
+import { Toggle } from '~/components/ui/toggle'
 import { DynamicConfigForm } from '~/features/connectors/components/dynamic-config-form'
 import { api } from '~/lib/api'
-import { cn } from '~/lib/cn'
 import type {
   CatalogEntry,
   ConfigField,
@@ -64,7 +64,7 @@ function ConnectorDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         {catalogEntry ? (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-lg font-semibold text-brand">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/10 text-lg font-semibold text-brand-500">
             {catalogEntry.iconUrl ? (
               <img src={catalogEntry.iconUrl} alt={catalogEntry.name} className="h-6 w-6 rounded" />
             ) : (
@@ -114,7 +114,11 @@ function ConnectorDetailPage() {
       ) : connector && catalogEntry ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <DetailsCard connector={connector} catalogEntry={catalogEntry} isAdmin={isAdmin} />
-          <ConfigurationCard connector={connector} catalogEntry={catalogEntry} />
+          <ConfigurationCard
+            key={connector.updatedAt}
+            connector={connector}
+            catalogEntry={catalogEntry}
+          />
           <ToolsCard tools={toolsData?.data ?? []} catalogEntry={catalogEntry} connectorId={id} />
           {isAdmin ? (
             <DangerZoneCard
@@ -126,48 +130,6 @@ function ConnectorDetailPage() {
         </div>
       ) : null}
     </div>
-  )
-}
-
-function Toggle({
-  checked,
-  onChange,
-  disabled,
-  label,
-}: {
-  checked: boolean
-  onChange: () => void
-  disabled?: boolean
-  label?: string
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      disabled={disabled}
-      className={cn('group flex items-center gap-2.5', disabled && 'opacity-60')}
-    >
-      <span
-        className={cn(
-          'relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200',
-          checked ? 'bg-success' : 'bg-fg-subtle/40',
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200',
-            checked && 'translate-x-4',
-          )}
-        />
-      </span>
-      {label ? (
-        <span className="text-sm text-fg-secondary group-hover:text-fg-primary transition-colors">
-          {label}
-        </span>
-      ) : null}
-    </button>
   )
 }
 

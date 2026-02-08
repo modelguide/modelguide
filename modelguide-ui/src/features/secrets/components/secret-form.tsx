@@ -1,7 +1,11 @@
+import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Select } from '~/components/ui/select'
+import { api } from '~/lib/api'
+import type { PaginatedResponse } from '~/lib/pagination'
+import type { Connector } from '~/schemas/connectors'
 import type { SecretCreate } from '~/schemas/secrets'
 
 interface SecretFormProps {
@@ -14,15 +18,19 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
   const [secretType, setSecretType] = useState<SecretCreate['secretType']>('api_key')
-  const [ownerType, setOwnerType] = useState('connector')
   const [ownerId, setOwnerId] = useState('')
   const [errors, setErrors] = useState<{
     name?: string
     value?: string
-    secretType?: string
-    ownerType?: string
     ownerId?: string
   }>({})
+
+  const { data: connectorsData, isLoading: connectorsLoading } = useQuery({
+    queryKey: ['connectors'],
+    queryFn: () => api.get('connectors').json<PaginatedResponse<Connector>>(),
+  })
+
+  const connectors = connectorsData?.data ?? []
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,16 +42,8 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
     if (!value.trim()) {
       newErrors.value = 'Value is required'
     }
-    if (!ownerType.trim()) {
-      newErrors.ownerType = 'Owner type is required'
-    }
-    if (!ownerId.trim()) {
-      newErrors.ownerId = 'Owner ID is required'
-    } else {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      if (!uuidRegex.test(ownerId.trim())) {
-        newErrors.ownerId = 'Owner ID must be a valid UUID'
-      }
+    if (!ownerId) {
+      newErrors.ownerId = 'Connector is required'
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -55,8 +55,8 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
       name: name.trim(),
       value: value.trim(),
       secretType,
-      ownerType: ownerType.trim(),
-      ownerId: ownerId.trim(),
+      ownerType: 'connector',
+      ownerId,
     })
   }
 
@@ -92,9 +92,7 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
         value={secretType}
         onChange={(e) => {
           setSecretType(e.target.value as SecretCreate['secretType'])
-          setErrors((prev) => ({ ...prev, secretType: undefined }))
         }}
-        error={errors.secretType}
       >
         <option value="api_key">API Key</option>
         <option value="oauth_token">OAuth Token</option>
@@ -102,28 +100,24 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
       </Select>
 
       <Select
-        label="Owner Type"
-        value={ownerType}
-        onChange={(e) => {
-          setOwnerType(e.target.value)
-          setErrors((prev) => ({ ...prev, ownerType: undefined }))
-        }}
-        error={errors.ownerType}
-      >
-        <option value="connector">Connector</option>
-      </Select>
-
-      <Input
-        label="Owner ID"
+        label="Connector"
         value={ownerId}
         onChange={(e) => {
           setOwnerId(e.target.value)
           setErrors((prev) => ({ ...prev, ownerId: undefined }))
         }}
-        placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000"
         error={errors.ownerId}
-        hint="The UUID of the connector that owns this secret"
-      />
+        disabled={connectorsLoading}
+      >
+        <option value="">
+          {connectorsLoading ? 'Loading connectors...' : 'Select a connector'}
+        </option>
+        {connectors.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name} ({c.slug})
+          </option>
+        ))}
+      </Select>
 
       <div className="flex justify-end gap-3 pt-2">
         <Button type="button" variant="secondary" onClick={onCancel}>

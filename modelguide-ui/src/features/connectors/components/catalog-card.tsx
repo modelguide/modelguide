@@ -71,7 +71,7 @@ function CompactCard({
       style={style}
     >
       <div className="flex items-center gap-3 p-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-sm font-semibold text-brand">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-sm font-semibold text-brand-500">
           {entry.iconUrl ? (
             <img src={entry.iconUrl} alt={entry.name} className="h-5 w-5 rounded" />
           ) : (
@@ -124,7 +124,7 @@ function FullCard({
     >
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-lg font-semibold text-brand">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/10 text-lg font-semibold text-brand-500">
             {entry.iconUrl ? (
               <img src={entry.iconUrl} alt={entry.name} className="h-6 w-6 rounded" />
             ) : (
