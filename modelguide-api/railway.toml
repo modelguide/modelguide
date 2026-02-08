@@ -3,6 +3,7 @@ builder = "nixpacks"
 buildCommand = "bun install && bun run build"
 
 [deploy]
+preDeployCommand = "DATABASE_URL=$DATABASE_MIGRATION_URL bunx drizzle-kit migrate"
 startCommand = "bun run dist/index.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 10
