@@ -1,0 +1,17 @@
+:{$PORT} {
+    handle /api/* {
+        reverse_proxy {$API_URL}
+    }
+    handle /docs {
+        reverse_proxy {$API_URL}
+    }
+    handle /openapi.json {
+        reverse_proxy {$API_URL}
+    }
+    handle /mcp {
+        reverse_proxy {$API_URL}
+    }
+    handle {
+        reverse_proxy {$UI_URL}
+    }
+}
