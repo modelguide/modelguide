@@ -13,30 +13,29 @@ modelguide/
 
 ## Quick Start
 
-### API Server
+### Full Stack (Docker)
 
 ```bash
-# Install dependencies
-make install
+# Build and start everything (API + UI + Postgres + Caddy)
+make docker-up
+```
 
+App runs at http://localhost:8080 (API + UI behind Caddy reverse proxy).
+
+See `make docker-expose` for all exposed ports.
+
+### Dev Mode (individual services)
+
+```bash
 # Start PostgreSQL
 make db-up
 
-# Run dev server
-make dev
+# API dev server (port 3000)
+make api-dev
+
+# UI dev server (port 3001)
+make ui-dev
 ```
-
-API runs at http://localhost:3000
-
-### Dashboard UI
-
-```bash
-cd modelguide-ui
-npm install
-npm run dev
-```
-
-Dashboard runs at http://localhost:3001
 
 ## Tech Stack
 
@@ -50,6 +49,45 @@ Dashboard runs at http://localhost:3001
 - `/docs` - API documentation
 - `/mcp` - MCP endpoint for AI agents
 
+## Deployment
+
+### Docker Compose (local / staging)
+
+```bash
+make docker-up       # Build and start full stack
+make docker-logs     # View logs
+make docker-rebuild  # Rebuild API + UI only
+make docker-down     # Stop all
+make docker-reset    # Stop, remove volumes, rebuild
+```
+
+Override secrets for non-dev environments via `.env.docker`:
+
+```bash
+JWT_SECRET=...
+REFRESH_JWT_SECRET=...
+ENCRYPTION_KEY=...
+MAGIC_LINK_SECRET=...
+```
+
+### Railway (production)
+
+Architecture: PostgreSQL + API + UI + load balancer (Caddy). The LB is the only public-facing service — it routes `/api/*` and `/mcp` to the API and everything else to the UI via Railway's internal network.
+
+Config-as-code via `railway.toml` in each service. Full setup guide: [`railway/DEPLOY.md`](railway/DEPLOY.md).
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/TEMPLATE_ID)
+
+**Deploying changes:**
+
+```bash
+railway up --service api       # deploy API changes
+railway up --service ui        # deploy UI changes
+cd railway/lb && railway up --service lb && cd ../..  # deploy LB config changes
+```
+
+Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (migrations) automatically on every deploy via `preDeployCommand` in `railway.toml`.
+
 ## Documentation
 
 - [API Specification](docs/api-spec.md)
@@ -57,3 +95,4 @@ Dashboard runs at http://localhost:3001
 - [Product Requirements](docs/PRD.md)
 - [UI Structure](docs/UI_STRUCTURE.md)
 - [UI Implementation](docs/UI_IMPLEMENTATION.md)
+- [Deployment Strategy (ADR)](docs/decisions/002-deployment-strategy.md)

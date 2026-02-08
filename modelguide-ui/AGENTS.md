@@ -37,6 +37,7 @@ src/
 ## Scripts
 
 - `npm run dev` - Start dev server
+- `npm run msw:init` - Generate MSW worker (run once after clone if dev mocking fails)
 - `npm run build` - Production build
 - `npm run lint` - Run Biome linter
 - `npm run typecheck` - TypeScript check

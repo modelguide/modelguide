@@ -22,7 +22,7 @@ const envSchema = z
     // Encryption for secrets
     ENCRYPTION_KEY: z
       .string()
-      .min(32, "ENCRYPTION_KEY must be a base64-encoded 32-byte key"),
+      .min(32, "ENCRYPTION_KEY must be at least 32 characters"),
 
     // Application URL (for magic links and CSRF origin validation).
     // Must match the UI origin, not the API listen address.
@@ -40,6 +40,25 @@ const envSchema = z
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM_EMAIL: z.string().email().optional(),
   })
+  .refine(
+    (data) => {
+      if (data.NODE_ENV !== "production") return true;
+      const defaults = ["change-me", "modelguide-local-dev"];
+      const secrets = [
+        data.JWT_SECRET,
+        data.REFRESH_JWT_SECRET,
+        data.ENCRYPTION_KEY,
+        data.MAGIC_LINK_SECRET,
+      ];
+      return secrets.every(
+        (s) => !defaults.some((d) => s.toLowerCase().startsWith(d)),
+      );
+    },
+    {
+      message:
+        "Default/placeholder secrets detected — set real secrets for production",
+    },
+  )
   .refine(
     (data) =>
       data.MAGIC_LINK_STRATEGY !== "resend" || data.RESEND_API_KEY != null,
@@ -74,14 +93,3 @@ function validateEnv(): Env {
 }
 
 export const env = validateEnv();
-
-/**
- * Get the encryption key as a Buffer (32 bytes for AES-256)
- */
-export function getEncryptionKey(): Uint8Array {
-  const key = Buffer.from(env.ENCRYPTION_KEY, "base64");
-  if (key.length !== 32) {
-    throw new Error("ENCRYPTION_KEY must decode to exactly 32 bytes");
-  }
-  return new Uint8Array(key);
-}

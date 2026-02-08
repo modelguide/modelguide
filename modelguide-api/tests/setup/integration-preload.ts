@@ -50,29 +50,34 @@ const port = container.getMappedPort(5432);
 
 // App connects as modelguide_app (subject to RLS)
 const appUrl = `postgresql://modelguide_app:modelguide_app@${host}:${port}/${PG_DB}`;
-// Migrations connect as superuser modelguide (owns tables)
+// Migrations connect as superuser (owns tables)
 const migrationUrl = `postgresql://${PG_USER}:${PG_PASSWORD}@${host}:${port}/${PG_DB}`;
 
 // Set env vars BEFORE any test module loads (which triggers env.ts validation)
 process.env.DATABASE_URL = appUrl;
 process.env.DATABASE_MIGRATION_URL = migrationUrl;
+process.env.DATABASE_MIGRATION_USER = PG_USER;
+process.env.DATABASE_MIGRATION_PASSWORD = PG_PASSWORD;
+process.env.APP_DB_PASSWORD = "modelguide_app";
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-jwt-secret-that-is-at-least-32-characters-long";
 process.env.REFRESH_JWT_SECRET =
   "test-refresh-jwt-secret-at-least-32-chars-long";
-process.env.ENCRYPTION_KEY = Buffer.from(
-  "0123456789abcdef0123456789abcdef",
-).toString("base64");
+process.env.ENCRYPTION_KEY = "test-encryption-key-at-least-32-characters-long";
 process.env.APP_URL = "http://localhost:3000";
 process.env.MAGIC_LINK_SECRET =
   "test-magic-link-secret-that-is-at-least-32-characters-long";
 
 // Run Drizzle migrations as superuser
+const { getMigrationConnectionString } = await import(
+  "../../src/lib/migration-url"
+);
 const { drizzle } = await import("drizzle-orm/postgres-js");
 const { migrate } = await import("drizzle-orm/postgres-js/migrator");
 const postgres = (await import("postgres")).default;
 
-const migrationClient = postgres(migrationUrl, { max: 1 });
+const resolvedMigrationUrl = getMigrationConnectionString();
+const migrationClient = postgres(resolvedMigrationUrl, { max: 1 });
 const migrationDb = drizzle(migrationClient);
 
 const migrationsFolder = path.resolve(import.meta.dir, "..", "..", "drizzle");
@@ -82,7 +87,7 @@ await migrationClient.end();
 
 // Run seed as superuser (creates orgs, users, connectors, agents, etc.)
 const { runSeed } = await import("../../src/db/seed/index");
-await runSeed(migrationUrl);
+await runSeed(resolvedMigrationUrl);
 
 console.log(
   `[integration-preload] PostgreSQL container ready at ${host}:${port}`,
