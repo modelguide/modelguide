@@ -179,8 +179,7 @@ const getSummaryRoute = createRoute({
 
 router.openapi(getSummaryRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const { from_date, to_date, agent_id, channel_type } =
-    c.req.valid("query");
+  const { from_date, to_date, agent_id, channel_type } = c.req.valid("query");
 
   const result = await getSummary(orgId, {
     fromDate: new Date(from_date),

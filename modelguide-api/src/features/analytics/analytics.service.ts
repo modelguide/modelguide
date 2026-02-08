@@ -118,14 +118,20 @@ export async function getSummary(
           sms: sql<number>`count(*) filter (where ${sessions.channelType} = 'sms')::int`,
           whatsapp: sql<number>`count(*) filter (where ${sessions.channelType} = 'whatsapp')::int`,
           email: sql<number>`count(*) filter (where ${sessions.channelType} = 'email')::int`,
-          avgDuration: sql<number | null>`avg(extract(epoch from (${sessions.endedAt} - ${sessions.startedAt}))) filter (where ${sessions.endedAt} is not null)`,
+          avgDuration: sql<
+            number | null
+          >`avg(extract(epoch from (${sessions.endedAt} - ${sessions.startedAt}))) filter (where ${sessions.endedAt} is not null)`,
         })
         .from(sessions)
         .where(where),
       tx
         .select({
-          csatScore: sql<number | null>`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'customer')`,
-          supportScore: sql<number | null>`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'support')`,
+          csatScore: sql<
+            number | null
+          >`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'customer')`,
+          supportScore: sql<
+            number | null
+          >`avg(${sessionFeedback.rating}) filter (where ${sessionFeedback.feedbackSource} = 'support')`,
           customerCount: sql<number>`count(*) filter (where ${sessionFeedback.feedbackSource} = 'customer')::int`,
           supportCount: sql<number>`count(*) filter (where ${sessionFeedback.feedbackSource} = 'support')::int`,
         })
@@ -263,6 +269,7 @@ function formatTrendRows(
 ): TrendPoint[] {
   return rows.map((r) => ({
     date: new Date(r.date as string).toISOString(),
-    value: precision > 0 ? roundTo(Number(r.value), precision) : Number(r.value),
+    value:
+      precision > 0 ? roundTo(Number(r.value), precision) : Number(r.value),
   }));
 }

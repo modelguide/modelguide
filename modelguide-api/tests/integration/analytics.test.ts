@@ -415,7 +415,7 @@ describe("GET /api/analytics/trends", () => {
 
   test("rejects inverted date range (422)", async () => {
     const response = await request(
-      `/api/analytics/trends?metric=sessions&granularity=day&from_date=2030-01-01&to_date=2020-01-01`,
+      "/api/analytics/trends?metric=sessions&granularity=day&from_date=2030-01-01&to_date=2020-01-01",
       { headers: pizzaAdminHeaders },
     );
 
@@ -462,9 +462,7 @@ describe("RLS isolation", () => {
 
     // Burger Barn should have strictly fewer total sessions than Pizza Palace
     // (seed creates 1 active session per org; our test adds 4 only to pizza)
-    expect(burgerBody.total_sessions).toBeLessThan(
-      pizzaBody.total_sessions,
-    );
+    expect(burgerBody.total_sessions).toBeLessThan(pizzaBody.total_sessions);
 
     // Burger Barn should have no completed/escalated/abandoned sessions
     // (seed only creates active sessions)
