@@ -19,12 +19,17 @@ import {
 // Mutable ref used to override env values in tests
 const mutableEnv = env as { -readonly [K in keyof Env]: Env[K] };
 
+function captureConsoleLogs(): { logs: string[]; restore: () => void } {
+  const logs: string[] = [];
+  const spy = spyOn(console, "log").mockImplementation((...args: unknown[]) =>
+    logs.push(args.join(" ")),
+  );
+  return { logs, restore: () => spy.mockRestore() };
+}
+
 describe("ConsoleSender", () => {
   test("logs magic link details to console", async () => {
-    const logs: string[] = [];
-    const spy = spyOn(console, "log").mockImplementation((...args: unknown[]) =>
-      logs.push(args.join(" ")),
-    );
+    const { logs, restore } = captureConsoleLogs();
 
     const sender = new ConsoleSender();
     await sender.send("user@example.com", "https://example.com/auth?token=abc");
@@ -35,14 +40,11 @@ describe("ConsoleSender", () => {
     ).toBe(true);
     expect(logs.some((l) => l.includes("MAGIC LINK LOGIN"))).toBe(true);
 
-    spy.mockRestore();
+    restore();
   });
 
   test("includes userName when provided", async () => {
-    const logs: string[] = [];
-    const spy = spyOn(console, "log").mockImplementation((...args: unknown[]) =>
-      logs.push(args.join(" ")),
-    );
+    const { logs, restore } = captureConsoleLogs();
 
     const sender = new ConsoleSender();
     await sender.send(
@@ -53,21 +55,18 @@ describe("ConsoleSender", () => {
 
     expect(logs.some((l) => l.includes("Alice"))).toBe(true);
 
-    spy.mockRestore();
+    restore();
   });
 
   test("omits userName line when not provided", async () => {
-    const logs: string[] = [];
-    const spy = spyOn(console, "log").mockImplementation((...args: unknown[]) =>
-      logs.push(args.join(" ")),
-    );
+    const { logs, restore } = captureConsoleLogs();
 
     const sender = new ConsoleSender();
     await sender.send("user@example.com", "https://example.com/auth?token=abc");
 
     expect(logs.some((l) => l.includes("User:"))).toBe(false);
 
-    spy.mockRestore();
+    restore();
   });
 });
 
