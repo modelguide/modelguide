@@ -293,7 +293,7 @@ describe("POST /api/sessions/:id/feedback", () => {
     expect(body1.id).not.toBe(body2.id);
   });
 
-  test("rejects invalid rating (422)", async () => {
+  test("rejects rating above maximum (422)", async () => {
     const response = await request(
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
@@ -302,6 +302,38 @@ describe("POST /api/sessions/:id/feedback", () => {
         body: JSON.stringify({
           rating: 5,
           feedbackSource: "support",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects rating below minimum (422)", async () => {
+    const response = await request(
+      `/api/sessions/${feedbackPostSessionId}/feedback`,
+      {
+        method: "POST",
+        headers: pizzaAdminHeaders,
+        body: JSON.stringify({
+          rating: 0,
+          feedbackSource: "support",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects customer feedbackSource via REST (422)", async () => {
+    const response = await request(
+      `/api/sessions/${feedbackPostSessionId}/feedback`,
+      {
+        method: "POST",
+        headers: pizzaAdminHeaders,
+        body: JSON.stringify({
+          rating: 2,
+          feedbackSource: "customer",
         }),
       },
     );

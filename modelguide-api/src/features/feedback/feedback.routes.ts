@@ -12,7 +12,11 @@ import {
   requireUser,
 } from "@lib/middleware";
 import { errorResponse } from "@lib/schemas";
-import { feedbackResponseSchema, formatFeedback } from "./feedback.schemas";
+import {
+  feedbackResponseSchema,
+  formatFeedback,
+  sessionIdParams,
+} from "./feedback.schemas";
 import { addFeedback, listFeedback } from "./feedback.service";
 
 const router = createRouter();
@@ -38,12 +42,6 @@ const createFeedbackSchema = z.object({
     .max(10)
     .optional()
     .openapi({ description: "Optional tags" }),
-});
-
-const sessionIdParams = z.object({
-  id: z.string().uuid().openapi({
-    description: "Session ID",
-  }),
 });
 
 // ============================================================================

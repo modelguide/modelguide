@@ -6,7 +6,8 @@ import type { Session, SessionFeedback, SessionMessage } from "@db/schema";
 import {
   feedbackResponseSchema,
   formatFeedback,
-} from "@features/feedback/feedback.schemas";
+  sessionIdParams,
+} from "@features/feedback";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import {
@@ -204,12 +205,6 @@ const sessionFiltersSchema = paginationSchema.extend({
     .enum(["asc", "desc"])
     .optional()
     .openapi({ description: "Sort direction" }),
-});
-
-const sessionIdParams = z.object({
-  id: z.string().uuid().openapi({
-    description: "Session ID",
-  }),
 });
 
 // ============================================================================

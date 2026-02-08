@@ -5,6 +5,12 @@
 import type { SessionFeedback } from "@db/schema";
 import { z } from "zod";
 
+export const sessionIdParams = z.object({
+  id: z.string().uuid().openapi({
+    description: "Session ID",
+  }),
+});
+
 export const feedbackResponseSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().uuid(),

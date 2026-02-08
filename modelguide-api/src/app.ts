@@ -50,7 +50,7 @@ apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
 apiRouter.route("/secrets", secretsRoutes);
 apiRouter.route("/sessions", sessionRoutes);
-apiRouter.route("/sessions", feedbackRoutes);
+apiRouter.route("/sessions", feedbackRoutes); // sub-resource: /:id/feedback
 apiRouter.route("/users", userRoutes);
 
 const app = createApp();
