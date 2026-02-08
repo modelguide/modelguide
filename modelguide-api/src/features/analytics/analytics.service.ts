@@ -265,4 +265,3 @@ export async function getTrends(
     return { metric, granularity, data: formatTrendRows(rows, precision) };
   });
 }
-

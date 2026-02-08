@@ -25,10 +25,7 @@ function request(path: string, options?: RequestInit) {
 }
 
 /** Query analytics summary for the isolated test window */
-async function getSummary(
-  extra = "",
-  hdrs: Record<string, string> = headers,
-) {
+async function getSummary(extra = "", hdrs: Record<string, string> = headers) {
   const res = await request(
     `/api/analytics?from_date=2098-06-01&to_date=2098-06-30${extra}`,
     { headers: hdrs },
@@ -38,11 +35,7 @@ async function getSummary(
 }
 
 /** Query analytics trends for the isolated test window */
-async function getTrends(
-  metric: string,
-  granularity = "day",
-  extra = "",
-) {
+async function getTrends(metric: string, granularity = "day", extra = "") {
   const res = await request(
     `/api/analytics/trends?metric=${metric}&granularity=${granularity}&from_date=2098-06-01&to_date=2098-06-30${extra}`,
     { headers },

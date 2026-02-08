@@ -116,7 +116,7 @@ describe("normaliseScore", () => {
 
   test("respects custom decimal precision", () => {
     expect(normaliseScore(0.66667, 2)).toBe(0.67);
-    expect(normaliseScore(0.33333, 6)).toBe(0.333330);
+    expect(normaliseScore(0.33333, 6)).toBe(0.33333);
   });
 
   test("handles very small positive scores (not zero)", () => {
@@ -139,9 +139,7 @@ describe("formatTrendRows", () => {
     const rows = [{ date: "2024-06-15T00:00:00.000Z", value: 5 }];
     const result = formatTrendRows(rows, 0);
 
-    expect(result).toEqual([
-      { date: "2024-06-15T00:00:00.000Z", value: 5 },
-    ]);
+    expect(result).toEqual([{ date: "2024-06-15T00:00:00.000Z", value: 5 }]);
   });
 
   test("rounds values to specified precision", () => {
@@ -304,7 +302,14 @@ describe("computeSummaryScores", () => {
 
   test("handles 100% resolution rate", () => {
     const result = computeSummaryScores(
-      { ...baseSessionRow, total: 5, completed: 5, escalated: 0, abandoned: 0, active: 0 },
+      {
+        ...baseSessionRow,
+        total: 5,
+        completed: 5,
+        escalated: 0,
+        abandoned: 0,
+        active: 0,
+      },
       baseFeedbackRow,
     );
 
@@ -315,7 +320,14 @@ describe("computeSummaryScores", () => {
 
   test("handles 100% escalation rate", () => {
     const result = computeSummaryScores(
-      { ...baseSessionRow, total: 3, completed: 0, escalated: 3, abandoned: 0, active: 0 },
+      {
+        ...baseSessionRow,
+        total: 3,
+        completed: 0,
+        escalated: 3,
+        abandoned: 0,
+        active: 0,
+      },
       baseFeedbackRow,
     );
 
