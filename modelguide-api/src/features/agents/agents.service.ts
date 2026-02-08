@@ -110,7 +110,7 @@ export async function getAgentById(orgId: string, agentId: string) {
       throw Errors.agentNotFound(agentId);
     }
 
-    const [[activeKey], [elevenLabsSecret]] = await Promise.all([
+    const [[activeKey], [elevenLabsSecret], [webhookSecret]] = await Promise.all([
       tx
         .select({ keyPrefix: apiKeys.keyPrefix })
         .from(apiKeys)
@@ -125,12 +125,26 @@ export async function getAgentById(orgId: string, agentId: string) {
             eq(secrets.secretType, "platform_api_key"),
           ),
         ),
+      tx
+        .select({ id: secrets.id })
+        .from(secrets)
+        .where(
+          and(
+            eq(secrets.ownerType, "agent"),
+            eq(secrets.ownerId, agentId),
+            eq(secrets.secretType, "webhook_secret"),
+          ),
+        ),
     ]);
+
+    const metadata = agent.metadata as Record<string, unknown> | null;
+    const hasLegacyHmac = !!metadata?.webhook_hmac_secret;
 
     return {
       ...agent,
       keyPrefix: activeKey?.keyPrefix ?? null,
       hasElevenLabsKey: !!elevenLabsSecret,
+      hasWebhookSecret: !!webhookSecret || hasLegacyHmac,
     };
   });
 }

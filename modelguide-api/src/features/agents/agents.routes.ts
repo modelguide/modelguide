@@ -46,6 +46,7 @@ const agentResponseSchema = z.object({
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
   hasElevenLabsKey: z.boolean(),
+  hasWebhookSecret: z.boolean(),
   keyPrefix: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
@@ -156,8 +157,16 @@ const agentConnectorParams = z.object({
 // ============================================================================
 
 function formatAgent(
-  agent: Agent & { keyPrefix?: string | null; hasElevenLabsKey?: boolean },
+  agent: Agent & { keyPrefix?: string | null; hasElevenLabsKey?: boolean; hasWebhookSecret?: boolean },
 ) {
+  // Strip webhook_hmac_secret from metadata to prevent plaintext leak
+  const metadata = agent.metadata
+    ? (() => {
+        const { webhook_hmac_secret, ...rest } = agent.metadata as Record<string, unknown>;
+        return Object.keys(rest).length > 0 ? rest : undefined;
+      })()
+    : undefined;
+
   return {
     id: agent.id,
     name: agent.name,
@@ -166,8 +175,9 @@ function formatAgent(
     agentType: agent.agentType,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
-    metadata: agent.metadata ?? undefined,
+    metadata,
     hasElevenLabsKey: agent.hasElevenLabsKey ?? false,
+    hasWebhookSecret: agent.hasWebhookSecret ?? false,
     keyPrefix: agent.keyPrefix ?? null,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,

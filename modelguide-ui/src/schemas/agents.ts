@@ -15,6 +15,7 @@ export const agentSchema = z.object({
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
   hasElevenLabsKey: z.boolean(),
+  hasWebhookSecret: z.boolean().optional(),
   keyPrefix: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),

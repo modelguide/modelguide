@@ -423,8 +423,7 @@ function AgentDetailPage() {
               <div className="space-y-3">
                 {(() => {
                   const baseUrl = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:3000'
-                  const hasHmac = !!(agent.metadata as Record<string, unknown> | undefined)
-                    ?.webhook_hmac_secret
+                  const hasHmac = agent.hasWebhookSecret ?? false
                   const urls = [
                     {
                       label: 'Session Init',
