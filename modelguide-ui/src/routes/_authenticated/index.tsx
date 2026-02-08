@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowRight, Sparkles } from 'lucide-react'
+import { ArrowRight, BarChart3, Sparkles } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { PageHeader } from '~/components/ui/page-header'
 import { StatsGrid } from '~/features/dashboard/components/stats-grid'
 import { SessionsTable } from '~/features/sessions/components/sessions-table'
 import { api } from '~/lib/api'
+import { computeDateRange } from '~/lib/date-ranges'
 import type { PaginatedResponse } from '~/lib/pagination'
 import type { AnalyticsSummary } from '~/schemas/analytics'
 import type { SessionListItem } from '~/schemas/sessions'
@@ -15,9 +16,12 @@ export const Route = createFileRoute('/_authenticated/')({
 })
 
 function DashboardPage() {
+  const { from: from_date, to: to_date } = computeDateRange('last30d')
+
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ['analytics', 'summary'],
-    queryFn: () => api.get('analytics/summary').json<AnalyticsSummary>(),
+    queryKey: ['analytics', 'summary', from_date, to_date],
+    queryFn: () =>
+      api.get('analytics', { searchParams: { from_date, to_date } }).json<AnalyticsSummary>(),
   })
 
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
@@ -41,6 +45,18 @@ function DashboardPage() {
       />
 
       {/* Stats Grid */}
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-xl font-semibold tracking-tight text-fg-primary">
+          Last 30 Days
+        </h2>
+        <Link to="/analytics">
+          <Button variant="ghost" size="sm" className="group">
+            <BarChart3 className="mr-1 h-4 w-4" />
+            View insights
+            <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </Button>
+        </Link>
+      </div>
       {analyticsLoading || !analytics ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {['stat-1', 'stat-2', 'stat-3', 'stat-4'].map((key, i) => (
