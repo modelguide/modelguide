@@ -44,8 +44,16 @@ export class ResendSender implements MagicLinkSender {
   }
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function buildEmailHtml(link: string, userName?: string): string {
-  const greeting = userName ? `Hi ${userName},` : "Hi,";
+  const greeting = userName ? `Hi ${escapeHtml(userName)},` : "Hi,";
   const expiresIn = env.MAGIC_LINK_EXPIRES_IN_MINUTES;
 
   return `
@@ -60,6 +68,7 @@ function buildEmailHtml(link: string, userName?: string): string {
   `;
 }
 
+// Cached for process lifetime — env changes require a restart.
 let cachedSender: MagicLinkSender | undefined;
 
 export function getSender(): MagicLinkSender {
@@ -72,8 +81,12 @@ export function getSender(): MagicLinkSender {
         "RESEND_API_KEY is required when MAGIC_LINK_STRATEGY is 'resend'",
       );
     }
-    const from =
-      env.RESEND_FROM_EMAIL ?? `noreply@${new URL(env.APP_URL).hostname}`;
+    const from = env.RESEND_FROM_EMAIL;
+    if (!from) {
+      throw new Error(
+        "RESEND_FROM_EMAIL is required when MAGIC_LINK_STRATEGY is 'resend'",
+      );
+    }
     cachedSender = new ResendSender(apiKey, from);
   } else {
     cachedSender = new ConsoleSender();

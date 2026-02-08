@@ -112,6 +112,23 @@ describe("ResendSender", () => {
     expect(call.html).not.toContain("Hi Alice,");
   });
 
+  test("escapes HTML characters in userName", async () => {
+    const mockSend = mock(() =>
+      Promise.resolve({ data: { id: "email_123" }, error: null }),
+    );
+    const sender = createMockSender(mockSend);
+
+    await sender.send(
+      "user@example.com",
+      "https://example.com/auth?token=abc",
+      '<script>alert("xss")</script>',
+    );
+
+    const call = mockSend.mock.calls[0][0] as Record<string, unknown>;
+    expect(call.html).not.toContain("<script>");
+    expect(call.html).toContain("&lt;script&gt;");
+  });
+
   test("throws on resend API error", async () => {
     const mockSend = mock(() =>
       Promise.resolve({
@@ -130,10 +147,12 @@ describe("ResendSender", () => {
 describe("getSender", () => {
   let originalStrategy: string;
   let originalApiKey: string | undefined;
+  let originalFromEmail: string | undefined;
 
   beforeEach(() => {
     originalStrategy = env.MAGIC_LINK_STRATEGY;
     originalApiKey = env.RESEND_API_KEY;
+    originalFromEmail = env.RESEND_FROM_EMAIL;
     resetSenderCache();
   });
 
@@ -141,6 +160,7 @@ describe("getSender", () => {
     mutableEnv.MAGIC_LINK_STRATEGY =
       originalStrategy as Env["MAGIC_LINK_STRATEGY"];
     mutableEnv.RESEND_API_KEY = originalApiKey;
+    mutableEnv.RESEND_FROM_EMAIL = originalFromEmail;
     resetSenderCache();
   });
 
@@ -153,6 +173,7 @@ describe("getSender", () => {
   test("returns ResendSender when strategy is resend", () => {
     mutableEnv.MAGIC_LINK_STRATEGY = "resend";
     mutableEnv.RESEND_API_KEY = "re_test_key";
+    mutableEnv.RESEND_FROM_EMAIL = "noreply@example.com";
     const sender = getSender();
     expect(sender).toBeInstanceOf(ResendSender);
   });

@@ -48,6 +48,15 @@ const envSchema = z
         "RESEND_API_KEY is required when MAGIC_LINK_STRATEGY is 'resend'",
       path: ["RESEND_API_KEY"],
     },
+  )
+  .refine(
+    (data) =>
+      data.MAGIC_LINK_STRATEGY !== "resend" || data.RESEND_FROM_EMAIL != null,
+    {
+      message:
+        "RESEND_FROM_EMAIL is required when MAGIC_LINK_STRATEGY is 'resend'",
+      path: ["RESEND_FROM_EMAIL"],
+    },
   );
 
 export type Env = z.infer<typeof envSchema>;
@@ -57,7 +66,7 @@ function validateEnv(): Env {
 
   if (!result.success) {
     console.error("Invalid environment variables:");
-    console.error(result.error.flatten().fieldErrors);
+    console.error(result.error.issues);
     process.exit(1);
   }
 
