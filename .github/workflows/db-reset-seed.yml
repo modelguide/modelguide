@@ -21,3 +21,10 @@ jobs:
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           DATABASE_APP_PASSWORD: ${{ secrets.DATABASE_APP_PASSWORD }}
+          # Seed imports @lib/crypto which triggers env.ts Zod validation
+          DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          REFRESH_JWT_SECRET: ${{ secrets.REFRESH_JWT_SECRET }}
+          MAGIC_LINK_SECRET: ${{ secrets.MAGIC_LINK_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
