@@ -79,23 +79,29 @@ export async function getTestSeed(): Promise<TestSeed> {
       };
     };
 
-    const pizzaAdmin = await lookupUser(pizzaOrg.id, "admin@pizza-palace.com");
+    const pizzaAdmin = await lookupUser(
+      pizzaOrg.id,
+      "delivered+admin-pizza-palace@resend.dev",
+    );
     const pizzaSupport = await lookupUser(
       pizzaOrg.id,
-      "support@pizza-palace.com",
+      "delivered+support-pizza-palace@resend.dev",
     );
     const pizzaInactive = await lookupUser(
       pizzaOrg.id,
-      "inactive@pizza-palace.com",
+      "delivered+inactive-pizza-palace@resend.dev",
     );
-    const burgerAdmin = await lookupUser(burgerOrg.id, "admin@burger-barn.com");
+    const burgerAdmin = await lookupUser(
+      burgerOrg.id,
+      "delivered+admin-burger-barn@resend.dev",
+    );
     const burgerSupport = await lookupUser(
       burgerOrg.id,
-      "support@burger-barn.com",
+      "delivered+support-burger-barn@resend.dev",
     );
     const burgerInactive = await lookupUser(
       burgerOrg.id,
-      "inactive@burger-barn.com",
+      "delivered+inactive-burger-barn@resend.dev",
     );
 
     const [catalog] = await tx
