@@ -41,6 +41,8 @@ const agentSummarySchema = z.object({
 
 const feedbackSummarySchema = z.object({
   hasFeedback: z.boolean(),
+  customerRating: z.number().nullable(),
+  supportRating: z.number().nullable(),
 });
 
 const sessionResponseSchema = z.object({
@@ -216,7 +218,11 @@ function formatSession(
     agent: { id: string; name: string };
     messageCount: number;
     durationSeconds: number | null;
-    feedbackSummary: { hasFeedback: boolean };
+    feedbackSummary: {
+      hasFeedback: boolean;
+      customerRating: number | null;
+      supportRating: number | null;
+    };
   },
 ) {
   return {

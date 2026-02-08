@@ -21,10 +21,13 @@ export function RatingDialog({ sessionId, open, onClose, onSuccess }: RatingDial
   const mutation = useMutation({
     mutationFn: (data: { rating: number; comment: string }) =>
       api
-        .post(`sessions/${sessionId}/feedback`, { json: { ...data, feedback_source: 'support' } })
+        .post(`sessions/${sessionId}/feedback`, {
+          json: { ...data, feedbackSource: 'support' },
+        })
         .json(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['sessions', sessionId] })
       onSuccess?.()
       onClose()
     },
@@ -39,6 +42,7 @@ export function RatingDialog({ sessionId, open, onClose, onSuccess }: RatingDial
   const handleClose = () => {
     setRating(null)
     setComment('')
+    mutation.reset()
     onClose()
   }
 

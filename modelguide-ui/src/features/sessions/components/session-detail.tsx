@@ -18,9 +18,10 @@ const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated'
 
 export interface SessionDetailProps {
   session: SessionDetailType
+  onRate?: () => void
 }
 
-export function SessionDetail({ session }: SessionDetailProps) {
+export function SessionDetail({ session, onRate }: SessionDetailProps) {
   const supportFeedback = session.feedback?.find((f) => f.feedbackSource === 'support')
   const customerFeedback = session.feedback?.find((f) => f.feedbackSource === 'customer')
 
@@ -90,7 +91,15 @@ export function SessionDetail({ session }: SessionDetailProps) {
             </InfoItem>
 
             <InfoItem label="Expert Rating">
-              <RatingBadge rating={supportFeedback?.rating} size="sm" />
+              {supportFeedback ? (
+                <RatingBadge rating={supportFeedback.rating} size="sm" />
+              ) : onRate ? (
+                <button type="button" onClick={onRate} className="group cursor-pointer">
+                  <RatingBadge showAddButton size="sm" />
+                </button>
+              ) : (
+                <RatingBadge size="sm" />
+              )}
             </InfoItem>
           </div>
 

@@ -44,7 +44,7 @@ export const sessionFeedbackSchema = z.object({
   messageId: z.string().nullable(),
   rating: z.number().min(1).max(2),
   comment: z.string().nullable(),
-  feedbackSource: z.enum(['customer', 'support']),
+  feedbackSource: z.enum(['customer', 'support', 'system']),
   feedbackRef: z.string().nullable(),
   feedbackTags: z.array(z.string()).nullable(),
   userIdentifier: z.string().nullable(),
@@ -68,7 +68,11 @@ export const sessionListItemSchema = z.object({
   durationSeconds: z.number().nullable(),
   metadata: z.record(z.unknown()).optional(),
   messageCount: z.number(),
-  feedbackSummary: z.object({ hasFeedback: z.boolean() }),
+  feedbackSummary: z.object({
+    hasFeedback: z.boolean(),
+    customerRating: z.number().nullable(),
+    supportRating: z.number().nullable(),
+  }),
 })
 
 export type SessionListItem = z.infer<typeof sessionListItemSchema>
