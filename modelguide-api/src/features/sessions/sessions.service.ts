@@ -405,6 +405,23 @@ export async function validateActiveSession(
 // Feedback
 // ============================================================================
 
+export async function listFeedback(orgId: string, sessionId: string) {
+  return forOrg(orgId, async (tx) => {
+    const [session] = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+
+    if (!session) throw Errors.sessionNotFound(sessionId);
+
+    return tx
+      .select()
+      .from(sessionFeedback)
+      .where(eq(sessionFeedback.sessionId, sessionId))
+      .orderBy(asc(sessionFeedback.createdAt));
+  });
+}
+
 export async function addFeedback(
   orgId: string,
   sessionId: string,
@@ -412,11 +429,12 @@ export async function addFeedback(
     rating: number;
     comment?: string;
     feedbackSource: "customer" | "support" | "system";
+    feedbackRef?: string;
+    feedbackTags?: string[];
     userIdentifier?: string;
   },
 ) {
   return forOrg(orgId, async (tx) => {
-    // Verify session exists and belongs to this org
     const [session] = await tx
       .select({ id: sessions.id })
       .from(sessions)
@@ -431,6 +449,8 @@ export async function addFeedback(
         rating: data.rating,
         comment: data.comment ?? null,
         feedbackSource: data.feedbackSource,
+        feedbackRef: data.feedbackRef ?? null,
+        feedbackTags: data.feedbackTags ?? [],
         userIdentifier: data.userIdentifier ?? null,
       })
       .returning();
