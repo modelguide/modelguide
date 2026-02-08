@@ -3,6 +3,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 
 import { env } from "@/env";
 import { agentRoutes } from "@features/agents";
+import { analyticsRoutes } from "@features/analytics";
 import { connectorRoutes } from "@features/connectors";
 import { feedbackRoutes } from "@features/feedback";
 import { mcpHandler } from "@features/mcp";
@@ -45,6 +46,7 @@ apiRouter.openapi(healthRoute, (c) => {
 });
 
 apiRouter.route("/agents", agentRoutes);
+apiRouter.route("/analytics", analyticsRoutes);
 apiRouter.route("/auth", authRoutes);
 apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
