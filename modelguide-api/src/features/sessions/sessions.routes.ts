@@ -3,6 +3,11 @@
  */
 
 import type { Session, SessionFeedback, SessionMessage } from "@db/schema";
+import {
+  feedbackResponseSchema,
+  formatFeedback,
+  sessionIdParams,
+} from "@features/feedback";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import {
@@ -14,7 +19,7 @@ import {
   requireUser,
 } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
-import { errorResponseSchema } from "@lib/schemas";
+import { errorResponse } from "@lib/schemas";
 import {
   addMessage,
   createSession,
@@ -73,19 +78,6 @@ const messageResponseSchema = z.object({
   latencyMs: z.number().nullable(),
   createdAt: z.string(),
   occurredAt: z.string().nullable(),
-});
-
-const feedbackResponseSchema = z.object({
-  id: z.string().uuid(),
-  sessionId: z.string().uuid(),
-  messageId: z.string().uuid().nullable(),
-  rating: z.number(),
-  comment: z.string().nullable(),
-  feedbackSource: z.enum(["customer", "support", "system"]),
-  feedbackRef: z.string().nullable(),
-  feedbackTags: z.array(z.string()).nullable(),
-  userIdentifier: z.string().nullable(),
-  createdAt: z.string(),
 });
 
 const sessionDetailSchema = z.object({
@@ -215,22 +207,9 @@ const sessionFiltersSchema = paginationSchema.extend({
     .openapi({ description: "Sort direction" }),
 });
 
-const sessionIdParams = z.object({
-  id: z.string().uuid().openapi({
-    description: "Session ID",
-  }),
-});
-
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function errorResponse(description: string) {
-  return {
-    description,
-    content: { "application/json": { schema: errorResponseSchema } },
-  };
-}
 
 function formatSession(
   session: Session & {
@@ -305,21 +284,6 @@ function formatMessage(message: SessionMessage) {
     latencyMs: message.latencyMs,
     createdAt: message.createdAt.toISOString(),
     occurredAt: message.occurredAt?.toISOString() ?? null,
-  };
-}
-
-function formatFeedback(feedback: SessionFeedback) {
-  return {
-    id: feedback.id,
-    sessionId: feedback.sessionId,
-    messageId: feedback.messageId,
-    rating: feedback.rating,
-    comment: feedback.comment,
-    feedbackSource: feedback.feedbackSource,
-    feedbackRef: feedback.feedbackRef,
-    feedbackTags: feedback.feedbackTags,
-    userIdentifier: feedback.userIdentifier,
-    createdAt: feedback.createdAt.toISOString(),
   };
 }
 

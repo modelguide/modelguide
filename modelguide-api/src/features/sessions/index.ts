@@ -6,7 +6,6 @@ export {
   updateSession,
   addMessage,
   addMessages,
-  addFeedback,
   validateActiveSession,
 } from "./sessions.service";
 export type { MessageData } from "./sessions.service";

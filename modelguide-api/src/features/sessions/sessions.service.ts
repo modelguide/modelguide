@@ -362,13 +362,19 @@ function buildFilterConditions(filters: SessionFilters) {
   return conditions;
 }
 
+function getSortColumn(sortBy: SessionFilters["sortBy"]) {
+  switch (sortBy) {
+    case "ended_at":
+      return sessions.endedAt;
+    case "status":
+      return sessions.status;
+    default:
+      return sessions.startedAt;
+  }
+}
+
 function buildSort(filters: SessionFilters) {
-  const sortColumn =
-    filters.sortBy === "ended_at"
-      ? sessions.endedAt
-      : filters.sortBy === "status"
-        ? sessions.status
-        : sessions.startedAt;
+  const sortColumn = getSortColumn(filters.sortBy);
   const sortDir = filters.sortOrder === "asc" ? asc : desc;
   return { sortDir, sortColumn };
 }
@@ -398,43 +404,5 @@ export async function validateActiveSession(
       throw Errors.sessionAlreadyEnded(sessionId);
     }
     return session;
-  });
-}
-
-// ============================================================================
-// Feedback
-// ============================================================================
-
-export async function addFeedback(
-  orgId: string,
-  sessionId: string,
-  data: {
-    rating: number;
-    comment?: string;
-    feedbackSource: "customer" | "support" | "system";
-    userIdentifier?: string;
-  },
-) {
-  return forOrg(orgId, async (tx) => {
-    // Verify session exists and belongs to this org
-    const [session] = await tx
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(eq(sessions.id, sessionId));
-
-    if (!session) throw Errors.sessionNotFound(sessionId);
-
-    const [feedback] = await tx
-      .insert(sessionFeedback)
-      .values({
-        sessionId,
-        rating: data.rating,
-        comment: data.comment ?? null,
-        feedbackSource: data.feedbackSource,
-        userIdentifier: data.userIdentifier ?? null,
-      })
-      .returning();
-
-    return feedback;
   });
 }

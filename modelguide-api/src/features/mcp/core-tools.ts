@@ -2,12 +2,8 @@
  * Core MCP tools — real session management backed by the sessions service.
  */
 
-import {
-  addFeedback,
-  addMessages,
-  createSession,
-  updateSession,
-} from "@features/sessions";
+import { addFeedback } from "@features/feedback";
+import { addMessages, createSession, updateSession } from "@features/sessions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
