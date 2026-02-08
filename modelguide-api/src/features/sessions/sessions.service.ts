@@ -362,13 +362,19 @@ function buildFilterConditions(filters: SessionFilters) {
   return conditions;
 }
 
+function getSortColumn(sortBy: SessionFilters["sortBy"]) {
+  switch (sortBy) {
+    case "ended_at":
+      return sessions.endedAt;
+    case "status":
+      return sessions.status;
+    default:
+      return sessions.startedAt;
+  }
+}
+
 function buildSort(filters: SessionFilters) {
-  const sortColumn =
-    filters.sortBy === "ended_at"
-      ? sessions.endedAt
-      : filters.sortBy === "status"
-        ? sessions.status
-        : sessions.startedAt;
+  const sortColumn = getSortColumn(filters.sortBy);
   const sortDir = filters.sortOrder === "asc" ? asc : desc;
   return { sortDir, sortColumn };
 }

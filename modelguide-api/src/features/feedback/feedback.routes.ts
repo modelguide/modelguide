@@ -2,7 +2,6 @@
  * Feedback routes — mounted under /sessions/:id/feedback
  */
 
-import type { SessionFeedback } from "@db/schema";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import {
@@ -12,7 +11,8 @@ import {
   requirePermission,
   requireUser,
 } from "@lib/middleware";
-import { errorResponseSchema } from "@lib/schemas";
+import { errorResponse } from "@lib/schemas";
+import { feedbackResponseSchema, formatFeedback } from "./feedback.schemas";
 import { addFeedback, listFeedback } from "./feedback.service";
 
 const router = createRouter();
@@ -20,19 +20,6 @@ const router = createRouter();
 // ============================================================================
 // Schemas
 // ============================================================================
-
-const feedbackResponseSchema = z.object({
-  id: z.string().uuid(),
-  sessionId: z.string().uuid(),
-  messageId: z.string().uuid().nullable(),
-  rating: z.number(),
-  comment: z.string().nullable(),
-  feedbackSource: z.enum(["customer", "support", "system"]),
-  feedbackRef: z.string().nullable(),
-  feedbackTags: z.array(z.string()).nullable(),
-  userIdentifier: z.string().nullable(),
-  createdAt: z.string(),
-});
 
 const createFeedbackSchema = z.object({
   rating: z.number().int().min(1).max(2).openapi({
@@ -58,32 +45,6 @@ const sessionIdParams = z.object({
     description: "Session ID",
   }),
 });
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function errorResponse(description: string) {
-  return {
-    description,
-    content: { "application/json": { schema: errorResponseSchema } },
-  };
-}
-
-function formatFeedback(feedback: SessionFeedback) {
-  return {
-    id: feedback.id,
-    sessionId: feedback.sessionId,
-    messageId: feedback.messageId,
-    rating: feedback.rating,
-    comment: feedback.comment,
-    feedbackSource: feedback.feedbackSource,
-    feedbackRef: feedback.feedbackRef,
-    feedbackTags: feedback.feedbackTags,
-    userIdentifier: feedback.userIdentifier,
-    createdAt: feedback.createdAt.toISOString(),
-  };
-}
 
 // ============================================================================
 // Routes

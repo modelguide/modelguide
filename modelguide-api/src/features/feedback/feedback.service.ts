@@ -2,19 +2,27 @@
  * Feedback service - business logic for session feedback management
  */
 
+import type { Transaction } from "@db/rls";
 import { forOrg } from "@db/rls";
 import { sessionFeedback, sessions } from "@db/schema";
 import { Errors } from "@lib/errors";
 import { asc, eq } from "drizzle-orm";
 
+async function requireSession(
+  tx: Transaction,
+  sessionId: string,
+): Promise<void> {
+  const [session] = await tx
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId));
+
+  if (!session) throw Errors.sessionNotFound(sessionId);
+}
+
 export async function listFeedback(orgId: string, sessionId: string) {
   return forOrg(orgId, async (tx) => {
-    const [session] = await tx
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(eq(sessions.id, sessionId));
-
-    if (!session) throw Errors.sessionNotFound(sessionId);
+    await requireSession(tx, sessionId);
 
     return tx
       .select()
@@ -37,12 +45,7 @@ export async function addFeedback(
   },
 ) {
   return forOrg(orgId, async (tx) => {
-    const [session] = await tx
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(eq(sessions.id, sessionId));
-
-    if (!session) throw Errors.sessionNotFound(sessionId);
+    await requireSession(tx, sessionId);
 
     const [feedback] = await tx
       .insert(sessionFeedback)
