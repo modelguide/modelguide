@@ -7,7 +7,9 @@ export interface MagicLinkSender {
 
 export class ConsoleSender implements MagicLinkSender {
   async send(email: string, link: string, userName?: string): Promise<void> {
-    const label = userName ? `${userName} <${email}>` : email;
+    const rawLabel = userName ? `${userName} <${email}>` : email;
+    const label =
+      rawLabel.length > 28 ? `${rawLabel.slice(0, 25)}...` : rawLabel;
     const expires = `${env.MAGIC_LINK_EXPIRES_IN_MINUTES} min`;
     console.log(
       `\n\x1b[33m╔══════════════════════════════════════════╗\n║  🔗  MAGIC LINK LOGIN                    ║\n╠══════════════════════════════════════════╣\n║  To:      ${label.padEnd(30)} ║\n║  Expires: ${expires.padEnd(30)} ║\n╠══════════════════════════════════════════╣\x1b[0m\n\x1b[1m  ${link}\x1b[0m\n\x1b[33m╚══════════════════════════════════════════╝\x1b[0m\n`,

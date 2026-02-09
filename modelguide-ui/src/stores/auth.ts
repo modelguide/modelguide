@@ -27,7 +27,7 @@ const hydrationListeners = new Set<() => void>()
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
@@ -134,20 +134,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // For route guards that need to distinguish failure reasons.
-      // refreshAccessToken stays boolean for backward compat with api.ts interceptors.
+      // Delegates to refreshAccessToken() to share storeRefreshPromise dedup —
+      // prevents double refresh when beforeLoad and ky 401 interceptor race.
       tryRefresh: async () => {
         try {
-          const baseUrl = getApiBaseUrl()
-          const response = await fetch(`${baseUrl}/auth/refresh`, {
-            method: 'POST',
-            credentials: 'include',
-          })
-
-          if (!response.ok) return 'auth_error'
-
-          const data: AuthResponse = await response.json()
-          set({ user: data.user, token: data.token, isAuthenticated: true })
-          return 'success'
+          const success = await get().refreshAccessToken()
+          return success ? 'success' : 'auth_error'
         } catch {
           return 'network_error'
         }

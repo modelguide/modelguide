@@ -6,7 +6,7 @@ import {
   useNavigate,
   useRouterState,
 } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { AppShell } from '~/components/layout/app-shell'
 import { queryClient } from '~/lib/query-client'
 import { useAuthStore, waitForHydration } from '~/stores/auth'
@@ -70,16 +70,15 @@ function AuthenticatedLayout() {
 
   // Proactive token refresh when tab becomes visible again.
   // Prevents 401-retry-refresh cycle when tab has been idle > 15 min.
+  const lastRefreshRef = useRef(0)
   useEffect(() => {
-    let lastRefreshAt = 0
-
     function handleVisibilityChange() {
       if (
         document.visibilityState === 'visible' &&
         isAuthenticated &&
-        Date.now() - lastRefreshAt > 60_000 // 1-min throttle
+        Date.now() - lastRefreshRef.current > 60_000 // 1-min throttle
       ) {
-        lastRefreshAt = Date.now()
+        lastRefreshRef.current = Date.now()
         refreshAccessToken()
       }
     }
