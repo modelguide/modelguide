@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Key, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Key, RefreshCw, Link2 } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -24,6 +24,9 @@ function AgentDetailPage() {
 
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
   const [newApiKey, setNewApiKey] = useState<string | null>(null)
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [isEditingSecret, setIsEditingSecret] = useState(false)
 
   const {
     data: agent,
@@ -50,6 +53,15 @@ function AgentDetailPage() {
       setNewApiKey(data.apiKey)
       setShowRegenerateDialog(false)
       queryClient.invalidateQueries({ queryKey: ['agents', id] })
+    },
+  })
+
+  const updateMetadataMutation = useMutation({
+    mutationFn: (metadata: Record<string, unknown>) =>
+      api.patch(`agents/${id}`, { json: { metadata } }).json<Agent>(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents', id] })
+      setIsEditingSecret(false)
     },
   })
 
@@ -136,7 +148,9 @@ function AgentDetailPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3">
                   <Key className="h-4 w-4 text-fg-muted" />
-                  <span className="flex-1 text-sm text-fg-secondary">API key configured</span>
+                  <span className="flex-1 font-mono text-xs text-fg-secondary">
+                    {agent.keyPrefix ? `${agent.keyPrefix}...` : 'API key configured'}
+                  </span>
                 </div>
 
                 {isAdmin ? (
@@ -149,6 +163,124 @@ function AgentDetailPage() {
                     Regenerate Key
                   </Button>
                 ) : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ElevenLabs Webhook Secret */}
+          <Card>
+            <CardHeader>
+              <CardTitle>HMAC Secret for Post-Call Hook</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <p className="text-xs text-fg-muted">
+                  HMAC secret for verifying post-call webhook signatures from ElevenLabs.
+                </p>
+                {isEditingSecret ? (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={webhookSecret}
+                      onChange={(e) => setWebhookSecret(e.target.value)}
+                      placeholder="whsec_..."
+                      className="w-full rounded border border-fg-subtle/20 bg-bg-base px-3 py-2 font-mono text-sm text-fg-primary"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          updateMetadataMutation.mutate({
+                            ...agent.metadata,
+                            hmac_secret: webhookSecret,
+                          })
+                        }}
+                        loading={updateMetadataMutation.isPending}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setIsEditingSecret(false)
+                          setWebhookSecret((agent.metadata as any)?.hmac_secret || '')
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3">
+                      <Key className="h-4 w-4 text-fg-muted" />
+                      <span className="flex-1 font-mono text-xs text-fg-secondary">
+                        {(agent.metadata as any)?.hmac_secret
+                          ? `${(agent.metadata as any).hmac_secret.slice(0, 10)}...`
+                          : 'Not configured'}
+                      </span>
+                    </div>
+                    {isAdmin ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setWebhookSecret((agent.metadata as any)?.hmac_secret || '')
+                          setIsEditingSecret(true)
+                        }}
+                        className="w-full"
+                      >
+                        {(agent.metadata as any)?.hmac_secret ? 'Update' : 'Configure'}
+                      </Button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Integration URLs */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Integration URLs
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-4 text-sm text-fg-secondary">
+                Configure these URLs in your ElevenLabs agent settings.
+              </p>
+              <div className="space-y-3">
+                {(() => {
+                  const baseUrl = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:3000'
+                  const urls = [
+                    { label: 'Session Init', url: `${baseUrl}/api/sessions`, description: 'POST — create session before starting a call' },
+                    { label: 'MCP Endpoint', url: `${baseUrl}/mcp/${agent.id}`, description: 'POST — tool calls during conversation (MCP protocol)' },
+                    { label: 'Post-Call Webhook', url: `${baseUrl}/webhooks/elevenlabs/${agent.id}/post-call`, description: 'POST — transcript storage after call' },
+                  ]
+                  return urls.map(({ label, url, description }) => (
+                    <div key={label} className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-fg-muted">{label}</div>
+                        <div className="mt-0.5 truncate font-mono text-xs text-fg-secondary">{url}</div>
+                        <div className="mt-0.5 text-xs text-fg-muted">{description}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-bg-subtle hover:text-fg-primary"
+                        onClick={() => {
+                          navigator.clipboard.writeText(url)
+                          setCopiedUrl(label)
+                          setTimeout(() => setCopiedUrl(null), 2000)
+                        }}
+                      >
+                        {copiedUrl === label ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  ))
+                })()}
               </div>
             </CardContent>
           </Card>

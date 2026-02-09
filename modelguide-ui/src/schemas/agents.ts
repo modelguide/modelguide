@@ -8,6 +8,8 @@ export const agentSchema = z.object({
   description: z.string().nullable(),
   agentType: z.enum(['voice']),
   isActive: z.boolean(),
+  metadata: z.record(z.unknown()).optional(),
+  keyPrefix: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

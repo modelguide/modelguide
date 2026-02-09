@@ -102,6 +102,7 @@ app.get(
 app.route("/webhooks/elevenlabs", elevenlabsWebhooks);
 
 // MCP endpoint — separate from API router (different protocol, not REST)
-app.on(["POST", "GET", "DELETE"], "/mcp", mcpHandler);
+// Agent ID in path for explicit routing; API key in header for auth verification.
+app.on(["POST", "GET", "DELETE"], "/mcp/:agentId", mcpHandler);
 
 export default app;

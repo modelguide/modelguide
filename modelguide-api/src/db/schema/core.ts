@@ -366,6 +366,7 @@ export const agents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
       () => new Date(),
     ),

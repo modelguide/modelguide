@@ -40,6 +40,8 @@ const agentResponseSchema = z.object({
   description: z.string().nullable(),
   agentType: z.enum(["voice"]),
   isActive: z.boolean(),
+  metadata: z.record(z.unknown()).optional(),
+  keyPrefix: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });
@@ -78,10 +80,17 @@ const updateAgentSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     description: z.string().optional(),
+    metadata: z.record(z.unknown()).optional(),
   })
-  .refine((data) => data.name !== undefined || data.description !== undefined, {
-    message: "At least one of 'name' or 'description' must be provided",
-  });
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.description !== undefined ||
+      data.metadata !== undefined,
+    {
+      message: "At least one of 'name', 'description', or 'metadata' must be provided",
+    },
+  );
 
 const assignConnectorSchema = z.object({
   connectorId: z.string().uuid().openapi({ description: "Connector ID" }),
@@ -128,13 +137,15 @@ const agentConnectorParams = z.object({
 // Helpers
 // ============================================================================
 
-function formatAgent(agent: Agent) {
+function formatAgent(agent: Agent & { keyPrefix?: string | null }) {
   return {
     id: agent.id,
     name: agent.name,
     description: agent.description,
     agentType: agent.agentType,
     isActive: agent.isActive,
+    metadata: agent.metadata,
+    keyPrefix: agent.keyPrefix ?? null,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
   };

@@ -116,8 +116,65 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-fg-subtle/10 pt-4 text-xs text-fg-muted">
             <span>Started: {formatDate(session.startedAt)}</span>
             {session.endedAt && <span>Ended: {formatDate(session.endedAt)}</span>}
-            <span>External ID: {session.externalId}</span>
+            {session.externalId && <span>External ID: {session.externalId}</span>}
           </div>
+
+          {/* Call metadata from ElevenLabs */}
+          {session.metadata && Object.keys(session.metadata).length > 0 && (() => {
+            const meta = session.metadata as Record<string, unknown>
+            return (
+              <div className="mt-4 border-t border-fg-subtle/10 pt-4">
+                {meta.transcript_summary && (
+                  <p className="mb-3 text-sm italic text-fg-secondary">
+                    {String(meta.transcript_summary)}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-fg-muted">
+                  {meta.llm_model && (
+                    <span>
+                      Model:{' '}
+                      <span className="font-mono text-fg-secondary">
+                        {String(meta.llm_model)}
+                      </span>
+                    </span>
+                  )}
+                  {meta.llm_total_tokens ? (
+                    <span>
+                      Tokens:{' '}
+                      <span className="text-fg-secondary">
+                        {Number(meta.llm_input_tokens).toLocaleString()} in /{' '}
+                        {Number(meta.llm_output_tokens).toLocaleString()} out
+                      </span>
+                    </span>
+                  ) : null}
+                  {meta.cost_credits ? (
+                    <span>
+                      Cost:{' '}
+                      <span className="text-fg-secondary">
+                        {String(meta.cost_credits)} credits
+                      </span>
+                    </span>
+                  ) : null}
+                  {meta.call_successful && (
+                    <span>
+                      Result:{' '}
+                      <span className="text-fg-secondary">
+                        {String(meta.call_successful)}
+                      </span>
+                    </span>
+                  )}
+                  {meta.termination_reason && (
+                    <span>
+                      Ended:{' '}
+                      <span className="text-fg-secondary">
+                        {String(meta.termination_reason)}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
         </CardContent>
       </Card>
 
