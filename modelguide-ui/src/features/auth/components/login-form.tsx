@@ -154,6 +154,38 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
       <Button type="submit" loading={loading} className="w-full mt-2">
         Send magic link
       </Button>
+
+      {import.meta.env.DEV ? <DevAccounts onSelect={setEmail} /> : null}
     </form>
+  )
+}
+
+const DEV_ACCOUNTS = [
+  { email: 'delivered+admin-pizza-palace@resend.dev', role: 'admin' },
+  { email: 'delivered+support-pizza-palace@resend.dev', role: 'support' },
+] as const
+
+function DevAccounts({ onSelect }: { onSelect: (email: string) => void }) {
+  return (
+    <div className="mt-3 rounded-xl border border-fg-subtle/20 bg-bg-elevated p-4">
+      <p className="mb-3 font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+        Dev Accounts (seed data)
+      </p>
+      <div className="space-y-1.5">
+        {DEV_ACCOUNTS.map(({ email, role }) => (
+          <button
+            key={email}
+            type="button"
+            onClick={() => onSelect(email)}
+            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-bg-subtle"
+          >
+            <span className="font-mono text-sm text-fg-primary">{email}</span>
+            <span className="ml-2 shrink-0 rounded-md bg-bg-subtle px-2 py-0.5 font-mono text-xs text-fg-muted">
+              {role}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }

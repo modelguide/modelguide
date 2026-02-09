@@ -1,23 +1,17 @@
 import ky from 'ky'
 import { getApiBaseUrl } from '~/lib/api-base'
-import { useAuthStore } from '~/stores/auth'
-
-let refreshPromise: Promise<boolean> | null = null
+import { useAuthStore, waitForHydration } from '~/stores/auth'
 
 async function getValidToken(): Promise<string | null> {
+  await waitForHydration()
   const { token, isAuthenticated, refreshAccessToken } = useAuthStore.getState()
 
   if (token) return token
 
-  // No in-memory token but user is authenticated (page reload scenario)
+  // No in-memory token but user is authenticated (page reload scenario).
+  // refreshAccessToken() has its own storeRefreshPromise dedup — safe to call directly.
   if (isAuthenticated) {
-    if (!refreshPromise) {
-      refreshPromise = refreshAccessToken().finally(() => {
-        refreshPromise = null
-      })
-    }
-
-    const success = await refreshPromise
+    const success = await refreshAccessToken()
     if (success) {
       return useAuthStore.getState().token
     }
@@ -56,15 +50,10 @@ export const api = ky.create({
           return response
         }
 
-        if (!refreshPromise) {
-          // Clear stale token so getValidToken knows to refresh
-          useAuthStore.setState({ token: null })
-          refreshPromise = refreshAccessToken().finally(() => {
-            refreshPromise = null
-          })
-        }
-
-        const success = await refreshPromise
+        // Clear stale token so getValidToken knows to refresh.
+        // refreshAccessToken() has its own storeRefreshPromise dedup — safe to call directly.
+        useAuthStore.setState({ token: null })
+        const success = await refreshAccessToken()
         if (!success) {
           await logout()
           return response

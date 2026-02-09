@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted — see also [ADR-002: Magic Link Authentication](./002-magic-link-authentication.md) for the login flow that creates these sessions.
 
 ## Context
 
@@ -32,6 +32,8 @@ Implement refresh token rotation with short-lived access tokens.
 
 The `__Host-` prefix enforces `Secure` + `Path=/` + no `Domain` at the browser level, preventing subdomain attacks (e.g., XSS on `blog.yourdomain.com` cannot touch the session cookie). `SameSite=Strict` blocks all cross-site cookie transmission. `Secure=true` always (localhost is a secure context in modern browsers).
 
+**Note:** Chrome allows `Secure` cookies over `localhost` (dev exception); Firefox/Safari do not — **local dev requires Chrome**.
+
 ### CSRF Protection
 
 Origin header validation middleware (fail-closed). Applied to `POST /auth/refresh` and `POST /auth/logout`:
@@ -41,6 +43,8 @@ Origin header validation middleware (fail-closed). Applied to `POST /auth/refres
 3. If origin !== `APP_URL` → reject 403 `CSRF_REJECTED`
 
 `SameSite=Strict` is defense-in-depth, not primary protection.
+
+When using Vite proxy (UI `:3001` → API `:3000`), `APP_URL` must be set to the **frontend** URL (`http://localhost:3001`).
 
 ### Secret Separation
 
@@ -75,6 +79,15 @@ The `security_tokens` table stores one row per login session with a `generation`
 
 **CAS miss** (0 rows updated): concurrent rotation won → return generic 401, no revocation.
 
+### UI Refresh Lifecycle
+
+The UI handles token refresh transparently via a single deduplication promise (`storeRefreshPromise`):
+
+- **Page reload:** `_authenticated` route guard detects no in-memory token, calls `tryRefresh()` (which delegates to `refreshAccessToken()`) before rendering. Distinguishes auth errors (dead session → redirect to login) from network errors (offline → render with stale data, let ky interceptor retry later).
+- **401 interceptor:** The `ky` HTTP client catches 401 responses, calls `refreshAccessToken()` (deduped), and retries the original request with the new token. A `X-Retry-After-Refresh` header prevents infinite loops.
+- **Tab visibility:** When a tab becomes visible after being idle, proactive refresh prevents the 401-retry-refresh cycle (throttled to 1 min via ref).
+- **Mid-session logout:** A reactive `useEffect` watches `isAuthenticated` and redirects to `/login` if it flips to `false` (e.g., after a failed refresh or manual logout). Clears the TanStack Query cache on the way out.
+
 ### Logout Generation Guard
 
 Logout requires the refresh token's generation to match the DB generation. An attacker with a stale token cannot force-logout the victim.
@@ -82,6 +95,17 @@ Logout requires the refresh token's generation to match the DB generation. An at
 ### 401/403 Invariant
 
 `401` is used exclusively for authentication failures. Authorization/policy failures use `403`. The UI refresh interceptor triggers on `401` — misusing `401` for authorization errors would cause refresh loops.
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `JWT_SECRET` | Yes | — | Access token signing key (min 32 chars) |
+| `JWT_EXPIRES_IN` | No | `15m` | Access token lifetime |
+| `REFRESH_JWT_SECRET` | Yes | — | Refresh token signing key (must differ from `JWT_SECRET`) |
+| `REFRESH_TOKEN_EXPIRES_IN` | No | `7d` | Refresh token sliding window |
+| `REFRESH_SESSION_RETENTION_DAYS` | No | `90` | How long expired sessions are retained before cleanup |
+| `APP_URL` | No | `http://localhost:3000` | Must point to the frontend origin for CSRF validation |
 
 ## Consequences
 
@@ -96,10 +120,11 @@ Logout requires the refresh token's generation to match the DB generation. An at
 ### Negative
 
 - First load after upgrade requires a one-time re-login (no cookie exists yet)
-- Slightly more complex auth flow (refresh interceptor, promise lock)
+- Slightly more complex auth flow (refresh interceptor, deduplication promise)
 - DB lookup on every token rotation (acceptable for dashboard traffic patterns)
 
 ### Risks
 
 - If `exp` is added to refresh JWTs in the future, it creates dual source of truth for expiry
 - If mobile clients are added, the cookie-based approach won't work — would need a different transport
+- If `REFRESH_JWT_SECRET` is rotated, all active sessions are invalidated (users must re-login)

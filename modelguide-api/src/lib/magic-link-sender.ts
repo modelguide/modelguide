@@ -7,17 +7,13 @@ export interface MagicLinkSender {
 
 export class ConsoleSender implements MagicLinkSender {
   async send(email: string, link: string, userName?: string): Promise<void> {
-    const separator = "========================================";
-    console.log(`\n${separator}`);
-    console.log("MAGIC LINK LOGIN");
-    console.log(separator);
-    console.log(`Email: ${email}`);
-    if (userName) {
-      console.log(`User: ${userName}`);
-    }
-    console.log(`Link: ${link}`);
-    console.log(`Expires in: ${env.MAGIC_LINK_EXPIRES_IN_MINUTES} minutes`);
-    console.log(`${separator}\n`);
+    const rawLabel = userName ? `${userName} <${email}>` : email;
+    const label =
+      rawLabel.length > 28 ? `${rawLabel.slice(0, 25)}...` : rawLabel;
+    const expires = `${env.MAGIC_LINK_EXPIRES_IN_MINUTES} min`;
+    console.log(
+      `\n\x1b[33m╔══════════════════════════════════════════╗\n║  🔗  MAGIC LINK LOGIN                    ║\n╠══════════════════════════════════════════╣\n║  To:      ${label.padEnd(30)} ║\n║  Expires: ${expires.padEnd(30)} ║\n╠══════════════════════════════════════════╣\x1b[0m\n\x1b[1m  ${link}\x1b[0m\n\x1b[33m╚══════════════════════════════════════════╝\x1b[0m\n`,
+    );
   }
 }
 
@@ -31,7 +27,7 @@ export class ResendSender implements MagicLinkSender {
   }
 
   async send(email: string, link: string, userName?: string): Promise<void> {
-    const { error } = await this.resend.emails.send({
+    const { data, error } = await this.resend.emails.send({
       from: this.from,
       to: email,
       subject: "Your ModelGuide login link",
@@ -41,6 +37,8 @@ export class ResendSender implements MagicLinkSender {
     if (error) {
       throw new Error(`Failed to send magic link email: ${error.message}`);
     }
+
+    console.info(`[auth] Email sent via Resend (id: ${data?.id}) to ${email}`);
   }
 }
 

@@ -1,13 +1,15 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Logo } from '~/components/layout/logo'
 import { LoginForm } from '~/features/auth/components/login-form'
-import { useAuthStore } from '~/stores/auth'
+import { useAuthStore, waitForHydration } from '~/stores/auth'
 
 export const Route = createFileRoute('/login')({
   validateSearch: (search) => ({
     redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
   }),
   beforeLoad: async () => {
+    await waitForHydration()
+
     const { isAuthenticated } = useAuthStore.getState()
     if (isAuthenticated) {
       throw redirect({ to: '/' })
@@ -39,23 +41,6 @@ function LoginPage() {
 
           {/* Form */}
           <LoginForm redirectTo={redirectTo} />
-
-          {/* Dev Credentials */}
-          <div className="mt-8 rounded-xl border border-fg-subtle/20 bg-bg-elevated p-4">
-            <p className="mb-3 font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-              Dev Accounts (seed data)
-            </p>
-            <div className="space-y-2 font-mono text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-fg-primary">delivered+admin-pizza-palace@resend.dev</span>
-                <span className="text-fg-muted">admin</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-fg-primary">delivered+support-pizza-palace@resend.dev</span>
-                <span className="text-fg-muted">support</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
