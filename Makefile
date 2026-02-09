@@ -1,4 +1,4 @@
-.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
+.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed db-seed-synthetic clean reset logs
 
 .DEFAULT_GOAL := help
 
@@ -93,6 +93,9 @@ db-studio: ## [DB] Open Drizzle Studio
 
 db-seed: ## [DB] Seed database with test data
 	cd modelguide-api && bun run db:seed
+
+db-seed-synthetic: ## [DB] Generate 100k synthetic sessions
+	cd modelguide-api && bun run src/db/seed/synthetic-sessions.ts
 
 # =============================================================================
 # General
