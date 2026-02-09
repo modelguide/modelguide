@@ -1093,7 +1093,7 @@ The MCP server exposes connector tools to authenticated agents for discovery and
 
 ### MCP Server Configuration
 
-**Transport:** SSE (Server-Sent Events) over HTTP
+**Transport:** Streamable HTTP
 
 **Endpoint:** `/mcp` (served from the same Hono app as REST API)
 

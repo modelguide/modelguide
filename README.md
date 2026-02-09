@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="docs/api-spec.md">API Spec</a> · <a href="#how-it-works">How It Works</a> · <a href="#roadmap">Roadmap</a>
+  <a href="#quick-start">Quick Start</a> · <a href="docs/api-spec.md">API Spec</a> · <a href="docs/guide/getting-started.md">Agent Guide</a> · <a href="docs/guide/admin-setup.md">Admin Guide</a> · <a href="#how-it-works">How It Works</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
 ---
@@ -306,12 +306,23 @@ const modules = await Promise.all([
 
 📋 **Connector marketplace** — Community-built integrations
 
+## Documentation
+
+| Resource | Description |
+|----------|-------------|
+| [API Specification](docs/api-spec.md) | REST API and MCP protocol reference |
+| [Agent Developer Guide](docs/guide/getting-started.md) | Connect your AI agent via MCP |
+| [Admin Setup Guide](docs/guide/admin-setup.md) | Configure connectors, agents, and tools |
+| [Database Schema](docs/DB_SCHEMA.md) | Tables, indexes, RLS policies |
+| [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
+| [Contributing](CONTRIBUTING.md) | Setup, workflow, conventions |
+
 ## Contributing
 
-Contributions welcome. No CLA.
+Contributions welcome. No CLA. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 ```bash
-# Run tests before submitting
+# Run checks before submitting
 make api-test          # Unit + integration tests
 make ui-test           # UI component tests
 make api-lint-check    # Linting

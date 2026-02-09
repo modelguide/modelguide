@@ -40,11 +40,16 @@ async function createTestMagicToken(userId: string): Promise<string> {
   return token;
 }
 
-/** Extract Set-Cookie value for __Host-refresh_token from response. */
+/** Extract Set-Cookie value for the refresh token cookie (name varies by protocol). */
+const REFRESH_COOKIE_NAME =
+  new URL(ORIGIN).protocol === "https:"
+    ? "__Host-refresh_token"
+    : "refresh_token";
+
 function extractRefreshCookie(response: Response): string | null {
   const cookies = response.headers.getAll("set-cookie");
   for (const cookie of cookies) {
-    if (cookie.startsWith("__Host-refresh_token=")) {
+    if (cookie.startsWith(`${REFRESH_COOKIE_NAME}=`)) {
       const value = cookie.split("=")[1].split(";")[0];
       return value;
     }
@@ -133,7 +138,7 @@ describe("POST /api/auth/refresh", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${initialRefresh}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${initialRefresh}`,
       },
     });
 
@@ -164,7 +169,7 @@ describe("POST /api/auth/refresh", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${initialRefresh}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${initialRefresh}`,
       },
     });
     const { token: newAccessToken } = await refreshRes.json();
@@ -192,7 +197,7 @@ describe("POST /api/auth/refresh", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${gen0Refresh}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${gen0Refresh}`,
       },
     });
     expect(refresh1Res.status).toBe(200);
@@ -203,7 +208,7 @@ describe("POST /api/auth/refresh", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${gen1Refresh}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${gen1Refresh}`,
       },
     });
     expect(refresh2Res.status).toBe(200);
@@ -213,7 +218,7 @@ describe("POST /api/auth/refresh", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${gen0Refresh}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${gen0Refresh}`,
       },
     });
     expect(reuseRes.status).toBe(401);
@@ -226,7 +231,7 @@ describe("POST /api/auth/refresh", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${gen2Refresh}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${gen2Refresh}`,
       },
     });
     expect(afterRevokeRes.status).toBe(401);
@@ -263,7 +268,7 @@ describe("Logout revokes session", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${refreshValue}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${refreshValue}`,
       },
     });
 
@@ -274,7 +279,7 @@ describe("Logout revokes session", () => {
     // Cookie should be cleared (set to empty / expired)
     const cookies = logoutRes.headers.getAll("set-cookie");
     const refreshCookieHeader = cookies.find((c) =>
-      c.startsWith("__Host-refresh_token="),
+      c.startsWith(`${REFRESH_COOKIE_NAME}=`),
     );
     expect(refreshCookieHeader).toBeDefined();
 
@@ -289,7 +294,7 @@ describe("Logout revokes session", () => {
       method: "POST",
       headers: {
         Origin: ORIGIN,
-        Cookie: `__Host-refresh_token=${refreshValue}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${refreshValue}`,
       },
     });
     expect(refreshRes.status).toBe(401);
@@ -310,7 +315,7 @@ describe("CSRF protection", () => {
 
     const res = await request("/api/auth/refresh", {
       method: "POST",
-      headers: { Cookie: `__Host-refresh_token=${refreshValue}` },
+      headers: { Cookie: `${REFRESH_COOKIE_NAME}=${refreshValue}` },
     });
 
     expect(res.status).toBe(403);
@@ -329,7 +334,7 @@ describe("CSRF protection", () => {
       method: "POST",
       headers: {
         Origin: "https://evil.com",
-        Cookie: `__Host-refresh_token=${refreshValue}`,
+        Cookie: `${REFRESH_COOKIE_NAME}=${refreshValue}`,
       },
     });
 

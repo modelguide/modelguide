@@ -297,7 +297,7 @@ Instead of chat bubbles, use log format:
 ## Project Structure
 
 ```
-dashboard/
+modelguide-ui/
 ├── public/
 ├── src/
 │   ├── components/
@@ -362,16 +362,16 @@ dashboard/
 
 **Current:** Phase 0 Complete (Scaffolding)
 
-See `docs/UI_IMPLEMENTATION.md` for detailed phase tasks.
+See `modelguide-ui/README.md` for quick start and directory overview.
 
 ---
 
 ## Quick Start
 
 ```bash
-cd dashboard
+cd modelguide-ui
 npm install
 npm run dev
 ```
 
-App runs at http://localhost:3000
+App runs at http://localhost:3001

@@ -17,13 +17,16 @@ const router = createRouter();
 // Cookie helpers
 // ============================================================================
 
-const REFRESH_COOKIE = "__Host-refresh_token";
+const useSecureCookies = new URL(env.APP_URL).protocol === "https:";
+const REFRESH_COOKIE = useSecureCookies
+  ? "__Host-refresh_token"
+  : "refresh_token";
 
 function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
   const maxAge = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
   setCookie(c, REFRESH_COOKIE, token, {
     httpOnly: true,
-    secure: true,
+    secure: useSecureCookies,
     sameSite: "Strict",
     path: "/",
     maxAge,
@@ -33,7 +36,7 @@ function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
 function clearRefreshCookie(c: Parameters<typeof deleteCookie>[0]) {
   deleteCookie(c, REFRESH_COOKIE, {
     httpOnly: true,
-    secure: true,
+    secure: useSecureCookies,
     sameSite: "Strict",
     path: "/",
   });
@@ -234,7 +237,7 @@ const refreshRoute = createRoute({
   tags: ["Authentication"],
   summary: "Refresh access token",
   description: `Rotates the refresh token and issues a new short-lived access token.
-The refresh token is read from the \`__Host-refresh_token\` httpOnly cookie.
+The refresh token is read from the \`${REFRESH_COOKIE}\` httpOnly cookie.
 Requires Origin header for CSRF protection.`,
   responses: {
     200: {

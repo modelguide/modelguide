@@ -1,5 +1,7 @@
 # API & MCP Implementation Phases
 
+> **Note:** This document was used during initial implementation planning. The current roadmap is maintained in the [README](../README.md#roadmap). Phase tracking has moved to [GitHub Issues](https://github.com/modelguide/modelguide/issues). The content below is retained as historical context for architecture decisions.
+
 This document outlines the implementation phases for ModelGuide API and MCP server, organized into **two parallel streams**.
 
 ## Documentation References
