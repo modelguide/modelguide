@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 60">
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace" font-size="28" font-weight="500">
+    <tspan fill="#6B7280">{</tspan>
+    <tspan fill="#1A1A1A">model:</tspan>
+    <tspan fill="#F97316"> guide</tspan>
+    <tspan fill="#6B7280">}</tspan>
+  </text>
+</svg>
