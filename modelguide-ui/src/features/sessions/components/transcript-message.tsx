@@ -20,6 +20,11 @@ export function TranscriptMessage({ message }: TranscriptMessageProps) {
     )
   }
 
+  // Assistant tool-call messages have no content — skip rendering empty bubbles
+  if (message.role === 'assistant' && !message.content && message.toolCallId) {
+    return null
+  }
+
   const isUser = message.role === 'user'
 
   return (

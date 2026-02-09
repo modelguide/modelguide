@@ -1,8 +1,8 @@
 /**
  * Synthetic session data seed script
  *
- * Generates ~100k realistic e-commerce sessions for a Polish fashion store
- * modeled after estyl.pl. Data spans ~10 months back at ~10k sessions/month.
+ * Generates ~100k realistic e-commerce sessions for a fashion store
+ * modeled after a generic fashion store. Data spans ~10 months back at ~10k sessions/month.
  * Each session includes full conversation transcripts with messages, tool calls,
  * and feedback.
  *
@@ -111,111 +111,111 @@ const STATUS_WEIGHTS_PAST = [
   { value: "abandoned" as const, weight: 16 },
 ];
 
-const POLISH_FIRST_NAMES = [
-  "Anna",
-  "Katarzyna",
-  "Magdalena",
-  "Agnieszka",
-  "Joanna",
-  "Monika",
-  "Ewa",
-  "Marta",
-  "Aleksandra",
-  "Natalia",
-  "Patrycja",
-  "Karolina",
-  "Izabela",
-  "Dorota",
-  "Beata",
-  "Piotr",
-  "Krzysztof",
-  "Tomasz",
-  "Marcin",
-  "Paweł",
-  "Jakub",
-  "Adam",
-  "Łukasz",
-  "Michał",
-  "Dawid",
-  "Kamil",
-  "Rafał",
-  "Marek",
+const FIRST_NAMES = [
+  "Emma",
+  "Olivia",
+  "Sophia",
+  "Isabella",
+  "Charlotte",
+  "Amelia",
+  "Mia",
+  "Harper",
+  "Evelyn",
+  "Abigail",
+  "Sarah",
+  "Jessica",
+  "Rachel",
+  "Laura",
+  "Emily",
+  "James",
+  "William",
+  "Benjamin",
+  "Lucas",
+  "Henry",
+  "Alexander",
+  "Daniel",
+  "Matthew",
+  "David",
+  "Michael",
+  "Ryan",
+  "Nathan",
+  "Thomas",
   "Robert",
-  "Grzegorz",
+  "Andrew",
 ];
 
-const POLISH_LAST_NAMES = [
-  "Nowak",
-  "Kowalski",
-  "Wiśniewski",
-  "Wójcik",
-  "Kowalczyk",
-  "Kamiński",
-  "Lewandowski",
-  "Zieliński",
-  "Szymański",
-  "Woźniak",
-  "Dąbrowski",
-  "Kozłowski",
-  "Jankowski",
-  "Mazur",
-  "Wojciechowski",
-  "Kwiatkowski",
-  "Krawczyk",
-  "Kaczmarek",
-  "Piotrowska",
-  "Grabowska",
+const LAST_NAMES = [
+  "Smith",
+  "Johnson",
+  "Williams",
+  "Brown",
+  "Jones",
+  "Garcia",
+  "Miller",
+  "Davis",
+  "Rodriguez",
+  "Martinez",
+  "Anderson",
+  "Taylor",
+  "Thomas",
+  "Moore",
+  "Jackson",
+  "Martin",
+  "Lee",
+  "Thompson",
+  "White",
+  "Clark",
 ];
 
 const CITIES = [
-  "Warszawa",
-  "Kraków",
-  "Łódź",
-  "Wrocław",
-  "Poznań",
-  "Gdańsk",
-  "Szczecin",
-  "Bydgoszcz",
-  "Lublin",
-  "Białystok",
-  "Katowice",
-  "Gdynia",
-  "Częstochowa",
-  "Radom",
-  "Toruń",
+  "New York",
+  "Los Angeles",
+  "Chicago",
+  "Houston",
+  "Phoenix",
+  "Philadelphia",
+  "San Antonio",
+  "San Diego",
+  "Dallas",
+  "Austin",
+  "Denver",
+  "Seattle",
+  "Portland",
+  "Miami",
+  "Boston",
 ];
 
-const POSTAL_CODES = [
-  "00-001",
-  "02-515",
-  "30-001",
-  "50-001",
-  "60-001",
-  "80-001",
-  "70-001",
-  "85-001",
-  "20-001",
-  "15-001",
-  "40-001",
-  "81-001",
-  "42-200",
-  "26-600",
-  "87-100",
+const ZIP_CODES = [
+  "10001",
+  "90001",
+  "60601",
+  "77001",
+  "85001",
+  "19101",
+  "78201",
+  "92101",
+  "75201",
+  "73301",
+  "80201",
+  "98101",
+  "97201",
+  "33101",
+  "02101",
 ];
 
 const STREETS = [
-  "ul. Marszałkowska",
-  "ul. Nowy Świat",
-  "ul. Floriańska",
-  "ul. Piotrkowska",
-  "ul. Świdnicka",
-  "ul. Półwiejska",
-  "ul. Długa",
-  "ul. Kościuszki",
-  "al. Jerozolimskie",
-  "ul. Grodzka",
-  "ul. Świętokrzyska",
-  "ul. Piłsudskiego",
+  "Main St",
+  "Broadway",
+  "Oak Ave",
+  "Elm St",
+  "Park Ave",
+  "Maple Dr",
+  "Cedar Ln",
+  "Pine St",
+  "Washington Blvd",
+  "Lake Shore Dr",
+  "Market St",
+  "Highland Ave",
 ];
 
 interface Product {
@@ -223,7 +223,7 @@ interface Product {
   name: string;
   category: string;
   brand: string;
-  pricePLN: number;
+  price: number;
   sizes: string[];
   colors: string[];
 }
@@ -231,165 +231,165 @@ interface Product {
 const PRODUCTS: Product[] = [
   {
     id: "prod_dress_01",
-    name: "Sukienka midi z falbanami",
-    category: "sukienki",
+    name: "Midi Ruffle Dress",
+    category: "dresses",
     brand: "Reserved",
-    pricePLN: 189,
+    price: 49,
     sizes: ["XS", "S", "M", "L", "XL"],
-    colors: ["czarny", "czerwony", "granatowy"],
+    colors: ["black", "red", "navy"],
   },
   {
     id: "prod_dress_02",
-    name: "Sukienka koktajlowa satynowa",
-    category: "sukienki",
+    name: "Satin Cocktail Dress",
+    category: "dresses",
     brand: "Mohito",
-    pricePLN: 249,
+    price: 65,
     sizes: ["XS", "S", "M", "L"],
-    colors: ["butelkowa zieleń", "bordowy", "czarny"],
+    colors: ["emerald", "burgundy", "black"],
   },
   {
     id: "prod_dress_03",
-    name: "Sukienka maxi w kwiaty",
-    category: "sukienki",
+    name: "Floral Maxi Dress",
+    category: "dresses",
     brand: "Sinsay",
-    pricePLN: 119,
+    price: 35,
     sizes: ["S", "M", "L", "XL"],
-    colors: ["wielokolorowy", "biały"],
+    colors: ["multicolor", "white"],
   },
   {
     id: "prod_shoe_01",
-    name: "Szpilki lakierowane",
-    category: "buty",
+    name: "Patent Leather Heels",
+    category: "shoes",
     brand: "CCC",
-    pricePLN: 179,
-    sizes: ["36", "37", "38", "39", "40"],
-    colors: ["czarny", "nude", "czerwony"],
+    price: 45,
+    sizes: ["6", "7", "8", "9", "10"],
+    colors: ["black", "nude", "red"],
   },
   {
     id: "prod_shoe_02",
-    name: "Sneakersy platformowe",
-    category: "buty",
+    name: "Platform Sneakers",
+    category: "shoes",
     brand: "Nike",
-    pricePLN: 449,
-    sizes: ["36", "37", "38", "39", "40", "41", "42"],
-    colors: ["biały", "czarny", "różowy"],
+    price: 119,
+    sizes: ["6", "7", "8", "9", "10", "11", "12"],
+    colors: ["white", "black", "pink"],
   },
   {
     id: "prod_shoe_03",
-    name: "Botki na obcasie",
-    category: "buty",
-    brand: "Ryłko",
-    pricePLN: 399,
-    sizes: ["36", "37", "38", "39", "40"],
-    colors: ["czarny", "brązowy", "beżowy"],
+    name: "Heeled Ankle Boots",
+    category: "shoes",
+    brand: "Steve Madden",
+    price: 99,
+    sizes: ["6", "7", "8", "9", "10"],
+    colors: ["black", "brown", "beige"],
   },
   {
     id: "prod_bag_01",
-    name: "Torebka shopperka skórzana",
-    category: "torebki",
-    brand: "Batycki",
-    pricePLN: 329,
+    name: "Leather Tote Bag",
+    category: "bags",
+    brand: "Coach",
+    price: 89,
     sizes: ["one size"],
-    colors: ["czarny", "brązowy", "camel"],
+    colors: ["black", "brown", "camel"],
   },
   {
     id: "prod_bag_02",
-    name: "Listonoszka pikowana",
-    category: "torebki",
+    name: "Quilted Crossbody Bag",
+    category: "bags",
     brand: "Guess",
-    pricePLN: 549,
+    price: 139,
     sizes: ["one size"],
-    colors: ["czarny", "biały", "różowy"],
+    colors: ["black", "white", "pink"],
   },
   {
     id: "prod_jacket_01",
-    name: "Ramoneska skórzana",
-    category: "kurtki",
+    name: "Leather Biker Jacket",
+    category: "jackets",
     brand: "Zara",
-    pricePLN: 349,
+    price: 89,
     sizes: ["XS", "S", "M", "L", "XL"],
-    colors: ["czarny"],
+    colors: ["black"],
   },
   {
     id: "prod_jacket_02",
-    name: "Płaszcz wełniany oversize",
-    category: "kurtki",
+    name: "Oversized Wool Coat",
+    category: "jackets",
     brand: "H&M",
-    pricePLN: 499,
+    price: 129,
     sizes: ["S", "M", "L", "XL"],
-    colors: ["beżowy", "szary", "czarny"],
+    colors: ["beige", "grey", "black"],
   },
   {
     id: "prod_sweater_01",
-    name: "Sweter oversizowy z wełny",
-    category: "swetry",
+    name: "Oversized Wool Sweater",
+    category: "sweaters",
     brand: "Reserved",
-    pricePLN: 159,
+    price: 42,
     sizes: ["S/M", "L/XL"],
-    colors: ["ecru", "szary", "morelowy"],
+    colors: ["ecru", "grey", "apricot"],
   },
   {
     id: "prod_sweater_02",
-    name: "Golf kaszmirowy",
-    category: "swetry",
+    name: "Cashmere Turtleneck",
+    category: "sweaters",
     brand: "Massimo Dutti",
-    pricePLN: 599,
+    price: 155,
     sizes: ["XS", "S", "M", "L"],
-    colors: ["czarny", "camel", "granatowy"],
+    colors: ["black", "camel", "navy"],
   },
   {
     id: "prod_jeans_01",
-    name: "Jeansy mom fit high waist",
-    category: "jeansy",
+    name: "Mom Fit High Waist Jeans",
+    category: "jeans",
     brand: "Levi's",
-    pricePLN: 399,
+    price: 99,
     sizes: ["24", "25", "26", "27", "28", "29", "30", "31"],
-    colors: ["jasny niebieski", "ciemny niebieski"],
+    colors: ["light blue", "dark blue"],
   },
   {
     id: "prod_jeans_02",
-    name: "Jeansy wide leg",
-    category: "jeansy",
+    name: "Wide Leg Jeans",
+    category: "jeans",
     brand: "Pull & Bear",
-    pricePLN: 149,
+    price: 39,
     sizes: ["XS", "S", "M", "L", "XL"],
-    colors: ["niebieski", "czarny"],
+    colors: ["blue", "black"],
   },
   {
     id: "prod_acc_01",
-    name: "Szalik kaszmirowy",
-    category: "akcesoria",
+    name: "Cashmere Scarf",
+    category: "accessories",
     brand: "Weekend Max Mara",
-    pricePLN: 699,
+    price: 179,
     sizes: ["one size"],
-    colors: ["beżowy", "szary", "czarny"],
+    colors: ["beige", "grey", "black"],
   },
   {
     id: "prod_acc_02",
-    name: "Pasek skórzany z klamrą",
-    category: "akcesoria",
+    name: "Leather Belt with Buckle",
+    category: "accessories",
     brand: "Tommy Hilfiger",
-    pricePLN: 249,
+    price: 65,
     sizes: ["S", "M", "L"],
-    colors: ["czarny", "brązowy"],
+    colors: ["black", "brown"],
   },
   {
     id: "prod_sneaker_01",
-    name: "Buty sportowe do biegania",
-    category: "sneakersy",
+    name: "Running Shoes",
+    category: "sneakers",
     brand: "adidas",
-    pricePLN: 499,
-    sizes: ["38", "39", "40", "41", "42", "43", "44", "45"],
-    colors: ["czarny/biały", "szary/niebieski"],
+    price: 129,
+    sizes: ["8", "9", "10", "11", "12", "13"],
+    colors: ["black/white", "grey/blue"],
   },
   {
     id: "prod_sneaker_02",
-    name: "Sneakersy retro '90s",
-    category: "sneakersy",
+    name: "Retro '90s Sneakers",
+    category: "sneakers",
     brand: "New Balance",
-    pricePLN: 549,
-    sizes: ["36", "37", "38", "39", "40", "41", "42", "43"],
-    colors: ["szary", "granatowy", "zielony"],
+    price: 142,
+    sizes: ["6", "7", "8", "9", "10", "11", "12"],
+    colors: ["grey", "navy", "green"],
   },
 ];
 
@@ -408,21 +408,21 @@ const NEGATIVE_FEEDBACK_TAGS = [
 ];
 
 const POSITIVE_COMMENTS = [
-  "Szybka i pomocna obsługa!",
-  "Świetna pomoc przy wyborze rozmiaru",
-  "Agent bardzo dobrze doradził",
-  "Zakupy poszły sprawnie, polecam",
-  "Bardzo miła rozmowa, dziękuję",
+  "Fast and helpful service!",
+  "Great help choosing the right size",
+  "Agent gave excellent advice",
+  "Shopping went smoothly, highly recommend",
+  "Very pleasant conversation, thank you",
   "Great help with my order",
   "Quick and efficient service",
   "Resolved my issue perfectly",
 ];
 
 const NEGATIVE_COMMENTS = [
-  "Nie rozumiał mojego pytania",
-  "Za długo czekałam na odpowiedź",
-  "Podał złe informacje o rozmiarze",
-  "Nie pomógł mi z reklamacją",
+  "Didn't understand my question",
+  "Waited too long for a response",
+  "Gave wrong size information",
+  "Couldn't help with my return",
   "Agent seemed confused about products",
   "Didn't understand my return request",
 ];
@@ -477,7 +477,7 @@ const SCENARIO_WEIGHTS = Object.entries(SCENARIOS).map(([id, cfg]) => ({
 // Message generation helpers
 // ============================================================================
 
-const CONNECTOR_SLUG = "estyl";
+const CONNECTOR_SLUG = "acme";
 
 /** Tool names follow convention: {connector_slug}_{tool_slug} */
 function toolName(catalogName: string): string {
@@ -547,7 +547,7 @@ function generateProductListOutput(products: Product[]) {
       title: p.name,
       category: p.category,
       brand: p.brand,
-      price: { amount: p.pricePLN * 100, currency_code: "PLN" },
+      price: { amount: p.price * 100, currency_code: "USD" },
       variants: p.sizes.map((size, i) => ({
         id: `var_${p.id}_${i}`,
         title: `${size} / ${pick(p.colors)}`,
@@ -562,17 +562,17 @@ function generateProductDetailOutput(product: Product) {
   return {
     id: product.id,
     title: product.name,
-    description: `${product.brand} ${product.name} — dostępne rozmiary: ${product.sizes.join(", ")}`,
+    description: `${product.brand} ${product.name} — available sizes: ${product.sizes.join(", ")}`,
     category: product.category,
     brand: product.brand,
-    price: { amount: product.pricePLN * 100, currency_code: "PLN" },
+    price: { amount: product.price * 100, currency_code: "USD" },
     variants: product.sizes.map((size, i) => ({
       id: `var_${product.id}_${i}`,
       title: `${size} / ${pick(product.colors)}`,
-      prices: [{ amount: product.pricePLN * 100, currency_code: "PLN" }],
+      prices: [{ amount: product.price * 100, currency_code: "USD" }],
       inventory_quantity: randInt(0, 50),
     })),
-    images: [{ url: `https://cdn.estyl.pl/products/${product.id}_1.jpg` }],
+    images: [{ url: `https://cdn.acme-store.com/products/${product.id}_1.jpg` }],
   };
 }
 
@@ -587,7 +587,7 @@ function genProductInquiry(): GeneratedMessage[] {
   const msgs: GeneratedMessage[] = [];
 
   msgs.push(
-    userMsg(`Cześć, czy macie ${p.name} w kolorze ${color}, rozmiar ${size}?`),
+    userMsg(`Hi, do you have the ${p.name} in ${color}, size ${size}?`),
   );
   msgs.push(
     ...toolCallMsg(
@@ -605,14 +605,14 @@ function genProductInquiry(): GeneratedMessage[] {
   );
   msgs.push(
     assistantMsg(
-      `Tak, mamy ${p.name} marki ${p.brand} w rozmiarze ${size}. Cena to ${p.pricePLN} PLN. Kolor ${color} jest dostępny. Czy chciałaby Pani dodać do koszyka?`,
+      `Yes, we have the ${p.name} by ${p.brand} in size ${size}. It's priced at $${p.price}. The ${color} color is available. Would you like to add it to your cart?`,
     ),
   );
   if (rand() > 0.5) {
-    msgs.push(userMsg("Dziękuję za informację, muszę jeszcze pomyśleć."));
+    msgs.push(userMsg("Thanks for the info, I need to think about it."));
     msgs.push(
       assistantMsg(
-        "Oczywiście! Jeśli będzie Pani miała pytania, proszę śmiało pisać. Miłego dnia!",
+        "Of course! If you have any questions, feel free to reach out. Have a great day!",
       ),
     );
   }
@@ -623,11 +623,11 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
   const p = pick(PRODUCTS);
   const size = pick(p.sizes);
   const color = pick(p.colors);
-  const firstName = pick(POLISH_FIRST_NAMES);
-  const lastName = pick(POLISH_LAST_NAMES);
+  const firstName = pick(FIRST_NAMES);
+  const lastName = pick(LAST_NAMES);
   const city = pick(CITIES);
   const cityIdx = CITIES.indexOf(city);
-  const postalCode = POSTAL_CODES[cityIdx] || "00-001";
+  const zipCode = ZIP_CODES[cityIdx] || "10001";
   const street = pick(STREETS);
   const cartId = `cart_${uuid().slice(0, 8)}`;
   const variantId = `var_${p.id}_${randInt(0, p.sizes.length - 1)}`;
@@ -636,7 +636,7 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
   const msgs: GeneratedMessage[] = [];
   msgs.push(
     userMsg(
-      `Szukam ${p.category} na prezent. Coś eleganckiego do ${p.pricePLN < 300 ? "300" : "600"} PLN.`,
+      `I'm looking for ${p.category} as a gift. Something elegant under $${p.price < 80 ? "80" : "150"}.`,
     ),
   );
   msgs.push(
@@ -648,10 +648,10 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
   );
   msgs.push(
     assistantMsg(
-      `Polecam ${p.name} od ${p.brand} za ${p.pricePLN} PLN. Dostępne kolory: ${p.colors.join(", ")}. Chce Pani zobaczyć szczegóły?`,
+      `I'd recommend the ${p.name} by ${p.brand} for $${p.price}. Available colors: ${p.colors.join(", ")}. Would you like to see the details?`,
     ),
   );
-  msgs.push(userMsg(`Tak, poproszę ${color} w rozmiarze ${size}.`));
+  msgs.push(userMsg(`Yes, I'd like ${color} in size ${size}.`));
   msgs.push(
     ...toolCallMsg(
       "Get Product",
@@ -662,7 +662,7 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
   msgs.push(
     ...toolCallMsg(
       "Create Cart",
-      { regionId: "reg_pl", currencyCode: "PLN" },
+      { regionId: "reg_us", currencyCode: "USD" },
       { cart: { id: cartId } },
     ),
   );
@@ -677,22 +677,22 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
             {
               variant_id: variantId,
               quantity: 1,
-              unit_price: p.pricePLN * 100,
+              unit_price: p.price * 100,
             },
           ],
-          total: p.pricePLN * 100,
+          total: p.price * 100,
         },
       },
     ),
   );
   msgs.push(
     assistantMsg(
-      `Dodałam ${p.name} (${size}, ${color}) do koszyka. Łączna kwota: ${p.pricePLN} PLN. Podać adres dostawy?`,
+      `I've added the ${p.name} (${size}, ${color}) to your cart. Total: $${p.price}. Would you like to provide a shipping address?`,
     ),
   );
   msgs.push(
     userMsg(
-      `Tak, ${firstName} ${lastName}, ${street} ${randInt(1, 120)}, ${postalCode} ${city}`,
+      `Yes, ${firstName} ${lastName}, ${randInt(1, 9999)} ${street}, ${city} ${zipCode}`,
     ),
   );
   msgs.push(
@@ -703,22 +703,22 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
         address: {
           firstName,
           lastName,
-          address1: `${street} ${randInt(1, 120)}`,
+          address1: `${randInt(1, 9999)} ${street}`,
           city,
-          postalCode,
-          countryCode: "PL",
+          zipCode,
+          countryCode: "US",
         },
       },
       {
         cart: {
           id: cartId,
-          shipping_address: { city, postal_code: postalCode },
+          shipping_address: { city, zip_code: zipCode },
         },
       },
     ),
   );
-  msgs.push(assistantMsg("Adres zapisany. Potwierdzam zamówienie?"));
-  msgs.push(userMsg("Tak, potwierdzam."));
+  msgs.push(assistantMsg("Address saved. Shall I confirm the order?"));
+  msgs.push(userMsg("Yes, confirm it."));
   msgs.push(
     ...toolCallMsg(
       "Complete Cart",
@@ -735,7 +735,7 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
   );
   msgs.push(
     assistantMsg(
-      `Zamówienie zostało złożone! Numer zamówienia: ${orderId}. Potwierdzenie wysłane na maila. Dziękuję za zakupy w Estyl!`,
+      `Order placed! Order number: ${orderId}. Confirmation sent to your email. Thank you for shopping with ACME!`,
     ),
   );
   return msgs;
@@ -744,17 +744,17 @@ function genBrowseAndPurchase(): GeneratedMessage[] {
 function genOrderStatus(): GeneratedMessage[] {
   const orderId = `order_${uuid().slice(0, 8)}`;
   const msgs: GeneratedMessage[] = [];
-  msgs.push(userMsg(`Chciałbym sprawdzić status mojego zamówienia ${orderId}`));
+  msgs.push(userMsg(`I'd like to check the status of my order ${orderId}`));
   msgs.push(
     assistantMsg(
-      "Niestety, nie mam bezpośredniego dostępu do systemu śledzenia przesyłek. Proszę sprawdzić status na stronie estyl.pl/moje-zamowienia lub podać numer śledzenia z maila z potwierdzeniem. Mogę pomóc w czymś innym?",
+      "Unfortunately, I don't have direct access to the shipment tracking system. Please check your order status at acme-store.com/my-orders or provide the tracking number from your confirmation email. Can I help with anything else?",
     ),
   );
   if (rand() > 0.4) {
-    msgs.push(userMsg("A kiedy mogę spodziewać się dostawy?"));
+    msgs.push(userMsg("When can I expect delivery?"));
     msgs.push(
       assistantMsg(
-        "Standardowa dostawa to 2-4 dni robocze. Jeśli zamówienie było złożone ponad 5 dni temu i nie dotarło, proszę skontaktować się z naszym działem obsługi pod adresem pomoc@estyl.pl.",
+        "Standard delivery takes 2-4 business days. If your order was placed more than 5 days ago and hasn't arrived, please contact our support team at support@acme-store.com.",
       ),
     );
   }
@@ -768,7 +768,7 @@ function genSizeGuide(): GeneratedMessage[] {
   const msgs: GeneratedMessage[] = [];
   msgs.push(
     userMsg(
-      `Noszę rozmiar ${pick(["S", "M", "38", "40"])} w innych markach. Jaki rozmiar wybrać w ${p.name}?`,
+      `I usually wear size ${pick(["S", "M", "8", "10"])} in other brands. What size should I pick for the ${p.name}?`,
     ),
   );
   msgs.push(
@@ -780,13 +780,13 @@ function genSizeGuide(): GeneratedMessage[] {
   );
   msgs.push(
     assistantMsg(
-      `${p.brand} ${p.name} ma standardowy krój. Przy wzroście 165-170 cm polecam rozmiar ${pick(p.sizes)}. Tabela rozmiarów dostępna na stronie produktu. Czy chce Pani dodać do koszyka?`,
+      `The ${p.brand} ${p.name} has a standard fit. I'd recommend size ${pick(p.sizes)}. The size chart is available on the product page. Would you like to add it to your cart?`,
     ),
   );
   if (rand() > 0.3) {
-    msgs.push(userMsg("Dziękuję, wezmę ten rozmiar!"));
+    msgs.push(userMsg("Thanks, I'll take that size!"));
     msgs.push(
-      assistantMsg("Świetny wybór! Czy mogę dodać produkt do koszyka?"),
+      assistantMsg("Great choice! Shall I add it to your cart?"),
     );
   }
   return msgs;
@@ -798,22 +798,22 @@ function genReturnExchange(): GeneratedMessage[] {
   const msgs: GeneratedMessage[] = [];
   msgs.push(
     userMsg(
-      `Chciałabym zwrócić ${p.name} z zamówienia ${orderId}. Rozmiar jest za duży.`,
+      `I'd like to return the ${p.name} from order ${orderId}. The size is too big.`,
     ),
   );
   msgs.push(
     assistantMsg(
-      "Rozumiem. Zwroty są możliwe w ciągu 30 dni od otrzymania przesyłki. Czy chce Pani wymianę na mniejszy rozmiar czy pełny zwrot?",
+      "I understand. Returns are available within 30 days of receiving your order. Would you like an exchange for a smaller size or a full refund?",
     ),
   );
-  msgs.push(userMsg("Poproszę wymianę na rozmiar mniejszy."));
+  msgs.push(userMsg("I'd like an exchange for a smaller size."));
   msgs.push(
     assistantMsg(
-      "Niestety wymiana wymaga kontaktu z naszym zespołem wsparcia. Przekazuję Pani sprawę do konsultanta, który pomoże z wymianą. Proszę chwilę poczekać.",
+      "An exchange requires assistance from our support team. I'm transferring your case to an agent who can help with the exchange. Please hold on.",
     ),
   );
   if (rand() > 0.5) {
-    msgs.push(userMsg("Dobrze, czekam."));
+    msgs.push(userMsg("OK, I'll wait."));
   }
   return msgs;
 }
@@ -821,21 +821,21 @@ function genReturnExchange(): GeneratedMessage[] {
 function genDeliveryInquiry(): GeneratedMessage[] {
   const msgs: GeneratedMessage[] = [];
   const questions = [
-    "Ile kosztuje dostawa do Niemiec?",
-    "Czy mogę odebrać zamówienie w paczkomacie?",
-    "Jak długo trwa dostawa kurierem?",
-    "Czy jest darmowa dostawa od jakiejś kwoty?",
-    "Czy wysyłacie za granicę?",
+    "How much does international shipping cost?",
+    "Can I pick up my order in store?",
+    "How long does express delivery take?",
+    "Is there free shipping above a certain amount?",
+    "Do you ship to Canada?",
   ];
   msgs.push(userMsg(pick(questions)));
   msgs.push(
     assistantMsg(
-      "Oferujemy kilka opcji dostawy:\n- Kurier DPD: 14.99 PLN (2-3 dni robocze)\n- Paczkomat InPost: 11.99 PLN (1-2 dni robocze)\n- Darmowa dostawa od 199 PLN\n- Wysyłka zagraniczna: od 39.99 PLN (EU)\n\nCzy mogę pomóc w czymś jeszcze?",
+      "We offer several shipping options:\n- Standard shipping: $5.99 (3-5 business days)\n- Express shipping: $12.99 (1-2 business days)\n- Free shipping on orders over $75\n- International shipping: from $19.99\n\nCan I help with anything else?",
     ),
   );
   if (rand() > 0.6) {
-    msgs.push(userMsg("Dziękuję, to wszystko!"));
-    msgs.push(assistantMsg("Miłych zakupów! 😊"));
+    msgs.push(userMsg("Thanks, that's all!"));
+    msgs.push(assistantMsg("Happy shopping!"));
   }
   return msgs;
 }
@@ -843,7 +843,7 @@ function genDeliveryInquiry(): GeneratedMessage[] {
 function genCartAbandonment(): GeneratedMessage[] {
   const p = pick(PRODUCTS);
   const msgs: GeneratedMessage[] = [];
-  msgs.push(userMsg(`Pokażcie mi ${p.category}`));
+  msgs.push(userMsg(`Show me your ${p.category}`));
   msgs.push(
     ...toolCallMsg(
       "List Products",
@@ -855,12 +855,12 @@ function genCartAbandonment(): GeneratedMessage[] {
   );
   msgs.push(
     assistantMsg(
-      `Oto nasze ${p.category}:\n${PRODUCTS.filter(
+      `Here are our ${p.category}:\n${PRODUCTS.filter(
         (x) => x.category === p.category,
       )
         .slice(0, 3)
-        .map((x) => `• ${x.name} — ${x.pricePLN} PLN`)
-        .join("\n")}\n\nCzy chce Pani zobaczyć szczegóły któregoś produktu?`,
+        .map((x) => `• ${x.name} — $${x.price}`)
+        .join("\n")}\n\nWould you like to see details on any of these?`,
     ),
   );
   // User abandons — no more messages
@@ -871,27 +871,27 @@ function genComplaint(): GeneratedMessage[] {
   const p = pick(PRODUCTS);
   const msgs: GeneratedMessage[] = [];
   const complaints = [
-    `Otrzymałam uszkodzony produkt — ${p.name} ma plamę. To skandal!`,
-    `Zamówiłam ${p.name} 2 tygodnie temu i nadal nie dotarło. Co się dzieje?`,
-    `Dostałam zły kolor ${p.name}. Zamawiałam czarny a przyszedł szary!`,
-    `Jakość ${p.name} jest bardzo niska jak na cenę ${p.pricePLN} PLN. Chcę zwrot!`,
+    `I received a damaged product — the ${p.name} has a stain on it. This is unacceptable!`,
+    `I ordered the ${p.name} 2 weeks ago and it still hasn't arrived. What's going on?`,
+    `I received the wrong color for the ${p.name}. I ordered black but got grey!`,
+    `The quality of the ${p.name} is very poor for $${p.price}. I want a refund!`,
   ];
   msgs.push(userMsg(pick(complaints)));
   msgs.push(
     assistantMsg(
-      "Bardzo przepraszam za tę sytuację. Rozumiem Pani frustrację. Chcę jak najszybciej rozwiązać ten problem. Przekazuję sprawę do naszego specjalisty ds. reklamacji, który skontaktuje się w ciągu 24h.",
+      "I'm very sorry about this situation. I completely understand your frustration. I want to resolve this as quickly as possible. I'm escalating your case to our claims specialist who will contact you within 24 hours.",
     ),
   );
   if (rand() > 0.4) {
-    msgs.push(userMsg("Chcę rozmawiać z kierownikiem!"));
+    msgs.push(userMsg("I want to speak with a manager!"));
     msgs.push(
       assistantMsg(
-        "Oczywiście, przekierowuję Panią do naszego managera zespołu obsługi. Proszę chwilę poczekać.",
+        "Of course, I'm transferring you to our customer service manager. Please hold on.",
       ),
     );
   }
   if (rand() > 0.6) {
-    msgs.push(userMsg("Piszę też opinię na Google."));
+    msgs.push(userMsg("I'm also leaving a review on Google."));
   }
   return msgs;
 }
@@ -901,26 +901,26 @@ function genMultiItemPurchase(): GeneratedMessage[] {
     (p, i, a) => a.findIndex((x) => x.id === p.id) === i,
   );
   if (items.length < 2) items.push(PRODUCTS[0]);
-  const firstName = pick(POLISH_FIRST_NAMES);
-  const lastName = pick(POLISH_LAST_NAMES);
+  const firstName = pick(FIRST_NAMES);
+  const lastName = pick(LAST_NAMES);
   const city = pick(CITIES);
   const cityIdx = CITIES.indexOf(city);
-  const postalCode = POSTAL_CODES[cityIdx] || "00-001";
+  const zipCode = ZIP_CODES[cityIdx] || "10001";
   const cartId = `cart_${uuid().slice(0, 8)}`;
   const orderId = `order_${uuid().slice(0, 8)}`;
   let total = 0;
 
   const msgs: GeneratedMessage[] = [];
-  msgs.push(userMsg("Chciałabym kupić kilka rzeczy. Pomożecie?"));
+  msgs.push(userMsg("I'd like to buy a few things. Can you help?"));
   msgs.push(
     assistantMsg(
-      "Oczywiście! Proszę powiedzieć, czego Pani szuka, a ja pomogę znaleźć idealne produkty.",
+      "Of course! Tell me what you're looking for and I'll help you find the perfect items.",
     ),
   );
   msgs.push(
     ...toolCallMsg(
       "Create Cart",
-      { regionId: "reg_pl", currencyCode: "PLN" },
+      { regionId: "reg_us", currencyCode: "USD" },
       { cart: { id: cartId } },
     ),
   );
@@ -928,9 +928,9 @@ function genMultiItemPurchase(): GeneratedMessage[] {
   for (const item of items) {
     const size = pick(item.sizes);
     const variantId = `var_${item.id}_${randInt(0, item.sizes.length - 1)}`;
-    total += item.pricePLN;
+    total += item.price;
 
-    msgs.push(userMsg(`Dodaj ${item.name} w rozmiarze ${size}`));
+    msgs.push(userMsg(`Add the ${item.name} in size ${size}`));
     msgs.push(
       ...toolCallMsg(
         "Add to Cart",
@@ -945,13 +945,13 @@ function genMultiItemPurchase(): GeneratedMessage[] {
       ),
     );
     msgs.push(
-      assistantMsg(`Dodano ${item.name} (${size}). Suma: ${total} PLN.`),
+      assistantMsg(`Added ${item.name} (${size}). Total: $${total}.`),
     );
   }
 
   msgs.push(
     userMsg(
-      `OK, chcę zamówić. Adres: ${firstName} ${lastName}, ${pick(STREETS)} ${randInt(1, 99)}, ${postalCode} ${city}`,
+      `OK, I'd like to order. Address: ${firstName} ${lastName}, ${randInt(1, 9999)} ${pick(STREETS)}, ${city} ${zipCode}`,
     ),
   );
   msgs.push(
@@ -962,10 +962,10 @@ function genMultiItemPurchase(): GeneratedMessage[] {
         address: {
           firstName,
           lastName,
-          address1: `${pick(STREETS)} ${randInt(1, 99)}`,
+          address1: `${randInt(1, 9999)} ${pick(STREETS)}`,
           city,
-          postalCode,
-          countryCode: "PL",
+          zipCode,
+          countryCode: "US",
         },
       },
       { cart: { id: cartId, shipping_address: { city } } },
@@ -973,10 +973,10 @@ function genMultiItemPurchase(): GeneratedMessage[] {
   );
   msgs.push(
     assistantMsg(
-      `Adres dostawy ustawiony. Łączna kwota: ${total} PLN. Potwierdzić zamówienie?`,
+      `Shipping address set. Total: $${total}. Shall I confirm the order?`,
     ),
   );
-  msgs.push(userMsg("Tak, potwierdzam!"));
+  msgs.push(userMsg("Yes, confirm!"));
   msgs.push(
     ...toolCallMsg(
       "Complete Cart",
@@ -993,7 +993,7 @@ function genMultiItemPurchase(): GeneratedMessage[] {
   );
   msgs.push(
     assistantMsg(
-      `Zamówienie ${orderId} zostało złożone! Łączna kwota: ${total} PLN. Dziękuję za zakupy!`,
+      `Order ${orderId} has been placed! Total: $${total}. Thank you for shopping with us!`,
     ),
   );
   return msgs;
@@ -1015,7 +1015,7 @@ const SCENARIO_GENERATORS: Record<ScenarioId, () => GeneratedMessage[]> = {
 // Time distribution helpers
 // ============================================================================
 
-/** Hourly weight distribution for a Polish fashion store (CET) */
+/** Hourly weight distribution for an online fashion store (EST) */
 const HOURLY_WEIGHTS = [
   /* 00 */ 2, /* 01 */ 1, /* 02 */ 0.5, /* 03 */ 0.3, /* 04 */ 0.3,
   /* 05 */ 0.5, /* 06 */ 1, /* 07 */ 2, /* 08 */ 4, /* 09 */ 6, /* 10 */ 8,
@@ -1047,35 +1047,26 @@ function generateSessionTimestamp(now: Date, daysAgo: number): Date {
 // ============================================================================
 
 function generatePhoneNumber(): string {
-  return `+48 ${randInt(500, 899)} ${randInt(100, 999)} ${randInt(100, 999)}`;
+  return `+1 ${randInt(200, 999)}-${randInt(200, 999)}-${randInt(1000, 9999)}`;
 }
 
-// biome-ignore lint/suspicious/noMisleadingCharacterClass: standard NFD combining-marks strip pattern
-const COMBINING_MARKS_RE = /[\u0300-\u036f]/g;
-
 function generateEmail(): string {
-  const first = pick(POLISH_FIRST_NAMES)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(COMBINING_MARKS_RE, "");
-  const last = pick(POLISH_LAST_NAMES)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(COMBINING_MARKS_RE, "");
+  const first = pick(FIRST_NAMES).toLowerCase();
+  const last = pick(LAST_NAMES).toLowerCase();
   const domains = [
     "gmail.com",
-    "wp.pl",
-    "onet.pl",
-    "o2.pl",
-    "interia.pl",
+    "yahoo.com",
     "outlook.com",
+    "icloud.com",
+    "hotmail.com",
+    "proton.me",
   ];
   return `${first}.${last}${randInt(1, 99)}@${pick(domains)}`;
 }
 
 function generateUserMetadata(): Record<string, unknown> {
-  const firstName = pick(POLISH_FIRST_NAMES);
-  const lastName = pick(POLISH_LAST_NAMES);
+  const firstName = pick(FIRST_NAMES);
+  const lastName = pick(LAST_NAMES);
   const isReturning = rand() > 0.4;
   return {
     name: `${firstName} ${lastName}`,
@@ -1150,17 +1141,17 @@ function generateFeedback(
 // Main seed logic
 // ============================================================================
 
-async function setupEstylOrg(db: SeedDb) {
-  console.log("Setting up Estyl organization...\n");
+async function setupAcmeOrg(db: SeedDb) {
+  console.log("Setting up ACME organization...\n");
 
   // 1. Create org
   const [orgRow] = await db
     .insert(organizations)
     .values({
-      name: "Estyl",
-      slug: "estyl",
+      name: "ACME",
+      slug: "acme",
       settings: {
-        timezone: "Europe/Warsaw",
+        timezone: "America/New_York",
         features: ["voice-agents", "chat-agents"],
       },
     })
@@ -1170,15 +1161,15 @@ async function setupEstylOrg(db: SeedDb) {
   const org =
     orgRow ||
     (await db.query.organizations.findFirst({
-      where: (o, { eq }) => eq(o.slug, "estyl"),
+      where: (o, { eq }) => eq(o.slug, "acme"),
     }));
 
-  if (!org) throw new Error("Failed to create/find Estyl organization");
+  if (!org) throw new Error("Failed to create/find ACME organization");
   console.log(`  Org: ${org.name} (${org.id})`);
 
   // 2. Create users
-  const adminEmail = "delivered+admin-estyl@resend.dev";
-  const supportEmail = "delivered+support-estyl@resend.dev";
+  const adminEmail = "delivered+admin-acme@resend.dev";
+  const supportEmail = "delivered+support-acme@resend.dev";
 
   const [adminRow] = await db
     .insert(users)
@@ -1186,14 +1177,14 @@ async function setupEstylOrg(db: SeedDb) {
       {
         organizationId: org.id,
         email: adminEmail,
-        name: "Estyl Admin",
+        name: "ACME Admin",
         role: "admin",
         isActive: true,
       },
       {
         organizationId: org.id,
         email: supportEmail,
-        name: "Estyl Support",
+        name: "ACME Support",
         role: "support",
         isActive: true,
       },
@@ -1224,11 +1215,11 @@ async function setupEstylOrg(db: SeedDb) {
     .values({
       organizationId: org.id,
       connectorCatalogId: medusaCatalog.id,
-      name: "Estyl Store",
-      slug: "estyl",
+      name: "ACME Store",
+      slug: "acme",
       config: {
-        baseUrl: "https://api.estyl.pl",
-        publishableKey: "pk_estyl_prod",
+        baseUrl: "https://api.acme-store.com",
+        publishableKey: "pk_acme_prod",
       },
       isActive: true,
     })
@@ -1239,9 +1230,9 @@ async function setupEstylOrg(db: SeedDb) {
     connRow ||
     (await db.query.connectors.findFirst({
       where: (c, { eq, and }) =>
-        and(eq(c.organizationId, org.id), eq(c.slug, "estyl")),
+        and(eq(c.organizationId, org.id), eq(c.slug, "acme")),
     }));
-  if (!connector) throw new Error("Failed to create/find Estyl connector");
+  if (!connector) throw new Error("Failed to create/find ACME connector");
   console.log(`  Connector: ${connector.name}`);
 
   // 5. Create connector tools from catalog
@@ -1273,13 +1264,13 @@ async function setupEstylOrg(db: SeedDb) {
   }
 
   // 6. Create agent
-  const agentName = "Estyl Shopping Assistant";
+  const agentName = "ACME Shopping Assistant";
   const [agentRow] = await db
     .insert(agents)
     .values({
       organizationId: org.id,
       name: agentName,
-      description: "AI shopping assistant for estyl.pl fashion store",
+      description: "AI shopping assistant for ACME fashion store",
       agentType: "voice",
       isActive: true,
       createdBy: admin.id,
@@ -1303,7 +1294,7 @@ async function setupEstylOrg(db: SeedDb) {
     .values({
       organizationId: org.id,
       agentId: agent.id,
-      name: "Estyl Production Key",
+      name: "ACME Production Key",
       keyHash: hash,
       keyPrefix: prefix,
       isActive: true,
@@ -1604,11 +1595,11 @@ async function main() {
   try {
     console.log("=== Synthetic Session Data Seed ===\n");
 
-    const { orgId, agentId } = await setupEstylOrg(db);
+    const { orgId, agentId } = await setupAcmeOrg(db);
     await generateAndInsertSessions(db, orgId, agentId);
 
     console.log("\n=== Seed complete ===");
-    console.log("Login as: delivered+admin-estyl@resend.dev");
+    console.log("Login as: delivered+admin-acme@resend.dev");
   } finally {
     await queryClient.end();
   }
