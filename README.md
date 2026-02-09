@@ -1,12 +1,16 @@
 <p align="center">
-  <img src="assets/modelguide-logo-light.svg" height="60" alt="Model Guide" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/modelguide-logo-dark.svg" />
+    <img src="assets/modelguide-logo-light.svg" height="60" alt="Model Guide" />
+  </picture>
 </p>
 
 <h3 align="center">Your call center & support agent demo worked. Now ship it.</h3>
 
 <p align="center">
-  Open-source AI contact centers.<br/>
+  Self-hosted, open-source AI contact centers.<br/>
   Connect any voice/chat platform → your business systems → a full Contact Center for your team to run.<br/>
+  Built on agentic engineering principles — adding a connector is one TypeScript file. Any AI coding agent can build one for you.<br/>
   No vendor lock-in. No per-resolution pricing. You own everything.
 </p>
 
@@ -21,10 +25,7 @@
 
 ---
 
-<!-- TODO: screenshot of sessions dashboard showing tool call traces -->
-<p align="center">
-  <img src="assets/demo-screenshot.png" width="800" alt="Model Guide — sessions dashboard with tool call traces" />
-</p>
+<!-- TODO: add screenshot of sessions dashboard showing tool call traces -->
 
 ---
 
@@ -61,7 +62,7 @@ Model Guide sits between your AI agents and your business systems. It doesn't ru
 │  MODEL GUIDE                                             │
 │                                                          │
 │  Agents ─────── config, API keys, tool assignments       │
-│  Connectors ─── Medusa, Zendesk + build your own         │
+│  Connectors ─── e-commerce, helpdesk + build your own     │
 │  Sessions ───── transcripts, tool traces, feedback       │
 │  Dashboard ──── filter, review, evaluate, compare        │
 └────────────────────┬─────────────────────────────────────┘
@@ -75,24 +76,24 @@ Model Guide sits between your AI agents and your business systems. It doesn't ru
 
 ## Quick Start
 
+> **Prerequisites:** Docker 24+, Bun 1.1+, Node 22+
+
 ```bash
 git clone https://github.com/modelguide/modelguide.git
 cd modelguide
+make quickstart
+```
 
-# Start PostgreSQL + run migrations + seed demo data
-make db-up
-cd modelguide-api && cp .env.example .env && bun install && bun run db:migrate && bun run db:seed
-bun run dev    # API at http://localhost:3000
+Then in separate terminals:
 
-# In another terminal — dashboard
-cd modelguide-ui && cp .env.example .env && npm install && npm run dev
+```bash
+make api-dev    # API at http://localhost:3000
+make ui-dev     # Dashboard at http://localhost:3001
 ```
 
 Open `http://localhost:3001`. The seed creates a demo organization, a Pizza Palace agent with Medusa e-commerce tools, and an API key you can use to connect any voice platform.
 
 API docs are auto-generated at `http://localhost:3000/docs`.
-
-> **Requirements:** Docker 24+, Bun 1.1+, Node 22+
 
 ## How It Works
 
@@ -102,14 +103,17 @@ Each connector is a TypeScript module with a manifest and tool handlers:
 
 ```typescript
 // src/features/connectors/catalog/medusa/index.ts
-const medusaManifest: ConnectorManifest = {
+const manifest: ConnectorManifest = {
   name: "Medusa",
   slug: "medusa",
+  description: "E-commerce connector for carts, orders, and products",
   connectorType: "api",
   configSchema: {
     baseUrl: { type: "string", required: true },
     publishableKey: { type: "string", required: true },
   },
+  authMethods: ["api_key"],
+  iconUrl: "https://medusajs.com/images/logo.svg",
   tools: [
     {
       catalog: {
@@ -123,6 +127,8 @@ const medusaManifest: ConnectorManifest = {
     // ... 7 more tools
   ],
 };
+
+export default manifest;
 ```
 
 Run `make sync-connectors` to sync manifests to the database. Admins configure instances through the dashboard — set the API URL, link encrypted credentials, assign tools to agents.
@@ -160,29 +166,29 @@ The dashboard gives support teams what they need: session list with filters (sta
 
 ## Features
 
-✅ **Connector System** — Code-defined manifests with real HTTP handlers. Medusa e-commerce connector ships with 8 tools (browse products, manage carts, checkout, orders). Zendesk helpdesk connector with 5 tools (tickets, comments). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
+✅ **Connector System** — Code-defined manifests with real HTTP handlers. Ships with a Medusa e-commerce connector as a reference implementation (8 tools: browse products, manage carts, checkout, orders). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
 
 ✅ **Tool Namespacing** — Connector instances get a unique slug. Same connector type, different instances: `pizzapalace_add_to_cart` and `burgerking_add_to_cart` coexist on the same agent.
 
 ✅ **MCP Protocol** — Standard [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP. Tool discovery, execution, and resources. Works with any MCP-compatible client.
 
-✅ **Confirmation Gates** — Flag destructive tools (`confirm_order`, `cancel_order`, `close_ticket`). The `requires_confirmation` flag tells the AI agent to get customer confirmation before executing.
+✅ **Confirmation Gates** — Flag destructive tools as requiring customer confirmation before execution. The `requires_confirmation` flag tells the AI agent to verify intent before proceeding (e.g., completing a checkout).
 
-✅ **Session Recording** — Full message history with roles, timestamps, audio URLs, tool call inputs/outputs, latency, token counts. Sequence-numbered for correct ordering.
+✅ **Session Recording** — Full message history with roles, timestamps, audio URLs, tool call inputs/outputs. Sequence-numbered for correct ordering.
 
 ✅ **CSAT + QA** — Customer feedback via `core_rate_session`. Internal quality evaluation by support team with tags and comments. Both stored per session, filterable in dashboard.
 
-✅ **Escalation** — `core_escalate_session` marks the session, agent creates a Zendesk ticket with context. Dashboard shows escalation reference for follow-up.
+✅ **Escalation** — `core_escalate_session` marks sessions for human handoff. Dashboard surfaces escalated sessions for follow-up.
 
 ✅ **Multi-Tenant** — PostgreSQL row-level security on every org-scoped table. Separate DB roles: superuser for migrations, app role subject to RLS policies. One deployment, multiple organizations.
 
 ✅ **Auth** — Magic link passwordless login for dashboard users. API key auth (`mgk_` prefix, SHA-256 hashed, shown once on creation) for agents. Refresh token rotation with family-based revocation.
 
-✅ **RBAC** — 26 permissions across admin and support roles. Agents get a separate auth path — they can only access MCP, not REST endpoints.
+✅ **RBAC** — Granular permissions across admin and support roles. Agents get a separate auth path — they can only access MCP, not REST endpoints.
 
 ✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
 
-✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. 6,400+ lines of tests including MCP protocol tests using the official SDK client.
+✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
 
 ## Tech Stack
 
@@ -235,12 +241,14 @@ import type { ConnectorManifest } from "../types";
 const manifest: ConnectorManifest = {
   name: "Your Service",
   slug: "yourservice",
+  description: "Short description of your connector",
   connectorType: "api",
   configSchema: {
     apiUrl: { type: "string", required: true, description: "API base URL" },
     apiKey: { type: "secret", required: true, description: "API key" },
   },
   authMethods: ["api_key"],
+  iconUrl: "https://yourservice.com/logo.svg",
   tools: [
     {
       catalog: {
@@ -282,7 +290,7 @@ const modules = await Promise.all([
 
 ## Roadmap
 
-🚧 **Zendesk handler implementation** — Catalog and tools defined, HTTP handlers in progress
+🚧 **Zendesk connector** — Helpdesk integration with ticket management tools (create, update, comment, close)
 
 🚧 **Confirmation token flow** — Flag exists per tool, full token-based confirmation with expiry coming
 

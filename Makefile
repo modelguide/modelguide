@@ -1,4 +1,4 @@
-.PHONY: help api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset logs
 
 .DEFAULT_GOAL := help
 
@@ -6,6 +6,24 @@ help: ## Show available commands
 	@echo "ModelGuide Development Commands"
 	@echo "==============================="
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
+
+# =============================================================================
+# Quick Start
+# =============================================================================
+
+quickstart: ## Setup everything and start API + UI (first-time setup)
+	@echo "Starting PostgreSQL..."
+	docker compose up -d postgres
+	@echo "Waiting for PostgreSQL to be ready..."
+	@sleep 3
+	@echo "Setting up API..."
+	cd modelguide-api && cp -n .env.example .env && bun install && bun run db:migrate && bun run db:seed
+	@echo "Setting up UI..."
+	cd modelguide-ui && cp -n .env.example .env && npm install
+	@echo ""
+	@echo "Ready! Run in separate terminals:"
+	@echo "  make api-dev    # API at http://localhost:3000"
+	@echo "  make ui-dev     # Dashboard at http://localhost:3001"
 
 # =============================================================================
 # API
