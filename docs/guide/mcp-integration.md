@@ -325,6 +325,6 @@ main().catch(console.error);
 
 ## Next Steps
 
-- [Admin Setup Guide](admin-setup.md) — Configure connectors, create agents, assign tools
-- [API Specification](../api-spec.md) — Full REST API and MCP reference
+- [Admin Guide](admin-guide.md) — Configure connectors, create agents, assign tools
+- Auto-generated API docs at `http://localhost:3000/docs`
 - [Adding a Connector](../../README.md#adding-a-connector) — Build your own connector

@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="docs/api-spec.md">API Spec</a> · <a href="docs/guide/getting-started.md">Agent Guide</a> · <a href="docs/guide/admin-setup.md">Admin Guide</a> · <a href="#how-it-works">How It Works</a> · <a href="#roadmap">Roadmap</a>
+  <a href="#quick-start">Quick Start</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="#adding-a-connector">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
 ---
@@ -227,7 +227,7 @@ modelguide/
 │       ├── features/            # agents, connectors, sessions, analytics
 │       └── routes/              # File-based routing
 ├── docker/                      # PostgreSQL init (RLS roles)
-├── docs/                        # PRD, DB schema, API spec, phases
+├── docs/                        # Guides, ADRs, design system
 └── Makefile                     # All dev commands
 ```
 
@@ -310,10 +310,8 @@ const modules = await Promise.all([
 
 | Resource | Description |
 |----------|-------------|
-| [API Specification](docs/api-spec.md) | REST API and MCP protocol reference |
-| [Agent Developer Guide](docs/guide/getting-started.md) | Connect your AI agent via MCP |
-| [Admin Setup Guide](docs/guide/admin-setup.md) | Configure connectors, agents, and tools |
-| [Database Schema](docs/DB_SCHEMA.md) | Tables, indexes, RLS policies |
+| [MCP Integration Guide](docs/guide/mcp-integration.md) | Connect your AI agent via MCP |
+| [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools |
 | [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
 | [Contributing](CONTRIBUTING.md) | Setup, workflow, conventions |
 

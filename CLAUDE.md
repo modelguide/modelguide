@@ -6,21 +6,15 @@ Guidance for Claude Code when working in this repository.
 
 ModelGuide is an AI agent management platform that connects external AI agents (voice, chat) with service connectors (e-commerce, helpdesk, calendars). REST API for admin/support users, MCP server for AI agents, multitenancy via PostgreSQL RLS.
 
-## Documentation Index
+## Documentation
 
 - `README.md` — Project overview, architecture, quick start, roadmap
 - `CONTRIBUTING.md` — Setup, environment variables, dev workflow, code conventions
-- `docs/PRD.md` — Product requirements, personas, use cases, permissions matrix
-- `docs/api-spec.md` — Complete REST API and MCP specification
-- `docs/DB_SCHEMA.md` — Database schema
-- `docs/guide/getting-started.md` — Agent developer quickstart (MCP integration)
-- `docs/guide/admin-setup.md` — Platform admin configuration guide
+- `docs/guide/mcp-integration.md` — Agent developer MCP integration guide
+- `docs/guide/admin-guide.md` — Platform admin configuration guide
 - `docs/UI_STRUCTURE.md` — Dashboard design system and component patterns
-- `docs/decisions/001-refresh-token-rotation.md` — Token architecture, cookie config, CSRF
-- `docs/decisions/002-magic-link-authentication.md` — Passwordless auth, delivery strategies
-- `modelguide-api/README.md` — API package details
-- `modelguide-ui/README.md` — Dashboard package details
-- `Makefile` — All dev commands (`make help` for full list)
+- `docs/decisions/` — Architecture Decision Records (ADR-001: refresh tokens, ADR-002: magic links)
+- `Makefile` — All dev commands (`make help` for full list, `make quickstart` for first-time setup)
 
 ## Local Workspace
 
@@ -34,42 +28,118 @@ Create ADRs in `docs/decisions/` for significant decisions:
 - **Format:** `NNN-short-title.md` (e.g., `001-refresh-token-rotation.md`)
 - **Sections:** Status, Context, Decision (with rationale), Consequences
 
-## Authentication Model
+## Commands
 
-- **Admin/Support:** Short-lived JWT access tokens (15 min) + refresh token rotation via httpOnly cookie (7-day sliding, `__Host-` prefix on HTTPS). Refresh uses `REFRESH_JWT_SECRET` (separate from `JWT_SECRET`). CSRF protection via Origin header. See `docs/decisions/001-refresh-token-rotation.md`.
-- **Agents:** API keys (`mgk_xxx` prefix), SHA-256 hash stored, shown only on creation.
+```bash
+# First-time setup (starts Postgres, installs deps, runs migrations + seed)
+make quickstart
 
-## Key Concepts
+# API
+make api-dev                  # Start API dev server (port 3000)
+make api-test                 # Run all API tests
+make api-test-unit            # Unit tests only (no Docker needed)
+make api-test-integration     # Integration tests (requires running Postgres)
+make api-typecheck            # TypeScript type checking
+make api-lint                 # Lint with auto-fix
+make api-lint-check           # Lint check only (CI uses this)
 
-- **Connectors Catalog:** Read-only registry of connector types (Medusa, Zendesk, Calendly)
-- **Connectors:** Org-specific instances with config referencing secrets by UUID
-- **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `pizzapalace_add_to_cart`)
-- **Core Tools:** Built-in platform tools (`core_create_session`, `core_end_session`, etc.)
-- **requires_confirmation:** Tools that need user confirmation before execution
+# UI
+make ui-dev                   # Start UI dev server (port 3001)
+make ui-test                  # Run UI tests
+make ui-typecheck             # TypeScript type checking
+make ui-lint                  # Biome lint
 
-## Path Aliases
+# Database
+make db-up                    # Start PostgreSQL container (port 5434)
+make db-down                  # Stop PostgreSQL container
+make db-generate              # Generate Drizzle migrations (use: drizzle-kit generate --name <descriptive-name>)
+make db-migrate               # Run migrations
+make db-seed                  # Seed database with test data
+make db-studio                # Open Drizzle Studio
+```
 
-**API** (`modelguide-api/tsconfig.json`):
+## API Architecture
+
+**Tech stack:** Bun.js, Hono + @hono/zod-openapi, @modelcontextprotocol/sdk, PostgreSQL 16 + Drizzle ORM, Scalar docs
+
+```
+modelguide-api/src/
+├── index.ts              # Bun.serve entry point
+├── app.ts                # Hono app, routes, OpenAPI/Scalar setup
+├── env.ts                # Zod environment validation
+├── db/                   # Drizzle client and schema
+├── lib/                  # Shared utilities, middleware, crypto, JWT
+└── features/
+    ├── users/            # Auth (magic links, JWT, refresh tokens, API keys)
+    ├── organizations/    # Multitenancy, RLS context
+    ├── agents/           # Agent CRUD, activation, API key generation
+    ├── connectors/       # Connector catalog, instances, tools
+    ├── secrets/          # Encrypted credentials (AES-256-GCM)
+    ├── sessions/         # Session lifecycle, messages
+    ├── feedback/         # Customer CSAT, support evaluations
+    ├── analytics/        # Summary metrics, trends
+    └── mcp/              # MCP server, resources, core tools
+```
+
+**Key endpoints:** `POST /mcp` (AI agents), `GET /docs` (Scalar), `GET /api/health`
+
+**Path aliases** (`modelguide-api/tsconfig.json`):
 - `@features/*` → `./src/features/*`
 - `@lib/*` → `./src/lib/*`
 - `@db/*` → `./src/db/*`
 - `@/*` → `./src/*`
 
-**UI** (`modelguide-ui/tsconfig.json`):
-- `~/` → `./src/`
+### Authentication Model
+
+- **Dashboard users:** Magic link passwordless login. Short-lived JWT access tokens (15 min, memory-only). Refresh token rotation via httpOnly cookie (`__Host-` prefix on HTTPS, plain `refresh_token` on HTTP). CSRF protection via Origin header on `/auth/refresh` and `/auth/logout`. See ADR-001 and ADR-002.
+- **AI agents:** API keys (`mgk_xxx` prefix), SHA-256 hashed before storage, shown only once at creation.
+
+### Key Concepts
+
+- **Connectors Catalog:** Read-only registry of connector types (Medusa shipped as reference)
+- **Connectors:** Org-specific instances with config referencing secrets by UUID
+- **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `pizzapalace_add_to_cart`)
+- **Core Tools:** Built-in platform tools (`core_create_session`, `core_end_session`, etc.)
+- **requires_confirmation:** Tools that need user confirmation before execution
+
+### Database
+
+Key tables: `organizations`, `users`, `agents`, `api_keys`, `connectors_catalog`, `connectors`, `connector_tools`, `secrets`, `sessions`, `session_messages`, `session_feedback`, `magic_tokens`, `security_tokens`. Schema defined in `modelguide-api/src/db/schema/`.
 
 ---
 
 ## Dashboard UI (modelguide-ui)
 
+**Tech stack:** TanStack Start (SPA mode), React 19, TanStack Router + Query, Zustand, Tailwind CSS v4, ky, recharts, CVA
+
+```
+modelguide-ui/src/
+├── routes/               # File-based routing (TanStack Router)
+├── components/
+│   ├── ui/               # Reusable primitives (button, card, input, badge, dialog, etc.)
+│   └── layout/           # App shell, sidebar, header, logo
+├── features/             # Feature-specific components per domain
+│   ├── auth/             # Login form (magic link)
+│   ├── dashboard/        # Stats cards, recent sessions
+│   ├── sessions/         # Sessions table, transcript viewer, filters
+│   ├── agents/           # Agents table, API key modal
+│   ├── connectors/       # Connectors grid, config form
+│   ├── secrets/          # Secrets table, forms
+│   ├── analytics/        # Charts (trend, status, channel)
+│   └── settings/         # Profile, appearance, users
+├── stores/               # Zustand (auth with persist, theme)
+├── schemas/              # Zod schemas
+├── lib/                  # cn.ts, utils.ts, api.ts (ky instance)
+└── styles/app.css        # Tailwind config and design tokens
+```
+
+**Path alias** (`modelguide-ui/tsconfig.json`): `~/` → `./src/`
+
 ### Design System: "Atmospheric Dark"
 
-**Typography:**
-- Display: `--font-display: 'Syne'` — distinctive headings
-- Body: `--font-sans: 'IBM Plex Sans'` — clean, readable
-- Code: `--font-mono: 'JetBrains Mono'` — technical elements
+**Typography:** Syne (display), IBM Plex Sans (body), JetBrains Mono (code)
 
-**Color Tokens (defined in app.css):**
+**Color Tokens (app.css):**
 ```css
 --color-brand-500: #f97316;       /* Brand ember orange */
 --color-bg-base: #0a0a0b;        /* Dark mode page background */
@@ -83,14 +153,10 @@ Create ADRs in `docs/decisions/` for significant decisions:
 --color-error: #ef4444;
 ```
 
-**Theme:** Dark mode (default) with atmospheric gradients. Light mode with warm stone tones.
-
 ### UI Development Patterns
 
 **Component Variants with CVA:**
 ```tsx
-import { cva, type VariantProps } from 'class-variance-authority'
-
 const buttonVariants = cva('base-classes', {
   variants: {
     variant: { primary: '...', secondary: '...' },

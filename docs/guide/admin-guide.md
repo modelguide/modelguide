@@ -165,7 +165,7 @@ curl -X POST http://localhost:3000/api/agents/<agent-id>/activate \
 
 ## 6. Verify End-to-End
 
-Test that your agent can connect and use tools. See the [Agent Developer Guide](getting-started.md) for full MCP integration details, but here's a quick verification:
+Test that your agent can connect and use tools. See the [MCP Integration Guide](mcp-integration.md) for full MCP integration details, but here's a quick verification:
 
 ```bash
 # List available tools via MCP
@@ -206,6 +206,6 @@ Once agents are running, the **Sessions** page shows real-time activity:
 
 ## Next Steps
 
-- [Agent Developer Guide](getting-started.md) — Full MCP integration walkthrough
+- [MCP Integration Guide](mcp-integration.md) — Full MCP integration walkthrough
 - [Adding a Connector](../../README.md#adding-a-connector) — Build a custom connector
-- [API Specification](../api-spec.md) — Complete REST and MCP reference
+- Auto-generated API docs at `http://localhost:3000/docs`

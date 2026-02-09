@@ -64,7 +64,7 @@ src/
 | `GET /openapi.json` | OpenAPI 3.1 spec |
 | `POST /mcp` | MCP endpoint for AI agents |
 
-Full specification in [docs/api-spec.md](../docs/api-spec.md).
+Full specification auto-generated at `http://localhost:3000/docs` (Scalar UI).
 
 ## Path Aliases
 
@@ -99,7 +99,5 @@ make api-test-integration # Integration only
 
 ## Related Docs
 
-- [API Specification](../docs/api-spec.md) — Full REST + MCP spec
-- [Database Schema](../docs/DB_SCHEMA.md) — All tables, indexes, RLS policies
 - [Contributing](../CONTRIBUTING.md) — Setup, workflow, conventions
 - [Root README](../README.md) — Project overview
