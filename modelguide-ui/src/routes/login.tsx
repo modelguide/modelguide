@@ -47,17 +47,14 @@ function LoginPage() {
             </p>
             <div className="space-y-2 font-mono text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-fg-primary">admin@pizza-palace.com</span>
+                <span className="text-fg-primary">delivered+admin-pizza-palace@resend.dev</span>
                 <span className="text-fg-muted">admin</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-fg-primary">support@pizza-palace.com</span>
+                <span className="text-fg-primary">delivered+support-pizza-palace@resend.dev</span>
                 <span className="text-fg-muted">support</span>
               </div>
             </div>
-            <p className="mt-3 text-xs text-fg-muted">
-              Magic link token prints to the API server console
-            </p>
           </div>
         </div>
       </div>
