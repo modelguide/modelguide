@@ -82,15 +82,23 @@ export async function listAgents(
 }
 
 export async function getAgentById(orgId: string, agentId: string) {
-  const [agent] = await forOrg(orgId, (tx) =>
-    tx.select().from(agents).where(eq(agents.id, agentId)),
-  );
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId));
 
-  if (!agent) {
-    throw Errors.agentNotFound(agentId);
-  }
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
 
-  return agent;
+    const [activeKey] = await tx
+      .select({ keyPrefix: apiKeys.keyPrefix })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true)));
+
+    return { ...agent, keyPrefix: activeKey?.keyPrefix ?? null };
+  });
 }
 
 export async function createAgent(
@@ -137,6 +145,7 @@ export async function updateAgent(
   data: {
     name?: string;
     description?: string;
+    metadata?: Record<string, unknown>;
   },
 ) {
   const [updated] = await forOrg(orgId, (tx) =>

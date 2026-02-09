@@ -1,27 +1,21 @@
 /**
  * ElevenLabs webhook handlers
  *
- * Two endpoints following the official ElevenLabs integration pattern:
- * - POST /tool          — tool call during a conversation
- * - POST /post-call     — post_call_transcription after call ends
+ * POST /:agentId/post-call — post_call_transcription after call ends
  *
- * Both verify the ElevenLabs signature and authenticate the agent
- * via the mg_api_key dynamic variable.
+ * Tool calls during conversation go through the MCP endpoint (/mcp).
+ * Auth is via HMAC signature verification using the agent's hmac_secret.
  */
 
 import { env } from "@/env";
 import { db } from "@db/client";
-import { agents, apiKeys, sessionMessages, sessions } from "@db/schema";
+import { agents, sessionMessages, sessions } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import { hashApiKey, isValidApiKeyFormat } from "@lib/crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 
-import {
-  type DynamicVariables,
-  postCallTranscriptionPayloadSchema,
-  toolCallPayloadSchema,
-} from "./elevenlabs.schemas";
+import { postCallTranscriptionPayloadSchema } from "./elevenlabs.schemas";
+import { convertPostCallToSession } from "./elevenlabs.converter";
 
 const elevenlabs = new ElevenLabsClient();
 
@@ -32,143 +26,81 @@ const app = new Hono();
 // ============================================================================
 
 /**
- * Verify ElevenLabs webhook signature.
+ * Verify ElevenLabs webhook signature using the agent's webhook secret.
  * Must consume the raw body — Hono gives us text via c.req.text().
  */
-async function verifySignature(rawBody: string, signature: string) {
-  return elevenlabs.webhooks.constructEvent(
-    rawBody,
-    signature,
-    env.ELEVENLABS_WEBHOOK_SECRET,
-  );
+async function verifySignature(
+  rawBody: string,
+  signature: string,
+  webhookSecret: string,
+) {
+  return elevenlabs.webhooks.constructEvent(rawBody, signature, webhookSecret);
 }
 
 /**
- * Resolve an mg_api_key to its agent + organization context.
- * Reuses the same lookup logic as the auth middleware.
+ * Look up an agent by ID and return it with its metadata.
  */
-// TODO: Remove dev bypass — always resolve from DB in production
-const DEV_BYPASS_AGENT =
-  env.NODE_ENV === "development"
-    ? {
-        id: "00000000-0000-0000-0000-000000000000",
-        name: "dev-agent",
-        organizationId: "00000000-0000-0000-0000-000000000000",
-        agentType: "voice" as const,
-        isActive: true,
-      }
-    : null;
-
-async function resolveAgent(vars: DynamicVariables) {
-  const key = vars.mg_api_key;
-
-  // Dev bypass: skip DB lookup when key is not a real mgk_ key
-  if (DEV_BYPASS_AGENT && !isValidApiKeyFormat(key)) {
-    console.warn("[webhook] Dev bypass: using fake agent context");
-    return DEV_BYPASS_AGENT;
-  }
-
-  if (!isValidApiKeyFormat(key)) return null;
-
-  const keyHash = hashApiKey(key);
-  const rows = await db
-    .select({ apiKey: apiKeys, agent: agents })
-    .from(apiKeys)
-    .leftJoin(agents, eq(apiKeys.agentId, agents.id))
-    .where(eq(apiKeys.keyHash, keyHash))
+async function getAgentWithMetadata(agentId: string) {
+  const [agent] = await db
+    .select()
+    .from(agents)
+    .where(eq(agents.id, agentId))
     .limit(1);
-
-  if (rows.length === 0) {
-    if (DEV_BYPASS_AGENT) {
-      console.warn(
-        "[webhook] Dev bypass: API key not found in DB, using fake agent context",
-      );
-      return DEV_BYPASS_AGENT;
-    }
-    return null;
-  }
-
-  const { apiKey, agent } = rows[0];
-  if (!apiKey.isActive || !agent?.isActive) return null;
-
-  return agent;
+  return agent ?? null;
 }
 
 // ============================================================================
-// POST /tool — tool call during conversation
+// POST /:agentId/post-call — post_call_transcription webhook
 // ============================================================================
 
-app.post("/tool", async (c) => {
+app.post("/:agentId/post-call", async (c) => {
+  const agentId = c.req.param("agentId");
   const rawBody = await c.req.text();
   const signature = c.req.header("elevenlabs-signature") ?? "";
 
-  // 1. Verify webhook signature
-  try {
-    await verifySignature(rawBody, signature);
-  } catch {
-    return c.json({ error: "Invalid signature" }, 401);
+  // 1. Look up agent and get webhook secret from metadata
+  const agentRow = await getAgentWithMetadata(agentId);
+  if (!agentRow || !agentRow.isActive) {
+    return c.json({ error: "Agent not found or inactive" }, 404);
   }
 
-  // 2. Parse & validate payload
-  const parsed = toolCallPayloadSchema.safeParse(JSON.parse(rawBody));
-  if (!parsed.success) {
-    return c.json(
-      { error: "Invalid payload", details: parsed.error.flatten() },
-      400,
+  const webhookSecret =
+    (agentRow.metadata as Record<string, unknown>)
+      ?.hmac_secret as string | undefined;
+
+  if (!webhookSecret) {
+    console.error(
+      `[webhook/post-call] No hmac_secret in metadata for agent=${agentId}`,
     );
+    return c.json({ error: "Webhook secret not configured for this agent" }, 500);
   }
 
-  const { tool_name, parameters, dynamic_variables } = parsed.data;
+  // 2. Verify webhook signature with agent-specific secret
+  const skipHmac =
+    env.NODE_ENV === "development" &&
+    c.req.header("x-skip-hmac") === "true";
 
-  // 3. Authenticate agent
-  const agent = await resolveAgent(dynamic_variables);
-  if (!agent) {
-    return c.json({ error: "Invalid API key" }, 401);
+  if (!skipHmac) {
+    try {
+      await verifySignature(rawBody, signature, webhookSecret);
+    } catch (err) {
+      console.error("[webhook/post-call] Signature verification failed:", err);
+      return c.json({ error: "Invalid signature" }, 401);
+    }
   }
 
-  // 4. Execute tool
-  // TODO: Route tool_name (e.g. "pizzapalace_add_to_cart") to the
-  // matching connector tool and call ModelGuide's connector API.
-  //
-  // const [connectorSlug, ...actionParts] = tool_name.split("_");
-  // const action = actionParts.join("_");
-  // const result = await connectorService.executeTool(agent.organizationId, connectorSlug, action, parameters);
-  // return c.json(result);
-
-  console.log(
-    `[webhook/tool] agent=${agent.name} tool=${tool_name} params=${JSON.stringify(parameters)}`,
-  );
-
-  return c.json({
-    success: true,
-    tool_name,
-    message: `Tool '${tool_name}' received — connector execution not yet wired`,
-  });
-});
-
-// ============================================================================
-// POST /post-call — post_call_transcription webhook
-// ============================================================================
-
-app.post("/post-call", async (c) => {
-  const rawBody = await c.req.text();
-  const signature = c.req.header("elevenlabs-signature") ?? "";
-
-  // 1. Verify webhook signature
-  try {
-    await verifySignature(rawBody, signature);
-  } catch (err) {
-    console.error("[webhook/post-call] Signature verification failed:", err);
-    console.error("[webhook/post-call] Signature header:", signature ? signature.slice(0, 30) + "..." : "(empty)");
-    console.error("[webhook/post-call] Secret configured:", env.ELEVENLABS_WEBHOOK_SECRET ? env.ELEVENLABS_WEBHOOK_SECRET.slice(0, 10) + "..." : "(empty)");
-    return c.json({ error: "Invalid signature" }, 401);
+  // 3. Parse & validate payload
+  const rawJson = JSON.parse(rawBody);
+  if (env.NODE_ENV === "development") {
+    const fs = await import("node:fs");
+    fs.writeFileSync("/tmp/elevenlabs-post-call.json", rawBody);
+    console.log("[webhook/post-call] Saved raw payload to /tmp/elevenlabs-post-call.json");
   }
+  console.log("[webhook/post-call] Transcript entries:", rawJson.data?.transcript?.length ?? 0);
 
-  // 2. Parse & validate payload
-  const parsed = postCallTranscriptionPayloadSchema.safeParse(
-    JSON.parse(rawBody),
-  );
+  const parsed = postCallTranscriptionPayloadSchema.safeParse(rawJson);
   if (!parsed.success) {
+    console.error("[webhook/post-call] Validation failed:", JSON.stringify(parsed.error.flatten()));
     return c.json(
       { error: "Invalid payload", details: parsed.error.flatten() },
       400,
@@ -179,85 +111,68 @@ app.post("/post-call", async (c) => {
   const dynamicVars =
     data.conversation_initiation_client_data?.dynamic_variables;
 
-  // 3. Authenticate agent (optional — post-call may not carry dynamic_variables)
-  if (!dynamicVars) {
-    console.warn(
-      `[webhook/post-call] No dynamic_variables for conversation=${data.conversation_id}`,
-    );
-    return c.json({ received: true });
-  }
+  const agent = {
+    id: agentRow.id,
+    organizationId: agentRow.organizationId,
+  };
 
-  const agent = await resolveAgent(dynamicVars);
-  if (!agent) {
-    console.warn(
-      `[webhook/post-call] Could not resolve agent for conversation=${data.conversation_id}`,
-    );
-    return c.json({ received: true });
-  }
+  // 5. Convert payload to ModelGuide shapes
+  const converted = convertPostCallToSession(data, dynamicVars);
+  const existingSessionId = dynamicVars?.mg_session_id;
 
-  // 4. Create session + store transcript
-  // TODO: Replace hardcoded values with real session service calls when available.
-  //
-  // const session = await sessionService.create({
-  //   organizationId: agent.organizationId,
-  //   agentId: agent.id,
-  //   externalId: data.conversation_id,
-  //   channelType: "voice",
-  //   userIdentifier: dynamicVars.mg_user_id ?? null,
-  //   status: "completed",
-  //   startedAt: new Date(data.metadata.start_time_unix_secs * 1000),
-  //   endedAt: new Date((data.metadata.start_time_unix_secs + data.metadata.call_duration_secs) * 1000),
-  //   metadata: {
-  //     call_duration_secs: data.metadata.call_duration_secs,
-  //     transcript_summary: data.analysis.transcript_summary,
-  //     call_successful: data.analysis.call_successful,
-  //     elevenlabs_agent_id: data.agent_id,
-  //   },
-  // });
+  let sessionId: string;
 
-  const [session] = await db
-    .insert(sessions)
-    .values({
-      organizationId: agent.organizationId,
-      agentId: agent.id,
-      externalId: data.conversation_id,
-      channelType: "voice",
-      userIdentifier: dynamicVars.mg_user_id ?? null,
-      status: "completed",
-      startedAt: new Date(data.metadata.start_time_unix_secs * 1000),
-      endedAt: new Date(
-        (data.metadata.start_time_unix_secs +
-          data.metadata.call_duration_secs) *
-          1000,
-      ),
-      metadata: {
-        call_duration_secs: data.metadata.call_duration_secs,
-        transcript_summary: data.analysis.transcript_summary,
-        call_successful: data.analysis.call_successful,
-        elevenlabs_agent_id: data.agent_id,
-      },
-    })
-    .returning();
+  if (existingSessionId) {
+    // Session was created upfront — insert transcript messages first, then complete
+    if (converted.messages.length > 0) {
+      await db.insert(sessionMessages).values(
+        converted.messages.map((msg) => ({
+          sessionId: existingSessionId,
+          ...msg,
+        })),
+      );
+    }
 
-  // 5. Store transcript messages
-  if (data.transcript.length > 0) {
-    await db.insert(sessionMessages).values(
-      data.transcript.map((msg, idx) => ({
-        sessionId: session.id,
-        role: msg.role === "agent" ? ("assistant" as const) : ("user" as const),
-        content: msg.message,
-        toolInput: msg.tool_calls as Record<string, unknown> | undefined,
-        toolOutput: msg.tool_results as Record<string, unknown> | undefined,
-        sequenceNumber: idx + 1,
-      })),
-    );
+    const [updated] = await db
+      .update(sessions)
+      .set({
+        status: "completed",
+        externalId: converted.session.externalId,
+        endedAt: converted.session.endedAt,
+        metadata: converted.session.metadata,
+      })
+      .where(eq(sessions.id, existingSessionId))
+      .returning();
+
+    sessionId = updated?.id ?? existingSessionId;
+  } else {
+    // Fallback: create session retroactively
+    const [session] = await db
+      .insert(sessions)
+      .values({
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        ...converted.session,
+      })
+      .returning();
+
+    if (converted.messages.length > 0) {
+      await db.insert(sessionMessages).values(
+        converted.messages.map((msg) => ({
+          sessionId: session.id,
+          ...msg,
+        })),
+      );
+    }
+
+    sessionId = session.id;
   }
 
   console.log(
-    `[webhook/post-call] Stored session=${session.id} conversation=${data.conversation_id} messages=${data.transcript.length}`,
+    `[webhook/post-call] ${existingSessionId ? "Updated" : "Created"} session=${sessionId} agent=${agentId} conversation=${data.conversation_id} messages=${converted.messages.length}`,
   );
 
-  return c.json({ received: true, session_id: session.id });
+  return c.json({ received: true, session_id: sessionId });
 });
 
 export default app;

@@ -44,6 +44,12 @@ export function TranscriptMessage({ message }: TranscriptMessageProps) {
         )}
       >
         <p className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{message.content}</p>
+        {(message.latencyMs || message.modelUsed) ? (
+          <div className={cn('mt-1.5 flex items-center gap-2 text-[10px]', isUser ? 'text-white/50' : 'text-fg-muted')}>
+            {message.latencyMs ? <span>{message.latencyMs}ms</span> : null}
+            {message.modelUsed ? <span>{message.modelUsed}</span> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

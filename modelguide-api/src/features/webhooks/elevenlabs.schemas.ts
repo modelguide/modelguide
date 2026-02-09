@@ -9,10 +9,13 @@ import { z } from "zod";
 // Shared
 // ============================================================================
 
-export const dynamicVariablesSchema = z.object({
-  mg_api_key: z.string().startsWith("mgk_"),
-  mg_user_id: z.string().optional(),
-});
+export const dynamicVariablesSchema = z
+  .object({
+    mg_api_key: z.string().startsWith("mgk_").optional(),
+    mg_user_id: z.string().optional(),
+    mg_session_id: z.string().uuid().optional(),
+  })
+  .passthrough();
 
 export type DynamicVariables = z.infer<typeof dynamicVariablesSchema>;
 
@@ -36,7 +39,7 @@ export type ToolCallPayload = z.infer<typeof toolCallPayloadSchema>;
 
 const transcriptEntrySchema = z.object({
   role: z.enum(["agent", "user"]),
-  message: z.string(),
+  message: z.string().nullable().default(""),
   tool_calls: z.unknown().nullable(),
   tool_results: z.unknown().nullable(),
   feedback: z.unknown().nullable(),
@@ -64,8 +67,9 @@ const callMetadataSchema = z.object({
 const callAnalysisSchema = z.object({
   evaluation_criteria_results: z.record(z.unknown()).optional(),
   data_collection_results: z.record(z.unknown()).optional(),
-  call_successful: z.string(),
-  transcript_summary: z.string(),
+  call_successful: z.string().nullable().default("unknown"),
+  transcript_summary: z.string().nullable().default(""),
+  call_summary_title: z.string().nullable().optional(),
 });
 
 const conversationInitiationClientDataSchema = z.object({

@@ -33,6 +33,11 @@ export async function mcpHandler(c: Context<AppBindings>): Promise<Response> {
     throw Errors.agentInactive(auth.agent.id);
   }
 
+  const pathAgentId = c.req.param("agentId");
+  if (pathAgentId && pathAgentId !== auth.agent.id) {
+    throw Errors.unauthorized("API key does not match agent ID in URL");
+  }
+
   const orgId = auth.agent.organizationId;
   const agentId = auth.agent.id;
 
