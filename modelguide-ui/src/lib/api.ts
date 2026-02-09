@@ -1,10 +1,11 @@
 import ky from 'ky'
 import { getApiBaseUrl } from '~/lib/api-base'
-import { useAuthStore } from '~/stores/auth'
+import { useAuthStore, waitForHydration } from '~/stores/auth'
 
 let refreshPromise: Promise<boolean> | null = null
 
 async function getValidToken(): Promise<string | null> {
+  await waitForHydration()
   const { token, isAuthenticated, refreshAccessToken } = useAuthStore.getState()
 
   if (token) return token

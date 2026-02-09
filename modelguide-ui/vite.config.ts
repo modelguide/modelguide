@@ -16,6 +16,7 @@ export default defineConfig({
     }),
     tanstackStart({
       srcDirectory: 'src',
+      spa: { enabled: true },
     }),
     viteReact(),
     nitro({
