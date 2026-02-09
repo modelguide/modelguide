@@ -36,3 +36,18 @@ export const regenerateKeyResponseSchema = z.object({
 export type RegenerateKeyResponse = z.infer<typeof regenerateKeyResponseSchema>
 
 export type AgentListResponse = PaginatedResponse<Agent>
+
+export interface AgentConnectorTool {
+  id: string
+  name: string
+  slug: string
+  isEnabled: boolean
+  requiresConfirmation: boolean
+}
+
+export interface AgentConnector {
+  connectorId: string
+  connectorSlug: string
+  connectorName: string
+  tools: AgentConnectorTool[]
+}

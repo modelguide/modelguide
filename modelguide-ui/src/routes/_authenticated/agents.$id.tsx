@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Key, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Key, Plug, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -9,7 +9,7 @@ import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Spinner } from '~/components/ui/spinner'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { api } from '~/lib/api'
-import type { Agent, RegenerateKeyResponse } from '~/schemas/agents'
+import type { Agent, AgentConnector, RegenerateKeyResponse } from '~/schemas/agents'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated/agents/$id')({
@@ -32,6 +32,12 @@ function AgentDetailPage() {
   } = useQuery({
     queryKey: ['agents', id],
     queryFn: () => api.get(`agents/${id}`).json<Agent>(),
+  })
+
+  const { data: connectorsData, error: connectorsError } = useQuery({
+    queryKey: ['agents', id, 'connectors'],
+    queryFn: () => api.get(`agents/${id}/connectors`).json<{ data: AgentConnector[] }>(),
+    enabled: !!agent,
   })
 
   const activateMutation = useMutation({
@@ -150,6 +156,68 @@ function AgentDetailPage() {
                   </Button>
                 ) : null}
               </div>
+            </CardContent>
+          </Card>
+          {/* Linked Tools */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-4 w-4" />
+                Linked Tools
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {connectorsError ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Plug className="h-8 w-8 text-error/50" />
+                  <p className="mt-3 text-sm text-error">Failed to load linked tools</p>
+                </div>
+              ) : !connectorsData?.data?.length ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Plug className="h-8 w-8 text-fg-muted" />
+                  <p className="mt-3 text-sm text-fg-muted">No connectors linked to this agent</p>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {connectorsData.data.map((connector) => (
+                    <div key={connector.connectorId}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <Plug className="h-3.5 w-3.5 text-fg-muted" />
+                        <span className="text-sm font-medium text-fg-primary">
+                          {connector.connectorName}
+                        </span>
+                        <span className="font-mono text-xs text-fg-muted">
+                          {connector.connectorSlug}
+                        </span>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {connector.tools.map((tool) => (
+                          <div
+                            key={tool.id}
+                            className="flex items-center justify-between rounded-lg border border-fg-subtle/10 bg-bg-subtle/50 px-3 py-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs text-fg-secondary">
+                                {tool.slug}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {tool.requiresConfirmation ? (
+                                <span title="Requires confirmation">
+                                  <ShieldCheck className="h-3.5 w-3.5 text-warning" />
+                                </span>
+                              ) : null}
+                              <Badge variant={tool.isEnabled ? 'success' : 'default'} dot>
+                                {tool.isEnabled ? 'on' : 'off'}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

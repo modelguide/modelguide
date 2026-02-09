@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
-import { sessionFeedback, sessions } from "@db/schema";
+import { sessionFeedback, sessionMessages, sessions } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
@@ -102,6 +102,45 @@ beforeAll(async () => {
         userIdentifier: "analytics-test-customer-2",
       },
     ]);
+
+    // Add session messages for avg_messages_per_session testing
+    await tx.insert(sessionMessages).values([
+      {
+        sessionId: inserted[0].id,
+        role: "user",
+        content: "Hello",
+      },
+      {
+        sessionId: inserted[0].id,
+        role: "assistant",
+        content: "Hi there!",
+      },
+      {
+        sessionId: inserted[0].id,
+        role: "tool",
+        content: "tool result",
+      },
+      {
+        sessionId: inserted[3].id,
+        role: "user",
+        content: "I need help",
+      },
+      {
+        sessionId: inserted[3].id,
+        role: "assistant",
+        content: "Sure!",
+      },
+      {
+        sessionId: inserted[3].id,
+        role: "user",
+        content: "Thanks",
+      },
+      {
+        sessionId: inserted[3].id,
+        role: "assistant",
+        content: "You're welcome",
+      },
+    ]);
   });
 });
 
@@ -150,6 +189,24 @@ describe("GET /api/analytics", () => {
     expect(body.feedback_count).toBeDefined();
     expect(typeof body.feedback_count.customer).toBe("number");
     expect(typeof body.feedback_count.support).toBe("number");
+
+    // New fields
+    expect(typeof body.feedback_coverage_rate).toBe("number");
+    expect(body.feedback_coverage_rate).toBeGreaterThanOrEqual(0);
+    expect(body.feedback_coverage_rate).toBeLessThanOrEqual(1);
+
+    // avg_messages_per_session: number or null
+    if (body.avg_messages_per_session !== null) {
+      expect(typeof body.avg_messages_per_session).toBe("number");
+      expect(body.avg_messages_per_session).toBeGreaterThan(0);
+    }
+
+    // previous_period: object or null
+    expect("previous_period" in body).toBe(true);
+    if (body.previous_period !== null) {
+      expect(typeof body.previous_period.total_sessions).toBe("number");
+      expect(typeof body.previous_period.resolution_rate).toBe("number");
+    }
   });
 
   test("counts match expected data", async () => {
@@ -264,6 +321,35 @@ describe("GET /api/analytics", () => {
     expect(body.support_evaluation_score).toBeNull();
     expect(body.feedback_count.customer).toBe(0);
     expect(body.feedback_count.support).toBe(0);
+    expect(body.avg_messages_per_session).toBeNull();
+    expect(body.feedback_coverage_rate).toBe(0);
+  });
+
+  test("includes avg_messages_per_session from session messages", async () => {
+    const response = await request(
+      `/api/analytics?from_date=${FROM}&to_date=${TO}`,
+      { headers: pizzaAdminHeaders },
+    );
+
+    const body = await response.json();
+
+    // We added messages to 2 sessions: session[0] has 2 user+assistant messages,
+    // session[3] has 4 user+assistant messages. Average should be 3.
+    expect(body.avg_messages_per_session).not.toBeNull();
+    expect(body.avg_messages_per_session).toBeGreaterThan(0);
+  });
+
+  test("includes feedback_coverage_rate", async () => {
+    const response = await request(
+      `/api/analytics?from_date=${FROM}&to_date=${TO}`,
+      { headers: pizzaAdminHeaders },
+    );
+
+    const body = await response.json();
+
+    // 2 of our 4 test sessions have customer feedback
+    expect(body.feedback_coverage_rate).toBeGreaterThan(0);
+    expect(body.feedback_coverage_rate).toBeLessThanOrEqual(1);
   });
 });
 
@@ -433,6 +519,66 @@ describe("GET /api/analytics/trends", () => {
 
     expect(body.data).toBeArray();
     expect(body.data.length).toBe(0);
+  });
+});
+
+// ============================================================================
+// GET /api/analytics/agents - Agent Performance
+// ============================================================================
+
+describe("GET /api/analytics/agents", () => {
+  test("returns agent performance with valid params (200)", async () => {
+    const response = await request(
+      `/api/analytics/agents?from_date=${FROM}&to_date=${TO}`,
+      { headers: pizzaAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.agents).toBeArray();
+    expect(body.agents.length).toBeGreaterThanOrEqual(1);
+
+    const agent = body.agents[0];
+    expect(agent.agent_id).toBeDefined();
+    expect(agent.agent_name).toBeDefined();
+    expect(typeof agent.total_sessions).toBe("number");
+    expect(typeof agent.resolution_rate).toBe("number");
+    expect(typeof agent.escalation_rate).toBe("number");
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request(
+      `/api/analytics/agents?from_date=${FROM}&to_date=${TO}`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  test("RLS isolates agent performance by org", async () => {
+    const [pizzaRes, burgerRes] = await Promise.all([
+      request(`/api/analytics/agents?from_date=${FROM}&to_date=${TO}`, {
+        headers: pizzaAdminHeaders,
+      }),
+      request(`/api/analytics/agents?from_date=${FROM}&to_date=${TO}`, {
+        headers: burgerAdminHeaders,
+      }),
+    ]);
+
+    const pizzaBody = await pizzaRes.json();
+    const burgerBody = await burgerRes.json();
+
+    // Pizza Palace should have agents with sessions
+    const pizzaTotal = pizzaBody.agents.reduce(
+      (sum: number, a: { total_sessions: number }) => sum + a.total_sessions,
+      0,
+    );
+    const burgerTotal = burgerBody.agents.reduce(
+      (sum: number, a: { total_sessions: number }) => sum + a.total_sessions,
+      0,
+    );
+
+    expect(pizzaTotal).toBeGreaterThan(burgerTotal);
   });
 });
 

@@ -12,7 +12,11 @@ import {
   requireUser,
 } from "@lib/middleware";
 import { errorResponse } from "@lib/schemas";
-import { getSummary, getTrends } from "./analytics.service";
+import {
+  getAgentPerformance,
+  getSummary,
+  getTrends,
+} from "./analytics.service";
 
 const router = createRouter();
 
@@ -69,6 +73,17 @@ const feedbackCountSchema = z.object({
   support: z.number(),
 });
 
+const previousPeriodSchema = z.object({
+  total_sessions: z.number(),
+  resolution_rate: z.number(),
+  escalation_rate: z.number(),
+  abandonment_rate: z.number(),
+  avg_duration_seconds: z.number().nullable(),
+  csat_score: z.number().nullable(),
+  avg_messages_per_session: z.number().nullable(),
+  feedback_coverage_rate: z.number(),
+});
+
 const summaryResponseSchema = z.object({
   period: z.object({ from: z.string(), to: z.string() }),
   total_sessions: z.number(),
@@ -81,6 +96,23 @@ const summaryResponseSchema = z.object({
   csat_score: z.number().nullable(),
   support_evaluation_score: z.number().nullable(),
   feedback_count: feedbackCountSchema,
+  avg_messages_per_session: z.number().nullable(),
+  feedback_coverage_rate: z.number(),
+  previous_period: previousPeriodSchema.nullable(),
+});
+
+const agentPerformanceItemSchema = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+  total_sessions: z.number(),
+  resolution_rate: z.number(),
+  escalation_rate: z.number(),
+  avg_duration_seconds: z.number().nullable(),
+  csat_score: z.number().nullable(),
+});
+
+const agentPerformanceResponseSchema = z.object({
+  agents: z.array(agentPerformanceItemSchema),
 });
 
 const trendMetrics = [
@@ -139,6 +171,12 @@ router.get(
 );
 router.get(
   "/trends",
+  requireUser(),
+  requirePermission("analytics:read"),
+  requireOrganization(),
+);
+router.get(
+  "/agents",
   requireUser(),
   requirePermission("analytics:read"),
   requireOrganization(),
@@ -220,6 +258,45 @@ router.openapi(getTrendsRoute, async (c) => {
     c.req.valid("query");
 
   const result = await getTrends(orgId, metric, granularity, {
+    fromDate: new Date(from_date),
+    toDate: endOfDay(to_date),
+    agentId: agent_id,
+    channelType: channel_type,
+  });
+
+  return c.json(result, 200);
+});
+
+const getAgentsRoute = createRoute({
+  method: "get",
+  path: "/agents",
+  tags: ["Analytics"],
+  summary: "Get agent performance",
+  description:
+    "Returns per-agent performance metrics (sessions, resolution rate, CSAT, etc.) " +
+    "sorted by total sessions descending.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    query: summaryQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "Agent performance data",
+      content: {
+        "application/json": { schema: agentPerformanceResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(getAgentsRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { from_date, to_date, agent_id, channel_type } = c.req.valid("query");
+
+  const result = await getAgentPerformance(orgId, {
     fromDate: new Date(from_date),
     toDate: endOfDay(to_date),
     agentId: agent_id,

@@ -11,10 +11,14 @@ const CHANNEL_LABELS: Record<string, string> = {
   widget: 'Widget',
   whatsapp: 'WhatsApp',
   sms: 'SMS',
+  api: 'API',
+  slack: 'Slack',
+  email: 'Email',
 }
 
 export function ChannelBreakdown({ data }: ChannelBreakdownProps) {
   const chartData = Object.entries(data)
+    .filter(([, count]) => count > 0)
     .map(([channel, count]) => ({
       channel: CHANNEL_LABELS[channel] ?? channel,
       count,
@@ -58,18 +62,21 @@ export function ChannelBreakdown({ data }: ChannelBreakdownProps) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'var(--color-bg-elevated)',
-                  border: '1px solid var(--color-fg-subtle)',
+                  backgroundColor: '#141416',
+                  border: '1px solid #45454d',
                   borderRadius: '8px',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '12px',
+                  color: '#fafafa',
                 }}
-                cursor={{ fill: 'var(--color-brand)', opacity: 0.1 }}
+                itemStyle={{ color: '#fafafa' }}
+                labelStyle={{ color: '#a8a8b3' }}
+                cursor={{ fill: '#f97316', opacity: 0.1 }}
               />
               <Bar
                 dataKey="count"
                 name="Sessions"
-                fill="var(--color-brand)"
+                fill="var(--color-brand-500)"
                 radius={[0, 4, 4, 0]}
                 barSize={24}
               />

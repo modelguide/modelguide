@@ -14,7 +14,7 @@ const COLORS = {
   completed: 'var(--color-success)',
   escalated: 'var(--color-warning)',
   abandoned: 'var(--color-error)',
-  active: 'var(--color-brand)',
+  active: 'var(--color-brand-500)',
 }
 
 export function StatusBreakdown({ data }: StatusBreakdownProps) {
@@ -51,15 +51,19 @@ export function StatusBreakdown({ data }: StatusBreakdownProps) {
               </Pie>
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'var(--color-bg-elevated)',
-                  border: '1px solid var(--color-fg-subtle)',
+                  backgroundColor: '#141416',
+                  border: '1px solid #45454d',
                   borderRadius: '8px',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '12px',
+                  color: '#fafafa',
                 }}
+                itemStyle={{ color: '#fafafa' }}
+                labelStyle={{ color: '#a8a8b3' }}
                 formatter={(value) => {
                   const numValue = Number(value) || 0
-                  return [`${numValue} (${((numValue / total) * 100).toFixed(1)}%)`, '']
+                  const pct = total > 0 ? ((numValue / total) * 100).toFixed(1) : '0.0'
+                  return [`${numValue} (${pct}%)`, '']
                 }}
               />
             </PieChart>

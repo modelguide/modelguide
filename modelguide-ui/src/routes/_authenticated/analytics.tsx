@@ -1,25 +1,121 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { BarChart3, Calendar } from 'lucide-react'
+import { BarChart3 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { PageHeader } from '~/components/ui/page-header'
+import { Select } from '~/components/ui/select'
 import { Spinner } from '~/components/ui/spinner'
+import { AgentPerformance } from '~/features/analytics/components/agent-performance'
 import { AnalyticsSummary } from '~/features/analytics/components/analytics-summary'
 import { ChannelBreakdown } from '~/features/analytics/components/channel-breakdown'
 import { StatusBreakdown } from '~/features/analytics/components/status-breakdown'
 import { TrendChart } from '~/features/analytics/components/trend-chart'
 import { api } from '~/lib/api'
-import { formatDate } from '~/lib/utils'
-import type { AnalyticsSummary as AnalyticsSummaryType } from '~/schemas/analytics'
+import {
+  RANGE_LABELS,
+  type RangePreset,
+  computeDateRange,
+  granularityForPreset,
+} from '~/lib/date-ranges'
+import { fillTrendGaps } from '~/lib/fill-trend-gaps'
+import type {
+  AgentPerformanceResponse,
+  AnalyticsSummary as AnalyticsSummaryType,
+  TrendsResponse,
+} from '~/schemas/analytics'
 
 export const Route = createFileRoute('/_authenticated/analytics')({
   component: AnalyticsPage,
 })
 
 function AnalyticsPage() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['analytics', 'summary'],
-    queryFn: () => api.get('analytics/summary').json<AnalyticsSummaryType>(),
+  const [rangePreset, setRangePreset] = useState<RangePreset>('last30d')
+
+  const { from, to } = computeDateRange(rangePreset)
+  const granularity = granularityForPreset(rangePreset)
+
+  const summaryQuery = useQuery({
+    queryKey: ['analytics', 'summary', from, to],
+    queryFn: () =>
+      api
+        .get('analytics', {
+          searchParams: { from_date: from, to_date: to },
+        })
+        .json<AnalyticsSummaryType>(),
   })
+
+  const sessionsTrendQuery = useQuery({
+    queryKey: ['analytics', 'trends', 'sessions', granularity, from, to],
+    queryFn: () =>
+      api
+        .get('analytics/trends', {
+          searchParams: {
+            metric: 'sessions',
+            granularity,
+            from_date: from,
+            to_date: to,
+          },
+        })
+        .json<TrendsResponse>(),
+  })
+
+  const resolutionTrendQuery = useQuery({
+    queryKey: ['analytics', 'trends', 'resolution_rate', granularity, from, to],
+    queryFn: () =>
+      api
+        .get('analytics/trends', {
+          searchParams: {
+            metric: 'resolution_rate',
+            granularity,
+            from_date: from,
+            to_date: to,
+          },
+        })
+        .json<TrendsResponse>(),
+  })
+
+  const escalationTrendQuery = useQuery({
+    queryKey: ['analytics', 'trends', 'escalation_rate', granularity, from, to],
+    queryFn: () =>
+      api
+        .get('analytics/trends', {
+          searchParams: {
+            metric: 'escalation_rate',
+            granularity,
+            from_date: from,
+            to_date: to,
+          },
+        })
+        .json<TrendsResponse>(),
+  })
+
+  const agentQuery = useQuery({
+    queryKey: ['analytics', 'agents', from, to],
+    queryFn: () =>
+      api
+        .get('analytics/agents', {
+          searchParams: { from_date: from, to_date: to },
+        })
+        .json<AgentPerformanceResponse>(),
+  })
+
+  const sessionsData = useMemo(
+    () => fillTrendGaps(sessionsTrendQuery.data?.data ?? [], from, to, granularity),
+    [sessionsTrendQuery.data, from, to, granularity],
+  )
+
+  const resolutionsData = useMemo(
+    () => fillTrendGaps(resolutionTrendQuery.data?.data ?? [], from, to, granularity),
+    [resolutionTrendQuery.data, from, to, granularity],
+  )
+
+  const escalationsData = useMemo(
+    () => fillTrendGaps(escalationTrendQuery.data?.data ?? [], from, to, granularity),
+    [escalationTrendQuery.data, from, to, granularity],
+  )
+
+  const trendsLoading =
+    sessionsTrendQuery.isLoading || resolutionTrendQuery.isLoading || escalationTrendQuery.isLoading
 
   return (
     <div className="space-y-6">
@@ -30,35 +126,48 @@ function AnalyticsPage() {
         title="Analytics"
         description="Performance metrics and trends"
         actions={
-          data?.period ? (
-            <div className="flex items-center gap-2 rounded-lg border border-fg-subtle/20 bg-bg-elevated px-3 py-2">
-              <Calendar className="h-4 w-4 text-fg-muted" />
-              <span className="text-xs text-fg-secondary">
-                {formatDate(data.period.from)} — {formatDate(data.period.to)}
-              </span>
-            </div>
-          ) : null
+          <Select
+            value={rangePreset}
+            onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+            className="w-40"
+          >
+            {Object.entries(RANGE_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </Select>
         }
       />
 
-      {isLoading ? (
+      {summaryQuery.isLoading ? (
         <div className="flex justify-center py-12">
           <Spinner size="lg" />
         </div>
-      ) : error ? (
+      ) : summaryQuery.error ? (
         <div className="rounded-lg border border-error/30 bg-error-muted p-6 text-center">
           <p className="text-sm text-error">Failed to load analytics</p>
         </div>
-      ) : data ? (
+      ) : summaryQuery.data ? (
         <>
-          <AnalyticsSummary data={data} />
+          <AnalyticsSummary data={summaryQuery.data} />
 
-          {data.trend ? <TrendChart data={data.trend} /> : null}
+          <TrendChart
+            sessions={sessionsData}
+            resolutions={resolutionsData}
+            escalations={escalationsData}
+            isLoading={trendsLoading}
+          />
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <StatusBreakdown data={data.sessions_by_status} />
-            <ChannelBreakdown data={data.sessions_by_channel} />
+            <StatusBreakdown data={summaryQuery.data.sessions_by_status} />
+            <ChannelBreakdown data={summaryQuery.data.sessions_by_channel} />
           </div>
+
+          <AgentPerformance
+            agents={agentQuery.data?.agents ?? []}
+            isLoading={agentQuery.isLoading}
+          />
         </>
       ) : null}
     </div>
