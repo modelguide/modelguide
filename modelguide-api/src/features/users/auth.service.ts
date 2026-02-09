@@ -2,6 +2,7 @@
  * Authentication service for magic link authentication
  */
 
+import { env } from "@/env";
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
 import { forApp } from "@db/rls";
@@ -22,14 +23,26 @@ import { cleanupExpiredSessions, createSession } from "./refresh-token.service";
  * Returns success even if user doesn't exist (to prevent enumeration)
  */
 export async function requestMagicLink(email: string): Promise<void> {
+  const normalizedEmail = email.toLowerCase();
+  console.info(`[auth] Magic link requested for: ${normalizedEmail}`);
+
   const user = await forApp((tx) =>
     tx.query.users.findFirst({
-      where: eq(users.email, email.toLowerCase()),
+      where: eq(users.email, normalizedEmail),
     }),
   );
 
   // Silently succeed for non-existent/inactive users to prevent email enumeration
-  if (!user || !user.isActive) {
+  if (!user) {
+    console.warn(
+      `[auth] No user found for ${normalizedEmail} — returning 200 (anti-enumeration)`,
+    );
+    return;
+  }
+  if (!user.isActive) {
+    console.warn(
+      `[auth] User ${normalizedEmail} is inactive — returning 200 (anti-enumeration)`,
+    );
     return;
   }
 
@@ -43,8 +56,11 @@ export async function requestMagicLink(email: string): Promise<void> {
 
   try {
     await sendMagicLink(user.email, link, user.name);
+    console.info(
+      `[auth] Magic link sent to ${user.email} via ${env.MAGIC_LINK_STRATEGY} strategy`,
+    );
   } catch (err) {
-    console.error("[magic-link] Failed to send:", err);
+    console.error("[auth] Failed to send magic link:", err);
     // Swallow to preserve anti-enumeration — caller always returns 200
   }
 }

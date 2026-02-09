@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-002: Magic Link Authentication & Session Lifecycle](./002-magic-link-authentication.md)
 
 ## Context
 
