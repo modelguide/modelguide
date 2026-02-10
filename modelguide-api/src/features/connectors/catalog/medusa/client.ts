@@ -45,7 +45,7 @@ export function createMedusaAdminFetcher(
     {
       "Content-Type": "application/json",
       Accept: "application/json",
-      Authorization: `Bearer ${secretApiKey}`,
+      Authorization: `Basic ${btoa(`${secretApiKey}:`)}`,
     },
     "Medusa Admin",
   );

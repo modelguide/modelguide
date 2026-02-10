@@ -33,18 +33,29 @@ export async function mcpHandler(c: Context<AppBindings>): Promise<Response> {
     throw Errors.agentInactive(auth.agent.id);
   }
 
+  const pathAgentId = c.req.param("agentId");
+  if (pathAgentId && pathAgentId !== auth.agent.id) {
+    throw Errors.unauthorized("API key does not match agent ID in URL");
+  }
+
   const orgId = auth.agent.organizationId;
   const agentId = auth.agent.id;
 
   const tools = await getAgentTools(orgId, agentId);
+
+  const enableCoreAddMessages =
+    auth.agent.metadata?.enableCoreAddMessages === true;
 
   const server = new McpServer(
     { name: "ModelGuide MCP", version: "1.0.0" },
     { capabilities: { logging: {} } },
   );
 
-  registerResources(server, auth.agent, tools);
-  registerCoreTools(server, orgId, agentId);
+  const coreToolCount = enableCoreAddMessages ? CORE_TOOL_COUNT : 0;
+  registerResources(server, auth.agent, tools, coreToolCount);
+  if (enableCoreAddMessages) {
+    registerCoreTools(server, orgId, agentId);
+  }
   registerConnectorTools(server, orgId, agentId, tools);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -65,6 +76,7 @@ function registerResources(
     agentType: string;
   },
   tools: ResolvedTool[],
+  coreToolCount: number,
 ): void {
   server.resource("agent-config", "agent://config", async () => ({
     contents: [
@@ -76,7 +88,7 @@ function registerResources(
           agent_name: agent.name,
           organization_id: agent.organizationId,
           agent_type: agent.agentType,
-          tool_count: tools.length + CORE_TOOL_COUNT,
+          tool_count: tools.length + coreToolCount,
         }),
       },
     ],
@@ -146,9 +158,7 @@ function registerConnectorTools(
     const zodShape = jsonSchemaToZod(tool.inputSchema);
 
     // Every connector tool requires an active session
-    zodShape.session_id = z
-      .string()
-      .describe("Active session ID (from core_create_session)");
+    zodShape.session_id = z.string().describe("The current session ID");
 
     server.tool(tool.mcpName, tool.description, zodShape, async (args) => {
       try {

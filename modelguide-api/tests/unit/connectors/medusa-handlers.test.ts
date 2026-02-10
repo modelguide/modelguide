@@ -334,37 +334,31 @@ describe("lookUpOrder (Admin API)", () => {
   // ----------------------------------------------------------------
   // Happy path
   // ----------------------------------------------------------------
-  test("finds order on first page and fetches detail with items", async () => {
+  test("finds order on first page with items included", async () => {
     mockFetchSequence([
       { status: 200, body: { customers: [{ id: "cust_1" }] } },
       {
         status: 200,
         body: {
           orders: [
-            { id: "order_aaa", display_id: 1001 },
+            {
+              id: "order_aaa",
+              display_id: 1001,
+              status: "completed",
+              total: 4500,
+              currency_code: "usd",
+              items: [
+                {
+                  id: "item_1",
+                  title: "Margherita",
+                  quantity: 2,
+                  unit_price: 1500,
+                },
+              ],
+            },
             { id: "order_bbb", display_id: 1002 },
           ],
           count: 2,
-        },
-      },
-      {
-        status: 200,
-        body: {
-          order: {
-            id: "order_aaa",
-            display_id: 1001,
-            status: "completed",
-            total: 4500,
-            currency_code: "usd",
-            items: [
-              {
-                id: "item_1",
-                title: "Margherita",
-                quantity: 2,
-                unit_price: 1500,
-              },
-            ],
-          },
         },
       },
     ]);
@@ -382,10 +376,10 @@ describe("lookUpOrder (Admin API)", () => {
       items: [{ id: "item_1", title: "Margherita", quantity: 2 }],
     });
 
-    // Verify auth header uses Bearer token (not publishable key)
+    // Verify auth header uses Basic auth (not publishable key)
     const [, customerOpts] = fetchMock.mock.calls[0];
     expect(customerOpts.headers.Authorization).toBe(
-      "Bearer sk_admin_token_123",
+      `Basic ${btoa("sk_admin_token_123:")}`,
     );
     expect(customerOpts.headers["x-publishable-api-key"]).toBeUndefined();
 
@@ -397,12 +391,11 @@ describe("lookUpOrder (Admin API)", () => {
     const [ordersUrl] = fetchMock.mock.calls[1];
     expect(ordersUrl).toContain("/admin/orders");
     expect(ordersUrl).toContain("customer_id=cust_1");
+    expect(ordersUrl).toContain("fields=");
+    expect(ordersUrl).toContain("*items");
 
-    // Verify detail fetch with fields param
-    const [detailUrl] = fetchMock.mock.calls[2];
-    expect(detailUrl).toContain("/admin/orders/order_aaa");
-    expect(detailUrl).toContain("fields=");
-    expect(detailUrl).toContain("*items");
+    // Only 2 fetches: customers + orders (no separate detail call)
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   // ----------------------------------------------------------------
@@ -422,21 +415,15 @@ describe("lookUpOrder (Admin API)", () => {
         status: 200,
         body: {
           orders: [
-            { id: "order_p2_0", display_id: 1099 },
+            {
+              id: "order_p2_0",
+              display_id: 1099,
+              status: "pending",
+              items: [],
+            },
             { id: "order_p2_1", display_id: 1100 },
           ],
           count: 55,
-        },
-      },
-      {
-        status: 200,
-        body: {
-          order: {
-            id: "order_p2_0",
-            display_id: 1099,
-            status: "pending",
-            items: [],
-          },
         },
       },
     ]);
@@ -447,7 +434,7 @@ describe("lookUpOrder (Admin API)", () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toMatchObject({ id: "order_p2_0", display_id: 1099 });
-    expect(fetchMock).toHaveBeenCalledTimes(4); // customers + page1 + page2 + detail
+    expect(fetchMock).toHaveBeenCalledTimes(3); // customers + page1 + page2
 
     // Verify second orders call has correct offset
     const [page2Url] = fetchMock.mock.calls[2];
@@ -530,19 +517,15 @@ describe("lookUpOrder (Admin API)", () => {
       {
         status: 200,
         body: {
-          orders: [{ id: "order_match", display_id: 42 }],
+          orders: [
+            {
+              id: "order_match",
+              display_id: 42,
+              status: "completed",
+              items: [],
+            },
+          ],
           count: 1,
-        },
-      },
-      {
-        status: 200,
-        body: {
-          order: {
-            id: "order_match",
-            display_id: 42,
-            status: "completed",
-            items: [],
-          },
         },
       },
     ]);
@@ -648,18 +631,11 @@ describe("lookUpOrder (Admin API)", () => {
   });
 
   // ----------------------------------------------------------------
-  // API error on order detail fetch (step 3)
+  // API error on orders fetch
   // ----------------------------------------------------------------
-  test("returns error when order detail fetch fails", async () => {
+  test("returns error when orders fetch fails with 502", async () => {
     mockFetchSequence([
       { status: 200, body: { customers: [{ id: "cust_1" }] } },
-      {
-        status: 200,
-        body: {
-          orders: [{ id: "order_aaa", display_id: 1001 }],
-          count: 1,
-        },
-      },
       { status: 502, body: "Bad Gateway" },
     ]);
 

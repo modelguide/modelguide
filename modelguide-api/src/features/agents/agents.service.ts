@@ -10,8 +10,11 @@ import {
   apiKeys,
   connectorTools,
   connectors,
+  connectorsCatalog,
+  secrets,
 } from "@db/schema";
 import { generateApiKey } from "@lib/crypto";
+import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
@@ -21,6 +24,15 @@ import {
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 
 type AgentType = (typeof agents.agentType.enumValues)[number];
+type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
+
+/** Convert a name to a URL-safe slug */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 // ============================================================================
 // Helpers
@@ -47,7 +59,11 @@ async function requireAgent(tx: Transaction, agentId: string) {
 export async function listAgents(
   orgId: string,
   pagination: PaginationParams,
-  filters?: { isActive?: boolean; agentType?: AgentType },
+  filters?: {
+    isActive?: boolean;
+    agentType?: AgentType;
+    agentPlatform?: AgentPlatform;
+  },
 ) {
   const { page, pageSize } = pagination;
   const offset = getOffset(page, pageSize);
@@ -59,6 +75,9 @@ export async function listAgents(
     }
     if (filters?.agentType) {
       conditions.push(eq(agents.agentType, filters.agentType));
+    }
+    if (filters?.agentPlatform) {
+      conditions.push(eq(agents.agentPlatform, filters.agentPlatform));
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -82,34 +101,81 @@ export async function listAgents(
 }
 
 export async function getAgentById(orgId: string, agentId: string) {
-  const [agent] = await forOrg(orgId, (tx) =>
-    tx.select().from(agents).where(eq(agents.id, agentId)),
-  );
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId));
 
-  if (!agent) {
-    throw Errors.agentNotFound(agentId);
-  }
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
 
-  return agent;
+    const [[activeKey], [elevenLabsSecret], [webhookSecret]] =
+      await Promise.all([
+        tx
+          .select({ keyPrefix: apiKeys.keyPrefix })
+          .from(apiKeys)
+          .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true))),
+        tx
+          .select({ id: secrets.id })
+          .from(secrets)
+          .where(
+            and(
+              eq(secrets.ownerType, "agent"),
+              eq(secrets.ownerId, agentId),
+              eq(secrets.secretType, "platform_api_key"),
+            ),
+          ),
+        tx
+          .select({ id: secrets.id })
+          .from(secrets)
+          .where(
+            and(
+              eq(secrets.ownerType, "agent"),
+              eq(secrets.ownerId, agentId),
+              eq(secrets.secretType, "webhook_secret"),
+            ),
+          ),
+      ]);
+
+    const metadata = agent.metadata as Record<string, unknown> | null;
+    const hasLegacyHmac = !!metadata?.webhook_hmac_secret;
+
+    return {
+      ...agent,
+      keyPrefix: activeKey?.keyPrefix ?? null,
+      hasElevenLabsKey: !!elevenLabsSecret,
+      hasWebhookSecret: !!webhookSecret || hasLegacyHmac,
+    };
+  });
 }
 
 export async function createAgent(
   orgId: string,
   data: {
     name: string;
+    slug?: string;
     description?: string;
     agentType?: AgentType;
+    agentPlatform?: AgentPlatform;
+    metadata?: Record<string, unknown>;
   },
   createdBy: string,
 ) {
   return forOrg(orgId, async (tx) => {
+    const slug = data.slug || slugify(data.name);
+
     const [agent] = await tx
       .insert(agents)
       .values({
         organizationId: orgId,
         name: data.name,
+        slug,
         description: data.description,
         agentType: data.agentType ?? "voice",
+        agentPlatform: data.agentPlatform ?? "custom",
+        metadata: data.metadata ?? {},
         isActive: false,
         createdBy,
       })
@@ -127,6 +193,16 @@ export async function createAgent(
       createdBy,
     });
 
+    // Store raw API key as encrypted secret for MCP auth
+    await tx.insert(secrets).values({
+      organizationId: orgId,
+      name: "ModelGuide API Key",
+      secretType: "api_key",
+      encryptedValue: await encryptSecret(keyData.key),
+      ownerType: "agent",
+      ownerId: agent.id,
+    });
+
     return { agent, apiKey: keyData.key };
   });
 }
@@ -137,11 +213,27 @@ export async function updateAgent(
   data: {
     name?: string;
     description?: string;
+    metadata?: Record<string, unknown>;
+    agentPlatform?: AgentPlatform;
   },
 ) {
-  const [updated] = await forOrg(orgId, (tx) =>
-    tx.update(agents).set(data).where(eq(agents.id, agentId)).returning(),
-  );
+  const [updated] = await forOrg(orgId, async (tx) => {
+    // Deep-merge metadata to prevent overwriting keys set by sync
+    if (data.metadata) {
+      const [current] = await tx
+        .select({ metadata: agents.metadata })
+        .from(agents)
+        .where(eq(agents.id, agentId));
+      const existing = (current?.metadata ?? {}) as Record<string, unknown>;
+      data.metadata = { ...existing, ...data.metadata };
+    }
+
+    return tx
+      .update(agents)
+      .set(data)
+      .where(eq(agents.id, agentId))
+      .returning();
+  });
 
   if (!updated) {
     throw Errors.agentNotFound(agentId);
@@ -219,7 +311,82 @@ export async function regenerateApiKey(
       createdBy,
     });
 
+    // Update or create the encrypted MG API key secret
+    const encryptedValue = await encryptSecret(keyData.key);
+    const [existing] = await tx
+      .select({ id: secrets.id })
+      .from(secrets)
+      .where(
+        and(
+          eq(secrets.ownerType, "agent"),
+          eq(secrets.ownerId, agentId),
+          eq(secrets.secretType, "api_key"),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await tx
+        .update(secrets)
+        .set({ encryptedValue })
+        .where(eq(secrets.id, existing.id));
+    } else {
+      await tx.insert(secrets).values({
+        organizationId: orgId,
+        name: "ModelGuide API Key",
+        secretType: "api_key",
+        encryptedValue,
+        ownerType: "agent",
+        ownerId: agentId,
+      });
+    }
+
     return { apiKey: keyData.key, keyPrefix: keyData.prefix };
+  });
+}
+
+// ============================================================================
+// Platform Key Management
+// ============================================================================
+
+export async function upsertAgentPlatformKey(
+  orgId: string,
+  agentId: string,
+  value: string,
+) {
+  return forOrg(orgId, async (tx) => {
+    await requireAgent(tx, agentId);
+
+    const encryptedValue = await encryptSecret(value);
+    const [existing] = await tx
+      .select({ id: secrets.id })
+      .from(secrets)
+      .where(
+        and(
+          eq(secrets.ownerType, "agent"),
+          eq(secrets.ownerId, agentId),
+          eq(secrets.secretType, "platform_api_key"),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await tx
+        .update(secrets)
+        .set({ encryptedValue })
+        .where(eq(secrets.id, existing.id));
+      return { action: "updated" as const };
+    }
+
+    await tx.insert(secrets).values({
+      organizationId: orgId,
+      name: "ElevenLabs API Key",
+      secretType: "platform_api_key",
+      encryptedValue,
+      ownerType: "agent",
+      ownerId: agentId,
+    });
+    return { action: "created" as const };
   });
 }
 
@@ -247,6 +414,7 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
         connectorId: connectors.id,
         connectorSlug: connectors.slug,
         connectorName: connectors.name,
+        connectorIconUrl: connectorsCatalog.iconUrl,
       })
       .from(agentConnectorTools)
       .innerJoin(
@@ -254,6 +422,10 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
         eq(agentConnectorTools.connectorToolId, connectorTools.id),
       )
       .innerJoin(connectors, eq(connectorTools.connectorId, connectors.id))
+      .innerJoin(
+        connectorsCatalog,
+        eq(connectors.connectorCatalogId, connectorsCatalog.id),
+      )
       .where(eq(agentConnectorTools.agentId, agentId))
       .orderBy(asc(connectors.name), asc(connectorTools.name));
 
@@ -263,6 +435,7 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
         connectorId: string;
         connectorSlug: string;
         connectorName: string;
+        connectorIconUrl: string | null;
         tools: {
           id: string;
           name: string;
@@ -279,6 +452,7 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
           connectorId: row.connectorId,
           connectorSlug: row.connectorSlug,
           connectorName: row.connectorName,
+          connectorIconUrl: row.connectorIconUrl,
           tools: [],
         });
       }

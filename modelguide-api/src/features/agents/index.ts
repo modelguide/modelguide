@@ -16,3 +16,4 @@ export {
   updateAgentConnectorTools,
   removeConnectorFromAgent,
 } from "./agents.service";
+export { syncAgentToElevenLabs } from "./agents.sync";

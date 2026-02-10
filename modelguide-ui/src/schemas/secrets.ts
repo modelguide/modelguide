@@ -21,3 +21,10 @@ export const secretCreateSchema = z.object({
 })
 
 export type SecretCreate = z.infer<typeof secretCreateSchema>
+
+export const secretUpdateSchema = z.object({
+  name: z.string().optional(),
+  value: z.string().optional(),
+})
+
+export type SecretUpdate = z.infer<typeof secretUpdateSchema>

@@ -265,6 +265,7 @@ async function seedOrgData(
     .values({
       organizationId,
       name: agentName,
+      slug: `${orgSlug}-order-agent`,
       description: `Voice agent for handling ${orgSlug} orders`,
       agentType: "voice",
       isActive: true,

@@ -78,6 +78,34 @@
       "when": 1770722990032,
       "tag": "0010_remove-escalation",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1770723000000,
+      "tag": "0011_add-agent-metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1770723100000,
+      "tag": "0012_add-agent-platform",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1770723200000,
+      "tag": "0013_add-agent-slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1770723300000,
+      "tag": "0014_add-webhook-secret-type",
+      "breakpoints": true
     }
   ]
 }

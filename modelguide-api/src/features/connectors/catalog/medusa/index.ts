@@ -263,7 +263,7 @@ const medusaManifest: ConnectorManifest = {
     },
   },
   authMethods: ["api_key"],
-  iconUrl: "https://medusajs.com/images/logo.svg",
+  iconUrl: "/logos/medusa.svg",
   tools,
 };
 

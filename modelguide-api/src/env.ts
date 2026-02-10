@@ -39,6 +39,11 @@ const envSchema = z
     // Resend email configuration
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM_EMAIL: z.string().email().optional(),
+
+    // Public API address reachable by external services (e.g., Railway load balancer URL).
+    // Used for ElevenLabs sync (MCP server URL, webhook URL) and integration URL display.
+    // Falls back to APP_URL if not set.
+    API_EXTERNAL_ADDRESS: z.string().url().optional(),
   })
   .refine(
     (data) =>

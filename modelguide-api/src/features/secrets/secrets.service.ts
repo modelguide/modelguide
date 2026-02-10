@@ -3,15 +3,15 @@
  */
 
 import { forOrg } from "@db/rls";
-import { connectors, secrets } from "@db/schema";
-import { encryptSecret } from "@lib/crypto";
+import { agents, connectors, secrets } from "@db/schema";
+import { decryptSecret, encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 
 /**
  * Metadata columns returned for all secret queries.
@@ -66,8 +66,13 @@ export async function createSecret(
   data: {
     name: string;
     value: string;
-    secretType: "api_key" | "oauth_token" | "credentials";
-    ownerType: "connector";
+    secretType:
+      | "api_key"
+      | "oauth_token"
+      | "credentials"
+      | "platform_api_key"
+      | "webhook_secret";
+    ownerType: "connector" | "agent";
     ownerId: string;
   },
 ) {
@@ -82,6 +87,14 @@ export async function createSecret(
         .where(eq(connectors.id, data.ownerId));
       if (!owner) {
         throw Errors.notFound("Connector", data.ownerId);
+      }
+    } else if (data.ownerType === "agent") {
+      const [owner] = await tx
+        .select({ id: agents.id })
+        .from(agents)
+        .where(eq(agents.id, data.ownerId));
+      if (!owner) {
+        throw Errors.notFound("Agent", data.ownerId);
       }
     }
 
@@ -99,6 +112,58 @@ export async function createSecret(
   });
 
   return created;
+}
+
+/**
+ * Get a decrypted agent secret by secretType.
+ * Uses (ownerType=agent, ownerId, secretType) — no name matching.
+ */
+export async function getAgentSecretByType(
+  orgId: string,
+  agentId: string,
+  secretType:
+    | "api_key"
+    | "platform_api_key"
+    | "oauth_token"
+    | "credentials"
+    | "webhook_secret",
+): Promise<string | null> {
+  const [secret] = await forOrg(orgId, (tx) =>
+    tx
+      .select({ encryptedValue: secrets.encryptedValue })
+      .from(secrets)
+      .where(
+        and(
+          eq(secrets.ownerType, "agent"),
+          eq(secrets.ownerId, agentId),
+          eq(secrets.secretType, secretType),
+        ),
+      )
+      .limit(1),
+  );
+
+  if (!secret) return null;
+  return decryptSecret(secret.encryptedValue);
+}
+
+/**
+ * Get decrypted ElevenLabs API key (platform_api_key) for an agent.
+ */
+export async function getAgentElevenLabsKey(
+  orgId: string,
+  agentId: string,
+): Promise<string | null> {
+  return getAgentSecretByType(orgId, agentId, "platform_api_key");
+}
+
+/**
+ * Get decrypted ModelGuide API key (api_key) for an agent.
+ */
+export async function getAgentModelGuideKey(
+  orgId: string,
+  agentId: string,
+): Promise<string | null> {
+  return getAgentSecretByType(orgId, agentId, "api_key");
 }
 
 export async function updateSecret(

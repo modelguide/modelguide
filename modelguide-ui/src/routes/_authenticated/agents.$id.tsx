@@ -1,6 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Key, Plug, Plus, RefreshCw, ShieldCheck, Trash2, Wrench } from 'lucide-react'
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Key,
+  Link2,
+  Plug,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+  Wrench,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -10,6 +22,7 @@ import { Spinner } from '~/components/ui/spinner'
 import { Toggle } from '~/components/ui/toggle'
 import { AddConnectorDialog } from '~/features/agents/components/add-connector-dialog'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
+import { ElevenLabsCard } from '~/features/agents/components/elevenlabs-card'
 import { api } from '~/lib/api'
 import type {
   Agent,
@@ -113,7 +126,15 @@ function LinkedToolsCard({
               {connectorsData.data.map((connector) => (
                 <div key={connector.connectorId}>
                   <div className="mb-2 flex items-center gap-2">
-                    <Plug className="h-3.5 w-3.5 text-fg-muted" />
+                    {connector.connectorIconUrl ? (
+                      <img
+                        src={connector.connectorIconUrl}
+                        alt=""
+                        className="h-3.5 w-3.5 rounded-sm object-contain"
+                      />
+                    ) : (
+                      <Plug className="h-3.5 w-3.5 text-fg-muted" />
+                    )}
                     <span className="text-sm font-medium text-fg-primary">
                       {connector.connectorName}
                     </span>
@@ -238,6 +259,7 @@ function AgentDetailPage() {
 
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
   const [newApiKey, setNewApiKey] = useState<string | null>(null)
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
 
   const {
     data: agent,
@@ -273,6 +295,8 @@ function AgentDetailPage() {
     },
   })
 
+  const isElevenLabs = agent?.agentPlatform === 'elevenlabs'
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 animate-fade-up">
@@ -283,7 +307,12 @@ function AgentDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-fg-primary">{agent?.name ?? 'Agent Detail'}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-fg-primary">{agent?.name ?? 'Agent Detail'}</h1>
+            {agent ? (
+              <Badge variant={isElevenLabs ? 'brand' : 'default'}>{agent.agentPlatform}</Badge>
+            ) : null}
+          </div>
           {agent?.description ? (
             <p className="mt-1 font-sans text-sm text-fg-secondary">{agent.description}</p>
           ) : null}
@@ -355,7 +384,9 @@ function AgentDetailPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3">
                   <Key className="h-4 w-4 text-fg-muted" />
-                  <span className="flex-1 text-sm text-fg-secondary">API key configured</span>
+                  <span className="flex-1 font-mono text-xs text-fg-secondary">
+                    {agent.keyPrefix ? `${agent.keyPrefix}...` : 'API key configured'}
+                  </span>
                 </div>
 
                 {isAdmin ? (
@@ -379,6 +410,86 @@ function AgentDetailPage() {
             connectorsError={connectorsError}
             isAdmin={isAdmin}
           />
+
+          {/* Platform */}
+          <ElevenLabsCard agent={agent} isAdmin={isAdmin} />
+
+          {/* Integration URLs */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Integration URLs
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-4 text-sm text-fg-secondary">
+                {isElevenLabs
+                  ? 'These URLs are configured automatically during sync.'
+                  : 'Configure these URLs in your agent settings.'}
+              </p>
+              <div className="space-y-3">
+                {(() => {
+                  const baseUrl = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:3000'
+                  const hasHmac = agent.hasWebhookSecret ?? false
+                  const urls = [
+                    {
+                      label: 'Session Init',
+                      url: `${baseUrl}/api/sessions`,
+                      description: 'POST — create session before starting a call',
+                    },
+                    {
+                      label: 'MCP Endpoint',
+                      url: `${baseUrl}/mcp/${agent.id}`,
+                      description: 'POST — tool calls during conversation (MCP protocol)',
+                    },
+                    {
+                      label: 'Post-Call Webhook',
+                      url: `${baseUrl}/webhooks/elevenlabs/${agent.id}/post-call`,
+                      description: 'POST — transcript storage after call',
+                      hmac: isElevenLabs,
+                    },
+                  ]
+                  return urls.map(({ label, url, description, hmac }) => (
+                    <div
+                      key={label}
+                      className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-fg-muted">{label}</span>
+                          {hmac ? (
+                            <Badge variant={hasHmac ? 'success' : 'warning'} dot>
+                              {hasHmac ? 'HMAC verified' : 'HMAC not configured'}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="mt-0.5 truncate font-mono text-xs text-fg-secondary">
+                          {url}
+                        </div>
+                        <div className="mt-0.5 text-xs text-fg-muted">{description}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-bg-subtle hover:text-fg-primary"
+                        onClick={() => {
+                          navigator.clipboard.writeText(url)
+                          setCopiedUrl(label)
+                          setTimeout(() => setCopiedUrl(null), 2000)
+                        }}
+                      >
+                        {copiedUrl === label ? (
+                          <Check className="h-3.5 w-3.5 text-success" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
 

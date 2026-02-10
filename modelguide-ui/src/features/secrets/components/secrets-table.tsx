@@ -1,5 +1,6 @@
-import { Key, MoreVertical, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { Key, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Spinner } from '~/components/ui/spinner'
@@ -10,6 +11,7 @@ interface SecretsTableProps {
   secrets: Secret[]
   isLoading: boolean
   isAdmin: boolean
+  onEdit: (secret: Secret) => void
   onDelete: (secret: Secret) => void
 }
 
@@ -19,7 +21,7 @@ const secretTypeLabels: Record<string, string> = {
   credentials: 'Credentials',
 }
 
-export function SecretsTable({ secrets, isLoading, isAdmin, onDelete }: SecretsTableProps) {
+export function SecretsTable({ secrets, isLoading, isAdmin, onEdit, onDelete }: SecretsTableProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -70,6 +72,7 @@ export function SecretsTable({ secrets, isLoading, isAdmin, onDelete }: SecretsT
               key={secret.id}
               secret={secret}
               isAdmin={isAdmin}
+              onEdit={() => onEdit(secret)}
               onDelete={() => onDelete(secret)}
               style={{ animationDelay: `${index * 30}ms` }}
             />
@@ -83,12 +86,25 @@ export function SecretsTable({ secrets, isLoading, isAdmin, onDelete }: SecretsT
 interface SecretRowProps {
   secret: Secret
   isAdmin: boolean
+  onEdit: () => void
   onDelete: () => void
   style?: React.CSSProperties
 }
 
-function SecretRow({ secret, isAdmin, onDelete, style }: SecretRowProps) {
+function SecretRow({ secret, isAdmin, onEdit, onDelete, style }: SecretRowProps) {
   const [showMenu, setShowMenu] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
+
+  useEffect(() => {
+    if (showMenu && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+  }, [showMenu])
 
   return (
     <tr
@@ -114,36 +130,57 @@ function SecretRow({ secret, isAdmin, onDelete, style }: SecretRowProps) {
       </td>
       {isAdmin ? (
         <td className="px-4 py-3 text-right">
-          <div className="relative inline-block">
-            <Button variant="ghost" size="icon-sm" onClick={() => setShowMenu(!showMenu)}>
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-            {showMenu ? (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowMenu(false)}
-                  onKeyDown={(e) => e.key === 'Escape' && setShowMenu(false)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label="Close menu"
-                />
-                <div className="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg border border-fg-subtle/20 bg-bg-elevated py-1 shadow-lg">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMenu(false)
-                      onDelete()
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-error hover:bg-error/10"
+          <Button
+            ref={buttonRef}
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setShowMenu(!showMenu)}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+          {showMenu
+            ? createPortal(
+                <>
+                  <div
+                    className="fixed inset-0"
+                    style={{ zIndex: 9998 }}
+                    onClick={() => setShowMenu(false)}
+                    onKeyDown={(e) => e.key === 'Escape' && setShowMenu(false)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Close menu"
+                  />
+                  <div
+                    className="fixed w-32 rounded-lg border border-fg-subtle/20 bg-bg-elevated py-1 shadow-lg"
+                    style={{ zIndex: 9999, top: menuPos.top, right: menuPos.right }}
                   >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false)
+                        onEdit()
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg-secondary hover:bg-bg-subtle"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false)
+                        onDelete()
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-error hover:bg-error/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </div>
+                </>,
+                document.body,
+              )
+            : null}
         </td>
       ) : null}
     </tr>

@@ -1,0 +1,466 @@
+{
+  "agentId": "agent_3501kgq8y9nre61vhwb60nyc0fnt",
+  "name": "Pizza Palace Agent",
+  "conversationConfig": {
+    "asr": {
+      "quality": "high",
+      "provider": "scribe_realtime",
+      "userInputAudioFormat": "pcm_16000",
+      "keywords": []
+    },
+    "turn": {
+      "turnTimeout": 7,
+      "silenceEndCallTimeout": -1,
+      "softTimeoutConfig": {
+        "timeoutSeconds": -1,
+        "message": "Hhmmmm...yeah.",
+        "useLlmGeneratedMessage": false
+      },
+      "mode": "turn",
+      "turnEagerness": "normal",
+      "spellingPatience": "auto",
+      "speculativeTurn": true,
+      "turn_model": "turn_v2"
+    },
+    "tts": {
+      "modelId": "eleven_v3_conversational",
+      "voiceId": "xfMUKeTJXYYX6U76STYv",
+      "supportedVoices": [],
+      "suggested_audio_tags": [],
+      "agentOutputAudioFormat": "pcm_16000",
+      "optimizeStreamingLatency": 3,
+      "stability": 0.5,
+      "speed": 1,
+      "similarityBoost": 0.8,
+      "textNormalisationType": "system_prompt",
+      "pronunciationDictionaryLocators": []
+    },
+    "conversation": {
+      "textOnly": false,
+      "maxDurationSeconds": 600,
+      "clientEvents": [
+        "audio",
+        "interruption",
+        "agent_response",
+        "user_transcript",
+        "agent_response_correction",
+        "agent_tool_response"
+      ],
+      "monitoringEnabled": false,
+      "monitoringEvents": [
+        "user_transcript",
+        "agent_response",
+        "agent_response_correction"
+      ]
+    },
+    "languagePresets": {},
+    "vad": {
+      "background_voice_detection": false
+    },
+    "agent": {
+      "firstMessage": "Hi, welcome to Pizza Palace! What can I get for you today?",
+      "language": "en",
+      "hinglishMode": false,
+      "dynamicVariables": {
+        "dynamicVariablePlaceholders": {}
+      },
+      "disableFirstMessageInterruptions": false,
+      "prompt": {
+        "prompt": "You are a friendly Pizza Palace voice assistant. You help customers place orders, check order status, and modify existing orders.\n\n## Rules\n- Be concise and natural — this is a voice conversation.\n- Always confirm before placing or modifying an order.\n- If you can't find an item, suggest alternatives.\n- If something goes wrong with a tool call, apologize and try once more.\n\n## Available tools\nYou have access to tools prefixed with \"pizzapalace_\". Use them to:\n- Add items to cart\n- View cart contents  \n- Create and confirm orders\n- Check order status\n- Update delivery addresses",
+        "llm": "glm-45-air-fp8",
+        "reasoningEffort": "low",
+        "temperature": 0,
+        "maxTokens": -1,
+        "toolIds": [
+          "tool_7001kgshkaj5fyv8xsjcvt5bpy01",
+          "tool_9801kgshkaj4eh5r0xn2e3q8xfyt",
+          "tool_9801kgshkaj6fzpbfw8fj1ndj5rz",
+          "tool_8801kgshkaj7fff96q9w6q7m6bs5"
+        ],
+        "builtInTools": {},
+        "enable_parallel_tool_calls": false,
+        "mcpServerIds": [],
+        "nativeMcpServerIds": [],
+        "knowledgeBase": [],
+        "ignoreDefaultPersonality": false,
+        "rag": {
+          "enabled": false,
+          "embeddingModel": "e5_mistral_7b_instruct",
+          "maxVectorDistance": 0.6,
+          "maxDocumentsLength": 50000,
+          "maxRetrievedRagChunksCount": 20
+        },
+        "timezone": "Europe/London",
+        "backupLlmConfig": {
+          "preference": "default"
+        },
+        "cascadeTimeoutSeconds": 8,
+        "tools": [
+          {
+            "type": "webhook",
+            "name": "pizzapalace_get_cart",
+            "description": "View the current cart contents and total",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [],
+                "description": "",
+                "properties": {}
+              },
+              "contentType": "application/json"
+            }
+          },
+          {
+            "type": "webhook",
+            "name": "pizzapalace_add_to_cart",
+            "description": "Add an item to the customer's shopping cart",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [
+                  "item",
+                  "quantity"
+                ],
+                "description": "",
+                "properties": {
+                  "item": {
+                    "type": "string",
+                    "description": "Item name (e.g. 'large pepperoni pizza')",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  },
+                  "quantity": {
+                    "type": "number",
+                    "description": "Number of items",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  },
+                  "size": {
+                    "type": "string",
+                    "description": "Size variant",
+                    "enum": [
+                      "small",
+                      "medium",
+                      "large"
+                    ],
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  },
+                  "toppings": {
+                    "type": "string",
+                    "description": "Comma-separated toppings",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  }
+                }
+              },
+              "contentType": "application/json"
+            }
+          },
+          {
+            "type": "webhook",
+            "name": "pizzapalace_confirm_order",
+            "description": "Confirm and place the order. Always ask the customer to confirm first.",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [
+                  "delivery_address"
+                ],
+                "description": "",
+                "properties": {
+                  "delivery_address": {
+                    "type": "string",
+                    "description": "Full delivery address",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  }
+                }
+              },
+              "contentType": "application/json"
+            }
+          },
+          {
+            "type": "webhook",
+            "name": "pizzapalace_get_order",
+            "description": "Get details of an existing order by order ID",
+            "responseTimeoutSecs": 30,
+            "disableInterruptions": false,
+            "forcePreToolSpeech": false,
+            "assignments": [],
+            "toolCallSoundBehavior": "auto",
+            "dynamicVariables": {
+              "dynamicVariablePlaceholders": {}
+            },
+            "executionMode": "immediate",
+            "apiSchema": {
+              "requestHeaders": {},
+              "url": "https://1d9b-185-93-94-24.ngrok-free.app/webhooks/elevenlabs/tool",
+              "method": "POST",
+              "pathParamsSchema": {},
+              "requestBodySchema": {
+                "type": "object",
+                "required": [
+                  "order_id"
+                ],
+                "description": "",
+                "properties": {
+                  "order_id": {
+                    "type": "string",
+                    "description": "The order ID",
+                    "isSystemProvided": false,
+                    "dynamicVariable": "",
+                    "constantValue": ""
+                  }
+                }
+              },
+              "contentType": "application/json"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "metadata": {
+    "createdAtUnixSecs": 1770307660,
+    "updatedAtUnixSecs": 1770384353
+  },
+  "platformSettings": {
+    "evaluation": {
+      "criteria": []
+    },
+    "widget": {
+      "variant": "full",
+      "placement": "bottom-right",
+      "expandable": "never",
+      "avatar": {
+        "type": "orb",
+        "color1": "#2792dc",
+        "color2": "#9ce6e6"
+      },
+      "feedbackMode": "during",
+      "endFeedback": {
+        "type": "rating"
+      },
+      "bgColor": "#ffffff",
+      "textColor": "#000000",
+      "btnColor": "#000000",
+      "btnTextColor": "#ffffff",
+      "borderColor": "#e1e1e1",
+      "focusColor": "#000000",
+      "shareablePageShowTerms": true,
+      "termsText": "#### Terms and conditions\n\nBy clicking \"Agree,\" and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\nIf you do not wish to have your conversations recorded, please refrain from using this service.",
+      "termsHtml": "<h4>Terms and conditions</h4>\n<p>By clicking &quot;Agree,&quot; and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\nIf you do not wish to have your conversations recorded, please refrain from using this service.</p>\n",
+      "showAvatarWhenCollapsed": false,
+      "disableBanner": false,
+      "markdownLinkAllowedHosts": [],
+      "markdownLinkIncludeWww": true,
+      "markdownLinkAllowHttp": true,
+      "micMutingEnabled": false,
+      "transcriptEnabled": false,
+      "textInputEnabled": true,
+      "conversationModeToggleEnabled": false,
+      "defaultExpanded": false,
+      "alwaysExpanded": false,
+      "textContents": {},
+      "styles": {},
+      "languageSelector": false,
+      "supportsTextOnly": true,
+      "languagePresets": {}
+    },
+    "dataCollection": {},
+    "overrides": {
+      "conversationConfigOverride": {
+        "turn": {
+          "softTimeoutConfig": {
+            "message": false
+          }
+        },
+        "tts": {
+          "voiceId": false,
+          "stability": false,
+          "speed": false,
+          "similarityBoost": false
+        },
+        "conversation": {
+          "textOnly": true
+        },
+        "agent": {
+          "firstMessage": false,
+          "language": false,
+          "prompt": {
+            "prompt": false,
+            "llm": false,
+            "nativeMcpServerIds": false
+          }
+        }
+      },
+      "customLlmExtraBody": false,
+      "enableConversationInitiationClientDataFromWebhook": false
+    },
+    "workspaceOverrides": {
+      "webhooks": {
+        "postCallWebhookId": "0628a754e9d843969f2af6fab6c7967c",
+        "events": [
+          "transcript"
+        ],
+        "sendAudio": false
+      }
+    },
+    "testing": {
+      "attachedTests": [],
+      "referenced_tests_ids": []
+    },
+    "archived": false,
+    "guardrails": {
+      "version": "1",
+      "alignment": {
+        "is_enabled": false
+      },
+      "moderation": {
+        "config": {
+          "sexual": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "violence": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "violence_graphic": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "harassment": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "harassment_threatening": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "hate": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "hate_threatening": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "self_harm_instructions": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "self_harm": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "self_harm_intent": {
+            "is_enabled": false,
+            "threshold": 0.3
+          },
+          "sexual_minors": {
+            "is_enabled": false,
+            "threshold": 0.3
+          }
+        }
+      }
+    },
+    "auth": {
+      "enableAuth": false,
+      "allowlist": [],
+      "require_origin_header": false
+    },
+    "callLimits": {
+      "agentConcurrencyLimit": -1,
+      "dailyLimit": 100000,
+      "burstingEnabled": true
+    },
+    "ban": null,
+    "privacy": {
+      "recordVoice": true,
+      "retentionDays": -1,
+      "deleteTranscriptAndPii": false,
+      "deleteAudio": false,
+      "applyToExistingConversations": false,
+      "zeroRetentionMode": false
+    },
+    "safety": {
+      "isBlockedIvc": false,
+      "isBlockedNonIvc": false,
+      "ignoreSafetyEvaluation": false
+    }
+  },
+  "phoneNumbers": [],
+  "whatsappAccounts": [],
+  "workflow": {
+    "edges": {},
+    "nodes": {
+      "start_node": {
+        "type": "start",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "edgeOrder": []
+      }
+    },
+    "preventSubagentLoops": false
+  },
+  "accessInfo": {
+    "isCreator": true,
+    "creatorName": "sammy@modelguide.ai",
+    "creatorEmail": "sammy@modelguide.ai",
+    "role": "admin"
+  },
+  "tags": [],
+  "versionId": "agtvrsn_9101kgsj2t8hf5ntxr2q0sf5rmeg",
+  "branchId": "agtbrch_6501kgq8yaj3fc9vz7t4354c0zhm",
+  "mainBranchId": "agtbrch_6501kgq8yaj3fc9vz7t4354c0zhm",
+  "procedure_versions": [],
+  "procedures_enabled": false
+}

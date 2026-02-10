@@ -86,7 +86,13 @@ const tools: ConnectorToolDefinition[] = [
           },
           body: {
             type: "string",
-            description: "Initial comment body (plain text or HTML)",
+            description:
+              "Initial comment body (plain text or HTML). Alias: description",
+          },
+          description: {
+            type: "string",
+            description:
+              "Alias for body — initial comment text. Use body or description, not both.",
           },
           priority: {
             type: "string",
@@ -113,7 +119,7 @@ const tools: ConnectorToolDefinition[] = [
             description: "Requester display name (optional)",
           },
         },
-        required: ["subject", "body"],
+        required: ["subject"],
       },
       defaultRequiresConfirmation: true,
       defaultTimeoutSeconds: 60,
@@ -303,8 +309,7 @@ const zendeskManifest: ConnectorManifest = {
     },
   },
   authMethods: ["basic"],
-  iconUrl:
-    "https://d26a57ydsghvgx.cloudfront.net/www/public/assets/images/logos/zendesk-logo.svg",
+  iconUrl: "/logos/zendesk.svg",
   tools,
 };
 

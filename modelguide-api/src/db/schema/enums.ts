@@ -26,17 +26,27 @@ export const secretTypeEnum = pgEnum("secret_type", [
   "api_key",
   "oauth_token",
   "credentials",
+  "platform_api_key",
+  "webhook_secret",
 ]);
 
 /**
  * Owner types for polymorphic secret ownership
  */
-export const ownerTypeEnum = pgEnum("owner_type", ["connector"]);
+export const ownerTypeEnum = pgEnum("owner_type", ["connector", "agent"]);
 
 /**
  * Agent types (voice only for V1)
  */
 export const agentTypeEnum = pgEnum("agent_type", ["voice"]);
+
+/**
+ * Agent platform — where the agent runs
+ */
+export const agentPlatformEnum = pgEnum("agent_platform", [
+  "custom",
+  "elevenlabs",
+]);
 
 /**
  * Session status indicating conversation state

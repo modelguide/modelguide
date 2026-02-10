@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --color-brand: #f97316;
+  --color-brand-dark: #ea580c;
+  --color-el: #4f46e5;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
+
+/* Animations */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+/* Input field */
+.input-field {
+  @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 font-mono outline-none placeholder:text-zinc-400 focus:border-brand focus:ring-1 focus:ring-brand/30 disabled:opacity-50 disabled:bg-zinc-50;
+}

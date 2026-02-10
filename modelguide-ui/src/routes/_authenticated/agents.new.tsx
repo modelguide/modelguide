@@ -8,7 +8,12 @@ import { Input } from '~/components/ui/input'
 import { Select } from '~/components/ui/select'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { api } from '~/lib/api'
-import type { AgentCreate, AgentWithKey } from '~/schemas/agents'
+import type { AgentCreate, AgentPlatform, AgentWithKey } from '~/schemas/agents'
+
+/** Helper to build metadata with elevenlabs namespace */
+function buildElevenlabsMetadata(agentId: string) {
+  return { elevenlabs: { agentId } }
+}
 
 export const Route = createFileRoute('/_authenticated/agents/new')({
   component: NewAgentPage,
@@ -19,6 +24,8 @@ function NewAgentPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [agentType, setAgentType] = useState<'voice'>('voice')
+  const [agentPlatform, setAgentPlatform] = useState<AgentPlatform>('custom')
+  const [elevenlabsAgentId, setElevenlabsAgentId] = useState('')
   const [newAgent, setNewAgent] = useState<AgentWithKey | null>(null)
 
   const createMutation = useMutation({
@@ -33,7 +40,12 @@ function NewAgentPage() {
     createMutation.mutate({
       name,
       description: description || undefined,
-      agentType: agentType,
+      agentType,
+      agentPlatform,
+      metadata:
+        agentPlatform === 'elevenlabs' && elevenlabsAgentId
+          ? buildElevenlabsMetadata(elevenlabsAgentId)
+          : undefined,
     })
   }
 
@@ -86,6 +98,25 @@ function NewAgentPage() {
             >
               <option value="voice">Voice</option>
             </Select>
+
+            <Select
+              label="Platform"
+              value={agentPlatform}
+              onChange={(e) => setAgentPlatform(e.target.value as AgentPlatform)}
+            >
+              <option value="custom">Custom</option>
+              <option value="elevenlabs">ElevenLabs</option>
+            </Select>
+
+            {agentPlatform === 'elevenlabs' ? (
+              <Input
+                label="ElevenLabs Agent ID"
+                value={elevenlabsAgentId}
+                onChange={(e) => setElevenlabsAgentId(e.target.value)}
+                placeholder="e.g., abc123def456"
+                required
+              />
+            ) : null}
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" loading={createMutation.isPending}>

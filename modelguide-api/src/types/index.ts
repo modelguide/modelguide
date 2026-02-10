@@ -30,6 +30,7 @@ export interface AuthAgent {
   organizationId: string;
   agentType: AgentType;
   isActive: boolean;
+  metadata: Record<string, unknown>;
 }
 
 /**
