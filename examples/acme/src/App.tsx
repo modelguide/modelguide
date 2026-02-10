@@ -1,7 +1,7 @@
 import { useConversation } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const LS_KEY = "pizza-palace-config";
+const LS_KEY = "acme-corp-config";
 
 function loadConfig(): { apiKey: string; agentId: string } {
   try {
@@ -114,15 +114,13 @@ export function App() {
       {/* Top header */}
       <header className="shrink-0 border-b border-zinc-200 bg-white px-6 py-5 flex flex-col items-center gap-2">
         <div className="flex items-center gap-3">
-          <div className="size-10 rounded-xl bg-amber-500 flex items-center justify-center text-white text-2xl leading-none">
-            🍕
-          </div>
+          <AcmeLogo />
           <div className="text-lg font-bold text-zinc-900 tracking-tight">
-            Pizza Palace — AI Voice Ordering
+            Acme Corp — AI Voice Assistant
           </div>
         </div>
         <div className="text-[13px] text-zinc-500">
-          Scenario 1: Voice ordering via browser
+          Scenario 1: Voice support via browser
         </div>
         <div className="flex items-center gap-2 text-[11px] text-zinc-400">
           <span>Powered by</span>
@@ -251,7 +249,7 @@ export function App() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-0.5">
+          <div className="flex-1 overflow-y-auto scroll-smooth px-6 py-4 flex flex-col gap-0.5">
             {messages.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
                 <ChatIcon />
@@ -296,6 +294,18 @@ export function App() {
 }
 
 /* ── Icons & helpers ──────────────────────────── */
+
+function AcmeLogo() {
+  return (
+    <div className="size-10 rounded-xl bg-zinc-900 flex items-center justify-center shrink-0">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L2 19h20L12 2z" fill="#f97316" />
+        <path d="M12 8l-5 9h10l-5-9z" fill="#fff" />
+        <rect x="10.5" y="13" width="3" height="3" rx="0.5" fill="#f97316" />
+      </svg>
+    </div>
+  );
+}
 
 function ModelGuideLogo() {
   return (

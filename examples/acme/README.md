@@ -1,4 +1,4 @@
-# Pizza Palace Demo
+# Acme Corp Demo
 
 Session-aware ElevenLabs voice agent integration with ModelGuide.
 

@@ -39,4 +39,4 @@ drizzle/meta/
 
 # TanStack Router
 .tanstack/
-/examples/pizza-palace/.vite/
+.vite/
