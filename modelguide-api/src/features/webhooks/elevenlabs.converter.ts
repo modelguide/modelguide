@@ -154,13 +154,14 @@ function extractLlmUsage(metadata: PostCallData["metadata"]): {
 
 export function convertPostCallToSession(
   data: PostCallData,
-  dynamicVars?: DynamicVariables,
+  dynamicVars: DynamicVariables | undefined,
+  conversationId: string,
 ): ConvertedPostCall {
   const startTime = data.metadata.start_time_unix_secs;
   const llmUsage = extractLlmUsage(data.metadata);
 
   const session: ConvertedSession = {
-    externalId: data.conversation_id,
+    externalId: conversationId,
     channelType: "voice",
     userIdentifier: dynamicVars?.mg_user_id ?? null,
     status: "completed",

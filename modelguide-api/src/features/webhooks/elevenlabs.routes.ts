@@ -95,11 +95,6 @@ app.post("/:agentId/post-call", async (c) => {
     return c.json({ error: "Invalid JSON" }, 400);
   }
 
-  if (env.NODE_ENV === "development") {
-    const fs = await import("node:fs");
-    fs.writeFileSync("/tmp/elevenlabs-post-call.json", rawBody);
-  }
-
   const parsed = postCallTranscriptionPayloadSchema.safeParse(rawJson);
   if (!parsed.success) {
     console.error(
@@ -122,9 +117,18 @@ app.post("/:agentId/post-call", async (c) => {
   };
 
   // 4. Convert payload to ModelGuide shapes
-  const converted = convertPostCallToSession(data, dynamicVars);
+  const conversationId =
+    data.conversation_id ?? dynamicVars?.system__conversation_id;
+
+  if (!conversationId) {
+    console.error(
+      "[webhook/post-call] No conversation_id in payload or dynamic_variables",
+    );
+    return c.json({ error: "Missing conversation_id" }, 400);
+  }
+
+  const converted = convertPostCallToSession(data, dynamicVars, conversationId);
   const existingSessionId = dynamicVars?.mg_session_id;
-  const conversationId = data.conversation_id;
 
   // 5. Idempotency: check if session with this externalId already exists
   const [existingByExternalId] = await db

@@ -14,6 +14,7 @@ export const dynamicVariablesSchema = z
     mg_api_key: z.string().startsWith("mgk_").optional(),
     mg_user_id: z.string().optional(),
     mg_session_id: z.string().uuid().optional(),
+    system__conversation_id: z.string().optional(),
   })
   .passthrough();
 
@@ -83,7 +84,7 @@ export const postCallTranscriptionPayloadSchema = z.object({
   event_timestamp: z.number(),
   data: z.object({
     agent_id: z.string(),
-    conversation_id: z.string(),
+    conversation_id: z.string().optional(),
     status: z.string(),
     transcript: z.array(transcriptEntrySchema),
     metadata: callMetadataSchema,
