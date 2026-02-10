@@ -44,9 +44,6 @@ const envSchema = z
     // Used for ElevenLabs sync (MCP server URL, webhook URL) and integration URL display.
     // Falls back to APP_URL if not set.
     API_EXTERNAL_ADDRESS: z.string().url().optional(),
-
-    // ElevenLabs webhook secret for signature verification
-    ELEVENLABS_WEBHOOK_SECRET: z.string().default(""),
   })
   .refine(
     (data) =>
