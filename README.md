@@ -23,11 +23,6 @@
   <a href="#quick-start">Quick Start</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="#adding-a-connector">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
----
-
-<!-- TODO: add screenshot of sessions dashboard showing tool call traces -->
-
----
 
 ## The Problem
 
@@ -39,17 +34,27 @@ The AI agent is becoming a commodity. The voice stacks work. The LLMs work. What
 
 SaaS charges $150K+ for that layer. We open-sourced it.
 
+![Architecture diagram](./docs/architecture_image.png)
+
 ## What Model Guide Does
 
 Model Guide sits between your AI agents and your business systems. It doesn't run the AI. It doesn't own the voice stack. It provides three layers:
 
 **Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
 
+![Connectors diagram](./docs/connectors.png)
+
 **Observation layer** — Every session recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did*.
+
+![Conversation diagram](./docs/conversation.png)
 
 **Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
 
-![Architecture diagram](./docs/architecture_image.png)
+![Control diagram](./docs/control.png)
+
+**Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics CX leaders actually need to prove AI is working, not vanity dashboards.
+
+![Optimize diagram](./docs/optimize.png)
 
 ## Quick Start
 
