@@ -2,13 +2,18 @@ import { z } from 'zod'
 
 import type { PaginatedResponse } from '~/lib/pagination'
 
+export const agentPlatforms = ['custom', 'elevenlabs'] as const
+export type AgentPlatform = (typeof agentPlatforms)[number]
+
 export const agentSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   description: z.string().nullable(),
   agentType: z.enum(['voice']),
+  agentPlatform: z.enum(agentPlatforms),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
+  hasElevenLabsKey: z.boolean(),
   keyPrefix: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -20,6 +25,8 @@ export const agentCreateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
   agentType: z.enum(['voice']),
+  agentPlatform: z.enum(agentPlatforms).optional(),
+  metadata: z.record(z.unknown()).optional(),
 })
 
 export type AgentCreate = z.infer<typeof agentCreateSchema>

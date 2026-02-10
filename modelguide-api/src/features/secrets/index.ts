@@ -9,4 +9,5 @@ export {
   createSecret,
   updateSecret,
   deleteSecret,
+  getAgentElevenLabsKey,
 } from "./secrets.service";

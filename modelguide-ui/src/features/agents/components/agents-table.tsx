@@ -42,7 +42,7 @@ export function AgentsTable({ agents, isLoading, isAdmin, onDelete }: AgentsTabl
               Name
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
-              Type
+              Platform
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
               Status
@@ -76,7 +76,9 @@ export function AgentsTable({ agents, isLoading, isAdmin, onDelete }: AgentsTabl
                 ) : null}
               </td>
               <td className="px-4 py-3">
-                <Badge variant="default">{agent.agentType}</Badge>
+                <Badge variant={agent.agentPlatform === 'elevenlabs' ? 'brand' : 'default'}>
+                  {agent.agentPlatform}
+                </Badge>
               </td>
               <td className="px-4 py-3">
                 <Badge variant={agent.isActive ? 'success' : 'default'} dot>

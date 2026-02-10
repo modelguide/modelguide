@@ -27,6 +27,7 @@ import {
   updateAgent,
   updateAgentConnectorTools,
 } from "./agents.service";
+import { syncAgentToElevenLabs } from "./agents.sync";
 
 const router = createRouter();
 
@@ -39,8 +40,10 @@ const agentResponseSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   agentType: z.enum(["voice"]),
+  agentPlatform: z.enum(["custom", "elevenlabs"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
+  hasElevenLabsKey: z.boolean(),
   keyPrefix: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
@@ -74,6 +77,8 @@ const createAgentSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: "Order Agent" }),
   description: z.string().optional(),
   agentType: z.enum(["voice"]).default("voice").optional(),
+  agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 const updateAgentSchema = z
@@ -81,14 +86,16 @@ const updateAgentSchema = z
     name: z.string().min(1).max(255).optional(),
     description: z.string().optional(),
     metadata: z.record(z.unknown()).optional(),
+    agentPlatform: z.enum(["custom", "elevenlabs"]).optional(),
   })
   .refine(
     (data) =>
       data.name !== undefined ||
       data.description !== undefined ||
-      data.metadata !== undefined,
+      data.metadata !== undefined ||
+      data.agentPlatform !== undefined,
     {
-      message: "At least one of 'name', 'description', or 'metadata' must be provided",
+      message: "At least one field must be provided",
     },
   );
 
@@ -122,6 +129,10 @@ const listAgentsQuerySchema = paginationSchema.extend({
     .enum(["voice"])
     .optional()
     .openapi({ description: "Filter by agent type" }),
+  agentPlatform: z
+    .enum(["custom", "elevenlabs"])
+    .optional()
+    .openapi({ description: "Filter by agent platform" }),
 });
 
 const agentIdParams = z.object({
@@ -137,14 +148,18 @@ const agentConnectorParams = z.object({
 // Helpers
 // ============================================================================
 
-function formatAgent(agent: Agent & { keyPrefix?: string | null }) {
+function formatAgent(
+  agent: Agent & { keyPrefix?: string | null; hasElevenLabsKey?: boolean },
+) {
   return {
     id: agent.id,
     name: agent.name,
     description: agent.description,
     agentType: agent.agentType,
+    agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
     metadata: agent.metadata,
+    hasElevenLabsKey: agent.hasElevenLabsKey ?? false,
     keyPrefix: agent.keyPrefix ?? null,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
@@ -196,11 +211,12 @@ const listAgentsRoute = createRoute({
 
 router.openapi(listAgentsRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const { page, pageSize, isActive, agentType } = c.req.valid("query");
+  const { page, pageSize, isActive, agentType, agentPlatform } =
+    c.req.valid("query");
   const result = await listAgents(
     orgId,
     { page, pageSize },
-    { isActive, agentType },
+    { isActive, agentType, agentPlatform },
   );
 
   return c.json(
@@ -483,6 +499,60 @@ router.openapi(regenerateKeyRoute, async (c) => {
   const result = await regenerateApiKey(orgId, id, user.id);
 
   return c.json(result, 200);
+});
+
+// POST /:id/sync
+router.post(
+  "/:id/sync",
+  requireUser(),
+  requirePermission("agents:update"),
+  requireOrganization(),
+);
+
+const syncAgentRoute = createRoute({
+  method: "post",
+  path: "/{id}/sync",
+  tags: ["Agents"],
+  summary: "Sync agent to ElevenLabs",
+  description:
+    "Pushes MCP server URL and post-call webhook URL to ElevenLabs. Creates workspace webhook and MCP server if needed, stores HMAC secret for signature verification.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    200: {
+      description: "Sync completed",
+      content: {
+        "application/json": {
+          schema: z.object({
+            mcpServerId: z.string(),
+            webhookId: z.string(),
+            syncedAt: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse("Invalid input (missing platform, agent ID, or API key)"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(syncAgentRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const result = await syncAgentToElevenLabs(orgId, id);
+
+  return c.json(
+    {
+      mcpServerId: result.mcpServerId,
+      webhookId: result.webhookId,
+      syncedAt: result.syncedAt,
+    },
+    200,
+  );
 });
 
 // GET /:id/connectors

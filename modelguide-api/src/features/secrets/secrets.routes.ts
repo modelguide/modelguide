@@ -36,7 +36,7 @@ const secretResponseSchema = z.object({
   secretType: z.enum(["api_key", "oauth_token", "credentials"]).openapi({
     example: "api_key",
   }),
-  ownerType: z.enum(["connector"]).openapi({
+  ownerType: z.enum(["connector", "agent"]).openapi({
     example: "connector",
   }),
   ownerId: z.string().uuid().openapi({
@@ -62,7 +62,7 @@ const createSecretRequestSchema = z.object({
   secretType: z.enum(["api_key", "oauth_token", "credentials"]).openapi({
     example: "api_key",
   }),
-  ownerType: z.enum(["connector"]).openapi({
+  ownerType: z.enum(["connector", "agent"]).openapi({
     example: "connector",
   }),
   ownerId: z.string().uuid().openapi({
@@ -107,7 +107,7 @@ function formatSecret(secret: {
     id: secret.id,
     name: secret.name,
     secretType: secret.secretType as "api_key" | "oauth_token" | "credentials",
-    ownerType: secret.ownerType as "connector",
+    ownerType: secret.ownerType as "connector" | "agent",
     ownerId: secret.ownerId,
     createdAt: secret.createdAt.toISOString(),
     updatedAt: secret.updatedAt?.toISOString() ?? null,
