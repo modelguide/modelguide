@@ -17,7 +17,6 @@ import { Hono } from "hono";
 import { postCallTranscriptionPayloadSchema } from "./elevenlabs.schemas";
 import { convertPostCallToSession } from "./elevenlabs.converter";
 
-const elevenlabs = new ElevenLabsClient();
 
 const app = new Hono();
 
@@ -30,7 +29,8 @@ async function verifySignature(
   signature: string,
   webhookSecret: string,
 ) {
-  return elevenlabs.webhooks.constructEvent(rawBody, signature, webhookSecret);
+  const client = new ElevenLabsClient({ apiKey: "unused" });
+  return client.webhooks.constructEvent(rawBody, signature, webhookSecret);
 }
 
 async function getAgentWithMetadata(agentId: string) {

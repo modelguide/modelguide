@@ -1,23 +1,59 @@
 /**
  * ElevenLabs sync service
  *
- * Pushes MCP server URL and post-call webhook URL to ElevenLabs,
- * then stores the resulting IDs and HMAC secret in agent metadata.
+ * Creates/updates all ElevenLabs entities (secret, MCP server, webhook)
+ * and assigns them to the ElevenLabs agent.
  */
 
 import { env } from "@/env";
 import { agents } from "@db/schema";
 import { forOrg } from "@db/rls";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import { getAgentElevenLabsKey } from "@features/secrets";
+import {
+  getAgentElevenLabsKey,
+  getAgentModelGuideKey,
+} from "@features/secrets";
 import { Errors } from "@lib/errors";
 import { eq } from "drizzle-orm";
 
-interface SyncResult {
+/**
+ * Thin wrapper around ElevenLabs secrets API.
+ * The SDK has a response parsing bug (requires `name` which the API may omit),
+ * so we call the REST endpoint directly for secrets only.
+ */
+const EL_SECRETS_BASE = "https://api.elevenlabs.io/v1/convai/secrets";
+
+async function elSecretsRequest(
+  apiKey: string,
+  method: "POST" | "PATCH",
+  secretId: string | undefined,
+  body: Record<string, string>,
+): Promise<{ secret_id?: string; secretId?: string }> {
+  const url = secretId ? `${EL_SECRETS_BASE}/${secretId}` : EL_SECRETS_BASE;
+  const res = await fetch(url, {
+    method,
+    headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify(method === "PATCH" ? { type: "update", ...body } : body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`ElevenLabs secrets API ${method} ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+interface SyncStep {
+  step: string;
+  status: "success" | "skipped" | "error";
+  message?: string;
+}
+
+export interface SyncResult {
+  secretId: string | null;
   mcpServerId: string;
   webhookId: string;
-  webhookSecret: string;
   syncedAt: string;
+  steps: SyncStep[];
 }
 
 export async function syncAgentToElevenLabs(
@@ -35,8 +71,9 @@ export async function syncAgentToElevenLabs(
   }
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
-  const elevenlabsMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
-  const elevenLabsAgentId = elevenlabsMeta.agentId as string | undefined;
+  const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
+  const elevenLabsAgentId = elMeta.agentId as string | undefined;
+  const slug = agent.slug;
 
   if (!elevenLabsAgentId) {
     throw Errors.invalidInput(
@@ -44,7 +81,7 @@ export async function syncAgentToElevenLabs(
     );
   }
 
-  // 2. Get per-agent API key
+  // 2. Get per-agent ElevenLabs API key
   const apiKey = await getAgentElevenLabsKey(orgId, agentId);
   if (!apiKey) {
     throw Errors.invalidInput(
@@ -52,68 +89,168 @@ export async function syncAgentToElevenLabs(
     );
   }
 
-  const client = new ElevenLabsClient({ apiKey });
-  const baseUrl = env.APP_URL;
+  // 3. Get ModelGuide API key for MCP auth (optional — agents created before secret storage won't have it)
+  const mgApiKey = await getAgentModelGuideKey(orgId, agentId);
 
-  // 3. Create or reuse workspace webhook
-  const webhookUrl = `${baseUrl}/webhooks/elevenlabs/${agentId}/post-call`;
-  let webhookId = elevenlabsMeta.webhookId as string | undefined;
+  const client = new ElevenLabsClient({ apiKey });
+  if (!env.API_EXTERNAL_ADDRESS) {
+    throw new Error("API_EXTERNAL_ADDRESS is required for ElevenLabs sync");
+  }
+  const baseUrl = env.API_EXTERNAL_ADDRESS.replace(/\/$/, "");
+  const steps: SyncStep[] = [];
+
+  // Step 1: Create/update ElevenLabs secret (ModelGuide API key)
+  let secretId = elMeta.secretId as string | undefined;
+  if (!mgApiKey) {
+    steps.push({ step: "API key secret", status: "skipped", message: "No ModelGuide API key — regenerate to enable" });
+  } else {
+    try {
+      if (secretId) {
+        await elSecretsRequest(apiKey, "PATCH", secretId, {
+          name: `${slug}_apikey`,
+          value: mgApiKey,
+        });
+        steps.push({ step: "API key secret", status: "success", message: "Updated existing secret" });
+      } else {
+        const res = await elSecretsRequest(apiKey, "POST", undefined, {
+          name: `${slug}_apikey`,
+          value: mgApiKey,
+        });
+        secretId = res.secret_id ?? res.secretId;
+        steps.push({ step: "API key secret", status: "success", message: "Created secret" });
+      }
+    } catch (err) {
+      steps.push({
+        step: "API key secret",
+        status: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+      throw err;
+    }
+  }
+
+  // Step 2: Create/update MCP server (STREAMABLE_HTTP)
+  let mcpServerId = elMeta.mcpServerId as string | undefined;
+  const mcpConfig: Record<string, unknown> = {
+    url: `${baseUrl}/mcp/${agentId}`,
+    name: `${slug}_mcp`,
+    description: "ModelGuide connector tools",
+    transport: "STREAMABLE_HTTP",
+    approvalPolicy: "auto_approve_all",
+  };
+  if (secretId) {
+    mcpConfig.secretToken = { secretId };
+  }
+
+  // Fetch current ElevenLabs agent state (used for MCP list + agent name)
+  const elAgent = await client.conversationalAi.agents.get(elevenLabsAgentId);
+
+  try {
+    // ElevenLabs API silently ignores URL changes on update, so delete + recreate.
+    // Preserve other MCP servers that aren't managed by ModelGuide.
+    const currentMcpIds: string[] = (elAgent as any).conversationConfig?.agent?.prompt?.mcpServerIds ?? [];
+
+    if (mcpServerId) {
+      // Unassign only our MCP server from agent, then delete it
+      const otherMcpIds = currentMcpIds.filter((id: string) => id !== mcpServerId);
+      await client.conversationalAi.agents.update(elevenLabsAgentId, {
+        conversationConfig: { agent: { prompt: { mcpServerIds: otherMcpIds } } } as any,
+      });
+      await client.conversationalAi.mcpServers.delete(mcpServerId);
+    }
+    const mcpServer = await client.conversationalAi.mcpServers.create({
+      config: mcpConfig,
+    });
+    const prevMcpServerId = mcpServerId;
+    mcpServerId = mcpServer.id;
+    steps.push({ step: "MCP server", status: "success", message: prevMcpServerId ? "Recreated" : "Created" });
+  } catch (err) {
+    steps.push({
+      step: "MCP server",
+      status: "error",
+      message: err instanceof Error ? err.message : "Unknown error",
+    });
+    throw err;
+  }
+
+  // Step 3: Delete + recreate webhook to ensure URL is current
+  let webhookId = elMeta.webhookId as string | undefined;
   let webhookSecret = meta.webhook_hmac_secret as string | undefined;
 
-  if (!webhookId) {
+  try {
+    if (webhookId) {
+      try {
+        await client.webhooks.delete(webhookId);
+      } catch {
+        // Best-effort: webhook may already be deleted on ElevenLabs side
+      }
+    }
     const webhook = await client.webhooks.create({
       settings: {
         authType: "hmac",
-        name: `ModelGuide Post-Call (${agent.name})`,
-        webhookUrl,
+        name: `${slug}_postcall`,
+        webhookUrl: `${baseUrl}/webhooks/elevenlabs/${agentId}/post-call`,
       },
     });
+    const prevWebhookId = webhookId;
     webhookId = webhook.webhookId;
     webhookSecret = webhook.webhookSecret ?? undefined;
+    steps.push({ step: "Post-call webhook", status: "success", message: prevWebhookId ? "Recreated" : "Created" });
+  } catch (err) {
+    steps.push({
+      step: "Post-call webhook",
+      status: "error",
+      message: err instanceof Error ? err.message : "Unknown error",
+    });
+    throw err;
   }
 
-  // 4. Create or reuse MCP server
-  const mcpUrl = `${baseUrl}/mcp/${agentId}`;
-  let mcpServerId = elevenlabsMeta.mcpServerId as string | undefined;
+  // Step 4: Assign to ElevenLabs agent (preserve other MCP servers)
+  try {
+    // originalMcpIds was fetched before delete; filter out old ID, add new one
+    const originalMcpIds: string[] = (elAgent as any).conversationConfig?.agent?.prompt?.mcpServerIds ?? [];
+    const oldMcpServerId = elMeta.mcpServerId as string | undefined;
+    const otherMcpIds = originalMcpIds.filter((id: string) => id !== oldMcpServerId);
+    const mergedMcpIds = [...otherMcpIds, mcpServerId!];
 
-  if (!mcpServerId) {
-    const mcpServer = await client.conversationalAi.mcpServers.create({
-      config: {
-        url: mcpUrl,
-        name: `ModelGuide MCP (${agent.name})`,
-        description: "ModelGuide connector tools via MCP",
+    await client.conversationalAi.agents.update(elevenLabsAgentId, {
+      conversationConfig: {
+        agent: {
+          prompt: {
+            mcpServerIds: mergedMcpIds,
+          },
+        },
+      } as any,
+      platformSettings: {
+        workspaceOverrides: {
+          webhooks: {
+            postCallWebhookId: webhookId,
+            events: ["transcript"],
+          },
+        },
       },
     });
-    mcpServerId = mcpServer.id;
+    steps.push({ step: "Agent configuration", status: "success" });
+  } catch (err) {
+    steps.push({
+      step: "Agent configuration",
+      status: "error",
+      message: err instanceof Error ? err.message : "Unknown error",
+    });
+    throw err;
   }
 
-  // 5. Update agent on ElevenLabs: assign webhook + MCP server
-  await client.conversationalAi.agents.update(elevenLabsAgentId, {
-    conversationConfig: {
-      agent: {
-        prompt: {
-          mcpServerIds: [mcpServerId],
-        },
-      },
-    } as any,
-    platformSettings: {
-      workspaceOverrides: {
-        webhooks: {
-          postCallWebhookId: webhookId,
-          events: ["transcript"],
-        },
-      },
-    },
-  });
-
-  // 6. Store sync results in agent metadata
+  // Step 5: Save metadata (agent name from earlier fetch)
+  const elAgentName = elAgent.name;
   const syncedAt = new Date().toISOString();
   const updatedMetadata: Record<string, unknown> = {
     ...meta,
     elevenlabs: {
-      ...elevenlabsMeta,
+      ...elMeta,
+      secretId,
       mcpServerId,
       webhookId,
+      ...(elAgentName ? { agentName: elAgentName } : {}),
       lastSyncedAt: syncedAt,
     },
     ...(webhookSecret ? { webhook_hmac_secret: webhookSecret } : {}),
@@ -126,10 +263,13 @@ export async function syncAgentToElevenLabs(
       .where(eq(agents.id, agentId)),
   );
 
+  steps.push({ step: "Save sync results", status: "success" });
+
   return {
-    mcpServerId,
-    webhookId,
-    webhookSecret: webhookSecret ?? "",
+    secretId: secretId ?? null,
+    mcpServerId: mcpServerId!,
+    webhookId: webhookId!,
     syncedAt,
+    steps,
   };
 }

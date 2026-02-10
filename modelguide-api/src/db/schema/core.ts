@@ -358,6 +358,7 @@ export const agents = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
     agentType: agentTypeEnum("agent_type").notNull().default("voice"),
     agentPlatform: agentPlatformEnum("agent_platform")
@@ -376,6 +377,7 @@ export const agents = pgTable(
     ),
   },
   (table) => [
+    uniqueIndex("agents_org_slug_unique").on(table.organizationId, table.slug),
     index("agents_org_idx").on(table.organizationId),
     index("agents_active_idx").on(table.organizationId, table.isActive),
   ],

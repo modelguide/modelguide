@@ -38,6 +38,7 @@ const router = createRouter();
 const agentResponseSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  slug: z.string(),
   description: z.string().nullable(),
   agentType: z.enum(["voice"]),
   agentPlatform: z.enum(["custom", "elevenlabs"]),
@@ -75,6 +76,7 @@ const regenerateKeyResponseSchema = z.object({
 
 const createAgentSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: "Order Agent" }),
+  slug: z.string().max(100).optional().openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
   agentType: z.enum(["voice"]).default("voice").optional(),
   agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
@@ -148,17 +150,31 @@ const agentConnectorParams = z.object({
 // Helpers
 // ============================================================================
 
+const SENSITIVE_METADATA_KEYS = ["webhook_hmac_secret"];
+
+function stripSensitiveMetadata(
+  metadata: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!metadata) return metadata;
+  const cleaned = { ...metadata };
+  for (const key of SENSITIVE_METADATA_KEYS) {
+    if (key in cleaned) cleaned[key] = true;
+  }
+  return cleaned;
+}
+
 function formatAgent(
   agent: Agent & { keyPrefix?: string | null; hasElevenLabsKey?: boolean },
 ) {
   return {
     id: agent.id,
     name: agent.name,
+    slug: agent.slug,
     description: agent.description,
     agentType: agent.agentType,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
-    metadata: agent.metadata,
+    metadata: stripSensitiveMetadata(agent.metadata),
     hasElevenLabsKey: agent.hasElevenLabsKey ?? false,
     keyPrefix: agent.keyPrefix ?? null,
     createdAt: agent.createdAt.toISOString(),
@@ -526,9 +542,17 @@ const syncAgentRoute = createRoute({
       content: {
         "application/json": {
           schema: z.object({
+            secretId: z.string().nullable(),
             mcpServerId: z.string(),
             webhookId: z.string(),
             syncedAt: z.string(),
+            steps: z.array(
+              z.object({
+                step: z.string(),
+                status: z.enum(["success", "skipped", "error"]),
+                message: z.string().optional(),
+              }),
+            ),
           }),
         },
       },
@@ -545,14 +569,7 @@ router.openapi(syncAgentRoute, async (c) => {
   const { id } = c.req.valid("param");
   const result = await syncAgentToElevenLabs(orgId, id);
 
-  return c.json(
-    {
-      mcpServerId: result.mcpServerId,
-      webhookId: result.webhookId,
-      syncedAt: result.syncedAt,
-    },
-    200,
-  );
+  return c.json(result, 200);
 });
 
 // GET /:id/connectors

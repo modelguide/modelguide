@@ -8,6 +8,7 @@ export type AgentPlatform = (typeof agentPlatforms)[number]
 export const agentSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  slug: z.string(),
   description: z.string().nullable(),
   agentType: z.enum(['voice']),
   agentPlatform: z.enum(agentPlatforms),
@@ -43,5 +44,19 @@ export const regenerateKeyResponseSchema = z.object({
 })
 
 export type RegenerateKeyResponse = z.infer<typeof regenerateKeyResponseSchema>
+
+export interface SyncStep {
+  step: string
+  status: 'success' | 'skipped' | 'error'
+  message?: string
+}
+
+export interface SyncResponse {
+  secretId: string
+  mcpServerId: string
+  webhookId: string
+  syncedAt: string
+  steps: SyncStep[]
+}
 
 export type AgentListResponse = PaginatedResponse<Agent>

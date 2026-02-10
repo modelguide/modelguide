@@ -33,7 +33,7 @@ const secretResponseSchema = z.object({
   name: z.string().openapi({
     example: "Medusa API Key",
   }),
-  secretType: z.enum(["api_key", "oauth_token", "credentials"]).openapi({
+  secretType: z.enum(["api_key", "oauth_token", "credentials", "platform_api_key"]).openapi({
     example: "api_key",
   }),
   ownerType: z.enum(["connector", "agent"]).openapi({
@@ -59,7 +59,7 @@ const createSecretRequestSchema = z.object({
     example: "sk_live_xxx...",
     description: "The secret value to encrypt and store",
   }),
-  secretType: z.enum(["api_key", "oauth_token", "credentials"]).openapi({
+  secretType: z.enum(["api_key", "oauth_token", "credentials", "platform_api_key"]).openapi({
     example: "api_key",
   }),
   ownerType: z.enum(["connector", "agent"]).openapi({
@@ -106,7 +106,7 @@ function formatSecret(secret: {
   return {
     id: secret.id,
     name: secret.name,
-    secretType: secret.secretType as "api_key" | "oauth_token" | "credentials",
+    secretType: secret.secretType as "api_key" | "oauth_token" | "credentials" | "platform_api_key",
     ownerType: secret.ownerType as "connector" | "agent",
     ownerId: secret.ownerId,
     createdAt: secret.createdAt.toISOString(),

@@ -85,6 +85,13 @@
       "when": 1770652800000,
       "tag": "0011_add-agent-platform",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1770739200000,
+      "tag": "0012_add-agent-slug",
+      "breakpoints": true
     }
   ]
 }

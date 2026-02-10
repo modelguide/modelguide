@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Check, Copy, Key, Link2, RefreshCw, Zap } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Key, Link2, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -55,16 +55,6 @@ function AgentDetailPage() {
     },
   })
 
-  const syncMutation = useMutation({
-    mutationFn: () =>
-      api
-        .post(`agents/${id}/sync`)
-        .json<{ mcpServerId: string; webhookId: string; syncedAt: string }>(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents', id] })
-    },
-  })
-
   const isElevenLabs = agent?.agentPlatform === 'elevenlabs'
 
   return (
@@ -89,23 +79,6 @@ function AgentDetailPage() {
         </div>
         {isAdmin && agent ? (
           <div className="flex items-center gap-2">
-            {isElevenLabs ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => syncMutation.mutate()}
-                  loading={syncMutation.isPending}
-                >
-                  <Zap className="h-4 w-4" />
-                  Sync
-                </Button>
-                {syncMutation.isError ? (
-                  <span className="text-xs text-error">Sync failed</span>
-                ) : syncMutation.isSuccess ? (
-                  <span className="text-xs text-success">Synced</span>
-                ) : null}
-              </div>
-            ) : null}
             {agent.isActive ? (
               <Button
                 variant="secondary"
