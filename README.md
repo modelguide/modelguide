@@ -42,19 +42,19 @@ Model Guide sits between your AI agents and your business systems. It doesn't ru
 
 **Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
 
-![Connectors diagram](./docs/connectors.png)
+![Connectors diagram](./docs/Connectors.png)
 
 **Observation layer** — Every session recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did*.
 
-![Conversation diagram](./docs/conversation.png)
+![Conversation diagram](./docs/Conversation.png)
 
 **Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
 
-![Control diagram](./docs/control.png)
+![Control diagram](./docs/Control.png)
 
 **Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics CX leaders actually need to prove AI is working, not vanity dashboards.
 
-![Optimize diagram](./docs/optimize.png)
+![Optimize diagram](./docs/Optimize.png)
 
 ## Quick Start
 
