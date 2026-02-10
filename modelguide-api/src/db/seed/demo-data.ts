@@ -20,6 +20,7 @@ import {
   sessions,
   users,
 } from "../schema";
+import { generateDemoSessions } from "./demo-generated-sessions";
 
 type SeedDb = PostgresJsDatabase<typeof schema>;
 
@@ -671,6 +672,10 @@ export async function seedDemoOrg(db: SeedDb) {
     }
   }
 
-  console.log(`  Created ${demoSessions.length} demo sessions with messages`);
+  console.log(`  Created ${demoSessions.length} handwritten demo sessions`);
+
+  // Generate ~300 additional sessions with realistic variety
+  await generateDemoSessions(db, demoOrg.id, createdAgents);
+
   console.log("  Demo org seed completed!");
 }

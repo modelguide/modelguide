@@ -8,6 +8,11 @@ export interface TranscriptMessageProps {
 }
 
 export function TranscriptMessage({ message }: TranscriptMessageProps) {
+  // Skip assistant messages that are tool-call initiators (no visible content)
+  if (message.role === 'assistant' && !message.content && message.toolCallId) {
+    return null
+  }
+
   if (message.role === 'tool') {
     return (
       <ToolCallBlock
