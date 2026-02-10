@@ -86,16 +86,12 @@ function parseToolResult(
 beforeAll(async () => {
   s = await getTestSeed();
 
-  // Enable core_add_messages for both agents (disabled by default)
+  // Enable core_add_messages for the pizza agent (disabled by default)
   await forApp(async (tx) => {
     await tx
       .update(agents)
       .set({ metadata: { enableCoreAddMessages: true } })
       .where(eq(agents.id, s.pizzaAgentId));
-    await tx
-      .update(agents)
-      .set({ metadata: { enableCoreAddMessages: true } })
-      .where(eq(agents.id, s.burgerAgentId));
   });
 
   [pizzaAdminHeaders, pizzaAgentHeaders, burgerAgentHeaders] =
@@ -117,10 +113,6 @@ afterAll(async () => {
       .update(agents)
       .set({ metadata: {} })
       .where(eq(agents.id, s.pizzaAgentId));
-    await tx
-      .update(agents)
-      .set({ metadata: {} })
-      .where(eq(agents.id, s.burgerAgentId));
   });
 });
 
@@ -389,6 +381,15 @@ describe("RLS isolation", () => {
   let pizzaSessionId: string;
 
   beforeAll(async () => {
+    // Enable core_add_messages for the burger agent so the tool is registered
+    // and the RLS test exercises cross-org rejection at the service layer
+    await forApp(async (tx) => {
+      await tx
+        .update(agents)
+        .set({ metadata: { enableCoreAddMessages: true } })
+        .where(eq(agents.id, s.burgerAgentId));
+    });
+
     ({ client: _pizzaClient, transport: pizzaTransport } =
       await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
     ({ client: burgerClient, transport: burgerTransport } =
@@ -404,6 +405,13 @@ describe("RLS isolation", () => {
   afterAll(async () => {
     await pizzaTransport.close();
     await burgerTransport.close();
+    // Restore burger agent metadata
+    await forApp(async (tx) => {
+      await tx
+        .update(agents)
+        .set({ metadata: {} })
+        .where(eq(agents.id, s.burgerAgentId));
+    });
   });
 
   test("Burger Barn agent cannot add messages to a Pizza Palace session", async () => {
