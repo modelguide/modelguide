@@ -1,20 +1,234 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Key, Plug, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import { ArrowLeft, Key, Plug, Plus, RefreshCw, ShieldCheck, Trash2, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Spinner } from '~/components/ui/spinner'
+import { Toggle } from '~/components/ui/toggle'
+import { AddConnectorDialog } from '~/features/agents/components/add-connector-dialog'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { api } from '~/lib/api'
-import type { Agent, AgentConnector, RegenerateKeyResponse } from '~/schemas/agents'
+import type {
+  Agent,
+  AgentConnector,
+  AgentConnectorTool,
+  RegenerateKeyResponse,
+} from '~/schemas/agents'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated/agents/$id')({
   component: AgentDetailPage,
 })
+
+function LinkedToolsCard({
+  agentId,
+  connectorsData,
+  connectorsError,
+  isAdmin,
+}: {
+  agentId: string
+  connectorsData: { data: AgentConnector[] } | undefined
+  connectorsError: Error | null
+  isAdmin: boolean
+}) {
+  const queryClient = useQueryClient()
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null)
+
+  const removeMutation = useMutation({
+    mutationFn: (connectorId: string) => api.delete(`agents/${agentId}/connectors/${connectorId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents', agentId, 'connectors'] })
+      setRemoveTarget(null)
+    },
+  })
+
+  const updateToolMutation = useMutation({
+    mutationFn: ({
+      connectorId,
+      tool,
+    }: {
+      connectorId: string
+      tool: { slug: string; isEnabled?: boolean; requiresConfirmation?: boolean }
+    }) =>
+      api
+        .patch(`agents/${agentId}/connectors/${connectorId}`, {
+          json: { tools: [tool] },
+        })
+        .json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents', agentId, 'connectors'] })
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents', agentId, 'connectors'] })
+    },
+  })
+
+  const assignedConnectorIds = connectorsData?.data.map((c) => c.connectorId) ?? []
+
+  function handleToggle(
+    connectorId: string,
+    tool: AgentConnectorTool,
+    field: 'isEnabled' | 'requiresConfirmation',
+  ): void {
+    updateToolMutation.mutate({
+      connectorId,
+      tool: { slug: tool.slug, [field]: !tool[field] },
+    })
+  }
+
+  return (
+    <>
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="h-4 w-4" />
+              Linked Tools
+            </CardTitle>
+            {isAdmin ? (
+              <Button variant="secondary" size="sm" onClick={() => setShowAddDialog(true)}>
+                <Plus className="h-4 w-4" />
+                Add Connector
+              </Button>
+            ) : null}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {connectorsError ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Plug className="h-8 w-8 text-error/50" />
+              <p className="mt-3 text-sm text-error">Failed to load linked tools</p>
+            </div>
+          ) : !connectorsData?.data?.length ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Plug className="h-8 w-8 text-fg-muted" />
+              <p className="mt-3 text-sm text-fg-muted">No connectors linked to this agent</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {connectorsData.data.map((connector) => (
+                <div key={connector.connectorId}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <Plug className="h-3.5 w-3.5 text-fg-muted" />
+                    <span className="text-sm font-medium text-fg-primary">
+                      {connector.connectorName}
+                    </span>
+                    <span className="font-mono text-xs text-fg-muted">
+                      {connector.connectorSlug}
+                    </span>
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          removeMutation.reset()
+                          setRemoveTarget({
+                            id: connector.connectorId,
+                            name: connector.connectorName,
+                          })
+                        }}
+                        className="ml-auto rounded p-1 text-fg-muted transition-colors hover:bg-error/10 hover:text-error"
+                        title="Remove connector"
+                        aria-label={`Remove connector ${connector.connectorName}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {connector.tools.map((tool) => (
+                      <div
+                        key={tool.id}
+                        className="flex items-center justify-between rounded-lg border border-fg-subtle/10 bg-bg-subtle/50 px-3 py-2"
+                      >
+                        <span className="font-mono text-xs text-fg-secondary">{tool.slug}</span>
+                        {isAdmin ? (
+                          <div className="flex items-center gap-4">
+                            <Toggle
+                              checked={tool.requiresConfirmation}
+                              onChange={() =>
+                                handleToggle(connector.connectorId, tool, 'requiresConfirmation')
+                              }
+                              disabled={updateToolMutation.isPending}
+                              label="Confirm"
+                            />
+                            <Toggle
+                              checked={tool.isEnabled}
+                              onChange={() =>
+                                handleToggle(connector.connectorId, tool, 'isEnabled')
+                              }
+                              disabled={updateToolMutation.isPending}
+                              label="Enabled"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            {tool.requiresConfirmation ? (
+                              <span title="Requires confirmation">
+                                <ShieldCheck className="h-3.5 w-3.5 text-warning" />
+                              </span>
+                            ) : null}
+                            <Badge variant={tool.isEnabled ? 'success' : 'default'} dot>
+                              {tool.isEnabled ? 'on' : 'off'}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {updateToolMutation.error ? (
+            <p className="mt-3 text-xs text-error">
+              Failed to update tool setting. Please try again.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {isAdmin ? (
+        <>
+          <AddConnectorDialog
+            open={showAddDialog}
+            onClose={() => setShowAddDialog(false)}
+            agentId={agentId}
+            assignedConnectorIds={assignedConnectorIds}
+          />
+
+          <Dialog
+            open={!!removeTarget}
+            onClose={() => setRemoveTarget(null)}
+            title="Remove Connector"
+            description={`This will unlink "${removeTarget?.name}" and all its tools from this agent.`}
+          >
+            {removeMutation.error ? (
+              <p className="mb-3 text-xs text-error">
+                Failed to remove connector. Please try again.
+              </p>
+            ) : null}
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setRemoveTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => removeTarget && removeMutation.mutate(removeTarget.id)}
+                loading={removeMutation.isPending}
+              >
+                Remove
+              </Button>
+            </DialogFooter>
+          </Dialog>
+        </>
+      ) : null}
+    </>
+  )
+}
 
 function AgentDetailPage() {
   const { id } = Route.useParams()
@@ -106,7 +320,6 @@ function AgentDetailPage() {
         </div>
       ) : agent ? (
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Agent Info */}
           <Card>
             <CardHeader>
               <CardTitle>Details</CardTitle>
@@ -158,68 +371,14 @@ function AgentDetailPage() {
               </div>
             </CardContent>
           </Card>
+
           {/* Linked Tools */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wrench className="h-4 w-4" />
-                Linked Tools
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {connectorsError ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Plug className="h-8 w-8 text-error/50" />
-                  <p className="mt-3 text-sm text-error">Failed to load linked tools</p>
-                </div>
-              ) : !connectorsData?.data?.length ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Plug className="h-8 w-8 text-fg-muted" />
-                  <p className="mt-3 text-sm text-fg-muted">No connectors linked to this agent</p>
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {connectorsData.data.map((connector) => (
-                    <div key={connector.connectorId}>
-                      <div className="mb-2 flex items-center gap-2">
-                        <Plug className="h-3.5 w-3.5 text-fg-muted" />
-                        <span className="text-sm font-medium text-fg-primary">
-                          {connector.connectorName}
-                        </span>
-                        <span className="font-mono text-xs text-fg-muted">
-                          {connector.connectorSlug}
-                        </span>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {connector.tools.map((tool) => (
-                          <div
-                            key={tool.id}
-                            className="flex items-center justify-between rounded-lg border border-fg-subtle/10 bg-bg-subtle/50 px-3 py-2"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs text-fg-secondary">
-                                {tool.slug}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {tool.requiresConfirmation ? (
-                                <span title="Requires confirmation">
-                                  <ShieldCheck className="h-3.5 w-3.5 text-warning" />
-                                </span>
-                              ) : null}
-                              <Badge variant={tool.isEnabled ? 'success' : 'default'} dot>
-                                {tool.isEnabled ? 'on' : 'off'}
-                              </Badge>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <LinkedToolsCard
+            agentId={id}
+            connectorsData={connectorsData}
+            connectorsError={connectorsError}
+            isAdmin={isAdmin}
+          />
         </div>
       ) : null}
 
@@ -244,10 +403,9 @@ function AgentDetailPage() {
         </DialogFooter>
       </Dialog>
 
-      {/* New API Key Modal */}
       {newApiKey ? (
         <ApiKeyModal
-          open={!!newApiKey}
+          open
           onClose={() => setNewApiKey(null)}
           apiKey={newApiKey}
           title="New API Key Generated"
