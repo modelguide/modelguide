@@ -113,7 +113,7 @@ const manifest: ConnectorManifest = {
     publishableKey: { type: "string", required: true },
   },
   authMethods: ["api_key"],
-  iconUrl: "https://medusajs.com/images/logo.svg",
+  iconUrl: "/logos/medusa.svg",
   tools: [
     {
       catalog: {

@@ -10,6 +10,7 @@ import {
   apiKeys,
   connectorTools,
   connectors,
+  connectorsCatalog,
   secrets,
 } from "@db/schema";
 import { generateApiKey } from "@lib/crypto";
@@ -413,6 +414,7 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
         connectorId: connectors.id,
         connectorSlug: connectors.slug,
         connectorName: connectors.name,
+        connectorIconUrl: connectorsCatalog.iconUrl,
       })
       .from(agentConnectorTools)
       .innerJoin(
@@ -420,6 +422,10 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
         eq(agentConnectorTools.connectorToolId, connectorTools.id),
       )
       .innerJoin(connectors, eq(connectorTools.connectorId, connectors.id))
+      .innerJoin(
+        connectorsCatalog,
+        eq(connectors.connectorCatalogId, connectorsCatalog.id),
+      )
       .where(eq(agentConnectorTools.agentId, agentId))
       .orderBy(asc(connectors.name), asc(connectorTools.name));
 
@@ -429,6 +435,7 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
         connectorId: string;
         connectorSlug: string;
         connectorName: string;
+        connectorIconUrl: string | null;
         tools: {
           id: string;
           name: string;
@@ -445,6 +452,7 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
           connectorId: row.connectorId,
           connectorSlug: row.connectorSlug,
           connectorName: row.connectorName,
+          connectorIconUrl: row.connectorIconUrl,
           tools: [],
         });
       }

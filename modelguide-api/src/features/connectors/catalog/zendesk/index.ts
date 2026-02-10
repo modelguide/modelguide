@@ -309,8 +309,7 @@ const zendeskManifest: ConnectorManifest = {
     },
   },
   authMethods: ["basic"],
-  iconUrl:
-    "https://d26a57ydsghvgx.cloudfront.net/www/public/assets/images/logos/zendesk-logo.svg",
+  iconUrl: "/logos/zendesk.svg",
   tools,
 };
 

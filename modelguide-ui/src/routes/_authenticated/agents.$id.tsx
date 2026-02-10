@@ -126,7 +126,15 @@ function LinkedToolsCard({
               {connectorsData.data.map((connector) => (
                 <div key={connector.connectorId}>
                   <div className="mb-2 flex items-center gap-2">
-                    <Plug className="h-3.5 w-3.5 text-fg-muted" />
+                    {connector.connectorIconUrl ? (
+                      <img
+                        src={connector.connectorIconUrl}
+                        alt=""
+                        className="h-3.5 w-3.5 rounded-sm object-contain"
+                      />
+                    ) : (
+                      <Plug className="h-3.5 w-3.5 text-fg-muted" />
+                    )}
                     <span className="text-sm font-medium text-fg-primary">
                       {connector.connectorName}
                     </span>

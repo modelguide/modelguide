@@ -68,6 +68,7 @@ const agentConnectorResponseSchema = z.object({
   connectorId: z.string().uuid(),
   connectorSlug: z.string(),
   connectorName: z.string(),
+  connectorIconUrl: z.string().nullable(),
   tools: z.array(agentConnectorToolSchema),
 });
 

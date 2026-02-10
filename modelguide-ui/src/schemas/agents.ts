@@ -74,5 +74,6 @@ export interface AgentConnector {
   connectorId: string
   connectorSlug: string
   connectorName: string
+  connectorIconUrl: string | null
   tools: AgentConnectorTool[]
 }

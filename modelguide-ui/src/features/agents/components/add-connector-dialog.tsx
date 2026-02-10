@@ -8,7 +8,7 @@ import { Spinner } from '~/components/ui/spinner'
 import { Toggle } from '~/components/ui/toggle'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
-import type { Connector, ConnectorTool } from '~/schemas/connectors'
+import type { CatalogEntry, Connector, ConnectorTool } from '~/schemas/connectors'
 
 interface ToolSelection {
   slug: string
@@ -45,6 +45,15 @@ export function AddConnectorDialog({
         .json<PaginatedResponse<Connector>>(),
     enabled: open,
   })
+
+  const { data: catalogData } = useQuery({
+    queryKey: ['connectors-catalog'],
+    queryFn: () => api.get('connectors/catalog').json<{ data: CatalogEntry[] }>(),
+    enabled: open,
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+
+  const catalogById = new Map(catalogData?.data.map((c) => [c.id, c]))
 
   const availableConnectors =
     connectorsData?.data.filter((c) => !assignedConnectorIds.includes(c.id)) ?? []
@@ -203,7 +212,14 @@ export function AddConnectorDialog({
             onClick={() => setSelectedConnector(connector)}
             className="flex w-full items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle/50 px-4 py-3 text-left transition-colors hover:border-brand-500/30 hover:bg-bg-subtle"
           >
-            <Plug className="h-4 w-4 shrink-0 text-fg-muted" />
+            {(() => {
+              const iconUrl = catalogById.get(connector.connectorCatalogId)?.iconUrl
+              return iconUrl ? (
+                <img src={iconUrl} alt="" className="h-4 w-4 shrink-0 rounded-sm object-contain" />
+              ) : (
+                <Plug className="h-4 w-4 shrink-0 text-fg-muted" />
+              )
+            })()}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-fg-primary">{connector.name}</span>
