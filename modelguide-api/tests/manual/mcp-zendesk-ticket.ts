@@ -35,7 +35,9 @@ await Bun.file(envPath)
     }
   })
   .catch(() => {
-    console.warn("No tests/manual/.env found, falling back to exported env vars");
+    console.warn(
+      "No tests/manual/.env found, falling back to exported env vars",
+    );
   });
 
 const BASE_URL = requireEnv("MG_BASE_URL");
@@ -74,7 +76,11 @@ const sessionRes = await request("/api/sessions", {
 });
 
 if (!sessionRes.ok) {
-  console.error("Failed to create session:", sessionRes.status, await sessionRes.text());
+  console.error(
+    "Failed to create session:",
+    sessionRes.status,
+    await sessionRes.text(),
+  );
   process.exit(1);
 }
 
