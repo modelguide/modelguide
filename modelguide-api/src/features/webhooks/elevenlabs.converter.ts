@@ -199,6 +199,8 @@ export function convertPostCallToSession(
   // Second pass: build messages
   const messages: ConvertedMessage[] = [];
 
+  const matchedRequestIds = new Set<string>();
+
   for (const msg of data.transcript) {
     const occurredAt = new Date((startTime + msg.time_in_call_secs) * 1000);
     const toolCalls = (msg.tool_calls ?? []) as ToolCall[];
@@ -228,7 +230,6 @@ export function convertPostCallToSession(
     }
 
     // Emit a tool message for each tool call (with matched result)
-    const matchedRequestIds = new Set<string>();
     for (const tc of toolCalls) {
       const toolName = tc.tool_name ?? "unknown";
       const params = tc.tool_details?.parameters ?? {};
