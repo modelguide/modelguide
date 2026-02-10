@@ -90,6 +90,7 @@ async function verifyApiKey(key: string): Promise<AuthAgent | null> {
       organizationId: agent.organizationId,
       agentType: agent.agentType,
       isActive: agent.isActive,
+      metadata: (agent.metadata as Record<string, unknown>) ?? {},
     };
   }
 

@@ -75,7 +75,6 @@ export function App() {
       await conversation.startSession({
         agentId,
         dynamicVariables: {
-          mg_api_key: apiKey,
           mg_session_id: session.id,
           mg_user_id: "demo-user",
         },

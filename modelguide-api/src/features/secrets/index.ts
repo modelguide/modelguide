@@ -10,4 +10,6 @@ export {
   updateSecret,
   deleteSecret,
   getAgentElevenLabsKey,
+  getAgentModelGuideKey,
+  getAgentSecretByType,
 } from "./secrets.service";

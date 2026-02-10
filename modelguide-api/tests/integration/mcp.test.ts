@@ -7,7 +7,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
-import { sessions } from "@db/schema";
+import { agents, sessions } from "@db/schema";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { eq } from "drizzle-orm";
@@ -28,6 +28,28 @@ const createdSessionIds: string[] = [];
 
 function request(path: string, options?: RequestInit) {
   return app.fetch(new Request(`http://localhost${path}`, options));
+}
+
+/** Creates a session via the REST API and returns its ID */
+async function createSessionViaRest(
+  adminHeaders: Record<string, string>,
+  agentId: string,
+  channelType = "voice",
+  userIdentifier = "+1234560000",
+): Promise<string> {
+  const response = await request("/api/sessions", {
+    method: "POST",
+    headers: { ...adminHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agentId,
+      channelType,
+      userIdentifier,
+    }),
+  });
+  const body = await response.json();
+  const id = body.id as string;
+  createdSessionIds.push(id);
+  return id;
 }
 
 /**
@@ -62,6 +84,15 @@ function parseToolResult(
 
 beforeAll(async () => {
   s = await getTestSeed();
+
+  // Enable core_add_messages for the pizza agent (disabled by default)
+  await forApp(async (tx) => {
+    await tx
+      .update(agents)
+      .set({ metadata: { enableCoreAddMessages: true } })
+      .where(eq(agents.id, s.pizzaAgentId));
+  });
+
   [pizzaAdminHeaders, pizzaAgentHeaders, burgerAgentHeaders] =
     await Promise.all([
       authHeadersFor(s.pizzaAdmin),
@@ -71,14 +102,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (createdSessionIds.length > 0) {
-    await forApp(async (tx) => {
-      for (const id of createdSessionIds) {
-        // Messages and feedback are cascade-deleted by FK
-        await tx.delete(sessions).where(eq(sessions.id, id));
-      }
-    });
-  }
+  await forApp(async (tx) => {
+    for (const id of createdSessionIds) {
+      // Messages and feedback are cascade-deleted by FK
+      await tx.delete(sessions).where(eq(sessions.id, id));
+    }
+    // Restore agent metadata
+    await tx
+      .update(agents)
+      .set({ metadata: {} })
+      .where(eq(agents.id, s.pizzaAgentId));
+  });
 });
 
 // ============================================================================
@@ -158,17 +192,28 @@ describe("Tool discovery", () => {
   test("returns core tools and connector tools", async () => {
     const result = await client.listTools();
 
-    expect(result.tools.length).toBeGreaterThanOrEqual(4);
+    expect(result.tools.length).toBeGreaterThanOrEqual(1);
 
     const coreToolNames = result.tools
       .filter((t) => t.name.startsWith("core_"))
       .map((t) => t.name);
 
-    expect(coreToolNames).toContain("core_create_session");
-    expect(coreToolNames).toContain("core_end_session");
     expect(coreToolNames).toContain("core_add_messages");
-    expect(coreToolNames).toContain("core_rate_session");
-    expect(coreToolNames.length).toBe(4);
+    expect(coreToolNames.length).toBe(1);
+  });
+
+  test("core_add_messages is hidden when enableCoreAddMessages is not set", async () => {
+    // Burger agent has default metadata (no enableCoreAddMessages)
+    const { client: burgerClient, transport: burgerTransport } =
+      await createMcpClient(burgerAgentHeaders);
+
+    const result = await burgerClient.listTools();
+    const coreToolNames = result.tools
+      .filter((t) => t.name.startsWith("core_"))
+      .map((t) => t.name);
+
+    expect(coreToolNames.length).toBe(0);
+    await burgerTransport.close();
   });
 
   test("connector tools include session_id in input schema", async () => {
@@ -226,7 +271,7 @@ describe("Resource discovery", () => {
     expect(data.agent_id).toBe(s.pizzaAgentId);
     expect(data.organization_id).toBe(s.pizzaOrg.id);
     expect(typeof data.tool_count).toBe("number");
-    expect(data.tool_count).toBeGreaterThanOrEqual(4);
+    expect(data.tool_count).toBeGreaterThanOrEqual(1);
   });
 
   test("readResource tools://list returns tool array with requires_confirmation", async () => {
@@ -247,113 +292,6 @@ describe("Resource discovery", () => {
 });
 
 // ============================================================================
-// Core tool: core_create_session
-// ============================================================================
-
-describe("core_create_session", () => {
-  let client: Client;
-  let transport: StreamableHTTPClientTransport;
-
-  beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
-  });
-
-  afterAll(async () => {
-    await transport.close();
-  });
-
-  test("creates a session with valid params", async () => {
-    const result = await client.callTool({
-      name: "core_create_session",
-      arguments: {
-        channel_type: "voice",
-        user_identifier: "+1234560000",
-      },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.session_id).toBeDefined();
-    expect(data.status).toBe("active");
-    expect(data.channel_type).toBe("voice");
-
-    // Validate UUID format
-    expect(data.session_id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
-
-    createdSessionIds.push(data.session_id);
-  });
-
-  test("returns error for missing required field", async () => {
-    // The MCP SDK throws when the server returns a JSON-RPC error
-    // (Zod validation rejects the missing required fields)
-    try {
-      await client.callTool({
-        name: "core_create_session",
-        arguments: {
-          // missing channel_type and user_identifier
-        },
-      });
-      // If we get here, the call didn't throw — check for isError in result
-      expect(true).toBe(false); // should not reach here
-    } catch (err) {
-      expect(err).toBeDefined();
-    }
-  });
-});
-
-// ============================================================================
-// Core tool: core_end_session
-// ============================================================================
-
-describe("core_end_session", () => {
-  let client: Client;
-  let transport: StreamableHTTPClientTransport;
-  let activeSessionId: string;
-
-  beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
-
-    // Create a session to end
-    const createResult = await client.callTool({
-      name: "core_create_session",
-      arguments: {
-        channel_type: "web",
-        user_identifier: "end-test@test.com",
-      },
-    });
-    const created = parseToolResult(createResult);
-    activeSessionId = created.session_id;
-    createdSessionIds.push(activeSessionId);
-  });
-
-  afterAll(async () => {
-    await transport.close();
-  });
-
-  test("ends an active session", async () => {
-    const result = await client.callTool({
-      name: "core_end_session",
-      arguments: { session_id: activeSessionId },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.session_id).toBe(activeSessionId);
-    expect(data.status).toBe("completed");
-  });
-
-  test("returns error for already-ended session", async () => {
-    const result = await client.callTool({
-      name: "core_end_session",
-      arguments: { session_id: activeSessionId },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.error).toBeDefined();
-  });
-});
-
-// ============================================================================
 // Core tool: core_add_messages
 // ============================================================================
 
@@ -364,17 +302,12 @@ describe("core_add_messages", () => {
 
   beforeAll(async () => {
     ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
-
-    const createResult = await client.callTool({
-      name: "core_create_session",
-      arguments: {
-        channel_type: "voice",
-        user_identifier: "+1234560002",
-      },
-    });
-    const created = parseToolResult(createResult);
-    sessionId = created.session_id;
-    createdSessionIds.push(sessionId);
+    sessionId = await createSessionViaRest(
+      pizzaAdminHeaders,
+      s.pizzaAgentId,
+      "voice",
+      "+1234560002",
+    );
   });
 
   afterAll(async () => {
@@ -425,59 +358,6 @@ describe("core_add_messages", () => {
 });
 
 // ============================================================================
-// Core tool: core_rate_session
-// ============================================================================
-
-describe("core_rate_session", () => {
-  let client: Client;
-  let transport: StreamableHTTPClientTransport;
-  let sessionId: string;
-
-  beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
-
-    const createResult = await client.callTool({
-      name: "core_create_session",
-      arguments: {
-        channel_type: "voice",
-        user_identifier: "+1234560003",
-      },
-    });
-    const created = parseToolResult(createResult);
-    sessionId = created.session_id;
-    createdSessionIds.push(sessionId);
-  });
-
-  afterAll(async () => {
-    await transport.close();
-  });
-
-  test("records a valid rating (2 = positive)", async () => {
-    const result = await client.callTool({
-      name: "core_rate_session",
-      arguments: { session_id: sessionId, rating: 2 },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.recorded).toBe(true);
-    expect(data.rating).toBe(2);
-    expect(data.session_id).toBe(sessionId);
-  });
-
-  test("rejects invalid rating (5) at schema level", async () => {
-    try {
-      await client.callTool({
-        name: "core_rate_session",
-        arguments: { session_id: sessionId, rating: 5 },
-      });
-      expect(true).toBe(false); // should not reach here
-    } catch (err) {
-      expect(err).toBeDefined();
-    }
-  });
-});
-
-// ============================================================================
 // RLS isolation
 // ============================================================================
 
@@ -494,32 +374,17 @@ describe("RLS isolation", () => {
     ({ client: burgerClient, transport: burgerTransport } =
       await createMcpClient(burgerAgentHeaders));
 
-    // Create a Pizza Palace session
-    const createResult = await pizzaClient.callTool({
-      name: "core_create_session",
-      arguments: {
-        channel_type: "voice",
-        user_identifier: "+1234560004",
-      },
-    });
-    const created = parseToolResult(createResult);
-    pizzaSessionId = created.session_id;
-    createdSessionIds.push(pizzaSessionId);
+    pizzaSessionId = await createSessionViaRest(
+      pizzaAdminHeaders,
+      s.pizzaAgentId,
+      "voice",
+      "+1234560004",
+    );
   });
 
   afterAll(async () => {
     await pizzaTransport.close();
     await burgerTransport.close();
-  });
-
-  test("Burger Barn agent cannot end a Pizza Palace session", async () => {
-    const result = await burgerClient.callTool({
-      name: "core_end_session",
-      arguments: { session_id: pizzaSessionId },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.error).toBeDefined();
   });
 
   test("Burger Barn agent cannot add messages to a Pizza Palace session", async () => {
@@ -539,15 +404,5 @@ describe("RLS isolation", () => {
 
     const data = parseToolResult(result);
     expect(data.error).toBeDefined();
-  });
-
-  test("Pizza Palace session is still active (not affected by cross-org attempts)", async () => {
-    const result = await pizzaClient.callTool({
-      name: "core_end_session",
-      arguments: { session_id: pizzaSessionId },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.status).toBe("completed");
   });
 });

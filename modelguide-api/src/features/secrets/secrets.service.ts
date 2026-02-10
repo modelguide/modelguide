@@ -66,7 +66,7 @@ export async function createSecret(
   data: {
     name: string;
     value: string;
-    secretType: "api_key" | "oauth_token" | "credentials";
+    secretType: "api_key" | "oauth_token" | "credentials" | "platform_api_key";
     ownerType: "connector" | "agent";
     ownerId: string;
   },
@@ -110,24 +110,50 @@ export async function createSecret(
 }
 
 /**
- * Get decrypted ElevenLabs API key for an agent.
+ * Get a decrypted agent secret by secretType.
+ * Uses (ownerType=agent, ownerId, secretType) — no name matching.
  */
-export async function getAgentElevenLabsKey(
+export async function getAgentSecretByType(
   orgId: string,
   agentId: string,
+  secretType: "api_key" | "platform_api_key" | "oauth_token" | "credentials",
 ): Promise<string | null> {
   const [secret] = await forOrg(orgId, (tx) =>
     tx
       .select({ encryptedValue: secrets.encryptedValue })
       .from(secrets)
       .where(
-        and(eq(secrets.ownerType, "agent"), eq(secrets.ownerId, agentId)),
+        and(
+          eq(secrets.ownerType, "agent"),
+          eq(secrets.ownerId, agentId),
+          eq(secrets.secretType, secretType),
+        ),
       )
       .limit(1),
   );
 
   if (!secret) return null;
   return decryptSecret(secret.encryptedValue);
+}
+
+/**
+ * Get decrypted ElevenLabs API key (platform_api_key) for an agent.
+ */
+export async function getAgentElevenLabsKey(
+  orgId: string,
+  agentId: string,
+): Promise<string | null> {
+  return getAgentSecretByType(orgId, agentId, "platform_api_key");
+}
+
+/**
+ * Get decrypted ModelGuide API key (api_key) for an agent.
+ */
+export async function getAgentModelGuideKey(
+  orgId: string,
+  agentId: string,
+): Promise<string | null> {
+  return getAgentSecretByType(orgId, agentId, "api_key");
 }
 
 export async function updateSecret(

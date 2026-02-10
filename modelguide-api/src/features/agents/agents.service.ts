@@ -19,10 +19,19 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
+import { encryptSecret } from "@lib/crypto";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 
 type AgentType = (typeof agents.agentType.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
+
+/** Convert a name to a URL-safe slug */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 // ============================================================================
 // Helpers
@@ -110,7 +119,11 @@ export async function getAgentById(orgId: string, agentId: string) {
         .select({ id: secrets.id })
         .from(secrets)
         .where(
-          and(eq(secrets.ownerType, "agent"), eq(secrets.ownerId, agentId)),
+          and(
+            eq(secrets.ownerType, "agent"),
+            eq(secrets.ownerId, agentId),
+            eq(secrets.secretType, "platform_api_key"),
+          ),
         ),
     ]);
 
@@ -126,6 +139,7 @@ export async function createAgent(
   orgId: string,
   data: {
     name: string;
+    slug?: string;
     description?: string;
     agentType?: AgentType;
     agentPlatform?: AgentPlatform;
@@ -134,11 +148,14 @@ export async function createAgent(
   createdBy: string,
 ) {
   return forOrg(orgId, async (tx) => {
+    const slug = data.slug || slugify(data.name);
+
     const [agent] = await tx
       .insert(agents)
       .values({
         organizationId: orgId,
         name: data.name,
+        slug,
         description: data.description,
         agentType: data.agentType ?? "voice",
         agentPlatform: data.agentPlatform ?? "custom",
@@ -158,6 +175,16 @@ export async function createAgent(
       keyPrefix: keyData.prefix,
       isActive: true,
       createdBy,
+    });
+
+    // Store raw API key as encrypted secret for MCP auth
+    await tx.insert(secrets).values({
+      organizationId: orgId,
+      name: "ModelGuide API Key",
+      secretType: "api_key",
+      encryptedValue: await encryptSecret(keyData.key),
+      ownerType: "agent",
+      ownerId: agent.id,
     });
 
     return { agent, apiKey: keyData.key };
@@ -253,6 +280,36 @@ export async function regenerateApiKey(
       isActive: true,
       createdBy,
     });
+
+    // Update or create the encrypted MG API key secret
+    const encryptedValue = await encryptSecret(keyData.key);
+    const [existing] = await tx
+      .select({ id: secrets.id })
+      .from(secrets)
+      .where(
+        and(
+          eq(secrets.ownerType, "agent"),
+          eq(secrets.ownerId, agentId),
+          eq(secrets.secretType, "api_key"),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await tx
+        .update(secrets)
+        .set({ encryptedValue })
+        .where(eq(secrets.id, existing.id));
+    } else {
+      await tx.insert(secrets).values({
+        organizationId: orgId,
+        name: "ModelGuide API Key",
+        secretType: "api_key",
+        encryptedValue,
+        ownerType: "agent",
+        ownerId: agentId,
+      });
+    }
 
     return { apiKey: keyData.key, keyPrefix: keyData.prefix };
   });
