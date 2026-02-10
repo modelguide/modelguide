@@ -32,16 +32,14 @@ function request(path: string, options?: RequestInit) {
 
 /** Creates a session via the REST API and returns its ID */
 async function createSessionViaRest(
-  adminHeaders: Record<string, string>,
-  agentId: string,
+  agentHeaders: Record<string, string>,
   channelType = "voice",
   userIdentifier = "+1234560000",
 ): Promise<string> {
   const response = await request("/api/sessions", {
     method: "POST",
-    headers: { ...adminHeaders, "Content-Type": "application/json" },
+    headers: { ...agentHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({
-      agentId,
       channelType,
       userIdentifier,
     }),
@@ -56,9 +54,12 @@ async function createSessionViaRest(
  * Creates a connected MCP Client backed by Hono's app.fetch.
  * The returned client handles initialize/initialized automatically via `connect()`.
  */
-async function createMcpClient(agentHeaders: Record<string, string>) {
+async function createMcpClient(
+  agentHeaders: Record<string, string>,
+  agentId: string,
+) {
   const transport = new StreamableHTTPClientTransport(
-    new URL("http://localhost/mcp"),
+    new URL(`http://localhost/mcp/${agentId}`),
     {
       fetch: (url, init) => app.fetch(new Request(url, init)),
       requestInit: { headers: { Authorization: agentHeaders.Authorization } },
@@ -121,7 +122,7 @@ afterAll(async () => {
 
 describe("Auth & access control", () => {
   test("rejects request with no auth header", async () => {
-    const response = await request("/mcp", {
+    const response = await request(`/mcp/${s.pizzaAgentId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -141,7 +142,7 @@ describe("Auth & access control", () => {
   });
 
   test("rejects admin JWT (agent auth required)", async () => {
-    const response = await request("/mcp", {
+    const response = await request(`/mcp/${s.pizzaAgentId}`, {
       method: "POST",
       headers: {
         ...pizzaAdminHeaders,
@@ -163,7 +164,7 @@ describe("Auth & access control", () => {
   });
 
   test("valid agent key connects successfully", async () => {
-    const { client, transport } = await createMcpClient(pizzaAgentHeaders);
+    const { client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId);
 
     const serverVersion = client.getServerVersion();
     expect(serverVersion).toBeDefined();
@@ -182,7 +183,7 @@ describe("Tool discovery", () => {
   let transport: StreamableHTTPClientTransport;
 
   beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
+    ({ client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
   });
 
   afterAll(async () => {
@@ -205,7 +206,7 @@ describe("Tool discovery", () => {
   test("core_add_messages is hidden when enableCoreAddMessages is not set", async () => {
     // Burger agent has default metadata (no enableCoreAddMessages)
     const { client: burgerClient, transport: burgerTransport } =
-      await createMcpClient(burgerAgentHeaders);
+      await createMcpClient(burgerAgentHeaders, s.burgerAgentId);
 
     const result = await burgerClient.listTools();
     const coreToolNames = result.tools
@@ -245,7 +246,7 @@ describe("Resource discovery", () => {
   let transport: StreamableHTTPClientTransport;
 
   beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
+    ({ client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
   });
 
   afterAll(async () => {
@@ -301,10 +302,9 @@ describe("core_add_messages", () => {
   let sessionId: string;
 
   beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
+    ({ client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
     sessionId = await createSessionViaRest(
-      pizzaAdminHeaders,
-      s.pizzaAgentId,
+      pizzaAgentHeaders,
       "voice",
       "+1234560002",
     );
@@ -370,13 +370,12 @@ describe("RLS isolation", () => {
 
   beforeAll(async () => {
     ({ client: _pizzaClient, transport: pizzaTransport } =
-      await createMcpClient(pizzaAgentHeaders));
+      await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
     ({ client: burgerClient, transport: burgerTransport } =
-      await createMcpClient(burgerAgentHeaders));
+      await createMcpClient(burgerAgentHeaders, s.burgerAgentId));
 
     pizzaSessionId = await createSessionViaRest(
-      pizzaAdminHeaders,
-      s.pizzaAgentId,
+      pizzaAgentHeaders,
       "voice",
       "+1234560004",
     );

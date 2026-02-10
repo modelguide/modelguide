@@ -27,6 +27,7 @@ export const secretTypeEnum = pgEnum("secret_type", [
   "oauth_token",
   "credentials",
   "platform_api_key",
+  "webhook_secret",
 ]);
 
 /**

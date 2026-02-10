@@ -7,14 +7,15 @@
 
 import { env } from "@/env";
 import { forOrg } from "@db/rls";
-import { agents } from "@db/schema";
+import { agents, secrets } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
   getAgentElevenLabsKey,
   getAgentModelGuideKey,
 } from "@features/secrets";
+import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 /**
  * Thin wrapper around ElevenLabs secrets API.
@@ -168,16 +169,25 @@ export async function syncAgentToElevenLabs(
   try {
     if (oldMcpServerId) {
       // Unassign our MCP server from agent so we can delete it
-      const otherMcpIds = currentMcpIds.filter(
-        (id: string) => id !== oldMcpServerId,
-      );
-      await client.conversationalAi.agents.update(elevenLabsAgentId, {
-        conversationConfig: {
-          agent: { prompt: { mcpServerIds: otherMcpIds } },
-          // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
-        } as any,
-      });
-      await client.conversationalAi.mcpServers.delete(oldMcpServerId);
+      try {
+        const otherMcpIds = currentMcpIds.filter(
+          (id: string) => id !== oldMcpServerId,
+        );
+        await client.conversationalAi.agents.update(elevenLabsAgentId, {
+          conversationConfig: {
+            agent: { prompt: { mcpServerIds: otherMcpIds } },
+            // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
+          } as any,
+        });
+      } catch {
+        // Best-effort: agent might not have this MCP server assigned anymore
+      }
+
+      try {
+        await client.conversationalAi.mcpServers.delete(oldMcpServerId);
+      } catch {
+        // Best-effort: MCP server may already be deleted on ElevenLabs side
+      }
     }
     const mcpServer = await client.conversationalAi.mcpServers.create({
       config: mcpConfig,
@@ -269,11 +279,14 @@ export async function syncAgentToElevenLabs(
     throw err;
   }
 
-  // Step 5: Save metadata (agent name from earlier fetch)
+  // Step 5: Save webhook secret to encrypted secrets table + save metadata
   const elAgentName = elAgent.name;
   const syncedAt = new Date().toISOString();
+
+  // Remove webhook_hmac_secret from metadata if it existed before migration
+  const { webhook_hmac_secret: _removed, ...cleanMeta } = meta;
   const updatedMetadata: Record<string, unknown> = {
-    ...meta,
+    ...cleanMeta,
     elevenlabs: {
       ...elMeta,
       secretId,
@@ -282,15 +295,46 @@ export async function syncAgentToElevenLabs(
       ...(elAgentName ? { agentName: elAgentName } : {}),
       lastSyncedAt: syncedAt,
     },
-    ...(webhookSecret ? { webhook_hmac_secret: webhookSecret } : {}),
   };
 
-  await forOrg(orgId, (tx) =>
-    tx
+  await forOrg(orgId, async (tx) => {
+    // Upsert webhook secret in secrets table
+    if (webhookSecret) {
+      const encryptedValue = await encryptSecret(webhookSecret);
+      const [existing] = await tx
+        .select({ id: secrets.id })
+        .from(secrets)
+        .where(
+          and(
+            eq(secrets.ownerType, "agent"),
+            eq(secrets.ownerId, agentId),
+            eq(secrets.secretType, "webhook_secret"),
+          ),
+        )
+        .limit(1);
+
+      if (existing) {
+        await tx
+          .update(secrets)
+          .set({ encryptedValue })
+          .where(eq(secrets.id, existing.id));
+      } else {
+        await tx.insert(secrets).values({
+          organizationId: orgId,
+          name: "Webhook HMAC Secret",
+          secretType: "webhook_secret",
+          encryptedValue,
+          ownerType: "agent",
+          ownerId: agentId,
+        });
+      }
+    }
+
+    await tx
       .update(agents)
       .set({ metadata: updatedMetadata })
-      .where(eq(agents.id, agentId)),
-  );
+      .where(eq(agents.id, agentId));
+  });
 
   steps.push({ step: "Save sync results", status: "success" });
 

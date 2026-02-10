@@ -14,6 +14,7 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
+import { getAgentSecretByType } from "@features/secrets";
 import { convertPostCallToSession } from "./elevenlabs.converter";
 import { postCallTranscriptionPayloadSchema } from "./elevenlabs.schemas";
 
@@ -56,12 +57,15 @@ app.post("/:agentId/post-call", async (c) => {
     return c.json({ error: "Agent not found or inactive" }, 404);
   }
 
-  const webhookSecret = (agentRow.metadata as Record<string, unknown>)
-    ?.webhook_hmac_secret as string | undefined;
+  const webhookSecret = await getAgentSecretByType(
+    agentRow.organizationId,
+    agentId,
+    "webhook_secret",
+  );
 
   if (!webhookSecret) {
     console.error(
-      `[webhook/post-call] No webhook_hmac_secret in metadata for agent=${agentId}`,
+      `[webhook/post-call] No webhook_secret in secrets table for agent=${agentId}`,
     );
     return c.json(
       { error: "Webhook secret not configured for this agent" },
@@ -165,7 +169,12 @@ app.post("/:agentId/post-call", async (c) => {
             endedAt: converted.session.endedAt,
             metadata: converted.session.metadata,
           })
-          .where(eq(sessions.id, existingSessionId))
+          .where(
+            and(
+              eq(sessions.id, existingSessionId),
+              eq(sessions.agentId, agent.id),
+            ),
+          )
           .returning({ id: sessions.id });
 
         return updated?.id ?? existingSessionId;

@@ -26,6 +26,7 @@ import {
   setAgentActive,
   updateAgent,
   updateAgentConnectorTools,
+  upsertAgentPlatformKey,
 } from "./agents.service";
 import { syncAgentToElevenLabs } from "./agents.sync";
 
@@ -154,19 +155,6 @@ const agentConnectorParams = z.object({
 // Helpers
 // ============================================================================
 
-const SENSITIVE_METADATA_KEYS = ["webhook_hmac_secret"];
-
-function stripSensitiveMetadata(
-  metadata: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-  if (!metadata) return metadata;
-  const cleaned = { ...metadata };
-  for (const key of SENSITIVE_METADATA_KEYS) {
-    if (key in cleaned) cleaned[key] = true;
-  }
-  return cleaned;
-}
-
 function formatAgent(
   agent: Agent & { keyPrefix?: string | null; hasElevenLabsKey?: boolean },
 ) {
@@ -178,7 +166,7 @@ function formatAgent(
     agentType: agent.agentType,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
-    metadata: stripSensitiveMetadata(agent.metadata) ?? undefined,
+    metadata: agent.metadata ?? undefined,
     hasElevenLabsKey: agent.hasElevenLabsKey ?? false,
     keyPrefix: agent.keyPrefix ?? null,
     createdAt: agent.createdAt.toISOString(),
@@ -574,6 +562,61 @@ router.openapi(syncAgentRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
   const result = await syncAgentToElevenLabs(orgId, id);
+
+  return c.json(result, 200);
+});
+
+// PUT /:id/platform-key
+router.put(
+  "/:id/platform-key",
+  requireUser(),
+  requirePermission("agents:update"),
+  requireOrganization(),
+);
+
+const upsertPlatformKeySchema = z.object({
+  value: z.string().min(1).openapi({ description: "Platform API key value" }),
+});
+
+const upsertPlatformKeyRoute = createRoute({
+  method: "put",
+  path: "/{id}/platform-key",
+  tags: ["Agents"],
+  summary: "Upsert platform API key",
+  description:
+    "Creates or updates the platform API key (e.g. ElevenLabs) for an agent. Stored encrypted.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": { schema: upsertPlatformKeySchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Platform key upserted",
+      content: {
+        "application/json": {
+          schema: z.object({
+            action: z.enum(["created", "updated"]),
+          }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(upsertPlatformKeyRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const { value } = c.req.valid("json");
+  const result = await upsertAgentPlatformKey(orgId, id, value);
 
   return c.json(result, 200);
 });

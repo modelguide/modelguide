@@ -51,14 +51,8 @@ export function ElevenLabsCard({ agent, isAdmin }: ElevenLabsCardProps) {
       // Save API key first if provided
       if (elApiKey) {
         await api
-          .post('secrets', {
-            json: {
-              name: 'ElevenLabs API Key',
-              value: elApiKey,
-              secretType: 'platform_api_key',
-              ownerType: 'agent',
-              ownerId: agent.id,
-            },
+          .put(`agents/${agent.id}/platform-key`, {
+            json: { value: elApiKey },
           })
           .json()
       }

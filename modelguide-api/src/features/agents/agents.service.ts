@@ -201,9 +201,23 @@ export async function updateAgent(
     agentPlatform?: AgentPlatform;
   },
 ) {
-  const [updated] = await forOrg(orgId, (tx) =>
-    tx.update(agents).set(data).where(eq(agents.id, agentId)).returning(),
-  );
+  const [updated] = await forOrg(orgId, async (tx) => {
+    // Deep-merge metadata to prevent overwriting keys set by sync
+    if (data.metadata) {
+      const [current] = await tx
+        .select({ metadata: agents.metadata })
+        .from(agents)
+        .where(eq(agents.id, agentId));
+      const existing = (current?.metadata ?? {}) as Record<string, unknown>;
+      data.metadata = { ...existing, ...data.metadata };
+    }
+
+    return tx
+      .update(agents)
+      .set(data)
+      .where(eq(agents.id, agentId))
+      .returning();
+  });
 
   if (!updated) {
     throw Errors.agentNotFound(agentId);
@@ -312,6 +326,51 @@ export async function regenerateApiKey(
     }
 
     return { apiKey: keyData.key, keyPrefix: keyData.prefix };
+  });
+}
+
+// ============================================================================
+// Platform Key Management
+// ============================================================================
+
+export async function upsertAgentPlatformKey(
+  orgId: string,
+  agentId: string,
+  value: string,
+) {
+  return forOrg(orgId, async (tx) => {
+    await requireAgent(tx, agentId);
+
+    const encryptedValue = await encryptSecret(value);
+    const [existing] = await tx
+      .select({ id: secrets.id })
+      .from(secrets)
+      .where(
+        and(
+          eq(secrets.ownerType, "agent"),
+          eq(secrets.ownerId, agentId),
+          eq(secrets.secretType, "platform_api_key"),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await tx
+        .update(secrets)
+        .set({ encryptedValue })
+        .where(eq(secrets.id, existing.id));
+      return { action: "updated" as const };
+    }
+
+    await tx.insert(secrets).values({
+      organizationId: orgId,
+      name: "ElevenLabs API Key",
+      secretType: "platform_api_key",
+      encryptedValue,
+      ownerType: "agent",
+      ownerId: agentId,
+    });
+    return { action: "created" as const };
   });
 }
 

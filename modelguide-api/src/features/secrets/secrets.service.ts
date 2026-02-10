@@ -66,7 +66,7 @@ export async function createSecret(
   data: {
     name: string;
     value: string;
-    secretType: "api_key" | "oauth_token" | "credentials" | "platform_api_key";
+    secretType: "api_key" | "oauth_token" | "credentials" | "platform_api_key" | "webhook_secret";
     ownerType: "connector" | "agent";
     ownerId: string;
   },
@@ -116,7 +116,7 @@ export async function createSecret(
 export async function getAgentSecretByType(
   orgId: string,
   agentId: string,
-  secretType: "api_key" | "platform_api_key" | "oauth_token" | "credentials",
+  secretType: "api_key" | "platform_api_key" | "oauth_token" | "credentials" | "webhook_secret",
 ): Promise<string | null> {
   const [secret] = await forOrg(orgId, (tx) =>
     tx

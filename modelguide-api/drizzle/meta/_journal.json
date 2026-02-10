@@ -99,6 +99,13 @@
       "when": 1770723200000,
       "tag": "0013_add-agent-slug",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1770723300000,
+      "tag": "0014_add-webhook-secret-type",
+      "breakpoints": true
     }
   ]
 }

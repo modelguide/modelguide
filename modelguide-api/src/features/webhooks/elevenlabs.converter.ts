@@ -227,10 +227,12 @@ export function convertPostCallToSession(
     }
 
     // Emit a tool message for each tool call (with matched result)
+    const matchedRequestIds = new Set<string>();
     for (const tc of toolCalls) {
       const toolName = tc.tool_name ?? "unknown";
       const params = tc.tool_details?.parameters ?? {};
       const matched = tc.request_id ? allResults.get(tc.request_id) : undefined;
+      if (matched && tc.request_id) matchedRequestIds.add(tc.request_id);
       const resultValue = matched
         ? parseResultValue(matched.result.result_value)
         : null;
@@ -251,9 +253,9 @@ export function convertPostCallToSession(
       });
     }
 
-    // Emit orphaned tool results (no matching call)
+    // Emit orphaned tool results (no matching call in this message's tool_calls)
     for (const tr of toolResults) {
-      if (tr.request_id) continue; // matched results handled above
+      if (tr.request_id && matchedRequestIds.has(tr.request_id)) continue;
       messages.push({
         role: "tool",
         content: "",
