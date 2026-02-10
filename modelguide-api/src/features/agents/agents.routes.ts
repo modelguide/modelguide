@@ -76,7 +76,11 @@ const regenerateKeyResponseSchema = z.object({
 
 const createAgentSchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: "Order Agent" }),
-  slug: z.string().max(100).optional().openapi({ description: "Auto-generated from name if omitted" }),
+  slug: z
+    .string()
+    .max(100)
+    .optional()
+    .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
   agentType: z.enum(["voice"]).default("voice").optional(),
   agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
@@ -97,7 +101,8 @@ const updateAgentSchema = z
       data.metadata !== undefined ||
       data.agentPlatform !== undefined,
     {
-      message: "At least one field must be provided",
+      message:
+        "At least one of 'name', 'description', or 'metadata' must be provided",
     },
   );
 
@@ -557,7 +562,9 @@ const syncAgentRoute = createRoute({
         },
       },
     },
-    400: errorResponse("Invalid input (missing platform, agent ID, or API key)"),
+    400: errorResponse(
+      "Invalid input (missing platform, agent ID, or API key)",
+    ),
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
     404: errorResponse("Agent not found"),

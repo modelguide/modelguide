@@ -14,9 +14,8 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
-import { postCallTranscriptionPayloadSchema } from "./elevenlabs.schemas";
 import { convertPostCallToSession } from "./elevenlabs.converter";
-
+import { postCallTranscriptionPayloadSchema } from "./elevenlabs.schemas";
 
 const app = new Hono();
 
@@ -57,9 +56,8 @@ app.post("/:agentId/post-call", async (c) => {
     return c.json({ error: "Agent not found or inactive" }, 404);
   }
 
-  const webhookSecret =
-    (agentRow.metadata as Record<string, unknown>)
-      ?.webhook_hmac_secret as string | undefined;
+  const webhookSecret = (agentRow.metadata as Record<string, unknown>)
+    ?.webhook_hmac_secret as string | undefined;
 
   if (!webhookSecret) {
     console.error(
@@ -73,8 +71,7 @@ app.post("/:agentId/post-call", async (c) => {
 
   // 2. Verify webhook signature with agent-specific secret
   const skipHmac =
-    env.NODE_ENV === "development" &&
-    c.req.header("x-skip-hmac") === "true";
+    env.NODE_ENV === "development" && c.req.header("x-skip-hmac") === "true";
 
   if (!skipHmac) {
     try {
