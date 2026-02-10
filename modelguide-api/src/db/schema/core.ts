@@ -509,7 +509,6 @@ export const sessions = pgTable(
       .$type<Record<string, unknown>>()
       .default({}),
     status: sessionStatusEnum("status").notNull().default("active"),
-    escalationRef: varchar("escalation_ref", { length: 255 }),
     startedAt: timestamp("started_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

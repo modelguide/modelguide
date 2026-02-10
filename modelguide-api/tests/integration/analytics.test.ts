@@ -54,7 +54,7 @@ beforeAll(async () => {
           organizationId: s.pizzaOrg.id,
           agentId: s.pizzaAgentId,
           channelType: "web",
-          status: "escalated",
+          status: "completed",
           startedAt: oneHourAgo,
           endedAt: now,
         },
@@ -177,14 +177,12 @@ describe("GET /api/analytics", () => {
     expect(body.total_sessions).toBeGreaterThanOrEqual(4);
     expect(body.sessions_by_status).toBeDefined();
     expect(typeof body.sessions_by_status.completed).toBe("number");
-    expect(typeof body.sessions_by_status.escalated).toBe("number");
     expect(typeof body.sessions_by_status.abandoned).toBe("number");
     expect(typeof body.sessions_by_status.active).toBe("number");
     expect(body.sessions_by_channel).toBeDefined();
     expect(typeof body.sessions_by_channel.voice).toBe("number");
     expect(typeof body.sessions_by_channel.web).toBe("number");
     expect(typeof body.resolution_rate).toBe("number");
-    expect(typeof body.escalation_rate).toBe("number");
     expect(typeof body.abandonment_rate).toBe("number");
     expect(body.feedback_count).toBeDefined();
     expect(typeof body.feedback_count.customer).toBe("number");
@@ -218,8 +216,7 @@ describe("GET /api/analytics", () => {
     const body = await response.json();
 
     // We created 4 test sessions + 1 seeded active session
-    expect(body.sessions_by_status.completed).toBeGreaterThanOrEqual(2);
-    expect(body.sessions_by_status.escalated).toBeGreaterThanOrEqual(1);
+    expect(body.sessions_by_status.completed).toBeGreaterThanOrEqual(3);
     expect(body.sessions_by_status.abandoned).toBeGreaterThanOrEqual(1);
 
     // Feedback from our test data
@@ -314,7 +311,6 @@ describe("GET /api/analytics", () => {
 
     expect(body.total_sessions).toBe(0);
     expect(body.resolution_rate).toBe(0);
-    expect(body.escalation_rate).toBe(0);
     expect(body.abandonment_rate).toBe(0);
     expect(body.avg_duration_seconds).toBeNull();
     expect(body.csat_score).toBeNull();
@@ -402,18 +398,6 @@ describe("GET /api/analytics/trends", () => {
 
     expect(body.metric).toBe("resolution_rate");
     expect(body.data).toBeArray();
-  });
-
-  test("returns escalation_rate trend (200)", async () => {
-    const response = await request(
-      `/api/analytics/trends?metric=escalation_rate&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
-    );
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-
-    expect(body.metric).toBe("escalation_rate");
   });
 
   test("returns duration trend (200)", async () => {
@@ -544,7 +528,6 @@ describe("GET /api/analytics/agents", () => {
     expect(agent.agent_name).toBeDefined();
     expect(typeof agent.total_sessions).toBe("number");
     expect(typeof agent.resolution_rate).toBe("number");
-    expect(typeof agent.escalation_rate).toBe("number");
   });
 
   test("rejects unauthenticated request (401)", async () => {
@@ -601,19 +584,17 @@ describe("RLS isolation", () => {
     const pizzaBody = await pizzaRes.json();
     const burgerBody = await burgerRes.json();
 
-    // Pizza Palace should have our 4 test sessions (2 completed, 1 escalated, 1 abandoned)
-    expect(pizzaBody.sessions_by_status.completed).toBeGreaterThanOrEqual(2);
-    expect(pizzaBody.sessions_by_status.escalated).toBeGreaterThanOrEqual(1);
+    // Pizza Palace should have our 4 test sessions (3 completed, 1 abandoned)
+    expect(pizzaBody.sessions_by_status.completed).toBeGreaterThanOrEqual(3);
     expect(pizzaBody.sessions_by_status.abandoned).toBeGreaterThanOrEqual(1);
 
     // Burger Barn should have strictly fewer total sessions than Pizza Palace
     // (seed creates 1 active session per org; our test adds 4 only to pizza)
     expect(burgerBody.total_sessions).toBeLessThan(pizzaBody.total_sessions);
 
-    // Burger Barn should have no completed/escalated/abandoned sessions
+    // Burger Barn should have no completed/abandoned sessions
     // (seed only creates active sessions)
     expect(burgerBody.sessions_by_status.completed).toBe(0);
-    expect(burgerBody.sessions_by_status.escalated).toBe(0);
     expect(burgerBody.sessions_by_status.abandoned).toBe(0);
   });
 

@@ -203,8 +203,7 @@ describe("computeSummaryScores", () => {
   const baseSessionRow = {
     total: 10,
     active: 2,
-    completed: 5,
-    escalated: 2,
+    completed: 7,
     abandoned: 1,
     avgDuration: 1800,
   };
@@ -219,8 +218,7 @@ describe("computeSummaryScores", () => {
   test("computes all rates correctly", () => {
     const result = computeSummaryScores(baseSessionRow, baseFeedbackRow);
 
-    expect(result.resolution_rate).toBe(0.5);
-    expect(result.escalation_rate).toBe(0.2);
+    expect(result.resolution_rate).toBe(0.7);
     expect(result.abandonment_rate).toBe(0.1);
   });
 
@@ -270,7 +268,6 @@ describe("computeSummaryScores", () => {
         total: 0,
         active: 0,
         completed: 0,
-        escalated: 0,
         abandoned: 0,
         avgDuration: null,
       },
@@ -283,7 +280,6 @@ describe("computeSummaryScores", () => {
     );
 
     expect(result.resolution_rate).toBe(0);
-    expect(result.escalation_rate).toBe(0);
     expect(result.abandonment_rate).toBe(0);
     expect(result.avg_duration_seconds).toBeNull();
     expect(result.csat_score).toBeNull();
@@ -306,7 +302,6 @@ describe("computeSummaryScores", () => {
         ...baseSessionRow,
         total: 5,
         completed: 5,
-        escalated: 0,
         abandoned: 0,
         active: 0,
       },
@@ -314,25 +309,7 @@ describe("computeSummaryScores", () => {
     );
 
     expect(result.resolution_rate).toBe(1);
-    expect(result.escalation_rate).toBe(0);
     expect(result.abandonment_rate).toBe(0);
-  });
-
-  test("handles 100% escalation rate", () => {
-    const result = computeSummaryScores(
-      {
-        ...baseSessionRow,
-        total: 3,
-        completed: 0,
-        escalated: 3,
-        abandoned: 0,
-        active: 0,
-      },
-      baseFeedbackRow,
-    );
-
-    expect(result.resolution_rate).toBe(0);
-    expect(result.escalation_rate).toBe(1);
   });
 
   test("rates are independent of feedback", () => {
@@ -348,7 +325,6 @@ describe("computeSummaryScores", () => {
     const resultB = computeSummaryScores(baseSessionRow, withFeedback);
 
     expect(resultA.resolution_rate).toBe(resultB.resolution_rate);
-    expect(resultA.escalation_rate).toBe(resultB.escalation_rate);
     expect(resultA.abandonment_rate).toBe(resultB.abandonment_rate);
   });
 

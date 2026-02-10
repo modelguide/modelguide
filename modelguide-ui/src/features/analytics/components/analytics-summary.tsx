@@ -6,7 +6,6 @@ import {
   MessageSquare,
   Minus,
   Percent,
-  Phone,
   ThumbsUp,
 } from 'lucide-react'
 import { Card, CardContent } from '~/components/ui/card'
@@ -47,14 +46,6 @@ export function AnalyticsSummary({ data }: AnalyticsSummaryProps) {
       icon: Percent,
       delta: computeDelta(data.resolution_rate, prev?.resolution_rate),
       invertDelta: false,
-    },
-    {
-      key: 'escalation-rate',
-      label: 'Escalation Rate',
-      value: formatPercent(data.escalation_rate),
-      icon: Phone,
-      delta: computeDelta(data.escalation_rate, prev?.escalation_rate),
-      invertDelta: true,
     },
     {
       key: 'avg-duration',

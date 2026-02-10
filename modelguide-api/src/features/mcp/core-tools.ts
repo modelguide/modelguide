@@ -8,7 +8,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
-export const CORE_TOOL_COUNT = 5;
+export const CORE_TOOL_COUNT = 4;
 
 export function registerCoreTools(
   server: McpServer,
@@ -64,27 +64,6 @@ export function registerCoreTools(
     },
   );
 
-  // Shared handler for status-transition tools (end, escalate)
-  function sessionStatusHandler(
-    targetStatus: "completed" | "escalated",
-    errorLabel: string,
-  ) {
-    return async ({ session_id }: { session_id: string }) => {
-      try {
-        const updated = await updateSession(orgId, session_id, agentId, {
-          status: targetStatus,
-        });
-
-        return mcpResponse({
-          session_id: updated.id,
-          status: updated.status,
-        });
-      } catch (err) {
-        return mcpErrorResponse(err, errorLabel);
-      }
-    };
-  }
-
   // ── core_end_session ─────────────────────────────────────────────────
   server.tool(
     "core_end_session",
@@ -92,17 +71,20 @@ export function registerCoreTools(
     {
       session_id: z.string().describe("Session ID to end"),
     },
-    sessionStatusHandler("completed", "Failed to end session"),
-  );
+    async ({ session_id }) => {
+      try {
+        const updated = await updateSession(orgId, session_id, agentId, {
+          status: "completed",
+        });
 
-  // ── core_escalate_session ────────────────────────────────────────────
-  server.tool(
-    "core_escalate_session",
-    "Escalate a session to a human agent",
-    {
-      session_id: z.string().describe("Session ID to escalate"),
+        return mcpResponse({
+          session_id: updated.id,
+          status: updated.status,
+        });
+      } catch (err) {
+        return mcpErrorResponse(err, "Failed to end session");
+      }
     },
-    sessionStatusHandler("escalated", "Failed to escalate session"),
   );
 
   // ── core_add_messages ────────────────────────────────────────────────

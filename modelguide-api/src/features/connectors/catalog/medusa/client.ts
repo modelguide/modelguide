@@ -3,30 +3,13 @@
  * Creates a fetcher bound to a specific connector instance's config.
  */
 
-interface MedusaFetchOptions {
-  method?: string;
-  body?: Record<string, unknown>;
-  params?: Record<string, string | number | undefined>;
-}
+import { type ConnectorFetcher, createBaseFetcher } from "../lib/http-client";
 
-export class MedusaApiError extends Error {
-  constructor(
-    public status: number,
-    public body: string,
-  ) {
-    super(`Medusa API error ${status}: ${body}`);
-    this.name = "MedusaApiError";
-  }
-}
-
-export type MedusaFetcher = <T = unknown>(
-  path: string,
-  options?: MedusaFetchOptions,
-) => Promise<T>;
+export type { ConnectorFetcher as MedusaFetcher };
 
 export function createMedusaFetcher(
   config: Record<string, string>,
-): MedusaFetcher {
+): ConnectorFetcher {
   const baseUrl = config.baseUrl?.replace(/\/+$/, "");
   if (!baseUrl) {
     throw new Error("Medusa baseUrl is required");
@@ -41,32 +24,5 @@ export function createMedusaFetcher(
     headers["x-publishable-api-key"] = config.publishableKey;
   }
 
-  return async function medusaFetch<T = unknown>(
-    path: string,
-    options?: MedusaFetchOptions,
-  ): Promise<T> {
-    const { method = "GET", body, params } = options ?? {};
-
-    let url = `${baseUrl}${path}`;
-    if (params) {
-      const entries = Object.entries(params).filter(([, v]) => v !== undefined);
-      if (entries.length > 0) {
-        const qs = new URLSearchParams(entries.map(([k, v]) => [k, String(v)]));
-        url += `?${qs}`;
-      }
-    }
-
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new MedusaApiError(response.status, text);
-    }
-
-    return response.json() as Promise<T>;
-  };
+  return createBaseFetcher(baseUrl, headers, "Medusa");
 }

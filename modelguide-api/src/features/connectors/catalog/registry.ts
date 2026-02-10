@@ -21,7 +21,10 @@ export function getAllManifests(): ConnectorManifest[] {
 }
 
 export async function loadAllManifests(): Promise<ConnectorManifest[]> {
-  const modules = await Promise.all([import("./medusa/index")]);
+  const modules = await Promise.all([
+    import("./medusa/index"),
+    import("./zendesk/index"),
+  ]);
 
   for (const mod of modules) {
     registerConnector(mod.default);

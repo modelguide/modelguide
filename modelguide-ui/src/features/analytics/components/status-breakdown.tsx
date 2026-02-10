@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 interface StatusBreakdownProps {
   data: {
     completed: number
-    escalated: number
     abandoned: number
     active: number
   }
@@ -12,7 +11,6 @@ interface StatusBreakdownProps {
 
 const COLORS = {
   completed: 'var(--color-success)',
-  escalated: 'var(--color-warning)',
   abandoned: 'var(--color-error)',
   active: 'var(--color-brand-500)',
 }
@@ -20,7 +18,6 @@ const COLORS = {
 export function StatusBreakdown({ data }: StatusBreakdownProps) {
   const chartData = [
     { name: 'Completed', value: data.completed, color: COLORS.completed },
-    { name: 'Escalated', value: data.escalated, color: COLORS.escalated },
     { name: 'Abandoned', value: data.abandoned, color: COLORS.abandoned },
     { name: 'Active', value: data.active, color: COLORS.active },
   ]

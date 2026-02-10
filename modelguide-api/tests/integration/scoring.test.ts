@@ -57,7 +57,7 @@ beforeAll(async () => {
 
   await forApp(async (tx) => {
     // 6 sessions total:
-    //   3 completed, 1 escalated, 1 abandoned, 1 active
+    //   4 completed, 1 abandoned, 1 active
     const inserted = await tx
       .insert(sessions)
       .values([
@@ -89,11 +89,11 @@ beforeAll(async () => {
           endedAt: baseEnd,
         },
         {
-          // [3] escalated, web
+          // [3] completed, web
           organizationId: s.pizzaOrg.id,
           agentId: s.pizzaAgentId,
           channelType: "web",
-          status: "escalated",
+          status: "completed",
           startedAt: base,
           endedAt: baseEnd,
         },
@@ -157,7 +157,7 @@ beforeAll(async () => {
         feedbackSource: "support",
         userIdentifier: "scoring-support-2",
       },
-      // Session 3 (escalated): customer positive
+      // Session 3 (completed): customer positive
       {
         sessionId: inserted[3].id,
         rating: 2,
@@ -266,22 +266,15 @@ describe("Feedback counts", () => {
 });
 
 // ============================================================================
-// Status-based rates (resolution, escalation, abandonment)
+// Status-based rates (resolution, abandonment)
 // ============================================================================
 
 describe("Rate calculations", () => {
   test("computes resolution rate as completed / total", async () => {
     const body = await getSummary();
 
-    // 3 completed out of 6 total = 0.5
-    expect(body.resolution_rate).toBe(0.5);
-  });
-
-  test("computes escalation rate as escalated / total", async () => {
-    const body = await getSummary();
-
-    // 1 escalated out of 6 total ≈ 0.1667
-    expect(body.escalation_rate).toBeCloseTo(1 / 6, 4);
+    // 4 completed out of 6 total ≈ 0.6667
+    expect(body.resolution_rate).toBeCloseTo(4 / 6, 4);
   });
 
   test("computes abandonment rate as abandoned / total", async () => {
@@ -294,9 +287,8 @@ describe("Rate calculations", () => {
   test("rates sum to <= 1 (active sessions make up remainder)", async () => {
     const body = await getSummary();
 
-    const sum =
-      body.resolution_rate + body.escalation_rate + body.abandonment_rate;
-    // 3/6 + 1/6 + 1/6 = 5/6 ≈ 0.8333 (1 active session remains)
+    const sum = body.resolution_rate + body.abandonment_rate;
+    // 4/6 + 1/6 = 5/6 ≈ 0.8333 (1 active session remains)
     expect(sum).toBeLessThanOrEqual(1);
     // Individual rates are rounded to 4 decimals, so summing them
     // may differ slightly from the exact fraction
@@ -311,7 +303,6 @@ describe("Rate calculations", () => {
     const body = await res.json();
 
     expect(body.resolution_rate).toBe(0);
-    expect(body.escalation_rate).toBe(0);
     expect(body.abandonment_rate).toBe(0);
   });
 });
@@ -353,8 +344,7 @@ describe("Session counts", () => {
   test("breaks down sessions by status correctly", async () => {
     const body = await getSummary();
 
-    expect(body.sessions_by_status.completed).toBe(3);
-    expect(body.sessions_by_status.escalated).toBe(1);
+    expect(body.sessions_by_status.completed).toBe(4);
     expect(body.sessions_by_status.abandoned).toBe(1);
     expect(body.sessions_by_status.active).toBe(1);
   });
@@ -385,12 +375,11 @@ describe("Filtered scoring", () => {
   });
 
   test("channel filter recalculates rates for filtered sessions only", async () => {
-    // Voice: 2 completed, 0 escalated, 1 abandoned = 3 total
+    // Voice: 2 completed, 1 abandoned = 3 total
     const body = await getSummary("&channel_type=voice");
 
     expect(body.total_sessions).toBe(3);
     expect(body.resolution_rate).toBeCloseTo(2 / 3, 4);
-    expect(body.escalation_rate).toBe(0);
     expect(body.abandonment_rate).toBeCloseTo(1 / 3, 4);
   });
 
@@ -446,22 +435,8 @@ describe("Resolution rate trend", () => {
     const body = await getTrends("resolution_rate");
 
     expect(body.data.length).toBe(1);
-    // 3 completed / 6 total = 0.5
-    expect(body.data[0].value).toBe(0.5);
-  });
-});
-
-// ============================================================================
-// Escalation rate trend
-// ============================================================================
-
-describe("Escalation rate trend", () => {
-  test("returns escalation rate matching summary", async () => {
-    const body = await getTrends("escalation_rate");
-
-    expect(body.data.length).toBe(1);
-    // 1 escalated / 6 total ≈ 0.1667
-    expect(body.data[0].value).toBeCloseTo(1 / 6, 4);
+    // 4 completed / 6 total ≈ 0.6667
+    expect(body.data[0].value).toBeCloseTo(4 / 6, 4);
   });
 });
 

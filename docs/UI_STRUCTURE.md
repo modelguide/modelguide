@@ -288,7 +288,6 @@ Instead of chat bubbles, use log format:
 /* Pill badges with semantic colors */
 .badge-active    { background: var(--color-success-muted); color: var(--color-success); }
 .badge-completed { background: var(--color-bg-subtle); color: var(--color-fg-secondary); }
-.badge-escalated { background: var(--color-warning-muted); color: var(--color-warning); }
 .badge-abandoned { background: var(--color-error-muted); color: var(--color-error); }
 ```
 

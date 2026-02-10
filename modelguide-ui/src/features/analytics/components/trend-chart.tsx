@@ -14,7 +14,6 @@ import type { TrendPoint } from '~/schemas/analytics'
 interface TrendChartProps {
   sessions: TrendPoint[]
   resolutions: TrendPoint[]
-  escalations: TrendPoint[]
   isLoading: boolean
 }
 
@@ -22,13 +21,12 @@ interface MergedPoint {
   displayDate: string
   sessions: number
   resolutions: number
-  escalations: number
 }
 
 function getOrCreate(map: Map<string, MergedPoint>, key: string, display: string): MergedPoint {
   let entry = map.get(key)
   if (!entry) {
-    entry = { displayDate: display, sessions: 0, resolutions: 0, escalations: 0 }
+    entry = { displayDate: display, sessions: 0, resolutions: 0 }
     map.set(key, entry)
   }
   return entry
@@ -38,11 +36,7 @@ function formatDisplay(date: string) {
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function mergeTrendData(
-  sessions: TrendPoint[],
-  resolutions: TrendPoint[],
-  escalations: TrendPoint[],
-): MergedPoint[] {
+function mergeTrendData(sessions: TrendPoint[], resolutions: TrendPoint[]): MergedPoint[] {
   const map = new Map<string, MergedPoint>()
 
   for (const p of sessions) {
@@ -56,15 +50,10 @@ function mergeTrendData(
     getOrCreate(map, key, formatDisplay(p.date)).resolutions = Math.round(p.value * 100)
   }
 
-  for (const p of escalations) {
-    const key = p.date.split('T')[0]
-    getOrCreate(map, key, formatDisplay(p.date)).escalations = Math.round(p.value * 100)
-  }
-
   return Array.from(map.values())
 }
 
-export function TrendChart({ sessions, resolutions, escalations, isLoading }: TrendChartProps) {
+export function TrendChart({ sessions, resolutions, isLoading }: TrendChartProps) {
   if (isLoading) {
     return (
       <Card className="animate-fade-up" style={{ animationDelay: '100ms' }}>
@@ -80,7 +69,7 @@ export function TrendChart({ sessions, resolutions, escalations, isLoading }: Tr
     )
   }
 
-  const data = mergeTrendData(sessions, resolutions, escalations)
+  const data = mergeTrendData(sessions, resolutions)
 
   if (data.length === 0) {
     return (
@@ -175,16 +164,6 @@ export function TrendChart({ sessions, resolutions, escalations, isLoading }: Tr
                 dot={{ fill: 'var(--color-success)', strokeWidth: 0, r: 3 }}
                 activeDot={{ fill: 'var(--color-success)', strokeWidth: 0, r: 5 }}
               />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="escalations"
-                name="Escalation %"
-                stroke="var(--color-warning)"
-                strokeWidth={2}
-                dot={{ fill: 'var(--color-warning)', strokeWidth: 0, r: 3 }}
-                activeDot={{ fill: 'var(--color-warning)', strokeWidth: 0, r: 5 }}
-              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -196,10 +175,6 @@ export function TrendChart({ sessions, resolutions, escalations, isLoading }: Tr
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-success" />
             <span className="font-mono text-xs text-fg-muted">Resolution %</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-warning" />
-            <span className="font-mono text-xs text-fg-muted">Escalation %</span>
           </div>
         </div>
       </CardContent>

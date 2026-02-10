@@ -24,7 +24,6 @@ const VALID_METRICS = [
   "sessions",
   "csat",
   "resolution_rate",
-  "escalation_rate",
   "duration",
 ] as const;
 export type TrendMetric = (typeof VALID_METRICS)[number];
@@ -41,7 +40,6 @@ export interface AnalyticsFilters {
 interface SessionsByStatus {
   active: number;
   completed: number;
-  escalated: number;
   abandoned: number;
 }
 
@@ -59,7 +57,6 @@ interface SessionsByChannel {
 export interface PreviousPeriodResult {
   total_sessions: number;
   resolution_rate: number;
-  escalation_rate: number;
   abandonment_rate: number;
   avg_duration_seconds: number | null;
   csat_score: number | null;
@@ -73,7 +70,6 @@ export interface SummaryResult {
   sessions_by_status: SessionsByStatus;
   sessions_by_channel: SessionsByChannel;
   resolution_rate: number;
-  escalation_rate: number;
   abandonment_rate: number;
   avg_duration_seconds: number | null;
   csat_score: number | null;
@@ -89,7 +85,6 @@ export interface AgentPerformanceItem {
   agent_name: string;
   total_sessions: number;
   resolution_rate: number;
-  escalation_rate: number;
   avg_duration_seconds: number | null;
   csat_score: number | null;
 }
@@ -134,7 +129,6 @@ function querySessionMetrics(
       total: sql<number>`count(*)::int`,
       active: sql<number>`count(*) filter (where ${sessions.status} = 'active')::int`,
       completed: sql<number>`count(*) filter (where ${sessions.status} = 'completed')::int`,
-      escalated: sql<number>`count(*) filter (where ${sessions.status} = 'escalated')::int`,
       abandoned: sql<number>`count(*) filter (where ${sessions.status} = 'abandoned')::int`,
       voice: sql<number>`count(*) filter (where ${sessions.channelType} = 'voice')::int`,
       web: sql<number>`count(*) filter (where ${sessions.channelType} = 'web')::int`,
@@ -274,7 +268,6 @@ export async function getSummary(
       previousPeriod = {
         total_sessions: prev.total,
         resolution_rate: prev.scores.resolution_rate,
-        escalation_rate: prev.scores.escalation_rate,
         abandonment_rate: prev.scores.abandonment_rate,
         avg_duration_seconds: prev.scores.avg_duration_seconds,
         csat_score: prev.scores.csat_score,
@@ -290,7 +283,6 @@ export async function getSummary(
       sessions_by_status: {
         active: row.active,
         completed: row.completed,
-        escalated: row.escalated,
         abandoned: row.abandoned,
       },
       sessions_by_channel: {
@@ -324,7 +316,6 @@ export async function getAgentPerformance(
         agentName: agents.name,
         total: sql<number>`count(*)::int`,
         completed: sql<number>`count(*) filter (where ${sessions.status} = 'completed')::int`,
-        escalated: sql<number>`count(*) filter (where ${sessions.status} = 'escalated')::int`,
         avgDuration: sql<
           number | null
         >`avg(extract(epoch from (${sessions.endedAt} - ${sessions.startedAt}))) filter (where ${sessions.endedAt} is not null)`,
@@ -356,7 +347,6 @@ export async function getAgentPerformance(
         agent_name: r.agentName,
         total_sessions: r.total,
         resolution_rate: r.total > 0 ? roundTo(r.completed / r.total, 4) : 0,
-        escalation_rate: r.total > 0 ? roundTo(r.escalated / r.total, 4) : 0,
         avg_duration_seconds: r.avgDuration
           ? roundTo(Number(r.avgDuration), 2)
           : null,
@@ -431,9 +421,6 @@ export async function getTrends(
       precision = 0;
     } else if (metric === "resolution_rate") {
       valueExpr = rateExpr("completed");
-      precision = 4;
-    } else if (metric === "escalation_rate") {
-      valueExpr = rateExpr("escalated");
       precision = 4;
     } else {
       throw new Error(`Unsupported trend metric: ${metric satisfies never}`);

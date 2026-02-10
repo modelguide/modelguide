@@ -22,7 +22,6 @@ const statusOptions: Array<{ value: SessionStatus | ''; label: string }> = [
   { value: '', label: 'All Status' },
   { value: 'active', label: 'Active' },
   { value: 'completed', label: 'Completed' },
-  { value: 'escalated', label: 'Escalated' },
   { value: 'abandoned', label: 'Abandoned' },
 ]
 

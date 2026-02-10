@@ -54,7 +54,6 @@ This returns only tools assigned to your agent. Tools are namespaced by connecto
 |-----------|--------|
 | `core_create_session` | Built-in platform tool |
 | `core_end_session` | Built-in platform tool |
-| `core_escalate_session` | Built-in platform tool |
 | `core_rate_session` | Built-in platform tool |
 | `pizzapalace_add_to_cart` | Medusa connector (instance: pizzapalace) |
 | `pizzapalace_confirm_order` | Medusa connector (instance: pizzapalace) |
@@ -187,21 +186,6 @@ await client.callTool({
 ```
 
 Confirmation tokens expire (see `expires_at`). If expired, the user must re-initiate the action.
-
-## Escalation
-
-When your agent can't resolve a request, escalate to human support:
-
-```typescript
-await client.callTool({
-  name: "core_escalate_session",
-  arguments: {
-    session_id: "the-session-id",
-  },
-});
-```
-
-The session status changes to `escalated` and it surfaces in the dashboard for the support team.
 
 ## CSAT Rating
 
