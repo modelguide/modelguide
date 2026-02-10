@@ -38,7 +38,7 @@ SaaS charges $150K+ for that layer. We open-sourced it.
 
 ## What Model Guide Does
 
-Model Guide sits between your AI agents and your business systems. It doesn't run the AI. It doesn't own the voice stack. It provides three layers:
+Model Guide sits between your AI agents and your business systems. It doesn't run the AI. It doesn't own the voice stack. It provides 4 layers:
 
 **Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
 
