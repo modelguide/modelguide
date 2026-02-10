@@ -28,7 +28,7 @@ const tools: ConnectorToolDefinition[] = [
           query: {
             type: "string",
             description:
-              "Product search term — name, brand, or category (e.g. 'Olaplex', 'bronzer', 'szampon')",
+              "Product search term — name, brand, or category (e.g. 'CeraVe', 'lipstick', 'moisturizer')",
           },
           limit: {
             type: "integer",
@@ -122,8 +122,7 @@ const tools: ConnectorToolDefinition[] = [
   {
     catalog: {
       name: "Get Cart",
-      description:
-        "Show what is currently in the cart with prices and totals",
+      description: "Show what is currently in the cart with prices and totals",
       inputSchema: {
         type: "object",
         properties: {
