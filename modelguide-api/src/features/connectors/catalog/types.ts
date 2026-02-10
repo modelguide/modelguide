@@ -14,7 +14,7 @@ export interface ToolExecutionContext {
 
 export interface ToolExecutionResult {
   success: boolean;
-  data?: { [key: string]: unknown };
+  data?: Record<string, unknown>;
   error?: string;
 }
 

@@ -178,9 +178,17 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
   // Step 2: Paginate through orders looking for display_id match
   const customerId = customers[0].id;
   const PAGE_SIZE = 50;
+  const MAX_PAGES = 20;
   let offset = 0;
+  let page = 0;
 
   while (true) {
+    if (page >= MAX_PAGES) {
+      return {
+        success: false,
+        error: `Order #${displayId} not found within the first ${MAX_PAGES * PAGE_SIZE} orders for customer ${email}. Please narrow your search.`,
+      };
+    }
     const { orders, count } = await fetcher<{
       orders: { id: string; display_id: number }[];
       count: number;
@@ -209,6 +217,7 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
     }
 
     offset += PAGE_SIZE;
+    page++;
     if (offset >= count) {
       return {
         success: false,
