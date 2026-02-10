@@ -1,89 +1,66 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
 ## Project Overview
 
-ModelGuide is an AI agent management platform that connects external AI agents (voice, chat) with service connectors (e-commerce, helpdesk, calendars). The platform provides:
-- REST API for admin/support users to manage agents, connectors, and view analytics
-- MCP (Model Context Protocol) server for AI agents to discover and execute tools
-- Multitenancy via PostgreSQL Row-Level Security (RLS)
-
-## Tech Stack
-
-- **Runtime:** Bun.js
-- **API Framework:** Hono with @hono/zod-openapi for typed routes
-- **MCP Server:** @modelcontextprotocol/sdk
-- **Database:** PostgreSQL 16 with Drizzle ORM
-- **Documentation:** Scalar (@scalar/hono-api-reference)
+ModelGuide is an AI agent management platform that connects external AI agents (voice, chat) with service connectors (e-commerce, helpdesk, calendars). REST API for admin/support users, MCP server for AI agents, multitenancy via PostgreSQL RLS.
 
 ## Documentation
 
-- `docs/PRD.md` - Product requirements, personas, use cases, permissions matrix
-- `docs/api-spec.md` - Complete REST API and MCP specification
-- `docs/DB_SCHEMA.md` - Database schema
+- `README.md` — Project overview, architecture, quick start, roadmap
+- `CONTRIBUTING.md` — Setup, environment variables, dev workflow, code conventions
+- `docs/guide/mcp-integration.md` — Agent developer MCP integration guide
+- `docs/guide/admin-guide.md` — Platform admin configuration guide
+- `docs/UI_STRUCTURE.md` — Dashboard design system and component patterns
+- `docs/decisions/` — Architecture Decision Records (ADR-001: refresh tokens, ADR-002: magic links)
+- `Makefile` — All dev commands (`make help` for full list, `make quickstart` for first-time setup)
 
 ## Local Workspace
 
-`.claude/local/` is a git-ignored directory for session artifacts — plans, research notes, scratch files, generated outputs. Use it to:
-- Store implementation plans and design notes before/during work
-- Keep research and exploration results for reuse across sessions
-- Save intermediate artifacts that support the current task
-
-This directory persists locally and is shared across tools. Do not commit its contents.
+`.claude/local/` is a git-ignored directory for session artifacts — plans, research notes, scratch files. Do not commit its contents.
 
 ## Architecture Decision Records
 
-For significant architectural or design decisions, create an ADR in `docs/decisions/`:
+Create ADRs in `docs/decisions/` for significant decisions:
 
 - **When:** New patterns, security model changes, technology choices, non-obvious tradeoffs
 - **Format:** `NNN-short-title.md` (e.g., `001-refresh-token-rotation.md`)
-- **Sections:** Status, Context, Decision (with rationale), Consequences (positive, negative, risks)
-
-Do not create ADRs for routine feature work — only for decisions where "why" matters to future contributors.
+- **Sections:** Status, Context, Decision (with rationale), Consequences
 
 ## Commands
 
 ```bash
-# Setup
-cp modelguide-api/.env.example modelguide-api/.env  # Create local env config
+# First-time setup (starts Postgres, installs deps, runs migrations + seed)
+make quickstart
 
 # API
-make api-install              # Install API dependencies
-make api-dev                  # Start API dev server with hot reload (port 3000)
-make api-build                # Build API for production
-make api-start                # Run API production build
+make api-dev                  # Start API dev server (port 3000)
 make api-test                 # Run all API tests
-make api-test-unit            # Run API unit tests
-make api-test-integration     # Run API integration tests (requires Docker)
+make api-test-unit            # Unit tests only (no Docker needed)
+make api-test-integration     # Integration tests (requires running Postgres)
 make api-typecheck            # TypeScript type checking
 make api-lint                 # Lint with auto-fix
-make api-lint-check           # Lint check only
+make api-lint-check           # Lint check only (CI uses this)
 
 # UI
-make ui-install               # Install UI dependencies
 make ui-dev                   # Start UI dev server (port 3001)
 make ui-test                  # Run UI tests
 make ui-typecheck             # TypeScript type checking
-make ui-lint                  # Lint UI code
+make ui-lint                  # Biome lint
 
 # Database
 make db-up                    # Start PostgreSQL container (port 5434)
 make db-down                  # Stop PostgreSQL container
-make db-generate              # Generate Drizzle migrations (always use: drizzle-kit generate --name <descriptive-name>)
+make db-generate              # Generate Drizzle migrations (use: drizzle-kit generate --name <descriptive-name>)
 make db-migrate               # Run migrations
-make db-push                  # Push schema changes (dev only)
-make db-studio                # Open Drizzle Studio
 make db-seed                  # Seed database with test data
-
-# General
-make reset                    # Stop containers and remove volumes
-make logs                     # View container logs
+make db-studio                # Open Drizzle Studio
 ```
 
-## Architecture
+## API Architecture
 
-### Directory Structure (Feature-Based)
+**Tech stack:** Bun.js, Hono + @hono/zod-openapi, @modelcontextprotocol/sdk, PostgreSQL 16 + Drizzle ORM, Scalar docs
 
 ```
 modelguide-api/src/
@@ -91,195 +68,95 @@ modelguide-api/src/
 ├── app.ts                # Hono app, routes, OpenAPI/Scalar setup
 ├── env.ts                # Zod environment validation
 ├── db/                   # Drizzle client and schema
-├── lib/                  # Shared utilities (createApp, createRouter)
-├── types/                # Shared TypeScript types (AppBindings)
-└── features/             # Feature modules
-    ├── users/            # User management, auth (JWT, API keys)
+├── lib/                  # Shared utilities, middleware, crypto, JWT
+└── features/
+    ├── users/            # Auth (magic links, JWT, refresh tokens, API keys)
     ├── organizations/    # Multitenancy, RLS context
     ├── agents/           # Agent CRUD, activation, API key generation
     ├── connectors/       # Connector catalog, instances, tools
-    ├── secrets/          # Encrypted credentials storage
+    ├── secrets/          # Encrypted credentials (AES-256-GCM)
     ├── sessions/         # Session lifecycle, messages
     ├── feedback/         # Customer CSAT, support evaluations
     ├── analytics/        # Summary metrics, trends
     └── mcp/              # MCP server, resources, core tools
 ```
 
-### Authentication Model
+**Key endpoints:** `POST /mcp` (AI agents), `GET /docs` (Scalar), `GET /api/health`
 
-- **Admin/Support:** Short-lived JWT access tokens (15 min) + refresh token rotation via `__Host-refresh_token` httpOnly cookie (7-day sliding). Refresh uses `REFRESH_JWT_SECRET` (separate from `JWT_SECRET`). CSRF protection via Origin header validation on `/auth/refresh` and `/auth/logout`. See `docs/decisions/001-refresh-token-rotation.md`.
-- **Agents:** API keys (`mgk_xxx` prefix), key hash stored, shown only on creation
-
-### Key Concepts
-
-- **Connectors Catalog:** Read-only registry of connector types (Medusa, Zendesk, Calendly)
-- **Connectors:** Org-specific instances with config referencing secrets by UUID
-- **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `pizzapalace_add_to_cart`)
-- **Core Tools:** Built-in platform tools (`core_create_session`, `core_end_session`, etc.)
-- **requires_confirmation:** Tools that need user confirmation before execution
-
-### API Endpoints
-
-- `GET /api/health` - Health check
-- `GET /openapi.json` - OpenAPI spec
-- `GET /docs` - Scalar API documentation
-- `POST /mcp` - MCP endpoint for AI agents
-
-### Database
-
-Schema defined in `docs/DB_SCHEMA.md`. Key tables:
-- `organizations` - Multitenancy root
-- `users` - Admin/Support users (not customers)
-- `agents`, `api_keys` - AI agent configuration
-- `connectors_catalog`, `connectors`, `connector_tools` - Connector system
-- `secrets` - Encrypted credentials (polymorphic ownership)
-- `sessions`, `session_messages`, `session_feedback` - Conversation tracking
-
-## Path Aliases
-
-Configured in tsconfig.json:
+**Path aliases** (`modelguide-api/tsconfig.json`):
 - `@features/*` → `./src/features/*`
 - `@lib/*` → `./src/lib/*`
 - `@db/*` → `./src/db/*`
 - `@/*` → `./src/*`
 
+### Authentication Model
+
+- **Dashboard users:** Magic link passwordless login. Short-lived JWT access tokens (15 min, memory-only). Refresh token rotation via httpOnly cookie (`__Host-` prefix on HTTPS, plain `refresh_token` on HTTP). CSRF protection via Origin header on `/auth/refresh` and `/auth/logout`. See ADR-001 and ADR-002.
+- **AI agents:** API keys (`mgk_xxx` prefix), SHA-256 hashed before storage, shown only once at creation.
+
+### Key Concepts
+
+- **Connectors Catalog:** Read-only registry of connector types (Medusa shipped as reference)
+- **Connectors:** Org-specific instances with config referencing secrets by UUID
+- **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `pizzapalace_add_to_cart`)
+- **Core Tools:** Built-in platform tools (`core_create_session`, `core_end_session`, etc.)
+- **requires_confirmation:** Tools that need user confirmation before execution
+
+### Database
+
+Key tables: `organizations`, `users`, `agents`, `api_keys`, `connectors_catalog`, `connectors`, `connector_tools`, `secrets`, `sessions`, `session_messages`, `session_feedback`, `magic_tokens`, `security_tokens`. Schema defined in `modelguide-api/src/db/schema/`.
+
 ---
 
 ## Dashboard UI (modelguide-ui)
 
-Admin and support dashboard built with TanStack Start. Located in `modelguide-ui/`.
-
-### UI Tech Stack
-
-| Category | Technology |
-|----------|------------|
-| Framework | TanStack Start (SPA mode) |
-| Runtime | React 19, TypeScript 5.7+ |
-| Routing | TanStack Router (file-based) |
-| Data Fetching | TanStack Query |
-| State Management | Zustand with persist middleware |
-| Styling | Tailwind CSS v4 |
-| HTTP Client | ky |
-| API Mocking | MSW (Mock Service Worker) |
-| Charts | recharts |
-| Component Variants | class-variance-authority (cva) |
-
-### UI Commands
-
-```bash
-cd modelguide-ui
-npm run dev           # Start dev server (port 3001)
-npm run build         # Build for production
-npm run typecheck     # TypeScript check
-npm run lint          # Biome lint
-npm run lint:fix      # Auto-fix lint issues
-npm run test          # Run Vitest tests
-```
-
-### UI Directory Structure
+**Tech stack:** TanStack Start (SPA mode), React 19, TanStack Router + Query, Zustand, Tailwind CSS v4, ky, recharts, CVA
 
 ```
 modelguide-ui/src/
-├── routes/                    # File-based routing (TanStack Router)
-│   ├── __root.tsx             # Root layout with QueryClientProvider
-│   ├── _authenticated.tsx     # Protected layout with auth check
-│   ├── _authenticated/        # Protected routes
-│   │   ├── index.tsx          # Dashboard
-│   │   ├── sessions.tsx       # Sessions list
-│   │   ├── sessions.$id.tsx   # Session detail
-│   │   ├── agents.tsx         # Agents list
-│   │   ├── agents.$id.tsx     # Agent detail
-│   │   ├── agents.new.tsx     # Create agent
-│   │   ├── connectors.tsx     # Connectors grid
-│   │   ├── connectors.$id.tsx # Connector config
-│   │   ├── secrets.tsx        # Secrets management
-│   │   ├── analytics.tsx      # Analytics charts
-│   │   └── settings.tsx       # User settings
-│   └── login.tsx              # Login page
+├── routes/               # File-based routing (TanStack Router)
 ├── components/
-│   ├── ui/                    # Reusable UI primitives
-│   │   ├── button.tsx         # Primary/secondary/ghost/danger variants
-│   │   ├── card.tsx           # Card, CardHeader, CardTitle, CardContent
-│   │   ├── input.tsx          # Input with label, error, hint
-│   │   ├── select.tsx         # Select dropdown
-│   │   ├── badge.tsx          # Status badges with dot indicator
-│   │   ├── avatar.tsx         # User avatar with initials fallback
-│   │   ├── spinner.tsx        # Loading indicator
-│   │   ├── dialog.tsx         # Modal wrapper
-│   │   ├── pagination.tsx     # Pagination controls
-│   │   ├── skeleton.tsx       # Loading placeholders
-│   │   └── empty-state.tsx    # No data states
-│   └── layout/
-│       ├── logo.tsx           # {model: guide} branding
-│       ├── sidebar.tsx        # Navigation with MAIN/ADMIN sections
-│       ├── header.tsx         # Top bar with user menu
-│       └── app-shell.tsx      # Sidebar + header + content
-├── features/                  # Feature-specific components
-│   ├── auth/components/       # Login form
-│   ├── dashboard/components/  # Stats cards, recent sessions
-│   ├── sessions/components/   # Sessions table, transcript, filters
-│   ├── agents/components/     # Agents table, API key modal
-│   ├── connectors/components/ # Connectors grid, config form
-│   ├── secrets/components/    # Secrets table, forms
-│   ├── analytics/components/  # Charts (trend, status, channel)
-│   └── settings/components/   # Profile, appearance, users
-├── stores/
-│   ├── auth.ts                # Zustand auth store with persist
-│   └── theme.ts               # Theme store (dark/light/system)
-├── schemas/                   # Zod schemas for type safety
-├── mocks/
-│   ├── browser.ts             # MSW worker setup
-│   ├── handlers/              # API mock handlers
-│   └── data/                  # Mock data
-├── lib/
-│   ├── cn.ts                  # clsx + tailwind-merge utility
-│   ├── utils.ts               # formatDuration, formatDate, etc.
-│   └── api.ts                 # ky instance with auth headers
-└── styles/
-    └── app.css                # Tailwind config and design tokens
+│   ├── ui/               # Reusable primitives (button, card, input, badge, dialog, etc.)
+│   └── layout/           # App shell, sidebar, header, logo
+├── features/             # Feature-specific components per domain
+│   ├── auth/             # Login form (magic link)
+│   ├── dashboard/        # Stats cards, recent sessions
+│   ├── sessions/         # Sessions table, transcript viewer, filters
+│   ├── agents/           # Agents table, API key modal
+│   ├── connectors/       # Connectors grid, config form
+│   ├── secrets/          # Secrets table, forms
+│   ├── analytics/        # Charts (trend, status, channel)
+│   └── settings/         # Profile, appearance, users
+├── stores/               # Zustand (auth with persist, theme)
+├── schemas/              # Zod schemas
+├── lib/                  # cn.ts, utils.ts, api.ts (ky instance)
+└── styles/app.css        # Tailwind config and design tokens
 ```
 
-### UI Design System
+**Path alias** (`modelguide-ui/tsconfig.json`): `~/` → `./src/`
 
-**Design Direction: "Atmospheric Dark"** — Modern SaaS aesthetics with warm ember accents and depth.
+### Design System: "Atmospheric Dark"
 
-**Typography:**
-- Display: `--font-display: 'Syne'` — distinctive headings
-- Body: `--font-sans: 'IBM Plex Sans'` — clean, readable
-- Code: `--font-mono: 'JetBrains Mono'` — technical elements
+**Typography:** Syne (display), IBM Plex Sans (body), JetBrains Mono (code)
 
-**Color Tokens (defined in app.css):**
+**Color Tokens (app.css):**
 ```css
-/* Brand - Ember orange */
---color-brand-500: #f97316;
-
-/* Dark mode backgrounds */
---color-bg-base: #0a0a0b;
---color-bg-elevated: #141416;
---color-bg-subtle: #1c1c1f;
-
-/* Dark mode foregrounds */
---color-fg-primary: #fafafa;
---color-fg-secondary: #a8a8b3;
---color-fg-muted: #6b6b76;
-
-/* Semantic */
+--color-brand-500: #f97316;       /* Brand ember orange */
+--color-bg-base: #0a0a0b;        /* Dark mode page background */
+--color-bg-elevated: #141416;    /* Cards, sidebar */
+--color-bg-subtle: #1c1c1f;      /* Hover, inputs */
+--color-fg-primary: #fafafa;     /* Primary text */
+--color-fg-secondary: #a8a8b3;   /* Secondary text */
+--color-fg-muted: #6b6b76;       /* Placeholders */
 --color-success: #10b981;
 --color-warning: #f59e0b;
 --color-error: #ef4444;
 ```
 
-**Theme Support:**
-- Dark mode (default) with atmospheric gradients
-- Light mode with warm stone tones
-- Toggle via header icon or Settings page
-
 ### UI Development Patterns
 
 **Component Variants with CVA:**
 ```tsx
-import { cva, type VariantProps } from 'class-variance-authority'
-
 const buttonVariants = cva('base-classes', {
   variants: {
     variant: { primary: '...', secondary: '...' },
@@ -309,11 +186,6 @@ export const Route = createFileRoute('/_authenticated')({
 })
 ```
 
-**Mock Credentials (dev only):**
-- Admin: `admin@modelguide.ai` / `admin123`
-- Support: `support@modelguide.ai` / `support123`
-
-### UI Path Aliases
-
-Configured in modelguide-ui/tsconfig.json:
-- `~/` → `./src/`
+**Dev Accounts (seed data — magic link auth, link printed to API console):**
+- Admin: `delivered+admin-pizza-palace@resend.dev`
+- Support: `delivered+support-pizza-palace@resend.dev`

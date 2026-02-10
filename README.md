@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="docs/api-spec.md">API Spec</a> · <a href="#how-it-works">How It Works</a> · <a href="#roadmap">Roadmap</a>
+  <a href="#quick-start">Quick Start</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="#adding-a-connector">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
 ---
@@ -227,7 +227,7 @@ modelguide/
 │       ├── features/            # agents, connectors, sessions, analytics
 │       └── routes/              # File-based routing
 ├── docker/                      # PostgreSQL init (RLS roles)
-├── docs/                        # PRD, DB schema, API spec, phases
+├── docs/                        # Guides, ADRs, design system
 └── Makefile                     # All dev commands
 ```
 
@@ -306,12 +306,21 @@ const modules = await Promise.all([
 
 📋 **Connector marketplace** — Community-built integrations
 
+## Documentation
+
+| Resource | Description |
+|----------|-------------|
+| [MCP Integration Guide](docs/guide/mcp-integration.md) | Connect your AI agent via MCP |
+| [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools |
+| [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
+| [Contributing](CONTRIBUTING.md) | Setup, workflow, conventions |
+
 ## Contributing
 
-Contributions welcome. No CLA.
+Contributions welcome. No CLA. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 ```bash
-# Run tests before submitting
+# Run checks before submitting
 make api-test          # Unit + integration tests
 make ui-test           # UI component tests
 make api-lint-check    # Linting
