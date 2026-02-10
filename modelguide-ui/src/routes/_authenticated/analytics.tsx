@@ -74,21 +74,6 @@ function AnalyticsPage() {
         .json<TrendsResponse>(),
   })
 
-  const escalationTrendQuery = useQuery({
-    queryKey: ['analytics', 'trends', 'escalation_rate', granularity, from, to],
-    queryFn: () =>
-      api
-        .get('analytics/trends', {
-          searchParams: {
-            metric: 'escalation_rate',
-            granularity,
-            from_date: from,
-            to_date: to,
-          },
-        })
-        .json<TrendsResponse>(),
-  })
-
   const agentQuery = useQuery({
     queryKey: ['analytics', 'agents', from, to],
     queryFn: () =>
@@ -109,13 +94,7 @@ function AnalyticsPage() {
     [resolutionTrendQuery.data, from, to, granularity],
   )
 
-  const escalationsData = useMemo(
-    () => fillTrendGaps(escalationTrendQuery.data?.data ?? [], from, to, granularity),
-    [escalationTrendQuery.data, from, to, granularity],
-  )
-
-  const trendsLoading =
-    sessionsTrendQuery.isLoading || resolutionTrendQuery.isLoading || escalationTrendQuery.isLoading
+  const trendsLoading = sessionsTrendQuery.isLoading || resolutionTrendQuery.isLoading
 
   return (
     <div className="space-y-6">
@@ -155,7 +134,6 @@ function AnalyticsPage() {
           <TrendChart
             sessions={sessionsData}
             resolutions={resolutionsData}
-            escalations={escalationsData}
             isLoading={trendsLoading}
           />
 

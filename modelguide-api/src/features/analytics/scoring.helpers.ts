@@ -7,7 +7,6 @@ export interface SessionMetricsRow {
   total: number;
   active: number;
   completed: number;
-  escalated: number;
   abandoned: number;
   avgDuration: number | null;
 }
@@ -79,7 +78,6 @@ export function computeSummaryScores(
 
   return {
     resolution_rate: computeRate(sessionRow.completed, total),
-    escalation_rate: computeRate(sessionRow.escalated, total),
     abandonment_rate: computeRate(sessionRow.abandoned, total),
     avg_duration_seconds: sessionRow.avgDuration
       ? roundTo(Number(sessionRow.avgDuration), 2)

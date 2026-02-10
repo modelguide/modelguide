@@ -3,40 +3,10 @@
  * Each handler creates a fetcher from ctx.config and calls the appropriate endpoint.
  */
 
-import type { ToolExecutionContext, ToolExecutionResult } from "../types";
-import {
-  MedusaApiError,
-  type MedusaFetcher,
-  createMedusaFetcher,
-} from "./client";
+import { withConnector } from "../lib/http-client";
+import { createMedusaFetcher } from "./client";
 
-function errorResult(err: unknown): ToolExecutionResult {
-  if (err instanceof MedusaApiError) {
-    return { success: false, error: `Medusa API ${err.status}: ${err.body}` };
-  }
-  const message = err instanceof Error ? err.message : String(err);
-  return { success: false, error: message };
-}
-
-/**
- * Wraps a handler body so every handler gets a fetcher and
- * consistent error handling without repeating try/catch.
- */
-function withMedusa(
-  fn: (
-    fetcher: MedusaFetcher,
-    ctx: ToolExecutionContext,
-  ) => Promise<ToolExecutionResult>,
-): (ctx: ToolExecutionContext) => Promise<ToolExecutionResult> {
-  return async function handler(ctx) {
-    try {
-      const fetcher = createMedusaFetcher(ctx.config);
-      return await fn(fetcher, ctx);
-    } catch (err) {
-      return errorResult(err);
-    }
-  };
-}
+const withMedusa = withConnector(createMedusaFetcher);
 
 export const listProducts = withMedusa(async (fetcher, ctx) => {
   const input = ctx.input as {

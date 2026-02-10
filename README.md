@@ -33,7 +33,7 @@
 
 You showed a call center/customer support demo to your CEO. Got "great, ship it."
 
-Months later: the demo that worked for 10 calls breaks at 500. There's no handoff to humans. No QA. No way to know if Tuesday's prompt change helped or hurt. And you're rebuilding the same session tracking, tool integrations, and escalation logic that every team rebuilds from scratch.
+Months later: the demo that worked for 10 calls breaks at 500. There's no QA. No way to know if Tuesday's prompt change helped or hurt. And you're rebuilding the same session tracking, tool integrations, and routing logic that every team rebuilds from scratch.
 
 The AI agent is becoming a commodity. The voice stacks work. The LLMs work. What nobody gives you is the infrastructure to **run** AI agents like a real operation — with observability, tool management, vendor freedom, and the ability to swap any component without starting over.
 
@@ -154,7 +154,6 @@ Core MCP tools handle the session lifecycle:
 
 - `core_create_session` — starts a session with channel type, user identifier, metadata
 - `core_add_messages` — bulk ingest conversation turns with timestamps and tool calls
-- `core_escalate_session` — marks for human handoff
 - `core_rate_session` — records CSAT (1 = negative, 2 = positive)
 - `core_end_session` — closes the session
 
@@ -177,8 +176,6 @@ The dashboard gives support teams what they need: session list with filters (sta
 ✅ **Session Recording** — Full message history with roles, timestamps, audio URLs, tool call inputs/outputs. Sequence-numbered for correct ordering.
 
 ✅ **CSAT + QA** — Customer feedback via `core_rate_session`. Internal quality evaluation by support team with tags and comments. Both stored per session, filterable in dashboard.
-
-✅ **Escalation** — `core_escalate_session` marks sessions for human handoff. Dashboard surfaces escalated sessions for follow-up.
 
 ✅ **Multi-Tenant** — PostgreSQL row-level security on every org-scoped table. Separate DB roles: superuser for migrations, app role subject to RLS policies. One deployment, multiple organizations.
 

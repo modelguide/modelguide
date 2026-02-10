@@ -28,7 +28,7 @@ interface SessionFilters extends PaginationParams {
   sortOrder?: "asc" | "desc";
 }
 
-const TERMINAL_STATUSES = ["completed", "escalated", "abandoned"] as const;
+const TERMINAL_STATUSES = ["completed", "abandoned"] as const;
 
 function isTerminal(status: string): boolean {
   return TERMINAL_STATUSES.includes(
@@ -228,7 +228,6 @@ export async function updateSession(
   agentId: string,
   data: {
     status?: string;
-    escalationRef?: string;
   },
 ) {
   return forOrg(orgId, async (tx) => {
@@ -255,10 +254,6 @@ export async function updateSession(
       }
       updateData.status = data.status as typeof sessions.$inferInsert.status;
       updateData.endedAt = new Date();
-    }
-
-    if (data.escalationRef !== undefined) {
-      updateData.escalationRef = data.escalationRef;
     }
 
     const [updated] = await tx

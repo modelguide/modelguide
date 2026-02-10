@@ -53,7 +53,6 @@ const summaryQuerySchema = z
 const sessionsByStatusSchema = z.object({
   active: z.number(),
   completed: z.number(),
-  escalated: z.number(),
   abandoned: z.number(),
 });
 
@@ -76,7 +75,6 @@ const feedbackCountSchema = z.object({
 const previousPeriodSchema = z.object({
   total_sessions: z.number(),
   resolution_rate: z.number(),
-  escalation_rate: z.number(),
   abandonment_rate: z.number(),
   avg_duration_seconds: z.number().nullable(),
   csat_score: z.number().nullable(),
@@ -90,7 +88,6 @@ const summaryResponseSchema = z.object({
   sessions_by_status: sessionsByStatusSchema,
   sessions_by_channel: sessionsByChannelSchema,
   resolution_rate: z.number(),
-  escalation_rate: z.number(),
   abandonment_rate: z.number(),
   avg_duration_seconds: z.number().nullable(),
   csat_score: z.number().nullable(),
@@ -106,7 +103,6 @@ const agentPerformanceItemSchema = z.object({
   agent_name: z.string(),
   total_sessions: z.number(),
   resolution_rate: z.number(),
-  escalation_rate: z.number(),
   avg_duration_seconds: z.number().nullable(),
   csat_score: z.number().nullable(),
 });
@@ -119,7 +115,6 @@ const trendMetrics = [
   "sessions",
   "csat",
   "resolution_rate",
-  "escalation_rate",
   "duration",
 ] as const;
 

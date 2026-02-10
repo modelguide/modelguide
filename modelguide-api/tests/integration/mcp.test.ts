@@ -158,7 +158,7 @@ describe("Tool discovery", () => {
   test("returns core tools and connector tools", async () => {
     const result = await client.listTools();
 
-    expect(result.tools.length).toBeGreaterThanOrEqual(5);
+    expect(result.tools.length).toBeGreaterThanOrEqual(4);
 
     const coreToolNames = result.tools
       .filter((t) => t.name.startsWith("core_"))
@@ -166,10 +166,9 @@ describe("Tool discovery", () => {
 
     expect(coreToolNames).toContain("core_create_session");
     expect(coreToolNames).toContain("core_end_session");
-    expect(coreToolNames).toContain("core_escalate_session");
     expect(coreToolNames).toContain("core_add_messages");
     expect(coreToolNames).toContain("core_rate_session");
-    expect(coreToolNames.length).toBe(5);
+    expect(coreToolNames.length).toBe(4);
   });
 
   test("connector tools include session_id in input schema", async () => {
@@ -227,7 +226,7 @@ describe("Resource discovery", () => {
     expect(data.agent_id).toBe(s.pizzaAgentId);
     expect(data.organization_id).toBe(s.pizzaOrg.id);
     expect(typeof data.tool_count).toBe("number");
-    expect(data.tool_count).toBeGreaterThanOrEqual(5);
+    expect(data.tool_count).toBeGreaterThanOrEqual(4);
   });
 
   test("readResource tools://list returns tool array with requires_confirmation", async () => {
@@ -351,44 +350,6 @@ describe("core_end_session", () => {
 
     const data = parseToolResult(result);
     expect(data.error).toBeDefined();
-  });
-});
-
-// ============================================================================
-// Core tool: core_escalate_session
-// ============================================================================
-
-describe("core_escalate_session", () => {
-  let client: Client;
-  let transport: StreamableHTTPClientTransport;
-
-  beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders));
-  });
-
-  afterAll(async () => {
-    await transport.close();
-  });
-
-  test("escalates an active session", async () => {
-    const createResult = await client.callTool({
-      name: "core_create_session",
-      arguments: {
-        channel_type: "voice",
-        user_identifier: "+1234560001",
-      },
-    });
-    const created = parseToolResult(createResult);
-    createdSessionIds.push(created.session_id);
-
-    const result = await client.callTool({
-      name: "core_escalate_session",
-      arguments: { session_id: created.session_id },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.session_id).toBe(created.session_id);
-    expect(data.status).toBe("escalated");
   });
 });
 
@@ -554,16 +515,6 @@ describe("RLS isolation", () => {
   test("Burger Barn agent cannot end a Pizza Palace session", async () => {
     const result = await burgerClient.callTool({
       name: "core_end_session",
-      arguments: { session_id: pizzaSessionId },
-    });
-
-    const data = parseToolResult(result);
-    expect(data.error).toBeDefined();
-  });
-
-  test("Burger Barn agent cannot escalate a Pizza Palace session", async () => {
-    const result = await burgerClient.callTool({
-      name: "core_escalate_session",
       arguments: { session_id: pizzaSessionId },
     });
 

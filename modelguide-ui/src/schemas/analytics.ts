@@ -15,13 +15,12 @@ export const trendsResponseSchema = z.object({
 
 export type TrendsResponse = z.infer<typeof trendsResponseSchema>
 
-export type TrendMetric = 'sessions' | 'csat' | 'resolution_rate' | 'escalation_rate' | 'duration'
+export type TrendMetric = 'sessions' | 'csat' | 'resolution_rate' | 'duration'
 export type Granularity = 'hour' | 'day' | 'week' | 'month'
 
 const previousPeriodSchema = z.object({
   total_sessions: z.number(),
   resolution_rate: z.number(),
-  escalation_rate: z.number(),
   abandonment_rate: z.number(),
   avg_duration_seconds: z.number().nullable(),
   csat_score: z.number().nullable(),
@@ -39,13 +38,11 @@ export const analyticsSummarySchema = z.object({
   total_sessions: z.number(),
   sessions_by_status: z.object({
     completed: z.number(),
-    escalated: z.number(),
     abandoned: z.number(),
     active: z.number(),
   }),
   sessions_by_channel: z.record(z.string(), z.number()),
   resolution_rate: z.number(),
-  escalation_rate: z.number(),
   abandonment_rate: z.number(),
   avg_duration_seconds: z.number().nullable(),
   csat_score: z.number().nullable(),
@@ -66,7 +63,6 @@ export const agentPerformanceItemSchema = z.object({
   agent_name: z.string(),
   total_sessions: z.number(),
   resolution_rate: z.number(),
-  escalation_rate: z.number(),
   avg_duration_seconds: z.number().nullable(),
   csat_score: z.number().nullable(),
 })

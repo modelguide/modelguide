@@ -7,10 +7,9 @@ import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
 import type { SessionListItem, SessionStatus } from '~/schemas/sessions'
 
-const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated' | 'abandoned'> = {
+const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
   active: 'active',
   completed: 'completed',
-  escalated: 'escalated',
   abandoned: 'abandoned',
 }
 

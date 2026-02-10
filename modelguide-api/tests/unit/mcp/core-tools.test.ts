@@ -6,8 +6,8 @@ import { describe, expect, test } from "bun:test";
 import { CORE_TOOL_COUNT, registerCoreTools } from "@features/mcp/core-tools";
 
 describe("CORE_TOOL_COUNT", () => {
-  test("equals 5", () => {
-    expect(CORE_TOOL_COUNT).toBe(5);
+  test("equals 4", () => {
+    expect(CORE_TOOL_COUNT).toBe(4);
   });
 });
 
@@ -34,11 +34,11 @@ describe("registerCoreTools", () => {
     return { server, registeredTools };
   }
 
-  test("registers exactly 5 tools", () => {
+  test("registers exactly 4 tools", () => {
     const { server, registeredTools } = createMockServer();
     registerCoreTools(server as never, "org-1", "agent-1");
 
-    expect(registeredTools).toHaveLength(5);
+    expect(registeredTools).toHaveLength(4);
   });
 
   test("registers all expected tool names", () => {
@@ -48,7 +48,6 @@ describe("registerCoreTools", () => {
     const names = registeredTools.map((t) => t.name);
     expect(names).toContain("core_create_session");
     expect(names).toContain("core_end_session");
-    expect(names).toContain("core_escalate_session");
     expect(names).toContain("core_add_messages");
     expect(names).toContain("core_rate_session");
   });
@@ -89,17 +88,6 @@ describe("registerCoreTools", () => {
     registerCoreTools(server as never, "org-1", "agent-1");
 
     const tool = registeredTools.find((t) => t.name === "core_end_session")!;
-    expect(tool.schema.session_id).toBeDefined();
-    expect(Object.keys(tool.schema)).toEqual(["session_id"]);
-  });
-
-  test("core_escalate_session schema has session_id", () => {
-    const { server, registeredTools } = createMockServer();
-    registerCoreTools(server as never, "org-1", "agent-1");
-
-    const tool = registeredTools.find(
-      (t) => t.name === "core_escalate_session",
-    )!;
     expect(tool.schema.session_id).toBeDefined();
     expect(Object.keys(tool.schema)).toEqual(["session_id"]);
   });

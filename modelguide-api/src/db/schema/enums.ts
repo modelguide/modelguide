@@ -44,7 +44,6 @@ export const agentTypeEnum = pgEnum("agent_type", ["voice"]);
 export const sessionStatusEnum = pgEnum("session_status", [
   "active",
   "completed",
-  "escalated",
   "abandoned",
 ]);
 

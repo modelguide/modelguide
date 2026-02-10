@@ -13,7 +13,7 @@ export const channelTypeSchema = z.enum([
 
 export type ChannelType = z.infer<typeof channelTypeSchema>
 
-export const sessionStatusSchema = z.enum(['active', 'completed', 'escalated', 'abandoned'])
+export const sessionStatusSchema = z.enum(['active', 'completed', 'abandoned'])
 
 export type SessionStatus = z.infer<typeof sessionStatusSchema>
 
@@ -63,7 +63,6 @@ export const sessionListItemSchema = z.object({
   status: sessionStatusSchema,
   userIdentifier: z.string(),
   userMetadata: z.record(z.unknown()).optional(),
-  escalationRef: z.string().nullable(),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   durationSeconds: z.number().nullable(),

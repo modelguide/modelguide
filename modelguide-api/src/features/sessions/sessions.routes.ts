@@ -53,8 +53,7 @@ const sessionResponseSchema = z.object({
   channelType: z.string(),
   userIdentifier: z.string().nullable(),
   userMetadata: z.record(z.unknown()),
-  status: z.enum(["active", "completed", "escalated", "abandoned"]),
-  escalationRef: z.string().nullable(),
+  status: z.enum(["active", "completed", "abandoned"]),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   metadata: z.record(z.unknown()),
@@ -90,8 +89,7 @@ const sessionDetailSchema = z.object({
   channelType: z.string(),
   userIdentifier: z.string().nullable(),
   userMetadata: z.record(z.unknown()),
-  status: z.enum(["active", "completed", "escalated", "abandoned"]),
-  escalationRef: z.string().nullable(),
+  status: z.enum(["active", "completed", "abandoned"]),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   metadata: z.record(z.unknown()),
@@ -126,24 +124,11 @@ const createSessionSchema = z.object({
   }),
 });
 
-const updateSessionSchema = z
-  .object({
-    status: z
-      .enum(["completed", "escalated", "abandoned"])
-      .optional()
-      .openapi({ description: "New session status (terminal)" }),
-    escalationRef: z
-      .string()
-      .max(255)
-      .optional()
-      .openapi({ description: "Escalation reference" }),
-  })
-  .refine(
-    (data) => data.status !== undefined || data.escalationRef !== undefined,
-    {
-      message: "At least one of 'status' or 'escalationRef' must be provided",
-    },
-  );
+const updateSessionSchema = z.object({
+  status: z
+    .enum(["completed", "abandoned"])
+    .openapi({ description: "New session status (terminal)" }),
+});
 
 const createMessageSchema = z.object({
   role: z.enum(["user", "assistant"]).openapi({ example: "user" }),
@@ -172,7 +157,7 @@ const sessionFiltersSchema = paginationSchema.extend({
     description: "Filter by agent ID",
   }),
   status: z
-    .enum(["active", "completed", "escalated", "abandoned"])
+    .enum(["active", "completed", "abandoned"])
     .optional()
     .openapi({ description: "Filter by status" }),
   channelType: z
@@ -234,7 +219,6 @@ function formatSession(
     userIdentifier: session.userIdentifier,
     userMetadata: session.userMetadata ?? {},
     status: session.status,
-    escalationRef: session.escalationRef,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
     metadata: session.metadata ?? {},
@@ -262,7 +246,6 @@ function formatSessionDetail(
     userIdentifier: session.userIdentifier,
     userMetadata: session.userMetadata ?? {},
     status: session.status,
-    escalationRef: session.escalationRef,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
     metadata: session.metadata ?? {},
@@ -303,7 +286,6 @@ function formatCreatedSession(session: Session) {
     userIdentifier: session.userIdentifier,
     userMetadata: session.userMetadata ?? {},
     status: session.status,
-    escalationRef: session.escalationRef,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
     metadata: session.metadata ?? {},
@@ -455,7 +437,7 @@ const updateSessionRoute = createRoute({
   tags: ["Sessions"],
   summary: "Update session",
   description:
-    "Updates session status or escalation ref. Only allows transitions from active to terminal states.",
+    "Updates session status. Only allows transitions from active to terminal states.",
   security: [{ bearerAuth: [] }],
   request: {
     params: sessionIdParams,

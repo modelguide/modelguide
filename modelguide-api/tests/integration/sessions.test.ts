@@ -353,35 +353,6 @@ describe("PATCH /api/sessions/:id", () => {
     expect(response.status).toBe(409);
   });
 
-  test("updates escalationRef (200)", async () => {
-    // Create a new active session for this test
-    const createRes = await request("/api/sessions", {
-      method: "POST",
-      headers: pizzaAgentHeaders,
-      body: JSON.stringify({
-        channelType: "voice",
-        userIdentifier: "+6666666666",
-      }),
-    });
-    const created = await createRes.json();
-    createdSessionIds.push(created.id);
-
-    const response = await request(`/api/sessions/${created.id}`, {
-      method: "PATCH",
-      headers: pizzaAgentHeaders,
-      body: JSON.stringify({
-        status: "escalated",
-        escalationRef: "TICKET-123",
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-
-    expect(body.status).toBe("escalated");
-    expect(body.escalationRef).toBe("TICKET-123");
-  });
-
   test("rejects unauthenticated request (401)", async () => {
     const response = await request(`/api/sessions/${updateSessionId}`, {
       method: "PATCH",

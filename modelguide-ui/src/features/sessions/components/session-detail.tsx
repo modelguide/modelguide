@@ -1,4 +1,3 @@
-import { AlertTriangle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -9,10 +8,9 @@ import { formatDate, formatDuration } from '~/lib/utils'
 import type { SessionDetail as SessionDetailType, SessionStatus } from '~/schemas/sessions'
 import { Transcript } from './transcript'
 
-const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'escalated' | 'abandoned'> = {
+const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
   active: 'active',
   completed: 'completed',
-  escalated: 'escalated',
   abandoned: 'abandoned',
 }
 
@@ -31,19 +29,6 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
 
   return (
     <div className="space-y-6">
-      {/* Escalation Banner */}
-      {session.status === 'escalated' && session.escalationRef && (
-        <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning-muted p-4">
-          <AlertTriangle className="h-5 w-5 text-warning" />
-          <div>
-            <p className="text-sm font-semibold text-warning">Session Escalated</p>
-            <p className="mt-0.5 text-xs text-fg-secondary">
-              Reference: <span className="font-mono">{session.escalationRef}</span>
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Session Info - Matching sessions list columns */}
       <Card>
         <CardContent className="pt-6">

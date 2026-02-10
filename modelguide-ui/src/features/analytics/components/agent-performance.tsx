@@ -60,7 +60,6 @@ export function AgentPerformance({ agents, isLoading }: AgentPerformanceProps) {
                 <th className="pb-3 pr-4 text-left font-medium text-fg-muted">Agent</th>
                 <th className="pb-3 pr-4 text-right font-medium text-fg-muted">Sessions</th>
                 <th className="pb-3 pr-4 text-right font-medium text-fg-muted">Resolution</th>
-                <th className="pb-3 pr-4 text-right font-medium text-fg-muted">Escalation</th>
                 <th className="pb-3 pr-4 text-right font-medium text-fg-muted">Avg Duration</th>
                 <th className="pb-3 text-right font-medium text-fg-muted">CSAT</th>
               </tr>
@@ -80,14 +79,6 @@ export function AgentPerformance({ agents, isLoading }: AgentPerformanceProps) {
                     })}`}
                   >
                     {formatPercent(agent.resolution_rate)}
-                  </td>
-                  <td
-                    className={`py-3 pr-4 text-right font-mono ${rateColor(agent.escalation_rate, {
-                      green: (v) => v <= 0.1,
-                      red: (v) => v > 0.3,
-                    })}`}
-                  >
-                    {formatPercent(agent.escalation_rate)}
                   </td>
                   <td className="py-3 pr-4 text-right font-mono text-fg-primary">
                     {agent.avg_duration_seconds != null
