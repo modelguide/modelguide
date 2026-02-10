@@ -78,6 +78,13 @@
       "when": 1770583101046,
       "tag": "0010_reflective_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1770652800000,
+      "tag": "0011_add-agent-platform",
+      "breakpoints": true
     }
   ]
 }

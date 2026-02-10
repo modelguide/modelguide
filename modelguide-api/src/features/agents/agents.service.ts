@@ -10,6 +10,7 @@ import {
   apiKeys,
   connectorTools,
   connectors,
+  secrets,
 } from "@db/schema";
 import { generateApiKey } from "@lib/crypto";
 import { Errors } from "@lib/errors";
@@ -21,6 +22,7 @@ import {
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 
 type AgentType = (typeof agents.agentType.enumValues)[number];
+type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
 
 // ============================================================================
 // Helpers
@@ -47,7 +49,11 @@ async function requireAgent(tx: Transaction, agentId: string) {
 export async function listAgents(
   orgId: string,
   pagination: PaginationParams,
-  filters?: { isActive?: boolean; agentType?: AgentType },
+  filters?: {
+    isActive?: boolean;
+    agentType?: AgentType;
+    agentPlatform?: AgentPlatform;
+  },
 ) {
   const { page, pageSize } = pagination;
   const offset = getOffset(page, pageSize);
@@ -59,6 +65,9 @@ export async function listAgents(
     }
     if (filters?.agentType) {
       conditions.push(eq(agents.agentType, filters.agentType));
+    }
+    if (filters?.agentPlatform) {
+      conditions.push(eq(agents.agentPlatform, filters.agentPlatform));
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -92,12 +101,24 @@ export async function getAgentById(orgId: string, agentId: string) {
       throw Errors.agentNotFound(agentId);
     }
 
-    const [activeKey] = await tx
-      .select({ keyPrefix: apiKeys.keyPrefix })
-      .from(apiKeys)
-      .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true)));
+    const [[activeKey], [elevenLabsSecret]] = await Promise.all([
+      tx
+        .select({ keyPrefix: apiKeys.keyPrefix })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true))),
+      tx
+        .select({ id: secrets.id })
+        .from(secrets)
+        .where(
+          and(eq(secrets.ownerType, "agent"), eq(secrets.ownerId, agentId)),
+        ),
+    ]);
 
-    return { ...agent, keyPrefix: activeKey?.keyPrefix ?? null };
+    return {
+      ...agent,
+      keyPrefix: activeKey?.keyPrefix ?? null,
+      hasElevenLabsKey: !!elevenLabsSecret,
+    };
   });
 }
 
@@ -107,6 +128,8 @@ export async function createAgent(
     name: string;
     description?: string;
     agentType?: AgentType;
+    agentPlatform?: AgentPlatform;
+    metadata?: Record<string, unknown>;
   },
   createdBy: string,
 ) {
@@ -118,6 +141,8 @@ export async function createAgent(
         name: data.name,
         description: data.description,
         agentType: data.agentType ?? "voice",
+        agentPlatform: data.agentPlatform ?? "custom",
+        metadata: data.metadata ?? {},
         isActive: false,
         createdBy,
       })
@@ -146,6 +171,7 @@ export async function updateAgent(
     name?: string;
     description?: string;
     metadata?: Record<string, unknown>;
+    agentPlatform?: AgentPlatform;
   },
 ) {
   const [updated] = await forOrg(orgId, (tx) =>

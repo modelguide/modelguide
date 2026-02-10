@@ -17,6 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import {
+  agentPlatformEnum,
   agentTypeEnum,
   channelTypeEnum,
   connectorTypeEnum,
@@ -359,6 +360,9 @@ export const agents = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     agentType: agentTypeEnum("agent_type").notNull().default("voice"),
+    agentPlatform: agentPlatformEnum("agent_platform")
+      .notNull()
+      .default("custom"),
     isActive: boolean("is_active").notNull().default(true),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",

@@ -120,61 +120,59 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
           </div>
 
           {/* Call metadata from ElevenLabs */}
-          {session.metadata && Object.keys(session.metadata).length > 0 && (() => {
-            const meta = session.metadata as Record<string, unknown>
-            return (
-              <div className="mt-4 border-t border-fg-subtle/10 pt-4">
-                {meta.transcript_summary && (
-                  <p className="mb-3 text-sm italic text-fg-secondary">
-                    {String(meta.transcript_summary)}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-fg-muted">
-                  {meta.llm_model && (
-                    <span>
-                      Model:{' '}
-                      <span className="font-mono text-fg-secondary">
-                        {String(meta.llm_model)}
-                      </span>
-                    </span>
+          {session.metadata &&
+            Object.keys(session.metadata).length > 0 &&
+            (() => {
+              const meta = session.metadata as Record<string, unknown>
+              return (
+                <div className="mt-4 border-t border-fg-subtle/10 pt-4">
+                  {meta.transcript_summary && (
+                    <p className="mb-3 text-sm italic text-fg-secondary">
+                      {String(meta.transcript_summary)}
+                    </p>
                   )}
-                  {meta.llm_total_tokens ? (
-                    <span>
-                      Tokens:{' '}
-                      <span className="text-fg-secondary">
-                        {Number(meta.llm_input_tokens).toLocaleString()} in /{' '}
-                        {Number(meta.llm_output_tokens).toLocaleString()} out
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-fg-muted">
+                    {meta.llm_model && (
+                      <span>
+                        Model:{' '}
+                        <span className="font-mono text-fg-secondary">
+                          {String(meta.llm_model)}
+                        </span>
                       </span>
-                    </span>
-                  ) : null}
-                  {meta.cost_credits ? (
-                    <span>
-                      Cost:{' '}
-                      <span className="text-fg-secondary">
-                        {String(meta.cost_credits)} credits
+                    )}
+                    {meta.llm_total_tokens ? (
+                      <span>
+                        Tokens:{' '}
+                        <span className="text-fg-secondary">
+                          {Number(meta.llm_input_tokens).toLocaleString()} in /{' '}
+                          {Number(meta.llm_output_tokens).toLocaleString()} out
+                        </span>
                       </span>
-                    </span>
-                  ) : null}
-                  {meta.call_successful && (
-                    <span>
-                      Result:{' '}
-                      <span className="text-fg-secondary">
-                        {String(meta.call_successful)}
+                    ) : null}
+                    {meta.cost_credits ? (
+                      <span>
+                        Cost:{' '}
+                        <span className="text-fg-secondary">
+                          {String(meta.cost_credits)} credits
+                        </span>
                       </span>
-                    </span>
-                  )}
-                  {meta.termination_reason && (
-                    <span>
-                      Ended:{' '}
-                      <span className="text-fg-secondary">
-                        {String(meta.termination_reason)}
+                    ) : null}
+                    {meta.call_successful && (
+                      <span>
+                        Result:{' '}
+                        <span className="text-fg-secondary">{String(meta.call_successful)}</span>
                       </span>
-                    </span>
-                  )}
+                    )}
+                    {meta.termination_reason && (
+                      <span>
+                        Ended:{' '}
+                        <span className="text-fg-secondary">{String(meta.termination_reason)}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )
-          })()}
+              )
+            })()}
         </CardContent>
       </Card>
 
