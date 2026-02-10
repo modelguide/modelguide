@@ -1,7 +1,9 @@
-import { AlertCircle, ArrowLeft, CheckCircle, Mail } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { AlertCircle, ArrowLeft, CheckCircle, Eye, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Label } from '~/components/ui/label'
+import { getApiBaseUrl } from '~/lib/api-base'
 import { magicLinkRequestSchema } from '~/schemas/auth'
 import { useAuthStore } from '~/stores/auth'
 
@@ -155,6 +157,8 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
         Send magic link
       </Button>
 
+      <DemoSection redirectTo={redirectTo} />
+
       {import.meta.env.DEV ? <DevAccounts onSelect={setEmail} /> : null}
     </form>
   )
@@ -164,6 +168,86 @@ const DEV_ACCOUNTS = [
   { email: 'delivered+admin-pizza-palace@resend.dev', role: 'admin' },
   { email: 'delivered+support-pizza-palace@resend.dev', role: 'support' },
 ] as const
+
+function DemoSection({ redirectTo }: { redirectTo?: string }) {
+  const demoLogin = useAuthStore((s) => s.demoLogin)
+  const navigate = useNavigate()
+  const [demoAvailable, setDemoAvailable] = useState<boolean | null>(null)
+  const [demoEmail, setDemoEmail] = useState('')
+  const [demoError, setDemoError] = useState<string | null>(null)
+  const [demoLoading, setDemoLoading] = useState(false)
+
+  useEffect(() => {
+    const baseUrl = getApiBaseUrl()
+    fetch(`${baseUrl}/config`)
+      .then((r) => {
+        if (!r.ok) throw new Error('config fetch failed')
+        return r.json()
+      })
+      .then((data: { demoMode: boolean }) => setDemoAvailable(data.demoMode))
+      .catch(() => setDemoAvailable(false))
+  }, [])
+
+  if (demoAvailable !== true) return null
+
+  const handleDemoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setDemoError(null)
+
+    const result = magicLinkRequestSchema.safeParse({ email: demoEmail })
+    if (!result.success) {
+      setDemoError(result.error.errors[0].message)
+      return
+    }
+
+    setDemoLoading(true)
+    try {
+      await demoLogin(demoEmail)
+      navigate({ to: redirectTo || '/' })
+    } catch (err) {
+      setDemoError(err instanceof Error ? err.message : 'Demo login failed')
+    } finally {
+      setDemoLoading(false)
+    }
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-fg-subtle/20" />
+        <span className="text-xs text-fg-muted">or</span>
+        <div className="h-px flex-1 bg-fg-subtle/20" />
+      </div>
+
+      <form onSubmit={handleDemoSubmit} className="mt-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm text-fg-secondary">
+          <Eye className="h-4 w-4 text-brand-500" />
+          <span className="font-medium">Try the Demo</span>
+        </div>
+        <input
+          type="email"
+          value={demoEmail}
+          onChange={(e) => setDemoEmail(e.target.value)}
+          placeholder="your@email.com"
+          autoComplete="email"
+          disabled={demoLoading}
+          required
+          className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-2.5 text-sm text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
+        />
+        {demoError ? (
+          <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-2.5 text-xs text-error">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>{demoError}</span>
+          </div>
+        ) : null}
+        <Button type="submit" variant="secondary" loading={demoLoading} className="w-full">
+          <Eye className="h-4 w-4" />
+          Start Demo
+        </Button>
+      </form>
+    </div>
+  )
+}
 
 function DevAccounts({ onSelect }: { onSelect: (email: string) => void }) {
   return (

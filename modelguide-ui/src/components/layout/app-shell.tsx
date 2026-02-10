@@ -1,6 +1,7 @@
 import { Outlet } from '@tanstack/react-router'
 import { useState } from 'react'
 import { cn } from '~/lib/cn'
+import { DemoBanner } from './demo-banner'
 import { Header } from './header'
 import { Sidebar } from './sidebar'
 
@@ -8,7 +9,7 @@ export interface AppShellProps {
   user: {
     name: string
     email: string
-    role: 'admin' | 'support'
+    role: 'admin' | 'support' | 'viewer'
     avatarUrl?: string
   }
   pageTitle?: string
@@ -42,6 +43,7 @@ export function AppShell({ user, pageTitle, onLogout }: AppShellProps) {
 
       {/* Main content area */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {user.role === 'viewer' && <DemoBanner />}
         <Header
           title={pageTitle}
           showMenuButton

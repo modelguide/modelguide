@@ -13,13 +13,13 @@ import type { MiddlewareHandler } from "hono";
  */
 export const Permissions = {
   // User management
-  "users:read": ["admin", "support"],
+  "users:read": ["admin", "support", "viewer"],
   "users:create": ["admin"],
   "users:update": ["admin"],
   "users:delete": ["admin"],
 
   // Agent management
-  "agents:read": ["admin", "support"],
+  "agents:read": ["admin", "support", "viewer"],
   "agents:create": ["admin"],
   "agents:update": ["admin"],
   "agents:delete": ["admin"],
@@ -27,36 +27,36 @@ export const Permissions = {
   "agents:generate-key": ["admin"],
 
   // Connector management
-  "connectors:read": ["admin", "support"],
+  "connectors:read": ["admin", "support", "viewer"],
   "connectors:create": ["admin"],
   "connectors:update": ["admin"],
   "connectors:delete": ["admin"],
 
   // Tool management
-  "tools:read": ["admin", "support"],
+  "tools:read": ["admin", "support", "viewer"],
   "tools:assign": ["admin"],
   "tools:unassign": ["admin"],
 
   // Secret management
-  "secrets:read": ["admin"],
+  "secrets:read": ["admin", "viewer"],
   "secrets:create": ["admin"],
   "secrets:update": ["admin"],
   "secrets:delete": ["admin"],
 
   // Session management
-  "sessions:read": ["admin", "support"],
+  "sessions:read": ["admin", "support", "viewer"],
   "sessions:update": ["support", "admin"],
 
   // Feedback management
-  "feedback:read": ["admin", "support"],
+  "feedback:read": ["admin", "support", "viewer"],
   "feedback:create": ["admin", "support"],
   "feedback:update": ["admin", "support"],
 
   // Analytics
-  "analytics:read": ["admin", "support"],
+  "analytics:read": ["admin", "support", "viewer"],
 
   // Organization management
-  "organization:read": ["admin", "support"],
+  "organization:read": ["admin", "support", "viewer"],
   "organization:update": ["admin"],
 } as const;
 

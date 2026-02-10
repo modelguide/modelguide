@@ -6,6 +6,7 @@ import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Spinner } from '~/components/ui/spinner'
 import { SessionDetail } from '~/features/sessions/components/session-detail'
 import { api } from '~/lib/api'
+import { useCanMutate } from '~/lib/permissions'
 import type { SessionDetail as SessionDetailType } from '~/schemas/sessions'
 
 export const Route = createFileRoute('/_authenticated/sessions/$id')({
@@ -14,6 +15,7 @@ export const Route = createFileRoute('/_authenticated/sessions/$id')({
 
 function SessionDetailPage() {
   const { id } = Route.useParams()
+  const canMutate = useCanMutate()
   const [ratingOpen, setRatingOpen] = useState(false)
 
   const {
@@ -54,7 +56,10 @@ function SessionDetailPage() {
         </div>
       ) : session ? (
         <>
-          <SessionDetail session={session} onRate={() => setRatingOpen(true)} />
+          <SessionDetail
+            session={session}
+            onRate={canMutate ? () => setRatingOpen(true) : undefined}
+          />
           <RatingDialog
             sessionId={id}
             open={ratingOpen}

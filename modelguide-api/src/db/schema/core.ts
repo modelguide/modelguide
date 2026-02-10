@@ -30,6 +30,26 @@ import {
 } from "./enums";
 
 // ============================================================================
+// Demo Users (Lead capture — no RLS)
+// ============================================================================
+
+export const demoUsers = pgTable(
+  "demo_users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: varchar("email", { length: 255 }).notNull(),
+    source: varchar("source", { length: 100 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("demo_users_email_idx").on(table.email),
+    index("demo_users_created_at_idx").on(table.createdAt),
+  ],
+);
+
+// ============================================================================
 // Organizations
 // ============================================================================
 

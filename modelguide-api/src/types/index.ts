@@ -3,7 +3,7 @@ import type { Env } from "@/env";
 /**
  * User roles for platform access
  */
-export type UserRole = "admin" | "support";
+export type UserRole = "admin" | "support" | "viewer";
 
 /**
  * Authenticated user information
@@ -14,6 +14,7 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   organizationId: string;
+  demo?: boolean;
 }
 
 /**

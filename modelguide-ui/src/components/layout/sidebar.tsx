@@ -9,7 +9,6 @@ interface NavItem {
   label: string
   href: string
   icon: ReactNode
-  adminOnly?: boolean
 }
 
 const mainNav: NavItem[] = [
@@ -19,23 +18,23 @@ const mainNav: NavItem[] = [
 ]
 
 const adminNav: NavItem[] = [
-  { label: 'Agents', href: '/agents', icon: <Bot className="h-4 w-4" />, adminOnly: true },
-  { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" />, adminOnly: true },
-  { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" />, adminOnly: true },
+  { label: 'Agents', href: '/agents', icon: <Bot className="h-4 w-4" /> },
+  { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" /> },
+  { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" /> },
 ]
 
 interface SidebarProps {
   user: {
     name: string
     email: string
-    role: 'admin' | 'support'
+    role: 'admin' | 'support' | 'viewer'
     avatarUrl?: string
   }
 }
 
 export function Sidebar({ user }: SidebarProps) {
   const location = useLocation()
-  const isAdmin = user.role === 'admin'
+  const canBrowseAdmin = user.role === 'admin' || user.role === 'viewer'
 
   return (
     <aside className="relative flex h-screen w-[260px] flex-col border-r border-fg-subtle/10 bg-bg-elevated">
@@ -70,7 +69,7 @@ export function Sidebar({ user }: SidebarProps) {
         </div>
 
         {/* Admin Section */}
-        {isAdmin && (
+        {canBrowseAdmin && (
           <div>
             <h3 className="mb-3 px-3 font-display text-[10px] font-semibold uppercase tracking-[0.2em] text-fg-subtle">
               Admin

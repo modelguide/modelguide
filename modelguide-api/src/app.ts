@@ -5,6 +5,7 @@ import { env } from "@/env";
 import { agentRoutes } from "@features/agents";
 import { analyticsRoutes } from "@features/analytics";
 import { connectorRoutes } from "@features/connectors";
+import { demoRoutes } from "@features/demo";
 import { feedbackRoutes } from "@features/feedback";
 import { mcpHandler } from "@features/mcp";
 import { organizationRoutes } from "@features/organizations";
@@ -13,6 +14,7 @@ import { sessionRoutes } from "@features/sessions";
 import { authRoutes, userRoutes } from "@features/users";
 import { elevenlabsWebhooks } from "@features/webhooks";
 import { createApp, createRouter } from "@lib/create-app";
+import { rateLimit } from "@lib/middleware";
 
 const healthRoute = createRoute({
   method: "get",
@@ -48,6 +50,7 @@ apiRouter.openapi(healthRoute, (c) => {
 
 apiRouter.route("/agents", agentRoutes);
 apiRouter.route("/analytics", analyticsRoutes);
+apiRouter.use("/auth/*", rateLimit({ limit: 10, windowSeconds: 60 }));
 apiRouter.route("/auth", authRoutes);
 apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
@@ -55,6 +58,33 @@ apiRouter.route("/secrets", secretsRoutes);
 apiRouter.route("/sessions", sessionRoutes);
 apiRouter.route("/sessions", feedbackRoutes); // sub-resource: /:id/feedback
 apiRouter.route("/users", userRoutes);
+
+// Config endpoint (always available — returns demoMode flag)
+const configRoute = createRoute({
+  method: "get",
+  path: "/config",
+  tags: ["Config"],
+  summary: "Get public config",
+  responses: {
+    200: {
+      description: "Public configuration",
+      content: {
+        "application/json": {
+          schema: z.object({ demoMode: z.boolean() }),
+        },
+      },
+    },
+  },
+});
+
+apiRouter.openapi(configRoute, (c) => {
+  return c.json({ demoMode: env.DEMO_MODE_ENABLED === true }, 200);
+});
+
+// Demo routes (conditionally mounted)
+if (env.DEMO_MODE_ENABLED) {
+  apiRouter.route("/", demoRoutes);
+}
 
 const app = createApp();
 app.route("/api", apiRouter);
