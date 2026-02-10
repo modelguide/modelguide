@@ -7,7 +7,7 @@ import { pgEnum } from "drizzle-orm/pg-core";
 /**
  * User roles for platform users (admin, support)
  */
-export const userRoleEnum = pgEnum("user_role", ["admin", "support"]);
+export const userRoleEnum = pgEnum("user_role", ["admin", "support", "viewer"]);
 
 /**
  * Connector types indicating how the connector communicates

@@ -9,6 +9,7 @@ import type {
   connectorTools,
   connectors,
   connectorsCatalog,
+  demoUsers,
   magicTokens,
   organizations,
   secrets,
@@ -66,3 +67,6 @@ export type NewSessionFeedback = InferInsertModel<typeof sessionFeedback>;
 
 export type SessionLink = InferSelectModel<typeof sessionLinks>;
 export type NewSessionLink = InferInsertModel<typeof sessionLinks>;
+
+export type DemoUser = InferSelectModel<typeof demoUsers>;
+export type NewDemoUser = InferInsertModel<typeof demoUsers>;

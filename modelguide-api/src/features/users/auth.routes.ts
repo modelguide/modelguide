@@ -2,45 +2,20 @@
  * Authentication routes for magic link login with refresh token rotation
  */
 
-import { env } from "@/env";
 import { createRoute, z } from "@hono/zod-openapi";
+import {
+  REFRESH_COOKIE,
+  clearRefreshCookie,
+  setRefreshCookie,
+} from "@lib/cookies";
 import { createRouter } from "@lib/create-app";
-import { parseDuration, verifyRefreshJWT } from "@lib/jwt";
+import { verifyRefreshJWT } from "@lib/jwt";
 import { csrfProtection, getCurrentUser, requireUser } from "@lib/middleware";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { getCookie } from "hono/cookie";
 import { requestMagicLink, verifyMagicToken } from "./auth.service";
 import { revokeSession, rotateRefreshToken } from "./refresh-token.service";
 
 const router = createRouter();
-
-// ============================================================================
-// Cookie helpers
-// ============================================================================
-
-const useSecureCookies = new URL(env.APP_URL).protocol === "https:";
-const REFRESH_COOKIE = useSecureCookies
-  ? "__Host-refresh_token"
-  : "refresh_token";
-
-function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
-  const maxAge = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
-  setCookie(c, REFRESH_COOKIE, token, {
-    httpOnly: true,
-    secure: useSecureCookies,
-    sameSite: "Strict",
-    path: "/",
-    maxAge,
-  });
-}
-
-function clearRefreshCookie(c: Parameters<typeof deleteCookie>[0]) {
-  deleteCookie(c, REFRESH_COOKIE, {
-    httpOnly: true,
-    secure: useSecureCookies,
-    sameSite: "Strict",
-    path: "/",
-  });
-}
 
 // ============================================================================
 // Schemas
@@ -76,7 +51,7 @@ const verifyResponseSchema = z.object({
       name: z.string().openapi({
         example: "Admin User",
       }),
-      role: z.enum(["admin", "support"]).openapi({
+      role: z.enum(["admin", "support", "viewer"]).openapi({
         example: "admin",
       }),
       organizationId: z.string().uuid().openapi({
@@ -99,7 +74,7 @@ const meResponseSchema = z.object({
   name: z.string().openapi({
     example: "Admin User",
   }),
-  role: z.enum(["admin", "support"]).openapi({
+  role: z.enum(["admin", "support", "viewer"]).openapi({
     example: "admin",
     description: "User role: admin has full access, support has limited access",
   }),

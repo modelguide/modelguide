@@ -9,6 +9,7 @@ interface AuthState {
   isAuthenticated: boolean
   requestMagicLink: (email: string) => Promise<void>
   verifyToken: (token: string) => Promise<void>
+  demoLogin: (email: string, source?: string) => Promise<void>
   logout: () => Promise<void>
   setAuth: (user: User, token: string) => void
   refreshAccessToken: () => Promise<boolean>
@@ -70,6 +71,34 @@ export const useAuthStore = create<AuthState>()(
             message = error.message || message
           } catch {
             // Non-JSON error response (e.g., 502 gateway timeout)
+          }
+          throw new Error(message)
+        }
+
+        const data: AuthResponse = await response.json()
+        set({
+          user: data.user,
+          token: data.token,
+          isAuthenticated: true,
+        })
+      },
+
+      demoLogin: async (email: string, source?: string) => {
+        const baseUrl = getApiBaseUrl()
+        const response = await fetch(`${baseUrl}/auth/demo-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, source }),
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          let message = 'Demo login failed'
+          try {
+            const error = await response.json()
+            message = error.message || message
+          } catch {
+            // Non-JSON error response
           }
           throw new Error(message)
         }

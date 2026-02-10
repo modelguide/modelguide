@@ -23,6 +23,7 @@ import {
   users,
 } from "../schema";
 import { connectorsCatalogSeed } from "./connectors-catalog";
+import { seedDemoOrg } from "./demo-data";
 
 type SeedDb = PostgresJsDatabase<typeof schema>;
 
@@ -121,10 +122,14 @@ async function seedAll(db: SeedDb) {
   console.log("\n--- Seeding Burger Barn data ---");
   await seedOrgData(db, burgerOrg.id, medusaCatalog.id, "burger-barn");
 
+  // 3. Seed demo organization
+  await seedDemoOrg(db);
+
   console.log("\nSeed completed successfully!");
   console.log("\nTest credentials:");
   console.log("  Pizza Palace: delivered+admin-pizza-palace@resend.dev");
   console.log("  Burger Barn:  delivered+admin-burger-barn@resend.dev");
+  console.log("  Demo viewer:  demo-viewer@modelguide.dev (viewer role)");
 }
 
 async function seedOrgData(

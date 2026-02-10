@@ -37,6 +37,7 @@ export async function generateJWT(user: AuthUser): Promise<string> {
       name: user.name,
       role: user.role,
       org: user.organizationId,
+      ...(user.demo ? { demo: true } : {}),
       iat: now,
       exp: now + expiresIn,
     },
@@ -65,6 +66,7 @@ export async function verifyJWT(token: string): Promise<AuthUser | null> {
       name: (payload.name as string) || "",
       role: payload.role as UserRole,
       organizationId: payload.org as string,
+      ...(payload.demo ? { demo: true } : {}),
     };
   } catch {
     return null;
