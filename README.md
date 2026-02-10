@@ -49,30 +49,7 @@ Model Guide sits between your AI agents and your business systems. It doesn't ru
 
 **Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  YOUR VOICE / CHAT PLATFORM                              │
-│  ElevenLabs · Pipecat · Vapi · Retell · custom           │
-│                                                          │
-│  Customer ←→ STT ←→ LLM ←→ TTS ←→ Customer              │
-└────────────────────┬─────────────────────────────────────┘
-                     │ MCP (Streamable HTTP)
-                     ▼
-┌──────────────────────────────────────────────────────────┐
-│  MODEL GUIDE                                             │
-│                                                          │
-│  Agents ─────── config, API keys, tool assignments       │
-│  Connectors ─── e-commerce, helpdesk + build your own     │
-│  Sessions ───── transcripts, tool traces, feedback       │
-│  Dashboard ──── filter, review, evaluate, compare        │
-└────────────────────┬─────────────────────────────────────┘
-                     │ HTTP
-                     ▼
-┌──────────────────────────────────────────────────────────┐
-│  YOUR BUSINESS SYSTEMS                                   │
-│  Medusa · Zendesk · your ERP · any REST API              │
-└──────────────────────────────────────────────────────────┘
-```
+![Architecture diagram](./docs/architecture_image.png)
 
 ## Quick Start
 
