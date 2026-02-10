@@ -14,6 +14,7 @@ import type {
   secrets,
   securityTokens,
   sessionFeedback,
+  sessionLinks,
   sessionMessages,
   sessions,
   users,
@@ -62,3 +63,6 @@ export type NewSessionMessage = InferInsertModel<typeof sessionMessages>;
 
 export type SessionFeedback = InferSelectModel<typeof sessionFeedback>;
 export type NewSessionFeedback = InferInsertModel<typeof sessionFeedback>;
+
+export type SessionLink = InferSelectModel<typeof sessionLinks>;
+export type NewSessionLink = InferInsertModel<typeof sessionLinks>;

@@ -9,12 +9,13 @@
 
 import { env } from "@/env";
 import { db } from "@db/client";
-import { agents, sessionMessages, sessions } from "@db/schema";
+import { agents, sessionLinks, sessionMessages, sessions } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { getAgentSecretByType } from "@features/secrets";
+import { extractLinks } from "@features/sessions/link-extraction";
 import { convertPostCallToSession } from "./elevenlabs.converter";
 import { postCallTranscriptionPayloadSchema } from "./elevenlabs.schemas";
 
@@ -149,7 +150,13 @@ app.post("/:agentId/post-call", async (c) => {
     return c.json({ received: true, session_id: existingByExternalId.id });
   }
 
-  // 6. Store session + messages in a transaction
+  // 6. Extract links from tool outputs
+  const toolMessages = converted.messages
+    .filter((m) => m.role === "tool" && m.toolOutput)
+    .map((m) => ({ toolName: m.toolName ?? "", toolOutput: m.toolOutput }));
+  const linkRows = extractLinks(toolMessages);
+
+  // 7. Store session + messages + links in a transaction
   let sessionId: string;
 
   try {
@@ -163,6 +170,17 @@ app.post("/:agentId/post-call", async (c) => {
               ...msg,
             })),
           );
+        }
+
+        if (linkRows.length > 0) {
+          await tx
+            .insert(sessionLinks)
+            .values(
+              linkRows.map((l) => ({ ...l, sessionId: existingSessionId })),
+            )
+            .onConflictDoNothing({
+              target: [sessionLinks.sessionId, sessionLinks.url],
+            });
         }
 
         const [updated] = await tx
@@ -201,6 +219,15 @@ app.post("/:agentId/post-call", async (c) => {
             ...msg,
           })),
         );
+      }
+
+      if (linkRows.length > 0) {
+        await tx
+          .insert(sessionLinks)
+          .values(linkRows.map((l) => ({ ...l, sessionId: session.id })))
+          .onConflictDoNothing({
+            target: [sessionLinks.sessionId, sessionLinks.url],
+          });
       }
 
       return session.id;

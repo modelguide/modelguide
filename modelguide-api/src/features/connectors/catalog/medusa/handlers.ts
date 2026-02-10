@@ -119,7 +119,14 @@ export const getOrder = withMedusa(async (fetcher, ctx) => {
   const data = await fetcher<Record<string, unknown>>(
     `/store/orders/${orderId}`,
   );
-  return { success: true, data };
+  const baseUrl = ctx.config.baseUrl?.replace(/\/$/, "");
+  return {
+    success: true,
+    data,
+    ...(baseUrl && {
+      url: `${baseUrl}/app/orders/${orderId}`,
+    }),
+  };
 });
 
 // ---------------------------------------------------------------------------
@@ -196,7 +203,14 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
 
     const match = orders?.find((o) => o.display_id === displayId);
     if (match) {
-      return { success: true, data: match };
+      const baseUrl = ctx.config.baseUrl?.replace(/\/$/, "");
+      return {
+        success: true,
+        data: match,
+        ...(baseUrl && {
+          url: `${baseUrl}/app/orders/${match.id}`,
+        }),
+      };
     }
 
     offset += PAGE_SIZE;

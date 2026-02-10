@@ -77,10 +77,22 @@ export const sessionListItemSchema = z.object({
 
 export type SessionListItem = z.infer<typeof sessionListItemSchema>
 
-// Detail endpoint — includes messages + feedback
+export const sessionLinkSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  title: z.string().nullable(),
+  connectorSlug: z.string().nullable(),
+  resourceType: z.string().nullable(),
+  createdAt: z.string(),
+})
+
+export type SessionLink = z.infer<typeof sessionLinkSchema>
+
+// Detail endpoint — includes messages + feedback + links
 export const sessionDetailSchema = sessionListItemSchema.extend({
   messages: z.array(sessionMessageSchema),
   feedback: z.array(sessionFeedbackSchema),
+  links: z.array(sessionLinkSchema).optional().default([]),
 })
 
 export type SessionDetail = z.infer<typeof sessionDetailSchema>

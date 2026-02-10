@@ -2,7 +2,12 @@
  * Session management routes
  */
 
-import type { Session, SessionFeedback, SessionMessage } from "@db/schema";
+import type {
+  Session,
+  SessionFeedback,
+  SessionLink,
+  SessionMessage,
+} from "@db/schema";
 import {
   feedbackResponseSchema,
   formatFeedback,
@@ -81,6 +86,15 @@ const messageResponseSchema = z.object({
   occurredAt: z.string().nullable(),
 });
 
+const sessionLinkSchema = z.object({
+  id: z.string().uuid(),
+  url: z.string(),
+  title: z.string().nullable(),
+  connectorSlug: z.string().nullable(),
+  resourceType: z.string().nullable(),
+  createdAt: z.string(),
+});
+
 const sessionDetailSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -97,6 +111,7 @@ const sessionDetailSchema = z.object({
   durationSeconds: z.number().nullable(),
   messages: z.array(messageResponseSchema),
   feedback: z.array(feedbackResponseSchema),
+  links: z.array(sessionLinkSchema),
 });
 
 const createSessionSchema = z.object({
@@ -235,6 +250,7 @@ function formatSessionDetail(
     durationSeconds: number | null;
     messages: SessionMessage[];
     feedback: SessionFeedback[];
+    links: SessionLink[];
   },
 ) {
   return {
@@ -253,6 +269,18 @@ function formatSessionDetail(
     durationSeconds: session.durationSeconds,
     messages: session.messages.map(formatMessage),
     feedback: session.feedback.map(formatFeedback),
+    links: session.links.map(formatLink),
+  };
+}
+
+function formatLink(link: SessionLink) {
+  return {
+    id: link.id,
+    url: link.url,
+    title: link.title,
+    connectorSlug: link.connectorSlug,
+    resourceType: link.resourceType,
+    createdAt: link.createdAt.toISOString(),
   };
 }
 
