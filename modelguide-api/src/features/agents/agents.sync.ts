@@ -145,25 +145,26 @@ export async function syncAgentToElevenLabs(
   // Fetch current ElevenLabs agent state (used for MCP list + agent name)
   const elAgent = await client.conversationalAi.agents.get(elevenLabsAgentId);
 
-  try {
-    // ElevenLabs API silently ignores URL changes on update, so delete + recreate.
-    // Preserve other MCP servers that aren't managed by ModelGuide.
-    const currentMcpIds: string[] = (elAgent as any).conversationConfig?.agent?.prompt?.mcpServerIds ?? [];
+  // ElevenLabs API silently ignores URL changes on MCP server update, so we
+  // must delete + recreate.  Order: unassign from agent → delete old → create new.
+  // The new server gets reassigned to the agent in the agent configuration step.
+  const currentMcpIds: string[] = (elAgent as any).conversationConfig?.agent?.prompt?.mcpServerIds ?? [];
+  const oldMcpServerId = mcpServerId;
 
-    if (mcpServerId) {
-      // Unassign only our MCP server from agent, then delete it
-      const otherMcpIds = currentMcpIds.filter((id: string) => id !== mcpServerId);
+  try {
+    if (oldMcpServerId) {
+      // Unassign our MCP server from agent so we can delete it
+      const otherMcpIds = currentMcpIds.filter((id: string) => id !== oldMcpServerId);
       await client.conversationalAi.agents.update(elevenLabsAgentId, {
         conversationConfig: { agent: { prompt: { mcpServerIds: otherMcpIds } } } as any,
       });
-      await client.conversationalAi.mcpServers.delete(mcpServerId);
+      await client.conversationalAi.mcpServers.delete(oldMcpServerId);
     }
     const mcpServer = await client.conversationalAi.mcpServers.create({
       config: mcpConfig,
     });
-    const prevMcpServerId = mcpServerId;
     mcpServerId = mcpServer.id;
-    steps.push({ step: "MCP server", status: "success", message: prevMcpServerId ? "Recreated" : "Created" });
+    steps.push({ step: "MCP server", status: "success", message: oldMcpServerId ? "Recreated" : "Created" });
   } catch (err) {
     steps.push({
       step: "MCP server",
@@ -205,12 +206,10 @@ export async function syncAgentToElevenLabs(
     throw err;
   }
 
-  // Step 4: Assign to ElevenLabs agent (preserve other MCP servers)
+  // Step 4: Assign new MCP server + webhook to ElevenLabs agent
   try {
-    // originalMcpIds was fetched before delete; filter out old ID, add new one
-    const originalMcpIds: string[] = (elAgent as any).conversationConfig?.agent?.prompt?.mcpServerIds ?? [];
-    const oldMcpServerId = elMeta.mcpServerId as string | undefined;
-    const otherMcpIds = originalMcpIds.filter((id: string) => id !== oldMcpServerId);
+    // Preserve other MCP servers, add our new one
+    const otherMcpIds = currentMcpIds.filter((id: string) => id !== oldMcpServerId);
     const mergedMcpIds = [...otherMcpIds, mcpServerId!];
 
     await client.conversationalAi.agents.update(elevenLabsAgentId, {

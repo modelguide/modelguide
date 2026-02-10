@@ -100,13 +100,13 @@ describe("mcpErrorResponse", () => {
   test("merges extra fields into response", () => {
     const err = new AppError(ErrorCode.NOT_FOUND, "Not found");
     const result = mcpErrorResponse(err, "Fallback", {
-      tool_name: "core_end_session",
+      tool_name: "core_add_messages",
       session_id: "abc",
     });
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.error).toBe("Not found");
-    expect(parsed.tool_name).toBe("core_end_session");
+    expect(parsed.tool_name).toBe("core_add_messages");
     expect(parsed.session_id).toBe("abc");
   });
 

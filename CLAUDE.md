@@ -115,7 +115,7 @@ modelguide-api/src/
 - **Connectors Catalog:** Read-only registry of connector types (Medusa, Zendesk, Calendly)
 - **Connectors:** Org-specific instances with config referencing secrets by UUID
 - **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `pizzapalace_add_to_cart`)
-- **Core Tools:** Built-in platform tools (`core_create_session`, `core_end_session`, etc.)
+- **Core Tools:** Built-in platform tools (`core_add_messages`)
 - **requires_confirmation:** Tools that need user confirmation before execution
 
 ### API Endpoints

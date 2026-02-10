@@ -55,7 +55,7 @@ The connector slug is customizable per instance and defaults to the catalog conn
 Examples:
 - `medusa_add_to_cart` - medusa connector instance, add_to_cart tool
 - `zendesk_create_ticket` - zendesk connector instance, create_ticket tool
-- `core_create_session` - core (built-in) platform tool
+- `core_add_messages` - core (built-in) platform tool
 
 ---
 
@@ -1138,20 +1138,6 @@ Returns tools from connectors assigned to this agent (as configured via API), pl
 {
   "tools": [
     {
-      "name": "core_create_session",
-      "connector": "core",
-      "description": "Create authenticated backend session",
-      "requires_confirmation": false,
-      "input_schema": { ... }
-    },
-    {
-      "name": "core_end_session",
-      "connector": "core",
-      "description": "End the current session",
-      "requires_confirmation": false,
-      "input_schema": { ... }
-    },
-    {
       "name": "medusa_add_to_cart",
       "connector": "medusa",
       "description": "Add an item to the shopping cart",
@@ -1215,47 +1201,21 @@ Examples:
 - `medusa_add_to_cart` - medusa connector instance, add_to_cart tool
 - `medusa_confirm_order` - medusa connector instance, confirm_order tool
 - `zendesk_create_ticket` - zendesk connector instance, create_ticket tool
-- `core_create_session` - core (built-in) platform tool
+- `core_add_messages` - core (built-in) platform tool
 
 ---
 
 ### Core MCP Tools (Built-in)
 
-Platform-level tools provided by Model Guide for session management:
+Platform-level tools provided by Model Guide for message tracking:
 
-#### `core_create_session`
-Create a session for tracking the conversation. Returns a session_id used in all subsequent MCP calls.
-
-```json
-{
-  "name": "core_create_session",
-  "description": "Create a new session",
-  "input_schema": {
-    "type": "object",
-    "properties": {}
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "session_id": "uuid"
-  }
-}
-```
-
-*Note: The session_id must be passed to all subsequent tool calls (e.g., `core_end_session`, connector tools).*
-
-#### `core_end_session`
-End the session with full message history (status: completed or abandoned).
+#### `core_add_messages`
+Add conversation messages to a session. Sessions are created via the REST API (`POST /api/sessions`) before the agent interaction begins. The `session_id` is passed to the agent as context.
 
 ```json
 {
-  "name": "core_end_session",
-  "description": "End the session with full message history",
+  "name": "core_add_messages",
+  "description": "Add conversation messages to a session",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -1267,10 +1227,10 @@ End the session with full message history (status: completed or abandoned).
           "properties": {
             "role": { "type": "string", "enum": ["user", "assistant", "system", "tool"] },
             "content": { "type": "string" },
-            "timestamp": { "type": "string", "format": "date-time" },
+            "occurred_at": { "type": "string", "format": "date-time" },
             "tool_calls": { "type": "array" }
           },
-          "required": ["role", "content", "timestamp"]
+          "required": ["role", "occurred_at"]
         }
       }
     },
@@ -1285,56 +1245,12 @@ End the session with full message history (status: completed or abandoned).
   "success": true,
   "data": {
     "session_id": "uuid",
-    "status": "completed"
+    "messages_added": 2
   }
 }
 ```
 
-#### `core_escalate_session`
-Mark session for escalation to human support.
-
-```json
-{
-  "name": "core_escalate_session",
-  "description": "Escalate session to human support",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "session_id": { "type": "string" }
-    },
-    "required": ["session_id"]
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "session_id": "uuid",
-    "status": "escalated"
-  }
-}
-```
-
-#### `core_rate_session`
-Record CSAT rating from customer.
-
-```json
-{
-  "name": "core_rate_session",
-  "description": "Record customer rating",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "session_id": { "type": "string" },
-      "rating": { "type": "integer", "enum": [1, 2], "description": "1=negative, 2=positive" }
-    },
-    "required": ["session_id", "rating"]
-  }
-}
-```
+*Note: The session_id must be passed to all tool calls (core and connector tools).*
 
 ---
 
