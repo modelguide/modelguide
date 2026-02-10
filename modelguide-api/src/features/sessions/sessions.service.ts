@@ -4,7 +4,14 @@
 
 import { db } from "@db/client";
 import { forOrg } from "@db/rls";
-import { agents, sessionFeedback, sessionMessages, sessions } from "@db/schema";
+import {
+  agents,
+  sessionFeedback,
+  sessionLinks,
+  sessionMessages,
+  sessions,
+} from "@db/schema";
+import { extractLinks } from "@features/sessions/link-extraction";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
@@ -157,7 +164,7 @@ export async function getSessionById(orgId: string, sessionId: string) {
       throw Errors.sessionNotFound(sessionId);
     }
 
-    const [messages, feedback] = await Promise.all([
+    const [messages, feedback, links] = await Promise.all([
       tx
         .select()
         .from(sessionMessages)
@@ -168,6 +175,11 @@ export async function getSessionById(orgId: string, sessionId: string) {
         .from(sessionFeedback)
         .where(eq(sessionFeedback.sessionId, sessionId))
         .orderBy(asc(sessionFeedback.createdAt)),
+      tx
+        .select()
+        .from(sessionLinks)
+        .where(eq(sessionLinks.sessionId, sessionId))
+        .orderBy(asc(sessionLinks.createdAt)),
     ]);
 
     return {
@@ -179,6 +191,7 @@ export async function getSessionById(orgId: string, sessionId: string) {
       ),
       messages,
       feedback,
+      links,
     };
   });
 }
@@ -333,7 +346,28 @@ export async function addMessages(
       }
     }
 
-    return tx.insert(sessionMessages).values(rows).returning();
+    const inserted = await tx.insert(sessionMessages).values(rows).returning();
+
+    // Extract external links from tool call outputs
+    const toolCallsWithOutput = messages
+      .flatMap((msg) => msg.toolCalls ?? [])
+      .filter((tc) => tc.toolOutput)
+      .map((tc) => ({
+        toolName: tc.toolName,
+        toolOutput: tc.toolOutput as Record<string, unknown>,
+      }));
+
+    const extracted = extractLinks(toolCallsWithOutput);
+    if (extracted.length > 0) {
+      await tx
+        .insert(sessionLinks)
+        .values(extracted.map((l) => ({ ...l, sessionId })))
+        .onConflictDoNothing({
+          target: [sessionLinks.sessionId, sessionLinks.url],
+        });
+    }
+
+    return inserted;
   });
 }
 

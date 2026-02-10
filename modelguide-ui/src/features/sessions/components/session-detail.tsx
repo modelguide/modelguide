@@ -1,3 +1,5 @@
+import type { LucideIcon } from 'lucide-react'
+import { ExternalLink, Link, Package, Ticket } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -5,7 +7,11 @@ import { RatingBadge } from '~/components/ui/rating-badge'
 import { Tooltip } from '~/components/ui/tooltip'
 import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
-import type { SessionDetail as SessionDetailType, SessionStatus } from '~/schemas/sessions'
+import type {
+  SessionDetail as SessionDetailType,
+  SessionLink,
+  SessionStatus,
+} from '~/schemas/sessions'
 import { Transcript } from './transcript'
 
 const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
@@ -161,6 +167,22 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
         </CardContent>
       </Card>
 
+      {/* External Resources */}
+      {session.links && session.links.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>External Resources</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {session.links.map((link) => (
+                <ExternalLinkRow key={link.id} link={link} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Transcript */}
       <Card>
         <CardHeader>
@@ -207,6 +229,29 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
   )
 }
 
+const resourceIcons: Record<string, LucideIcon> = {
+  ticket: Ticket,
+  order: Package,
+}
+
+function ExternalLinkRow({ link }: { link: SessionLink }) {
+  const Icon = resourceIcons[link.resourceType ?? ''] ?? Link
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle px-3 py-2 transition-colors hover:border-brand-500/30 hover:bg-bg-subtle/80"
+    >
+      <Icon className="h-4 w-4 shrink-0 text-fg-muted" />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-primary">
+        {link.title ?? link.url}
+      </span>
+      {link.connectorSlug && <Badge variant="default">{link.connectorSlug}</Badge>}
+      <ExternalLink className="h-4 w-4 shrink-0 text-fg-muted" />
+    </a>
+  )
+}
 function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>

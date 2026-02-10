@@ -16,6 +16,7 @@ export interface ToolExecutionResult {
   success: boolean;
   data?: Record<string, unknown>;
   error?: string;
+  url?: string;
 }
 
 export interface ConnectorToolDefinition {

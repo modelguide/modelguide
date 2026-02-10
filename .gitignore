@@ -33,6 +33,9 @@ bun.lockb
 # Drizzle
 drizzle/meta/
 
+# Manual test payloads
+**/tests/manual/payload*.json
+
 # Claude Code
 .claude/settings.local.json
 .claude/local/

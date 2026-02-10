@@ -39,7 +39,11 @@ export const getTicket = withZendesk(async (fetcher, ctx) => {
   const data = await fetcher<Record<string, unknown>>(
     `/tickets/${ticketId}.json`,
   );
-  return { success: true, data };
+  return {
+    success: true,
+    data,
+    url: `https://${ctx.config.subdomain}.zendesk.com/agent/tickets/${ticketId}`,
+  };
 });
 
 export const createTicket = withZendesk(async (fetcher, ctx) => {
@@ -81,7 +85,14 @@ export const createTicket = withZendesk(async (fetcher, ctx) => {
     method: "POST",
     body: { ticket },
   });
-  return { success: true, data };
+  const newTicketId = (data as { ticket?: { id?: number } })?.ticket?.id;
+  return {
+    success: true,
+    data,
+    ...(newTicketId && {
+      url: `https://${ctx.config.subdomain}.zendesk.com/agent/tickets/${newTicketId}`,
+    }),
+  };
 });
 
 export const updateTicket = withZendesk(async (fetcher, ctx) => {
@@ -112,7 +123,11 @@ export const updateTicket = withZendesk(async (fetcher, ctx) => {
       body: { ticket },
     },
   );
-  return { success: true, data };
+  return {
+    success: true,
+    data,
+    url: `https://${ctx.config.subdomain}.zendesk.com/agent/tickets/${ticketId}`,
+  };
 });
 
 export const addComment = withZendesk(async (fetcher, ctx) => {
@@ -138,7 +153,11 @@ export const addComment = withZendesk(async (fetcher, ctx) => {
       },
     },
   );
-  return { success: true, data };
+  return {
+    success: true,
+    data,
+    url: `https://${ctx.config.subdomain}.zendesk.com/agent/tickets/${ticketId}`,
+  };
 });
 
 export const searchTickets = withZendesk(async (fetcher, ctx) => {
