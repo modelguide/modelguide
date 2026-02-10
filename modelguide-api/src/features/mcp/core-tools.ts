@@ -1,116 +1,25 @@
 /**
- * Core MCP tools — real session management backed by the sessions service.
+ * Core MCP tools — platform tools registered on every MCP server instance.
  */
 
-import { addFeedback } from "@features/feedback";
-import { addMessages, createSession, updateSession } from "@features/sessions";
+import { addMessages } from "@features/sessions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
-export const CORE_TOOL_COUNT = 5;
+export const CORE_TOOL_COUNT = 1;
 
 export function registerCoreTools(
   server: McpServer,
   orgId: string,
   agentId: string,
 ): void {
-  // ── core_create_session ──────────────────────────────────────────────
-  server.tool(
-    "core_create_session",
-    "Create a new conversation session",
-    {
-      channel_type: z
-        .enum([
-          "voice",
-          "web",
-          "api",
-          "slack",
-          "widget",
-          "sms",
-          "whatsapp",
-          "email",
-        ])
-        .describe("Channel type for this session"),
-      user_identifier: z
-        .string()
-        .describe("Identifier for the end-user (phone, email, etc.)"),
-      external_id: z
-        .string()
-        .optional()
-        .describe("External reference ID for correlation"),
-      user_metadata: z
-        .record(z.unknown())
-        .optional()
-        .describe("Arbitrary metadata about the user"),
-    },
-    async ({ channel_type, user_identifier, external_id, user_metadata }) => {
-      try {
-        const session = await createSession(orgId, agentId, {
-          channelType: channel_type,
-          userIdentifier: user_identifier,
-          externalId: external_id,
-          userMetadata: user_metadata as Record<string, unknown> | undefined,
-        });
-
-        return mcpResponse({
-          session_id: session.id,
-          status: session.status,
-          channel_type: session.channelType,
-        });
-      } catch (err) {
-        return mcpErrorResponse(err, "Failed to create session");
-      }
-    },
-  );
-
-  // Shared handler for status-transition tools (end, escalate)
-  function sessionStatusHandler(
-    targetStatus: "completed" | "escalated",
-    errorLabel: string,
-  ) {
-    return async ({ session_id }: { session_id: string }) => {
-      try {
-        const updated = await updateSession(orgId, session_id, agentId, {
-          status: targetStatus,
-        });
-
-        return mcpResponse({
-          session_id: updated.id,
-          status: updated.status,
-        });
-      } catch (err) {
-        return mcpErrorResponse(err, errorLabel);
-      }
-    };
-  }
-
-  // ── core_end_session ─────────────────────────────────────────────────
-  server.tool(
-    "core_end_session",
-    "End an active conversation session",
-    {
-      session_id: z.string().describe("Session ID to end"),
-    },
-    sessionStatusHandler("completed", "Failed to end session"),
-  );
-
-  // ── core_escalate_session ────────────────────────────────────────────
-  server.tool(
-    "core_escalate_session",
-    "Escalate a session to a human agent",
-    {
-      session_id: z.string().describe("Session ID to escalate"),
-    },
-    sessionStatusHandler("escalated", "Failed to escalate session"),
-  );
-
   // ── core_add_messages ────────────────────────────────────────────────
   server.tool(
     "core_add_messages",
-    "Add conversation messages to a session",
+    "Add conversation messages to the current session",
     {
-      session_id: z.string().describe("Session ID to add messages to"),
+      session_id: z.string().describe("The current session ID"),
       messages: z
         .array(
           z.object({
@@ -168,37 +77,6 @@ export function registerCoreTools(
         });
       } catch (err) {
         return mcpErrorResponse(err, "Failed to add messages");
-      }
-    },
-  );
-
-  // ── core_rate_session ────────────────────────────────────────────────
-  server.tool(
-    "core_rate_session",
-    "Record a customer satisfaction rating for a session",
-    {
-      session_id: z.string().describe("Session ID to rate"),
-      rating: z
-        .number()
-        .int()
-        .min(1)
-        .max(2)
-        .describe("Rating (1 = negative, 2 = positive)"),
-    },
-    async ({ session_id, rating }) => {
-      try {
-        await addFeedback(orgId, session_id, {
-          rating,
-          feedbackSource: "customer",
-        });
-
-        return mcpResponse({
-          session_id,
-          rating,
-          recorded: true,
-        });
-      } catch (err) {
-        return mcpErrorResponse(err, "Failed to record rating");
       }
     },
   );
