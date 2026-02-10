@@ -16,7 +16,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License" /></a>&nbsp;
-  <a href="https://github.com/modelguide/modelguide/actions"><img src="https://img.shields.io/github/actions/workflow/status/modelguide/modelguide/ci.yml?style=for-the-badge&label=CI" alt="CI Status" /></a>
+  <a href="https://github.com/modelguide/modelguide/actions/workflows/ci.yml"><img src="https://github.com/modelguide/modelguide/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status" /></a>
 </p>
 
 <p align="center">
