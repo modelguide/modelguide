@@ -157,12 +157,19 @@ const agentConnectorParams = z.object({
 // ============================================================================
 
 function formatAgent(
-  agent: Agent & { keyPrefix?: string | null; hasElevenLabsKey?: boolean; hasWebhookSecret?: boolean },
+  agent: Agent & {
+    keyPrefix?: string | null;
+    hasElevenLabsKey?: boolean;
+    hasWebhookSecret?: boolean;
+  },
 ) {
   // Strip webhook_hmac_secret from metadata to prevent plaintext leak
   const metadata = agent.metadata
     ? (() => {
-        const { webhook_hmac_secret, ...rest } = agent.metadata as Record<string, unknown>;
+        const { webhook_hmac_secret, ...rest } = agent.metadata as Record<
+          string,
+          unknown
+        >;
         return Object.keys(rest).length > 0 ? rest : undefined;
       })()
     : undefined;

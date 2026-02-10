@@ -214,9 +214,10 @@ export async function syncAgentToElevenLabs(
     steps.push({
       step: "MCP server",
       status: "success",
-      message: ourMcpIds.size > 0
-        ? `Recreated (cleaned up ${ourMcpIds.size} old server${ourMcpIds.size > 1 ? "s" : ""})`
-        : "Created",
+      message:
+        ourMcpIds.size > 0
+          ? `Recreated (cleaned up ${ourMcpIds.size} old server${ourMcpIds.size > 1 ? "s" : ""})`
+          : "Created",
     });
   } catch (err) {
     steps.push({
