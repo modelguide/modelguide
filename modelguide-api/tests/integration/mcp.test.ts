@@ -164,7 +164,10 @@ describe("Auth & access control", () => {
   });
 
   test("valid agent key connects successfully", async () => {
-    const { client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId);
+    const { client, transport } = await createMcpClient(
+      pizzaAgentHeaders,
+      s.pizzaAgentId,
+    );
 
     const serverVersion = client.getServerVersion();
     expect(serverVersion).toBeDefined();
@@ -183,7 +186,10 @@ describe("Tool discovery", () => {
   let transport: StreamableHTTPClientTransport;
 
   beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
+    ({ client, transport } = await createMcpClient(
+      pizzaAgentHeaders,
+      s.pizzaAgentId,
+    ));
   });
 
   afterAll(async () => {
@@ -246,7 +252,10 @@ describe("Resource discovery", () => {
   let transport: StreamableHTTPClientTransport;
 
   beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
+    ({ client, transport } = await createMcpClient(
+      pizzaAgentHeaders,
+      s.pizzaAgentId,
+    ));
   });
 
   afterAll(async () => {
@@ -302,7 +311,10 @@ describe("core_add_messages", () => {
   let sessionId: string;
 
   beforeAll(async () => {
-    ({ client, transport } = await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
+    ({ client, transport } = await createMcpClient(
+      pizzaAgentHeaders,
+      s.pizzaAgentId,
+    ));
     sessionId = await createSessionViaRest(
       pizzaAgentHeaders,
       "voice",

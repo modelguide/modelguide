@@ -9,7 +9,7 @@ import {
 } from "@features/connectors/connectors.service";
 import { decryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { ResolvedTool } from "./mcp.types";
 
 /**
@@ -106,15 +106,7 @@ export async function resolveConnectorConfig(
   const rawConfig = (connector.config ?? {}) as Record<string, unknown>;
 
   const connectorSecrets = await forOrg(orgId, (tx) =>
-    tx
-      .select()
-      .from(secrets)
-      .where(
-        and(
-          eq(secrets.ownerType, "connector"),
-          eq(secrets.ownerId, connectorId),
-        ),
-      ),
+    tx.select().from(secrets).where(eq(secrets.ownerType, "connector")),
   );
 
   const secretById = new Map(connectorSecrets.map((s) => [s.id, s]));

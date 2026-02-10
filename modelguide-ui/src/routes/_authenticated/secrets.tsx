@@ -6,11 +6,12 @@ import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { PageHeader } from '~/components/ui/page-header'
 import { DeleteSecretDialog } from '~/features/secrets/components/delete-secret-dialog'
+import { EditSecretDialog } from '~/features/secrets/components/edit-secret-dialog'
 import { SecretForm } from '~/features/secrets/components/secret-form'
 import { SecretsTable } from '~/features/secrets/components/secrets-table'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
-import type { Secret, SecretCreate } from '~/schemas/secrets'
+import type { Secret, SecretCreate, SecretUpdate } from '~/schemas/secrets'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated/secrets')({
@@ -23,6 +24,7 @@ function SecretsPage() {
   const queryClient = useQueryClient()
 
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [secretToEdit, setSecretToEdit] = useState<Secret | null>(null)
   const [secretToDelete, setSecretToDelete] = useState<Secret | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -35,6 +37,15 @@ function SecretsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['secrets'] })
       setShowCreateForm(false)
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: SecretUpdate }) =>
+      api.patch(`secrets/${id}`, { json: data }).json<Secret>(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['secrets'] })
+      setSecretToEdit(null)
     },
   })
 
@@ -83,7 +94,16 @@ function SecretsPage() {
         secrets={data?.data ?? []}
         isLoading={isLoading}
         isAdmin={isAdmin}
+        onEdit={(secret) => setSecretToEdit(secret)}
         onDelete={(secret) => setSecretToDelete(secret)}
+      />
+
+      <EditSecretDialog
+        open={!!secretToEdit}
+        onClose={() => setSecretToEdit(null)}
+        onConfirm={(data) => secretToEdit && updateMutation.mutate({ id: secretToEdit.id, data })}
+        secret={secretToEdit}
+        isUpdating={updateMutation.isPending}
       />
 
       <DeleteSecretDialog
