@@ -362,14 +362,14 @@ describe("core_add_messages", () => {
 // ============================================================================
 
 describe("RLS isolation", () => {
-  let pizzaClient: Client;
+  let _pizzaClient: Client;
   let pizzaTransport: StreamableHTTPClientTransport;
   let burgerClient: Client;
   let burgerTransport: StreamableHTTPClientTransport;
   let pizzaSessionId: string;
 
   beforeAll(async () => {
-    ({ client: pizzaClient, transport: pizzaTransport } =
+    ({ client: _pizzaClient, transport: pizzaTransport } =
       await createMcpClient(pizzaAgentHeaders));
     ({ client: burgerClient, transport: burgerTransport } =
       await createMcpClient(burgerAgentHeaders));

@@ -88,10 +88,7 @@ function parseResultValue(raw: string | undefined): Record<string, unknown> {
  * For agent turns: LLM time-to-first-byte is the primary latency.
  * For user turns: ASR trailing latency.
  */
-function extractLatencyMs(
-  role: string,
-  metrics?: TurnMetrics,
-): number | null {
+function extractLatencyMs(role: string, metrics?: TurnMetrics): number | null {
   if (!metrics?.metrics) return null;
   const m = metrics.metrics;
 
@@ -130,13 +127,20 @@ function extractLlmUsage(metadata: PostCallData["metadata"]): {
     | undefined;
 
   if (!modelUsage) {
-    return { model: null, inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: null };
+    return {
+      model: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      cost: null,
+    };
   }
 
   const modelName = Object.keys(modelUsage)[0] ?? null;
   const usage = modelName ? modelUsage[modelName] : null;
 
-  const inputTokens = (usage?.input?.tokens ?? 0) + (usage?.input_cache_read?.tokens ?? 0);
+  const inputTokens =
+    (usage?.input?.tokens ?? 0) + (usage?.input_cache_read?.tokens ?? 0);
   const outputTokens = usage?.output_total?.tokens ?? 0;
 
   return {
@@ -212,7 +216,10 @@ export function convertPostCallToSession(
         toolName: null,
         toolInput: null,
         toolOutput: null,
-        modelUsed: turnMetrics?.convai_tts_model ?? turnMetrics?.convai_asr_provider ?? null,
+        modelUsed:
+          turnMetrics?.convai_tts_model ??
+          turnMetrics?.convai_asr_provider ??
+          null,
 
         latencyMs: extractLatencyMs(msg.role, turnMetrics),
         occurredAt,
@@ -223,9 +230,7 @@ export function convertPostCallToSession(
     for (const tc of toolCalls) {
       const toolName = tc.tool_name ?? "unknown";
       const params = tc.tool_details?.parameters ?? {};
-      const matched = tc.request_id
-        ? allResults.get(tc.request_id)
-        : undefined;
+      const matched = tc.request_id ? allResults.get(tc.request_id) : undefined;
       const resultValue = matched
         ? parseResultValue(matched.result.result_value)
         : null;

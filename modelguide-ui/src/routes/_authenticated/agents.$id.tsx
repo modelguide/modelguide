@@ -1,6 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Check, Copy, Key, Link2, Plug, Plus, RefreshCw, ShieldCheck, Trash2, Wrench, Zap } from 'lucide-react'
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Key,
+  Link2,
+  Plug,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+  Wrench,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'

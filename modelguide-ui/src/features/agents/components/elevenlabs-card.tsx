@@ -30,7 +30,9 @@ export function ElevenLabsCard({ agent, isAdmin }: ElevenLabsCardProps) {
   // Reset form when agent data changes
   useEffect(() => {
     setPlatform(agent.agentPlatform)
-    const m = ((agent.metadata ?? {}) as Record<string, unknown>).elevenlabs as Record<string, unknown> | undefined
+    const m = ((agent.metadata ?? {}) as Record<string, unknown>).elevenlabs as
+      | Record<string, unknown>
+      | undefined
     setElAgentId((m?.agentId as string) ?? '')
     setElApiKey('')
     setShowApiKeyInput(false)
@@ -92,7 +94,9 @@ export function ElevenLabsCard({ agent, isAdmin }: ElevenLabsCardProps) {
             {isElevenLabs && elMeta.lastSyncedAt ? (
               <div className="text-right">
                 {elMeta.agentName ? (
-                  <p className="text-sm font-medium text-fg-primary">{elMeta.agentName as string}</p>
+                  <p className="text-sm font-medium text-fg-primary">
+                    {elMeta.agentName as string}
+                  </p>
                 ) : null}
                 <p className="text-xs text-fg-muted">
                   Synced {new Date(elMeta.lastSyncedAt as string).toLocaleString()}
@@ -105,7 +109,11 @@ export function ElevenLabsCard({ agent, isAdmin }: ElevenLabsCardProps) {
           <div className="space-y-4">
             <div className="max-w-xs">
               {isAdmin ? (
-                <Select label="Platform" value={platform} onChange={(e) => setPlatform(e.target.value as AgentPlatform)}>
+                <Select
+                  label="Platform"
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value as AgentPlatform)}
+                >
                   <option value="custom">Custom</option>
                   <option value="elevenlabs">ElevenLabs</option>
                 </Select>
@@ -201,10 +209,7 @@ export function ElevenLabsCard({ agent, isAdmin }: ElevenLabsCardProps) {
               </div>
             ) : isAdmin && platform !== agent.agentPlatform ? (
               <div className="pt-2">
-                <Button
-                  onClick={() => saveMutation.mutate()}
-                  loading={saveMutation.isPending}
-                >
+                <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
                   Save
                 </Button>
               </div>

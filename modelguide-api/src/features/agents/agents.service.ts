@@ -13,13 +13,13 @@ import {
   secrets,
 } from "@db/schema";
 import { generateApiKey } from "@lib/crypto";
+import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { encryptSecret } from "@lib/crypto";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 
 type AgentType = (typeof agents.agentType.enumValues)[number];

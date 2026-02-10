@@ -6,8 +6,8 @@
  */
 
 import { env } from "@/env";
-import { agents } from "@db/schema";
 import { forOrg } from "@db/rls";
+import { agents } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
   getAgentElevenLabsKey,
@@ -33,7 +33,9 @@ async function elSecretsRequest(
   const res = await fetch(url, {
     method,
     headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify(method === "PATCH" ? { type: "update", ...body } : body),
+    body: JSON.stringify(
+      method === "PATCH" ? { type: "update", ...body } : body,
+    ),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -102,7 +104,11 @@ export async function syncAgentToElevenLabs(
   // Step 1: Create/update ElevenLabs secret (ModelGuide API key)
   let secretId = elMeta.secretId as string | undefined;
   if (!mgApiKey) {
-    steps.push({ step: "API key secret", status: "skipped", message: "No ModelGuide API key — regenerate to enable" });
+    steps.push({
+      step: "API key secret",
+      status: "skipped",
+      message: "No ModelGuide API key — regenerate to enable",
+    });
   } else {
     try {
       if (secretId) {
@@ -110,14 +116,22 @@ export async function syncAgentToElevenLabs(
           name: `${slug}_apikey`,
           value: mgApiKey,
         });
-        steps.push({ step: "API key secret", status: "success", message: "Updated existing secret" });
+        steps.push({
+          step: "API key secret",
+          status: "success",
+          message: "Updated existing secret",
+        });
       } else {
         const res = await elSecretsRequest(apiKey, "POST", undefined, {
           name: `${slug}_apikey`,
           value: mgApiKey,
         });
         secretId = res.secret_id ?? res.secretId;
-        steps.push({ step: "API key secret", status: "success", message: "Created secret" });
+        steps.push({
+          step: "API key secret",
+          status: "success",
+          message: "Created secret",
+        });
       }
     } catch (err) {
       steps.push({
@@ -131,16 +145,14 @@ export async function syncAgentToElevenLabs(
 
   // Step 2: Create/update MCP server (STREAMABLE_HTTP)
   let mcpServerId = elMeta.mcpServerId as string | undefined;
-  const mcpConfig: Record<string, unknown> = {
+  const mcpConfig = {
     url: `${baseUrl}/mcp/${agentId}`,
     name: `${slug}_mcp`,
     description: "ModelGuide connector tools",
-    transport: "STREAMABLE_HTTP",
-    approvalPolicy: "auto_approve_all",
+    transport: "STREAMABLE_HTTP" as const,
+    approvalPolicy: "auto_approve_all" as const,
+    ...(secretId ? { secretToken: { secretId } } : {}),
   };
-  if (secretId) {
-    mcpConfig.secretToken = { secretId };
-  }
 
   // Fetch current ElevenLabs agent state (used for MCP list + agent name)
   const elAgent = await client.conversationalAi.agents.get(elevenLabsAgentId);
@@ -148,15 +160,22 @@ export async function syncAgentToElevenLabs(
   // ElevenLabs API silently ignores URL changes on MCP server update, so we
   // must delete + recreate.  Order: unassign from agent → delete old → create new.
   // The new server gets reassigned to the agent in the agent configuration step.
-  const currentMcpIds: string[] = (elAgent as any).conversationConfig?.agent?.prompt?.mcpServerIds ?? [];
+  const currentMcpIds: string[] =
+    // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
+    (elAgent as any).conversationConfig?.agent?.prompt?.mcpServerIds ?? [];
   const oldMcpServerId = mcpServerId;
 
   try {
     if (oldMcpServerId) {
       // Unassign our MCP server from agent so we can delete it
-      const otherMcpIds = currentMcpIds.filter((id: string) => id !== oldMcpServerId);
+      const otherMcpIds = currentMcpIds.filter(
+        (id: string) => id !== oldMcpServerId,
+      );
       await client.conversationalAi.agents.update(elevenLabsAgentId, {
-        conversationConfig: { agent: { prompt: { mcpServerIds: otherMcpIds } } } as any,
+        conversationConfig: {
+          agent: { prompt: { mcpServerIds: otherMcpIds } },
+          // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
+        } as any,
       });
       await client.conversationalAi.mcpServers.delete(oldMcpServerId);
     }
@@ -164,7 +183,11 @@ export async function syncAgentToElevenLabs(
       config: mcpConfig,
     });
     mcpServerId = mcpServer.id;
-    steps.push({ step: "MCP server", status: "success", message: oldMcpServerId ? "Recreated" : "Created" });
+    steps.push({
+      step: "MCP server",
+      status: "success",
+      message: oldMcpServerId ? "Recreated" : "Created",
+    });
   } catch (err) {
     steps.push({
       step: "MCP server",
@@ -196,7 +219,11 @@ export async function syncAgentToElevenLabs(
     const prevWebhookId = webhookId;
     webhookId = webhook.webhookId;
     webhookSecret = webhook.webhookSecret ?? undefined;
-    steps.push({ step: "Post-call webhook", status: "success", message: prevWebhookId ? "Recreated" : "Created" });
+    steps.push({
+      step: "Post-call webhook",
+      status: "success",
+      message: prevWebhookId ? "Recreated" : "Created",
+    });
   } catch (err) {
     steps.push({
       step: "Post-call webhook",
@@ -209,7 +236,9 @@ export async function syncAgentToElevenLabs(
   // Step 4: Assign new MCP server + webhook to ElevenLabs agent
   try {
     // Preserve other MCP servers, add our new one
-    const otherMcpIds = currentMcpIds.filter((id: string) => id !== oldMcpServerId);
+    const otherMcpIds = currentMcpIds.filter(
+      (id: string) => id !== oldMcpServerId,
+    );
     const mergedMcpIds = [...otherMcpIds, mcpServerId!];
 
     await client.conversationalAi.agents.update(elevenLabsAgentId, {
@@ -219,6 +248,7 @@ export async function syncAgentToElevenLabs(
             mcpServerIds: mergedMcpIds,
           },
         },
+        // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
       } as any,
       platformSettings: {
         workspaceOverrides: {

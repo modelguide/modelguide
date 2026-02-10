@@ -111,20 +111,20 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
               const meta = session.metadata as Record<string, unknown>
               return (
                 <div className="mt-4 border-t border-fg-subtle/10 pt-4">
-                  {meta.transcript_summary && (
+                  {meta.transcript_summary ? (
                     <p className="mb-3 text-sm italic text-fg-secondary">
                       {String(meta.transcript_summary)}
                     </p>
-                  )}
+                  ) : null}
                   <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-fg-muted">
-                    {meta.llm_model && (
+                    {meta.llm_model ? (
                       <span>
                         Model:{' '}
                         <span className="font-mono text-fg-secondary">
                           {String(meta.llm_model)}
                         </span>
                       </span>
-                    )}
+                    ) : null}
                     {meta.llm_total_tokens ? (
                       <span>
                         Tokens:{' '}
@@ -142,18 +142,18 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                         </span>
                       </span>
                     ) : null}
-                    {meta.call_successful && (
+                    {meta.call_successful ? (
                       <span>
                         Result:{' '}
                         <span className="text-fg-secondary">{String(meta.call_successful)}</span>
                       </span>
-                    )}
-                    {meta.termination_reason && (
+                    ) : null}
+                    {meta.termination_reason ? (
                       <span>
                         Ended:{' '}
                         <span className="text-fg-secondary">{String(meta.termination_reason)}</span>
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               )

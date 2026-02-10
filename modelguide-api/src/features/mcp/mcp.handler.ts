@@ -158,9 +158,7 @@ function registerConnectorTools(
     const zodShape = jsonSchemaToZod(tool.inputSchema);
 
     // Every connector tool requires an active session
-    zodShape.session_id = z
-      .string()
-      .describe("The current session ID");
+    zodShape.session_id = z.string().describe("The current session ID");
 
     server.tool(tool.mcpName, tool.description, zodShape, async (args) => {
       try {

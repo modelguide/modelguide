@@ -71,7 +71,10 @@ export function SyncDialog({ agentId, open, onClose }: SyncDialogProps) {
   // Map API steps to display, or show placeholder labels while loading
   const displaySteps: { label: string; status: SyncStep['status'] | 'pending' | 'loading' }[] =
     result
-      ? result.steps.map((s) => ({ label: s.step + (s.message ? ` — ${s.message}` : ''), status: s.status }))
+      ? result.steps.map((s) => ({
+          label: s.step + (s.message ? ` — ${s.message}` : ''),
+          status: s.status,
+        }))
       : SYNC_STEP_LABELS.map((label, i) => ({
           label,
           status: i < visibleSteps ? 'loading' : i === visibleSteps ? 'loading' : 'pending',
@@ -100,7 +103,7 @@ export function SyncDialog({ agentId, open, onClose }: SyncDialogProps) {
           <div className="space-y-3">
             {displaySteps.map((step, i) => (
               <div
-                key={i}
+                key={step.label}
                 className={`flex items-center gap-3 text-sm transition-opacity ${
                   !result && i > visibleSteps ? 'opacity-30' : 'opacity-100'
                 }`}
@@ -122,9 +125,7 @@ export function SyncDialog({ agentId, open, onClose }: SyncDialogProps) {
 
             {isError && !result ? (
               <div className="mt-2 rounded border border-error/30 bg-error/5 p-2 text-xs text-error">
-                {syncMutation.error instanceof Error
-                  ? syncMutation.error.message
-                  : 'Sync failed'}
+                {syncMutation.error instanceof Error ? syncMutation.error.message : 'Sync failed'}
               </div>
             ) : null}
           </div>
