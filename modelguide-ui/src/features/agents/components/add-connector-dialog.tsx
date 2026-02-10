@@ -35,11 +35,13 @@ export function AddConnectorDialog({
   const [selectedConnector, setSelectedConnector] = useState<Connector | null>(null)
   const [toolSelections, setToolSelections] = useState<ToolSelection[]>([])
 
+  // Fetch all connectors — dialog needs the full list for selection
+  const DIALOG_PAGE_SIZE = 100
   const { data: connectorsData, isLoading: connectorsLoading } = useQuery({
-    queryKey: ['connectors', { pageSize: 100 }],
+    queryKey: ['connectors', { pageSize: DIALOG_PAGE_SIZE }],
     queryFn: () =>
       api
-        .get('connectors', { searchParams: { pageSize: 100 } })
+        .get('connectors', { searchParams: { pageSize: DIALOG_PAGE_SIZE } })
         .json<PaginatedResponse<Connector>>(),
     enabled: open,
   })
@@ -52,6 +54,7 @@ export function AddConnectorDialog({
     queryFn: () =>
       api.get(`connectors/${selectedConnector?.id}/tools`).json<{ data: ConnectorTool[] }>(),
     enabled: !!selectedConnector,
+    staleTime: Number.POSITIVE_INFINITY,
   })
 
   const assignMutation = useMutation({
@@ -64,8 +67,6 @@ export function AddConnectorDialog({
       handleClose()
     },
   })
-
-  const rawTools = toolsData?.data ?? []
 
   useEffect(() => {
     const loaded = toolsData?.data
@@ -121,7 +122,7 @@ export function AddConnectorDialog({
       )
     }
 
-    if (rawTools.length === 0) {
+    if (!toolsData?.data?.length) {
       return (
         <div className="flex flex-col items-center py-8 text-center">
           <p className="text-sm text-fg-muted">This connector has no tools.</p>
