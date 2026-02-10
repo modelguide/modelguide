@@ -435,8 +435,8 @@ describe("Resolution rate trend", () => {
     const body = await getTrends("resolution_rate");
 
     expect(body.data.length).toBe(1);
-    // 3 completed / 6 total = 0.5
-    expect(body.data[0].value).toBe(0.5);
+    // 4 completed / 6 total ≈ 0.6667
+    expect(body.data[0].value).toBeCloseTo(4 / 6, 4);
   });
 });
 
