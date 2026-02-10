@@ -44,6 +44,7 @@ export function createBaseFetcher(
   baseUrl: string,
   headers: Record<string, string>,
   connectorName: string,
+  timeoutMs = 30_000,
 ): ConnectorFetcher {
   return async function connectorFetch<T = unknown>(
     path: string,
@@ -64,10 +65,12 @@ export function createBaseFetcher(
       method,
       headers: { ...headers },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (!response.ok) {
-      const text = await response.text();
+      const raw = await response.text();
+      const text = raw.length > 512 ? `${raw.slice(0, 512)}…` : raw;
       throw new ConnectorApiError(connectorName, response.status, text);
     }
 
