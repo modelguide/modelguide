@@ -22,11 +22,15 @@ const tools: ConnectorToolDefinition[] = [
     catalog: {
       name: "List Products",
       description:
-        "Browse available products with optional search and pagination",
+        "Search the store catalog for products by name, brand, or category",
       inputSchema: {
         type: "object",
         properties: {
-          q: { type: "string", description: "Search query to filter products" },
+          query: {
+            type: "string",
+            description:
+              "Product search term — name, brand, or category (e.g. 'CeraVe', 'lipstick', 'moisturizer')",
+          },
           limit: {
             type: "integer",
             description: "Maximum number of products to return (default 20)",
@@ -39,7 +43,7 @@ const tools: ConnectorToolDefinition[] = [
             minimum: 0,
           },
         },
-        required: [],
+        required: ["query"],
       },
       defaultRequiresConfirmation: false,
       defaultTimeoutSeconds: 30,
@@ -49,11 +53,15 @@ const tools: ConnectorToolDefinition[] = [
   {
     catalog: {
       name: "Get Product",
-      description: "Get detailed information about a specific product",
+      description:
+        "Get product details (price, description, variants). Use a product ID returned by search.",
       inputSchema: {
         type: "object",
         properties: {
-          productId: { type: "string", description: "Product ID" },
+          productId: {
+            type: "string",
+            description: "Product ID from search results",
+          },
         },
         required: ["productId"],
       },
@@ -65,7 +73,7 @@ const tools: ConnectorToolDefinition[] = [
   {
     catalog: {
       name: "Create Cart",
-      description: "Create a new shopping cart",
+      description: "Start a new shopping cart for the customer",
       inputSchema: {
         type: "object",
         properties: {
@@ -88,12 +96,17 @@ const tools: ConnectorToolDefinition[] = [
   {
     catalog: {
       name: "Add to Cart",
-      description: "Add an item to the customer's shopping cart",
+      description:
+        "Add a product to the cart. Requires a variant ID from product details.",
       inputSchema: {
         type: "object",
         properties: {
-          cartId: { type: "string", description: "Cart ID" },
-          variantId: { type: "string", description: "Product variant ID" },
+          cartId: { type: "string", description: "Cart ID from cart creation" },
+          variantId: {
+            type: "string",
+            description:
+              "Product variant ID — use the variant returned by product search or details",
+          },
           quantity: {
             type: "integer",
             description: "Quantity to add",
@@ -110,7 +123,7 @@ const tools: ConnectorToolDefinition[] = [
   {
     catalog: {
       name: "Get Cart",
-      description: "Retrieve the current contents of a shopping cart",
+      description: "Show what is currently in the cart with prices and totals",
       inputSchema: {
         type: "object",
         properties: {
@@ -126,7 +139,7 @@ const tools: ConnectorToolDefinition[] = [
   {
     catalog: {
       name: "Set Delivery Address",
-      description: "Set or update the delivery address for a cart",
+      description: "Save the customer's delivery address on the cart",
       inputSchema: {
         type: "object",
         properties: {
@@ -164,7 +177,7 @@ const tools: ConnectorToolDefinition[] = [
     catalog: {
       name: "Complete Cart",
       description:
-        "Complete the cart checkout and create an order from the cart",
+        "Finalize the order and create it from the cart — only after the customer confirms",
       inputSchema: {
         type: "object",
         properties: {
@@ -183,11 +196,14 @@ const tools: ConnectorToolDefinition[] = [
   {
     catalog: {
       name: "Get Order",
-      description: "Retrieve details of an existing order",
+      description: "Look up an order by ID to check its status and contents",
       inputSchema: {
         type: "object",
         properties: {
-          orderId: { type: "string", description: "Order ID" },
+          orderId: {
+            type: "string",
+            description: "Order ID provided by the customer",
+          },
         },
         required: ["orderId"],
       },

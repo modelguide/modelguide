@@ -78,7 +78,7 @@ describe("Medusa handlers", () => {
 
     test("passes search query param", async () => {
       mockFetchSuccess({ products: [] });
-      await listProducts(makeCtx({ q: "shirt", limit: 5, offset: 10 }));
+      await listProducts(makeCtx({ query: "shirt", limit: 5, offset: 10 }));
 
       const [url] = fetchMock.mock.calls[0];
       expect(url).toContain("q=shirt");

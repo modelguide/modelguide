@@ -12,13 +12,13 @@ export const listProducts = withMedusa(async (fetcher, ctx) => {
   const input = ctx.input as {
     limit?: number;
     offset?: number;
-    q?: string;
+    query: string;
   };
   const data = await fetcher<Record<string, unknown>>("/store/products", {
     params: {
       limit: input.limit ?? 20,
       offset: input.offset ?? 0,
-      q: input.q,
+      q: input.query,
     },
   });
   return { success: true, data };
