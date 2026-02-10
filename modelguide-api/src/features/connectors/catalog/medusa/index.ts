@@ -13,6 +13,7 @@ import {
   getOrder,
   getProduct,
   listProducts,
+  lookUpOrder,
   setDeliveryAddress,
 } from "./handlers";
 
@@ -195,6 +196,30 @@ const tools: ConnectorToolDefinition[] = [
     },
     handler: getOrder,
   },
+  {
+    catalog: {
+      name: "Look Up Order",
+      description:
+        "Find a specific order by customer email and order number (requires admin API token)",
+      inputSchema: {
+        type: "object",
+        properties: {
+          email: {
+            type: "string",
+            description: "Customer email address",
+          },
+          displayId: {
+            type: "integer",
+            description: "Order number (e.g. 1001)",
+          },
+        },
+        required: ["email", "displayId"],
+      },
+      defaultRequiresConfirmation: false,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: lookUpOrder,
+  },
 ];
 
 const medusaManifest: ConnectorManifest = {
@@ -213,6 +238,12 @@ const medusaManifest: ConnectorManifest = {
       type: "string",
       required: true,
       description: "Publishable API key for storefront",
+    },
+    secretApiKey: {
+      type: "secret",
+      required: false,
+      description:
+        "Admin API token for order lookup (required for admin tools)",
     },
   },
   authMethods: ["api_key"],

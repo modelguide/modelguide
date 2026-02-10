@@ -1,10 +1,10 @@
 /**
- * Medusa v2 Store API tool handlers.
+ * Medusa v2 tool handlers (Store + Admin API).
  * Each handler creates a fetcher from ctx.config and calls the appropriate endpoint.
  */
 
 import { withConnector } from "../lib/http-client";
-import { createMedusaFetcher } from "./client";
+import { createMedusaAdminFetcher, createMedusaFetcher } from "./client";
 
 const withMedusa = withConnector(createMedusaFetcher);
 
@@ -120,4 +120,109 @@ export const getOrder = withMedusa(async (fetcher, ctx) => {
     `/store/orders/${orderId}`,
   );
   return { success: true, data };
+});
+
+// ---------------------------------------------------------------------------
+// Admin API handlers
+// ---------------------------------------------------------------------------
+
+const withMedusaAdmin = withConnector(createMedusaAdminFetcher);
+
+/** Medusa Admin API response types for order detail. */
+interface MedusaOrderItem {
+  id: string;
+  title: string;
+  quantity: number;
+  unit_price: number;
+  variant?: {
+    id: string;
+    title: string;
+    sku: string | null;
+    product?: {
+      id: string;
+      title: string;
+    };
+  };
+}
+
+interface MedusaOrderDetail {
+  id: string;
+  display_id: number;
+  status: string;
+  total: number;
+  currency_code: string;
+  summary: Record<string, unknown>;
+  version: number;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  items: MedusaOrderItem[];
+  [key: string]: unknown;
+}
+
+export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
+  const { email, displayId } = ctx.input as {
+    email: string;
+    displayId: number;
+  };
+
+  // Step 1: Find customer by email
+  const { customers } = await fetcher<{
+    customers: { id: string }[];
+  }>("/admin/customers", { params: { email } });
+
+  if (!customers?.length) {
+    return { success: false, error: "No customer found with this email" };
+  }
+
+  // Step 2: Paginate through orders looking for display_id match
+  const customerId = customers[0].id;
+  const PAGE_SIZE = 50;
+  const MAX_PAGES = 20;
+  let offset = 0;
+  let page = 0;
+
+  while (true) {
+    if (page >= MAX_PAGES) {
+      return {
+        success: false,
+        error: `Order #${displayId} not found within the first ${MAX_PAGES * PAGE_SIZE} orders for customer ${email}. Please narrow your search.`,
+      };
+    }
+    const { orders, count } = await fetcher<{
+      orders: { id: string; display_id: number }[];
+      count: number;
+    }>("/admin/orders", {
+      params: {
+        customer_id: customerId,
+        limit: PAGE_SIZE,
+        offset,
+        order: "-created_at",
+      },
+    });
+
+    const match = orders?.find((o) => o.display_id === displayId);
+    if (match) {
+      // Step 3: Fetch full order with items
+      const { order } = await fetcher<{ order: MedusaOrderDetail }>(
+        `/admin/orders/${match.id}`,
+        {
+          params: {
+            fields:
+              "id,display_id,status,total,currency_code,summary,version,metadata,created_at,updated_at,*items,*items.variant,*items.variant.product",
+          },
+        },
+      );
+      return { success: true, data: order };
+    }
+
+    offset += PAGE_SIZE;
+    page++;
+    if (offset >= count) {
+      return {
+        success: false,
+        error: `Order #${displayId} not found for customer ${email}`,
+      };
+    }
+  }
 });

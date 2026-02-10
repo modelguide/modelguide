@@ -12,8 +12,8 @@ describe("Medusa manifest", () => {
     expect(medusaManifest.connectorType).toBe("api");
   });
 
-  test("has 8 tools", () => {
-    expect(medusaManifest.tools).toHaveLength(8);
+  test("has 9 tools", () => {
+    expect(medusaManifest.tools).toHaveLength(9);
   });
 
   test("each tool has catalog and handler", () => {
@@ -53,6 +53,10 @@ describe("Medusa manifest", () => {
     expect(medusaManifest.configSchema.publishableKey).toBeDefined();
     expect(medusaManifest.configSchema.publishableKey.required).toBe(true);
     expect(medusaManifest.configSchema.publishableKey.type).toBe("string");
+
+    expect(medusaManifest.configSchema.secretApiKey).toBeDefined();
+    expect(medusaManifest.configSchema.secretApiKey.required).toBe(false);
+    expect(medusaManifest.configSchema.secretApiKey.type).toBe("secret");
   });
 
   test("tool names match expected set", () => {
@@ -65,5 +69,6 @@ describe("Medusa manifest", () => {
     expect(toolNames).toContain("Set Delivery Address");
     expect(toolNames).toContain("Complete Cart");
     expect(toolNames).toContain("Get Order");
+    expect(toolNames).toContain("Look Up Order");
   });
 });

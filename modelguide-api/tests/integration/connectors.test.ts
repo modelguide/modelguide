@@ -173,8 +173,8 @@ describe("POST /api/connectors", () => {
     expect(toolsResponse.status).toBe(200);
     const toolsBody = await toolsResponse.json();
 
-    // Medusa has 8 tools
-    expect(toolsBody.data.length).toBe(8);
+    // Medusa has 9 tools (8 storefront + 1 admin)
+    expect(toolsBody.data.length).toBe(9);
 
     // Verify slug format
     for (const tool of toolsBody.data) {
