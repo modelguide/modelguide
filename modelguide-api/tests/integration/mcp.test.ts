@@ -86,12 +86,16 @@ function parseToolResult(
 beforeAll(async () => {
   s = await getTestSeed();
 
-  // Enable core_add_messages for the pizza agent (disabled by default)
+  // Enable core_add_messages for both agents (disabled by default)
   await forApp(async (tx) => {
     await tx
       .update(agents)
       .set({ metadata: { enableCoreAddMessages: true } })
       .where(eq(agents.id, s.pizzaAgentId));
+    await tx
+      .update(agents)
+      .set({ metadata: { enableCoreAddMessages: true } })
+      .where(eq(agents.id, s.burgerAgentId));
   });
 
   [pizzaAdminHeaders, pizzaAgentHeaders, burgerAgentHeaders] =
@@ -113,6 +117,10 @@ afterAll(async () => {
       .update(agents)
       .set({ metadata: {} })
       .where(eq(agents.id, s.pizzaAgentId));
+    await tx
+      .update(agents)
+      .set({ metadata: {} })
+      .where(eq(agents.id, s.burgerAgentId));
   });
 });
 

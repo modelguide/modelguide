@@ -114,7 +114,7 @@ describe("Zendesk catalog entry", () => {
     expect(toolNames).toContain("Get User");
   });
 
-  test("Create Ticket requires only subject and body (anonymous drops)", async () => {
+  test("Create Ticket requires only subject (body/description are optional aliases)", async () => {
     const response = await request(
       `/api/connectors/catalog/${zendeskCatalogId}`,
       { headers: adminHeaders },
@@ -126,7 +126,7 @@ describe("Zendesk catalog entry", () => {
     );
 
     expect(createTool).toBeDefined();
-    expect(createTool.inputSchema.required).toEqual(["subject", "body"]);
+    expect(createTool.inputSchema.required).toEqual(["subject"]);
     expect(createTool.defaultRequiresConfirmation).toBe(true);
   });
 
