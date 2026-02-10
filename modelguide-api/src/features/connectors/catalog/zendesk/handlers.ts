@@ -45,7 +45,8 @@ export const getTicket = withZendesk(async (fetcher, ctx) => {
 export const createTicket = withZendesk(async (fetcher, ctx) => {
   const input = ctx.input as {
     subject: string;
-    body: string;
+    body?: string;
+    description?: string;
     priority?: string;
     type?: string;
     tags?: string[];
@@ -53,9 +54,12 @@ export const createTicket = withZendesk(async (fetcher, ctx) => {
     requesterName?: string;
   };
 
+  const body = input.body || input.description;
+  if (!body) throw new Error("Either body or description is required");
+
   const ticket: Record<string, unknown> = {
     subject: input.subject,
-    comment: { body: input.body },
+    comment: { body },
   };
 
   if (input.priority !== undefined) ticket.priority = input.priority;
@@ -67,7 +71,9 @@ export const createTicket = withZendesk(async (fetcher, ctx) => {
   if (input.requesterEmail || input.requesterName) {
     const requester: Record<string, string> = {};
     if (input.requesterEmail) requester.email = input.requesterEmail;
-    if (input.requesterName) requester.name = input.requesterName;
+    // Zendesk requires name to be at least 1 char when requester is provided
+    requester.name =
+      input.requesterName || input.requesterEmail?.split("@")[0] || "Customer";
     ticket.requester = requester;
   }
 
