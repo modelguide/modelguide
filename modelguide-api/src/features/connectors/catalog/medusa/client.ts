@@ -1,6 +1,6 @@
 /**
- * Medusa v2 Store API HTTP client.
- * Creates a fetcher bound to a specific connector instance's config.
+ * Medusa v2 HTTP clients (Store + Admin API).
+ * Creates fetchers bound to a specific connector instance's config.
  */
 
 import { type ConnectorFetcher, createBaseFetcher } from "../lib/http-client";
@@ -25,4 +25,28 @@ export function createMedusaFetcher(
   }
 
   return createBaseFetcher(baseUrl, headers, "Medusa");
+}
+
+export function createMedusaAdminFetcher(
+  config: Record<string, string>,
+): ConnectorFetcher {
+  const baseUrl = config.baseUrl?.replace(/\/+$/, "");
+  if (!baseUrl) {
+    throw new Error("Medusa baseUrl is required");
+  }
+
+  const secretApiKey = config.secretApiKey;
+  if (!secretApiKey) {
+    throw new Error("Medusa secretApiKey is required for admin operations");
+  }
+
+  return createBaseFetcher(
+    baseUrl,
+    {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${secretApiKey}`,
+    },
+    "Medusa Admin",
+  );
 }

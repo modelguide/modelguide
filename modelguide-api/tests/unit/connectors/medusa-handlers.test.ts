@@ -12,6 +12,7 @@ import {
   getOrder,
   getProduct,
   listProducts,
+  lookUpOrder,
   setDeliveryAddress,
 } from "@features/connectors/catalog/medusa/handlers";
 import type { ToolExecutionContext } from "@features/connectors/catalog/types";
@@ -278,5 +279,409 @@ describe("Medusa handlers", () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain("Network error");
     });
+  });
+});
+
+// ====================================================================
+// Admin API — lookUpOrder
+// ====================================================================
+
+const ADMIN_CONFIG: Record<string, string> = {
+  baseUrl: "https://api.test-store.com",
+  publishableKey: "pk_test_abc",
+  secretApiKey: "sk_admin_token_123",
+};
+
+function makeAdminCtx(
+  input: Record<string, unknown> = {},
+  config = ADMIN_CONFIG,
+): ToolExecutionContext {
+  return {
+    config,
+    input,
+    organizationId: "org-1",
+    connectorId: "conn-1",
+  };
+}
+
+/**
+ * Queues sequential fetch responses — each call to fetch consumes the next
+ * response in order. Useful for handlers that make multiple API calls.
+ */
+function mockFetchSequence(
+  responses: Array<{ status: number; body: unknown }>,
+) {
+  let callIndex = 0;
+  fetchMock = mock(() => {
+    const res = responses[callIndex++];
+    if (!res) {
+      return Promise.reject(new Error("Unexpected extra fetch call"));
+    }
+    return Promise.resolve(
+      new Response(
+        typeof res.body === "string" ? res.body : JSON.stringify(res.body),
+        {
+          status: res.status,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+  });
+  globalThis.fetch = fetchMock as typeof fetch;
+}
+
+describe("lookUpOrder (Admin API)", () => {
+  // ----------------------------------------------------------------
+  // Happy path
+  // ----------------------------------------------------------------
+  test("finds order on first page and fetches detail with items", async () => {
+    mockFetchSequence([
+      { status: 200, body: { customers: [{ id: "cust_1" }] } },
+      {
+        status: 200,
+        body: {
+          orders: [
+            { id: "order_aaa", display_id: 1001 },
+            { id: "order_bbb", display_id: 1002 },
+          ],
+          count: 2,
+        },
+      },
+      {
+        status: 200,
+        body: {
+          order: {
+            id: "order_aaa",
+            display_id: 1001,
+            status: "completed",
+            total: 4500,
+            currency_code: "usd",
+            items: [
+              {
+                id: "item_1",
+                title: "Margherita",
+                quantity: 2,
+                unit_price: 1500,
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "alice@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      id: "order_aaa",
+      display_id: 1001,
+      status: "completed",
+      total: 4500,
+      items: [{ id: "item_1", title: "Margherita", quantity: 2 }],
+    });
+
+    // Verify auth header uses Bearer token (not publishable key)
+    const [, customerOpts] = fetchMock.mock.calls[0];
+    expect(customerOpts.headers.Authorization).toBe(
+      "Bearer sk_admin_token_123",
+    );
+    expect(customerOpts.headers["x-publishable-api-key"]).toBeUndefined();
+
+    // Verify correct URLs
+    const [customerUrl] = fetchMock.mock.calls[0];
+    expect(customerUrl).toContain("/admin/customers");
+    expect(customerUrl).toContain("email=alice%40example.com");
+
+    const [ordersUrl] = fetchMock.mock.calls[1];
+    expect(ordersUrl).toContain("/admin/orders");
+    expect(ordersUrl).toContain("customer_id=cust_1");
+
+    // Verify detail fetch with fields param
+    const [detailUrl] = fetchMock.mock.calls[2];
+    expect(detailUrl).toContain("/admin/orders/order_aaa");
+    expect(detailUrl).toContain("fields=");
+    expect(detailUrl).toContain("*items");
+  });
+
+  // ----------------------------------------------------------------
+  // Pagination — order found on second page
+  // ----------------------------------------------------------------
+  test("paginates and finds order on second page", async () => {
+    // Build 50 orders for page 1, none matching display_id 1099
+    const page1Orders = Array.from({ length: 50 }, (_, i) => ({
+      id: `order_p1_${i}`,
+      display_id: 2000 + i,
+    }));
+
+    mockFetchSequence([
+      { status: 200, body: { customers: [{ id: "cust_2" }] } },
+      { status: 200, body: { orders: page1Orders, count: 55 } },
+      {
+        status: 200,
+        body: {
+          orders: [
+            { id: "order_p2_0", display_id: 1099 },
+            { id: "order_p2_1", display_id: 1100 },
+          ],
+          count: 55,
+        },
+      },
+      {
+        status: 200,
+        body: {
+          order: {
+            id: "order_p2_0",
+            display_id: 1099,
+            status: "pending",
+            items: [],
+          },
+        },
+      },
+    ]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "bob@example.com", displayId: 1099 }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ id: "order_p2_0", display_id: 1099 });
+    expect(fetchMock).toHaveBeenCalledTimes(4); // customers + page1 + page2 + detail
+
+    // Verify second orders call has correct offset
+    const [page2Url] = fetchMock.mock.calls[2];
+    expect(page2Url).toContain("offset=50");
+  });
+
+  // ----------------------------------------------------------------
+  // No customer found
+  // ----------------------------------------------------------------
+  test("returns error when no customer matches email", async () => {
+    mockFetchSequence([{ status: 200, body: { customers: [] } }]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "nobody@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("No customer found with this email");
+    expect(fetchMock).toHaveBeenCalledTimes(1); // only customer lookup
+  });
+
+  // ----------------------------------------------------------------
+  // Order not found after exhausting all pages
+  // ----------------------------------------------------------------
+  test("returns error when order not found across all pages", async () => {
+    mockFetchSequence([
+      { status: 200, body: { customers: [{ id: "cust_3" }] } },
+      {
+        status: 200,
+        body: {
+          orders: [
+            { id: "order_x", display_id: 5000 },
+            { id: "order_y", display_id: 5001 },
+          ],
+          count: 2,
+        },
+      },
+    ]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "carol@example.com", displayId: 9999 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(
+      "Order #9999 not found for customer carol@example.com",
+    );
+  });
+
+  // ----------------------------------------------------------------
+  // Customer has zero orders
+  // ----------------------------------------------------------------
+  test("returns error when customer has zero orders", async () => {
+    mockFetchSequence([
+      { status: 200, body: { customers: [{ id: "cust_empty" }] } },
+      { status: 200, body: { orders: [], count: 0 } },
+    ]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "empty@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(
+      "Order #1001 not found for customer empty@example.com",
+    );
+  });
+
+  // ----------------------------------------------------------------
+  // Multiple customers — uses first match
+  // ----------------------------------------------------------------
+  test("uses first customer when multiple are returned", async () => {
+    mockFetchSequence([
+      {
+        status: 200,
+        body: {
+          customers: [{ id: "cust_primary" }, { id: "cust_secondary" }],
+        },
+      },
+      {
+        status: 200,
+        body: {
+          orders: [{ id: "order_match", display_id: 42 }],
+          count: 1,
+        },
+      },
+      {
+        status: 200,
+        body: {
+          order: {
+            id: "order_match",
+            display_id: 42,
+            status: "completed",
+            items: [],
+          },
+        },
+      },
+    ]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "multi@example.com", displayId: 42 }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ id: "order_match" });
+
+    // Verify it used the first customer's ID
+    const [ordersUrl] = fetchMock.mock.calls[1];
+    expect(ordersUrl).toContain("customer_id=cust_primary");
+  });
+
+  // ----------------------------------------------------------------
+  // Missing secretApiKey
+  // ----------------------------------------------------------------
+  test("returns error when secretApiKey is missing", async () => {
+    const result = await lookUpOrder(
+      makeAdminCtx(
+        { email: "alice@example.com", displayId: 1001 },
+        { baseUrl: "https://api.test-store.com", publishableKey: "pk_test" },
+      ),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("secretApiKey");
+  });
+
+  // ----------------------------------------------------------------
+  // Missing baseUrl
+  // ----------------------------------------------------------------
+  test("returns error when baseUrl is missing", async () => {
+    const result = await lookUpOrder(
+      makeAdminCtx(
+        { email: "alice@example.com", displayId: 1001 },
+        { secretApiKey: "sk_token", publishableKey: "pk_test" },
+      ),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("baseUrl");
+  });
+
+  // ----------------------------------------------------------------
+  // API error on customer lookup (e.g. 401 Unauthorized)
+  // ----------------------------------------------------------------
+  test("returns error on customer API 401", async () => {
+    mockFetchSequence([{ status: 401, body: '{"message":"Unauthorized"}' }]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "alice@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("401");
+  });
+
+  // ----------------------------------------------------------------
+  // API error on orders lookup (e.g. 500)
+  // ----------------------------------------------------------------
+  test("returns error on orders API 500", async () => {
+    mockFetchSequence([
+      { status: 200, body: { customers: [{ id: "cust_1" }] } },
+      { status: 500, body: "Internal Server Error" },
+    ]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "alice@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("500");
+  });
+
+  // ----------------------------------------------------------------
+  // Network failure
+  // ----------------------------------------------------------------
+  test("returns error on network failure", async () => {
+    // First call succeeds (customers), second rejects
+    let callIndex = 0;
+    fetchMock = mock(() => {
+      if (callIndex++ === 0) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ customers: [{ id: "cust_1" }] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return Promise.reject(new Error("Connection refused"));
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "alice@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Connection refused");
+  });
+
+  // ----------------------------------------------------------------
+  // API error on order detail fetch (step 3)
+  // ----------------------------------------------------------------
+  test("returns error when order detail fetch fails", async () => {
+    mockFetchSequence([
+      { status: 200, body: { customers: [{ id: "cust_1" }] } },
+      {
+        status: 200,
+        body: {
+          orders: [{ id: "order_aaa", display_id: 1001 }],
+          count: 1,
+        },
+      },
+      { status: 502, body: "Bad Gateway" },
+    ]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "alice@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("502");
+  });
+
+  // ----------------------------------------------------------------
+  // API error on customer lookup (403 Forbidden)
+  // ----------------------------------------------------------------
+  test("returns error on customer API 403", async () => {
+    mockFetchSequence([{ status: 403, body: '{"message":"Forbidden"}' }]);
+
+    const result = await lookUpOrder(
+      makeAdminCtx({ email: "alice@example.com", displayId: 1001 }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("403");
   });
 });

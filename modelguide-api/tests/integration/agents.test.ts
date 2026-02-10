@@ -706,9 +706,9 @@ describe("GET /api/agents/:id/connectors (seeded)", () => {
     expect(body.data).toBeArray();
     expect(body.data.length).toBeGreaterThanOrEqual(1);
 
-    // Seeded agent has all 8 Medusa tools linked
+    // Seeded agent has all 9 Medusa tools linked (8 storefront + 1 admin)
     const connector = body.data[0];
-    expect(connector.tools.length).toBe(8);
+    expect(connector.tools.length).toBe(9);
   });
 
   test("accessible by support role (200)", async () => {
