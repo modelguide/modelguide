@@ -43,7 +43,7 @@ const agentResponseSchema = z.object({
   agentType: z.enum(["voice"]),
   agentPlatform: z.enum(["custom", "elevenlabs"]),
   isActive: z.boolean(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.unknown()).nullable(),
   hasElevenLabsKey: z.boolean(),
   keyPrefix: z.string().nullable(),
   createdAt: z.string(),
