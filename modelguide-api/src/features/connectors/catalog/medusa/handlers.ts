@@ -134,15 +134,6 @@ interface MedusaOrderItem {
   title: string;
   quantity: number;
   unit_price: number;
-  variant?: {
-    id: string;
-    title: string;
-    sku: string | null;
-    product?: {
-      id: string;
-      title: string;
-    };
-  };
 }
 
 interface MedusaOrderDetail {
@@ -190,7 +181,7 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
       };
     }
     const { orders, count } = await fetcher<{
-      orders: { id: string; display_id: number }[];
+      orders: MedusaOrderDetail[];
       count: number;
     }>("/admin/orders", {
       params: {
@@ -198,22 +189,14 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
         limit: PAGE_SIZE,
         offset,
         order: "-created_at",
+        fields:
+          "id,display_id,status,total,currency_code,summary,version,metadata,created_at,updated_at,*items",
       },
     });
 
     const match = orders?.find((o) => o.display_id === displayId);
     if (match) {
-      // Step 3: Fetch full order with items
-      const { order } = await fetcher<{ order: MedusaOrderDetail }>(
-        `/admin/orders/${match.id}`,
-        {
-          params: {
-            fields:
-              "id,display_id,status,total,currency_code,summary,version,metadata,created_at,updated_at,*items,*items.variant,*items.variant.product",
-          },
-        },
-      );
-      return { success: true, data: order };
+      return { success: true, data: match };
     }
 
     offset += PAGE_SIZE;
