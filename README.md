@@ -46,11 +46,11 @@ Model Guide sits between your AI agents and your business systems. It doesn't ru
 
 **Observation layer** — Every session recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did*.
 
-![Conversation diagram](./docs/Conversation.png)
+![Conversation diagram](./docs/Converstation.png)
 
 **Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
 
-![Control diagram](./docs/Control.png)
+![Control diagram](./docs/Data.png)
 
 **Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics CX leaders actually need to prove AI is working, not vanity dashboards.
 
