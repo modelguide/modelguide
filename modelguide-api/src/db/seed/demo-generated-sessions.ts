@@ -6,7 +6,12 @@
 
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "../schema";
-import { sessionFeedback, sessionMessages, sessions } from "../schema";
+import {
+  sessionFeedback,
+  sessionLinks,
+  sessionMessages,
+  sessions,
+} from "../schema";
 
 type SeedDb = PostgresJsDatabase<typeof schema>;
 
@@ -686,6 +691,18 @@ function generalQuestion(): Message[] {
 
 type Scenario = "inquiry" | "purchase" | "order_status" | "return" | "general";
 
+interface LinkDef {
+  url: string;
+  title: string;
+  connectorSlug?: string;
+  resourceType?: string;
+}
+
+interface ScenarioResult {
+  messages: Message[];
+  links: LinkDef[];
+}
+
 const SCENARIOS: { value: Scenario; weight: number }[] = [
   { value: "inquiry", weight: 30 },
   { value: "purchase", weight: 20 },
@@ -694,19 +711,129 @@ const SCENARIOS: { value: Scenario; weight: number }[] = [
   { value: "general", weight: 15 },
 ];
 
-function generateMessages(scenario: Scenario): Message[] {
+const BASE_URL = "https://techstore-demo.example.com";
+
+function productUrl(product: Product): string {
+  return `${BASE_URL}/products/${product.name.toLowerCase().replace(/["\s]+/g, "-")}`;
+}
+
+function generateScenario(scenario: Scenario): ScenarioResult {
   switch (scenario) {
     case "inquiry":
-      return productInquiry();
+      return inquiryWithLinks();
     case "purchase":
-      return purchaseFlow();
+      return purchaseWithLinks();
     case "order_status":
-      return orderStatus();
+      return orderStatusWithLinks();
     case "return":
-      return returnExchange();
+      return returnWithLinks();
     case "general":
-      return generalQuestion();
+      return { messages: generalQuestion(), links: [] };
   }
+}
+
+function inquiryWithLinks(): ScenarioResult {
+  const msgs = productInquiry();
+  // Extract product names from the first assistant message
+  const products = PRODUCTS.filter((p) =>
+    msgs.some(
+      (m) => m.role === "assistant" && m.content?.includes(p.name),
+    ),
+  );
+  return {
+    messages: msgs,
+    links: products.map((p) => ({
+      url: productUrl(p),
+      title: p.name,
+      connectorSlug: CONNECTOR_SLUG,
+      resourceType: "product",
+    })),
+  };
+}
+
+function purchaseWithLinks(): ScenarioResult {
+  const msgs = purchaseFlow();
+  const products = PRODUCTS.filter((p) =>
+    msgs.some(
+      (m) => m.role === "assistant" && m.content?.includes(p.name),
+    ),
+  );
+  const orderId = msgs
+    .map((m) => m.content?.match(/TK-\d+/)?.[0])
+    .find(Boolean);
+  const links: LinkDef[] = products.map((p) => ({
+    url: productUrl(p),
+    title: p.name,
+    connectorSlug: CONNECTOR_SLUG,
+    resourceType: "product",
+  }));
+  if (orderId) {
+    links.push({
+      url: `${BASE_URL}/orders/${orderId}`,
+      title: `Order ${orderId}`,
+      connectorSlug: CONNECTOR_SLUG,
+      resourceType: "order",
+    });
+  }
+  return { messages: msgs, links };
+}
+
+function orderStatusWithLinks(): ScenarioResult {
+  const msgs = orderStatus();
+  const orderId = msgs
+    .map((m) => m.content?.match(/TK-\d+/)?.[0])
+    .find(Boolean);
+  const links: LinkDef[] = [];
+  if (orderId) {
+    links.push({
+      url: `${BASE_URL}/orders/${orderId}`,
+      title: `Order ${orderId}`,
+      connectorSlug: CONNECTOR_SLUG,
+      resourceType: "order",
+    });
+  }
+  if (msgs.some((m) => m.content?.includes("shipped") || m.content?.includes("in transit"))) {
+    links.push({
+      url: `https://tracking.example.com/pkg/${crypto.randomUUID().slice(0, 12)}`,
+      title: "Shipment Tracking",
+      resourceType: "tracking",
+    });
+  }
+  return { messages: msgs, links };
+}
+
+function returnWithLinks(): ScenarioResult {
+  const msgs = returnExchange();
+  const orderId = msgs
+    .map((m) => m.content?.match(/TK-\d+/)?.[0])
+    .find(Boolean);
+  const product = PRODUCTS.find((p) =>
+    msgs.some((m) => m.content?.includes(p.name)),
+  );
+  const links: LinkDef[] = [];
+  if (orderId) {
+    links.push({
+      url: `${BASE_URL}/orders/${orderId}`,
+      title: `Order ${orderId}`,
+      connectorSlug: CONNECTOR_SLUG,
+      resourceType: "order",
+    });
+  }
+  if (product) {
+    links.push({
+      url: productUrl(product),
+      title: product.name,
+      connectorSlug: CONNECTOR_SLUG,
+      resourceType: "product",
+    });
+  }
+  links.push({
+    url: `${BASE_URL}/returns/RET-${randInt(1000, 9999)}`,
+    title: `Return RET-${randInt(1000, 9999)}`,
+    connectorSlug: CONNECTOR_SLUG,
+    resourceType: "return",
+  });
+  return { messages: msgs, links };
 }
 
 // ============================================================================
@@ -841,10 +968,20 @@ export async function generateDemoSessions(
     occurredAt: Date;
   }[] = [];
 
+  const allLinks: {
+    id: string;
+    sessionId: string;
+    url: string;
+    title: string;
+    connectorSlug: string | undefined;
+    resourceType: string | undefined;
+  }[] = [];
+
   for (let i = 0; i < sessionValues.length; i++) {
     const session = sessionValues[i];
     const { scenario, startedAt } = sessionScenarios[i];
-    let msgs = generateMessages(scenario);
+    const result = generateScenario(scenario);
+    let msgs = result.messages;
 
     // Abandoned sessions: user dropped off mid-conversation
     if (session.status === "abandoned") {
@@ -868,6 +1005,17 @@ export async function generateDemoSessions(
         toolOutput: msg.toolOutput,
         createdAt: ts,
         occurredAt: ts,
+      });
+    }
+
+    for (const link of result.links) {
+      allLinks.push({
+        id: crypto.randomUUID(),
+        sessionId: session.id,
+        url: link.url,
+        title: link.title,
+        connectorSlug: link.connectorSlug,
+        resourceType: link.resourceType,
       });
     }
   }
@@ -929,7 +1077,18 @@ export async function generateDemoSessions(
       .onConflictDoNothing();
   }
 
+  // Insert links in chunks
+  if (allLinks.length > 0) {
+    const LINK_CHUNK = 500;
+    for (let i = 0; i < allLinks.length; i += LINK_CHUNK) {
+      await db
+        .insert(sessionLinks)
+        .values(allLinks.slice(i, i + LINK_CHUNK))
+        .onConflictDoNothing();
+    }
+  }
+
   console.log(
-    `  Generated ${sessionValues.length} sessions, ${allMessages.length} messages, ${feedbackValues.length} feedback records`,
+    `  Generated ${sessionValues.length} sessions, ${allMessages.length} messages, ${feedbackValues.length} feedback, ${allLinks.length} links`,
   );
 }

@@ -4,6 +4,7 @@ import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Input } from '~/components/ui/input'
 import { api } from '~/lib/api'
+import { useCanMutate } from '~/lib/permissions'
 import type { User } from '~/schemas/auth'
 import { useAuthStore } from '~/stores/auth'
 
@@ -11,6 +12,7 @@ export function ProfileForm() {
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
   const setAuth = useAuthStore((s) => s.setAuth)
+  const canMutate = useCanMutate()
   const [name, setName] = useState(user?.name ?? '')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -42,6 +44,7 @@ export function ProfileForm() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
+            disabled={!canMutate}
           />
 
           <Input label="Email" value={user?.email ?? ''} disabled hint="Email cannot be changed" />
@@ -53,11 +56,13 @@ export function ProfileForm() {
             hint="Contact an administrator to change your role"
           />
 
-          <div className="pt-2">
-            <Button type="submit" loading={isSaving}>
-              Save Changes
-            </Button>
-          </div>
+          {canMutate ? (
+            <div className="pt-2">
+              <Button type="submit" loading={isSaving}>
+                Save Changes
+              </Button>
+            </div>
+          ) : null}
         </form>
       </CardContent>
     </Card>

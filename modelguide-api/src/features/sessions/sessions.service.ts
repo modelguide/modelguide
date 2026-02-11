@@ -11,7 +11,6 @@ import {
   sessionMessages,
   sessions,
 } from "@db/schema";
-import { extractLinks } from "@features/sessions/link-extraction";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
@@ -19,6 +18,7 @@ import {
   getOffset,
 } from "@lib/pagination";
 import { and, asc, count, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { extractLinks } from "./link-extraction";
 
 // ============================================================================
 // Types
@@ -348,7 +348,7 @@ export async function addMessages(
 
     const inserted = await tx.insert(sessionMessages).values(rows).returning();
 
-    // Extract external links from tool call outputs
+    // Extract external resource links from tool call outputs
     const toolCallsWithOutput = messages
       .flatMap((msg) => msg.toolCalls ?? [])
       .filter((tc) => tc.toolOutput)

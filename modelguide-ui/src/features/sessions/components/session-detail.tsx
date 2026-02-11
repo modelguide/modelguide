@@ -1,5 +1,4 @@
-import type { LucideIcon } from 'lucide-react'
-import { ExternalLink, Link, Package, Ticket } from 'lucide-react'
+import { ExternalLink, Link, type LucideIcon, Package, Ticket } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -252,6 +251,7 @@ function ExternalLinkRow({ link }: { link: SessionLink }) {
     </a>
   )
 }
+
 function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
