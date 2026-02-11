@@ -295,8 +295,17 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/orders/TK-20241", title: "Order TK-20241", connectorSlug: "techstore", resourceType: "order" },
-        { url: "https://tracking.example.com/pkg/1Z999AA10123456784", title: "Shipment Tracking", resourceType: "tracking" },
+        {
+          url: "https://techstore-demo.example.com/orders/TK-20241",
+          title: "Order TK-20241",
+          connectorSlug: "techstore",
+          resourceType: "order",
+        },
+        {
+          url: "https://tracking.example.com/pkg/1Z999AA10123456784",
+          title: "Shipment Tracking",
+          resourceType: "tracking",
+        },
       ],
     },
     {
@@ -334,9 +343,24 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/orders/TK-20198", title: "Order TK-20198", connectorSlug: "techstore", resourceType: "order" },
-        { url: "https://techstore-demo.example.com/products/probook-15", title: "ProBook 15 Laptop", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/returns/RET-4821", title: "Return RET-4821", connectorSlug: "techstore", resourceType: "return" },
+        {
+          url: "https://techstore-demo.example.com/orders/TK-20198",
+          title: "Order TK-20198",
+          connectorSlug: "techstore",
+          resourceType: "order",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/probook-15",
+          title: "ProBook 15 Laptop",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/returns/RET-4821",
+          title: "Return RET-4821",
+          connectorSlug: "techstore",
+          resourceType: "return",
+        },
       ],
     },
     {
@@ -386,10 +410,30 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/products/soundmax-pro", title: "SoundMax Pro Headphones", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/products/audioelite-wireless", title: "AudioElite Wireless", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/products/cleartone-anc", title: "ClearTone ANC", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/cart/session/CS-8812", title: "Cart CS-8812", connectorSlug: "techstore", resourceType: "cart" },
+        {
+          url: "https://techstore-demo.example.com/products/soundmax-pro",
+          title: "SoundMax Pro Headphones",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/audioelite-wireless",
+          title: "AudioElite Wireless",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/cleartone-anc",
+          title: "ClearTone ANC",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/cart/session/CS-8812",
+          title: "Cart CS-8812",
+          connectorSlug: "techstore",
+          resourceType: "cart",
+        },
       ],
     },
     {
@@ -422,9 +466,24 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/orders/TK-20185", title: "Order TK-20185", connectorSlug: "techstore", resourceType: "order" },
-        { url: "https://techstore-demo.example.com/products/ultraview-27", title: "UltraView 27\" Monitor", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/claims/DMG-1190", title: "Damage Claim DMG-1190", connectorSlug: "techstore", resourceType: "claim" },
+        {
+          url: "https://techstore-demo.example.com/orders/TK-20185",
+          title: "Order TK-20185",
+          connectorSlug: "techstore",
+          resourceType: "order",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/ultraview-27",
+          title: 'UltraView 27" Monitor',
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/claims/DMG-1190",
+          title: "Damage Claim DMG-1190",
+          connectorSlug: "techstore",
+          resourceType: "claim",
+        },
       ],
     },
     {
@@ -498,7 +557,12 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/orders/TK-20210", title: "Order TK-20210 (Cancelled)", connectorSlug: "techstore", resourceType: "order" },
+        {
+          url: "https://techstore-demo.example.com/orders/TK-20210",
+          title: "Order TK-20210 (Cancelled)",
+          connectorSlug: "techstore",
+          resourceType: "order",
+        },
       ],
     },
     {
@@ -531,8 +595,18 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/products/usb-c-cable", title: "USB-C Cable", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/cart/session/CS-9044", title: "Bulk Order Cart", connectorSlug: "techstore", resourceType: "cart" },
+        {
+          url: "https://techstore-demo.example.com/products/usb-c-cable",
+          title: "USB-C Cable",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/cart/session/CS-9044",
+          title: "Bulk Order Cart",
+          connectorSlug: "techstore",
+          resourceType: "cart",
+        },
       ],
     },
     {
@@ -579,9 +653,24 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/orders/TK-20150", title: "Order TK-20150", connectorSlug: "techstore", resourceType: "order" },
-        { url: "https://techstore-demo.example.com/products/probook-15", title: "ProBook 15 Laptop", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/warranty/WRN-3350", title: "Warranty WRN-3350 (3yr)", connectorSlug: "techstore", resourceType: "warranty" },
+        {
+          url: "https://techstore-demo.example.com/orders/TK-20150",
+          title: "Order TK-20150",
+          connectorSlug: "techstore",
+          resourceType: "order",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/probook-15",
+          title: "ProBook 15 Laptop",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/warranty/WRN-3350",
+          title: "Warranty WRN-3350 (3yr)",
+          connectorSlug: "techstore",
+          resourceType: "warranty",
+        },
       ],
     },
     {
@@ -614,9 +703,24 @@ export async function seedDemoOrg(db: SeedDb) {
         source: "customer" as const,
       },
       links: [
-        { url: "https://techstore-demo.example.com/orders/TK-20175", title: "Order TK-20175", connectorSlug: "techstore", resourceType: "order" },
-        { url: "https://techstore-demo.example.com/products/soundmax-pro", title: "SoundMax Pro Headphones", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/exchanges/EXC-7720", title: "Exchange EXC-7720", connectorSlug: "techstore", resourceType: "exchange" },
+        {
+          url: "https://techstore-demo.example.com/orders/TK-20175",
+          title: "Order TK-20175",
+          connectorSlug: "techstore",
+          resourceType: "order",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/soundmax-pro",
+          title: "SoundMax Pro Headphones",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/exchanges/EXC-7720",
+          title: "Exchange EXC-7720",
+          connectorSlug: "techstore",
+          resourceType: "exchange",
+        },
       ],
     },
     {
@@ -655,10 +759,30 @@ export async function seedDemoOrg(db: SeedDb) {
       ],
       feedback: null,
       links: [
-        { url: "https://techstore-demo.example.com/products/ultraview-27-4k", title: "UltraView 27\" 4K Monitor", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/products/dualview-32-curved", title: "DualView 32\" Curved", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/products/studiopro-usb-mic", title: "StudioPro USB Microphone", connectorSlug: "techstore", resourceType: "product" },
-        { url: "https://techstore-demo.example.com/products/soundmax-pro", title: "SoundMax Pro Headphones", connectorSlug: "techstore", resourceType: "product" },
+        {
+          url: "https://techstore-demo.example.com/products/ultraview-27-4k",
+          title: 'UltraView 27" 4K Monitor',
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/dualview-32-curved",
+          title: 'DualView 32" Curved',
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/studiopro-usb-mic",
+          title: "StudioPro USB Microphone",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
+        {
+          url: "https://techstore-demo.example.com/products/soundmax-pro",
+          title: "SoundMax Pro Headphones",
+          connectorSlug: "techstore",
+          resourceType: "product",
+        },
       ],
     },
   ];
