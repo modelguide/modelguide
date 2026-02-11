@@ -736,9 +736,7 @@ function inquiryWithLinks(): ScenarioResult {
   const msgs = productInquiry();
   // Extract product names from the first assistant message
   const products = PRODUCTS.filter((p) =>
-    msgs.some(
-      (m) => m.role === "assistant" && m.content?.includes(p.name),
-    ),
+    msgs.some((m) => m.role === "assistant" && m.content?.includes(p.name)),
   );
   return {
     messages: msgs,
@@ -754,9 +752,7 @@ function inquiryWithLinks(): ScenarioResult {
 function purchaseWithLinks(): ScenarioResult {
   const msgs = purchaseFlow();
   const products = PRODUCTS.filter((p) =>
-    msgs.some(
-      (m) => m.role === "assistant" && m.content?.includes(p.name),
-    ),
+    msgs.some((m) => m.role === "assistant" && m.content?.includes(p.name)),
   );
   const orderId = msgs
     .map((m) => m.content?.match(/TK-\d+/)?.[0])
@@ -792,7 +788,12 @@ function orderStatusWithLinks(): ScenarioResult {
       resourceType: "order",
     });
   }
-  if (msgs.some((m) => m.content?.includes("shipped") || m.content?.includes("in transit"))) {
+  if (
+    msgs.some(
+      (m) =>
+        m.content?.includes("shipped") || m.content?.includes("in transit"),
+    )
+  ) {
     links.push({
       url: `https://tracking.example.com/pkg/${crypto.randomUUID().slice(0, 12)}`,
       title: "Shipment Tracking",
