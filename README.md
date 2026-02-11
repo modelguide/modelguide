@@ -315,5 +315,5 @@ Check [open issues](https://github.com/modelguide/modelguide/issues) — look fo
 ---
 
 <p align="center">
-  Built by <a href="https://modelguide.dev">ModelGuide</a> · 🇵🇱 Poland
+  Built by <a href="https://modelguide.ai">ModelGuide</a> · 🇵🇱 Poland
 </p>
