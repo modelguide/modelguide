@@ -10,6 +10,7 @@ import { Spinner } from '~/components/ui/spinner'
 import { Toggle } from '~/components/ui/toggle'
 import { DynamicConfigForm } from '~/features/connectors/components/dynamic-config-form'
 import { api } from '~/lib/api'
+import { useCanMutate } from '~/lib/permissions'
 import type {
   CatalogEntry,
   ConfigField,
@@ -30,6 +31,7 @@ function ConnectorDetailPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.role === 'admin'
+  const canMutate = useCanMutate()
 
   const {
     data: connector,
@@ -118,8 +120,14 @@ function ConnectorDetailPage() {
             key={connector.updatedAt}
             connector={connector}
             catalogEntry={catalogEntry}
+            canMutate={canMutate}
           />
-          <ToolsCard tools={toolsData?.data ?? []} catalogEntry={catalogEntry} connectorId={id} />
+          <ToolsCard
+            tools={toolsData?.data ?? []}
+            catalogEntry={catalogEntry}
+            connectorId={id}
+            canMutate={canMutate}
+          />
           {isAdmin ? (
             <DangerZoneCard
               connectorId={connector.id}
@@ -208,9 +216,11 @@ function DetailsCard({
 function ConfigurationCard({
   connector,
   catalogEntry,
+  canMutate,
 }: {
   connector: Connector
   catalogEntry: CatalogEntry
+  canMutate: boolean
 }) {
   const queryClient = useQueryClient()
   const [config, setConfig] = useState<Record<string, unknown>>(
@@ -242,6 +252,7 @@ function ConfigurationCard({
           onSubmit={() => updateMutation.mutate({ config })}
           isSubmitting={updateMutation.isPending}
           successKey={updateMutation.data ? updateMutation.submittedAt : 0}
+          disabled={!canMutate}
           error={
             updateMutation.isError
               ? updateMutation.error instanceof Error
@@ -259,10 +270,12 @@ function ToolsCard({
   tools,
   catalogEntry,
   connectorId,
+  canMutate,
 }: {
   tools: ConnectorTool[]
   catalogEntry: CatalogEntry
   connectorId: string
+  canMutate: boolean
 }) {
   const queryClient = useQueryClient()
 
@@ -321,7 +334,7 @@ function ToolsCard({
                           update: { isActive: !tool.isActive },
                         })
                       }
-                      disabled={updateToolMutation.isPending}
+                      disabled={!canMutate || updateToolMutation.isPending}
                     />
                   </div>
                   <div className="mt-2 flex items-center gap-1 text-fg-muted">
