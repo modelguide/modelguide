@@ -16,6 +16,8 @@ interface DynamicConfigFormProps {
   successKey?: number
   error?: string
   submitLabel?: string
+  /** Disable all inputs (e.g. for viewer role) */
+  disabled?: boolean
 }
 
 export function DynamicConfigForm({
@@ -27,6 +29,7 @@ export function DynamicConfigForm({
   successKey = 0,
   error,
   submitLabel = 'Save Configuration',
+  disabled = false,
 }: DynamicConfigFormProps) {
   const [showSaved, setShowSaved] = useState(false)
 
@@ -58,6 +61,7 @@ export function DynamicConfigForm({
               label={formatLabel(key)}
               value={(values[key] as string) ?? ''}
               onChange={(value) => updateValue(key, value)}
+              disabled={disabled}
             />
           )
         }
@@ -71,6 +75,7 @@ export function DynamicConfigForm({
             placeholder={field.description}
             hint={field.description}
             required={field.required}
+            disabled={disabled}
           />
         )
       })}
@@ -94,18 +99,20 @@ export function DynamicConfigForm({
       <form onSubmit={handleSubmit} className="space-y-4">
         {fields}
         {error ? <p className="font-sans text-sm text-error">{error}</p> : null}
-        <div className="pt-2">
-          {showSaved ? (
-            <div className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-success">
-              <Check className="h-4 w-4" />
-              Saved
-            </div>
-          ) : (
-            <Button type="submit" loading={isSubmitting} disabled={!isValid} className="w-full">
-              {submitLabel}
-            </Button>
-          )}
-        </div>
+        {disabled ? null : (
+          <div className="pt-2">
+            {showSaved ? (
+              <div className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-success">
+                <Check className="h-4 w-4" />
+                Saved
+              </div>
+            ) : (
+              <Button type="submit" loading={isSubmitting} disabled={!isValid} className="w-full">
+                {submitLabel}
+              </Button>
+            )}
+          </div>
+        )}
       </form>
     )
   }

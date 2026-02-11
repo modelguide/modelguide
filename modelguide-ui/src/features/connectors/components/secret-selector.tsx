@@ -9,6 +9,7 @@ interface SecretSelectorProps {
   onChange: (value: string) => void
   label?: string
   error?: string
+  disabled?: boolean
 }
 
 export function SecretSelector({
@@ -16,6 +17,7 @@ export function SecretSelector({
   onChange,
   label = 'API Token',
   error,
+  disabled,
 }: SecretSelectorProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['secrets'],
@@ -32,7 +34,7 @@ export function SecretSelector({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          disabled={isLoading}
+          disabled={isLoading || disabled}
           className={`
             h-10 w-full appearance-none rounded border bg-bg-base pl-9 pr-10 font-mono text-sm text-fg-primary
             transition focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand
