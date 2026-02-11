@@ -7,6 +7,7 @@
   --font-mono: "JetBrains Mono", "SF Mono", monospace;
 
   /* Brand — Ember with depth */
+  --color-brand: #f97316;
   --color-brand-50: #fff7ed;
   --color-brand-100: #ffedd5;
   --color-brand-200: #fed7aa;

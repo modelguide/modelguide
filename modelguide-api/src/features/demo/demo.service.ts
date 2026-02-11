@@ -4,6 +4,7 @@
  * email as a lead. Completely isolated from core auth (auth.service.ts).
  */
 
+import { resolveMx } from "node:dns/promises";
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
 import { forApp } from "@db/rls";
@@ -25,6 +26,20 @@ export async function demoLogin(
 ): Promise<DemoLoginResult> {
   if (!isDemoEnabled()) {
     throw Errors.notFound("Not found");
+  }
+
+  // Quick MX check — reject emails with non-existent domains
+  const domain = email.split("@")[1];
+  try {
+    const records = await resolveMx(domain);
+    if (!records || records.length === 0) {
+      throw Errors.validationError("Email domain does not accept mail");
+    }
+  } catch (err) {
+    if (err instanceof Error && "code" in err) {
+      throw Errors.validationError("Email domain does not accept mail");
+    }
+    throw err;
   }
 
   const demoOrgId = await getDemoOrgId();

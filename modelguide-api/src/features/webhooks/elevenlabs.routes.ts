@@ -77,6 +77,8 @@ app.post("/:agentId/post-call", async (c) => {
   }
 
   // 2. Verify webhook signature with agent-specific secret
+  // Dev-only: allow skipping HMAC for manual replay scripts (replay-post-call.ts).
+  // Safe in production because NODE_ENV !== "development".
   const skipHmac =
     env.NODE_ENV === "development" && c.req.header("x-skip-hmac") === "true";
 
@@ -133,7 +135,16 @@ app.post("/:agentId/post-call", async (c) => {
   const converted = convertPostCallToSession(data, dynamicVars, conversationId);
   const existingSessionId = dynamicVars?.mg_session_id;
 
-  // 5. Idempotency: check if session with this externalId already exists
+  // 5. Extract external resource links from tool outputs
+  const toolMessages = converted.messages
+    .filter((m) => m.role === "tool" && m.toolOutput)
+    .map((m) => ({
+      toolName: m.toolName ?? "",
+      toolOutput: m.toolOutput,
+    }));
+  const linkRows = extractLinks(toolMessages);
+
+  // 6. Idempotency: check if session with this externalId already exists
   const [existingByExternalId] = await forOrg(agentRow.organizationId, (tx) =>
     tx
       .select({ id: sessions.id })
@@ -153,12 +164,6 @@ app.post("/:agentId/post-call", async (c) => {
     );
     return c.json({ received: true, session_id: existingByExternalId.id });
   }
-
-  // 6. Extract links from tool outputs
-  const toolMessages = converted.messages
-    .filter((m) => m.role === "tool" && m.toolOutput)
-    .map((m) => ({ toolName: m.toolName ?? "", toolOutput: m.toolOutput }));
-  const linkRows = extractLinks(toolMessages);
 
   // 7. Store session + messages + links in a transaction
   let sessionId: string;

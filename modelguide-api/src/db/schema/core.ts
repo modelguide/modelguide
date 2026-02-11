@@ -565,41 +565,6 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
 }));
 
 // ============================================================================
-// Session Links (external resource URLs from tool calls)
-// ============================================================================
-
-export const sessionLinks = pgTable(
-  "session_links",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    sessionId: uuid("session_id")
-      .notNull()
-      .references(() => sessions.id, { onDelete: "cascade" }),
-    url: varchar("url", { length: 2048 }).notNull(),
-    title: varchar("title", { length: 255 }),
-    connectorSlug: varchar("connector_slug", { length: 100 }),
-    resourceType: varchar("resource_type", { length: 100 }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("session_links_session_url_unique").on(
-      table.sessionId,
-      table.url,
-    ),
-    index("session_links_session_idx").on(table.sessionId),
-  ],
-);
-
-export const sessionLinksRelations = relations(sessionLinks, ({ one }) => ({
-  session: one(sessions, {
-    fields: [sessionLinks.sessionId],
-    references: [sessions.id],
-  }),
-}));
-
-// ============================================================================
 // Session Messages
 // ============================================================================
 
@@ -693,3 +658,38 @@ export const sessionFeedbackRelations = relations(
     }),
   }),
 );
+
+// ============================================================================
+// Session Links (External resource URLs from tool calls — no RLS)
+// ============================================================================
+
+export const sessionLinks = pgTable(
+  "session_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    url: varchar("url", { length: 2048 }).notNull(),
+    title: varchar("title", { length: 255 }),
+    connectorSlug: varchar("connector_slug", { length: 100 }),
+    resourceType: varchar("resource_type", { length: 100 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("session_links_session_url_unique").on(
+      table.sessionId,
+      table.url,
+    ),
+    index("session_links_session_idx").on(table.sessionId),
+  ],
+);
+
+export const sessionLinksRelations = relations(sessionLinks, ({ one }) => ({
+  session: one(sessions, {
+    fields: [sessionLinks.sessionId],
+    references: [sessions.id],
+  }),
+}));

@@ -24,6 +24,18 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   const [loading, setLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const cooldownRef = useRef<ReturnType<typeof setInterval>>(null)
+  const [demoAvailable, setDemoAvailable] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const baseUrl = getApiBaseUrl()
+    fetch(`${baseUrl}/config`)
+      .then((r) => {
+        if (!r.ok) throw new Error('config fetch failed')
+        return r.json()
+      })
+      .then((data: { demoMode: boolean }) => setDemoAvailable(data.demoMode))
+      .catch(() => setDemoAvailable(false))
+  }, [])
 
   const startCooldown = useCallback(() => {
     setCooldown(RESEND_COOLDOWN_SECONDS)
@@ -130,37 +142,57 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div>
-        <Label htmlFor="email">Email</Label>
-        <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@company.com"
-          autoComplete="email"
-          disabled={loading}
-          required
-          className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-3 text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
-        />
-      </div>
+    <>
+      {demoAvailable ? <DemoSection redirectTo={redirectTo} /> : null}
 
-      {error ? (
-        <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-3 text-sm text-error">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{error}</span>
+      {demoAvailable ? (
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-fg-subtle/20" />
+          <span className="text-xs text-fg-muted">or sign in</span>
+          <div className="h-px flex-1 bg-fg-subtle/20" />
         </div>
       ) : null}
 
-      <Button type="submit" loading={loading} className="w-full mt-2">
-        Send magic link
-      </Button>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <Label htmlFor="email">
+            Email
+            {demoAvailable ? (
+              <span className="ml-1 text-fg-muted font-normal">(registered users)</span>
+            ) : null}
+          </Label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            autoComplete="email"
+            disabled={loading}
+            required
+            className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-3 text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
+          />
+        </div>
 
-      <DemoSection redirectTo={redirectTo} />
+        {error ? (
+          <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-3 text-sm text-error">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        ) : null}
 
-      {import.meta.env.DEV ? <DevAccounts onSelect={setEmail} /> : null}
-    </form>
+        <Button
+          type="submit"
+          variant={demoAvailable ? 'secondary' : 'primary'}
+          loading={loading}
+          className="w-full mt-2"
+        >
+          Send magic link
+        </Button>
+
+        {import.meta.env.DEV && !demoAvailable ? <DevAccounts onSelect={setEmail} /> : null}
+      </form>
+    </>
   )
 }
 
@@ -172,23 +204,9 @@ const DEV_ACCOUNTS = [
 function DemoSection({ redirectTo }: { redirectTo?: string }) {
   const demoLogin = useAuthStore((s) => s.demoLogin)
   const navigate = useNavigate()
-  const [demoAvailable, setDemoAvailable] = useState<boolean | null>(null)
   const [demoEmail, setDemoEmail] = useState('')
   const [demoError, setDemoError] = useState<string | null>(null)
   const [demoLoading, setDemoLoading] = useState(false)
-
-  useEffect(() => {
-    const baseUrl = getApiBaseUrl()
-    fetch(`${baseUrl}/config`)
-      .then((r) => {
-        if (!r.ok) throw new Error('config fetch failed')
-        return r.json()
-      })
-      .then((data: { demoMode: boolean }) => setDemoAvailable(data.demoMode))
-      .catch(() => setDemoAvailable(false))
-  }, [])
-
-  if (demoAvailable !== true) return null
 
   const handleDemoSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -212,40 +230,32 @@ function DemoSection({ redirectTo }: { redirectTo?: string }) {
   }
 
   return (
-    <div className="mt-6">
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-fg-subtle/20" />
-        <span className="text-xs text-fg-muted">or</span>
-        <div className="h-px flex-1 bg-fg-subtle/20" />
+    <form onSubmit={handleDemoSubmit} className="space-y-3">
+      <div className="flex items-center gap-2 text-sm text-fg-secondary">
+        <Eye className="h-4 w-4 text-brand-500" />
+        <span className="font-medium">Try the Demo</span>
       </div>
-
-      <form onSubmit={handleDemoSubmit} className="mt-4 space-y-3">
-        <div className="flex items-center gap-2 text-sm text-fg-secondary">
-          <Eye className="h-4 w-4 text-brand-500" />
-          <span className="font-medium">Try the Demo</span>
+      <input
+        type="email"
+        value={demoEmail}
+        onChange={(e) => setDemoEmail(e.target.value)}
+        placeholder="your@email.com"
+        autoComplete="email"
+        disabled={demoLoading}
+        required
+        className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-2.5 text-sm text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
+      />
+      {demoError ? (
+        <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-2.5 text-xs text-error">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <span>{demoError}</span>
         </div>
-        <input
-          type="email"
-          value={demoEmail}
-          onChange={(e) => setDemoEmail(e.target.value)}
-          placeholder="your@email.com"
-          autoComplete="email"
-          disabled={demoLoading}
-          required
-          className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-2.5 text-sm text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
-        />
-        {demoError ? (
-          <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-2.5 text-xs text-error">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            <span>{demoError}</span>
-          </div>
-        ) : null}
-        <Button type="submit" variant="secondary" loading={demoLoading} className="w-full">
-          <Eye className="h-4 w-4" />
-          Start Demo
-        </Button>
-      </form>
-    </div>
+      ) : null}
+      <Button type="submit" loading={demoLoading} className="w-full">
+        <Eye className="h-4 w-4" />
+        Start Demo
+      </Button>
+    </form>
   )
 }
 

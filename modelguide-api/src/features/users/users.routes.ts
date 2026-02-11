@@ -284,6 +284,10 @@ router.openapi(updateUserRoute, async (c) => {
 
   const isAdmin = currentUser.role === "admin";
 
+  if (currentUser.role === "viewer") {
+    throw Errors.forbidden("Viewer role cannot update users");
+  }
+
   if (!isAdmin && currentUser.id !== id) {
     throw Errors.forbidden(
       "Permission denied: users:update requires admin role",

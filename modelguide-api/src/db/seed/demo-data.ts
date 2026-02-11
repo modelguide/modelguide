@@ -16,6 +16,7 @@ import {
   organizations,
   secrets,
   sessionFeedback,
+  sessionLinks,
   sessionMessages,
   sessions,
   users,
@@ -162,11 +163,13 @@ export async function seedDemoOrg(db: SeedDb) {
   const agentDefs = [
     {
       name: "TechStore Voice Assistant",
+      slug: "techstore-voice-assistant",
       description:
         "Handles phone orders, product inquiries, and order status checks via voice",
     },
     {
       name: "TechStore Chat Bot",
+      slug: "techstore-chat-bot",
       description:
         "Web chat assistant for browsing products, placing orders, and tracking deliveries",
     },
@@ -179,6 +182,7 @@ export async function seedDemoOrg(db: SeedDb) {
       .values({
         organizationId: demoOrg.id,
         name: def.name,
+        slug: def.slug,
         description: def.description,
         agentType: "voice",
         isActive: true,
@@ -290,6 +294,10 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Quick and helpful!",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/orders/TK-20241", title: "Order TK-20241", connectorSlug: "techstore", resourceType: "order" },
+        { url: "https://tracking.example.com/pkg/1Z999AA10123456784", title: "Shipment Tracking", resourceType: "tracking" },
+      ],
     },
     {
       agent: 0,
@@ -325,6 +333,11 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Return process was smooth",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/orders/TK-20198", title: "Order TK-20198", connectorSlug: "techstore", resourceType: "order" },
+        { url: "https://techstore-demo.example.com/products/probook-15", title: "ProBook 15 Laptop", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/returns/RET-4821", title: "Return RET-4821", connectorSlug: "techstore", resourceType: "return" },
+      ],
     },
     {
       agent: 1,
@@ -372,6 +385,12 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Found exactly what I needed",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/products/soundmax-pro", title: "SoundMax Pro Headphones", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/products/audioelite-wireless", title: "AudioElite Wireless", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/products/cleartone-anc", title: "ClearTone ANC", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/cart/session/CS-8812", title: "Cart CS-8812", connectorSlug: "techstore", resourceType: "cart" },
+      ],
     },
     {
       agent: 1,
@@ -402,6 +421,11 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Excellent service for a damaged item",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/orders/TK-20185", title: "Order TK-20185", connectorSlug: "techstore", resourceType: "order" },
+        { url: "https://techstore-demo.example.com/products/ultraview-27", title: "UltraView 27\" Monitor", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/claims/DMG-1190", title: "Damage Claim DMG-1190", connectorSlug: "techstore", resourceType: "claim" },
+      ],
     },
     {
       agent: 0,
@@ -426,6 +450,7 @@ export async function seedDemoOrg(db: SeedDb) {
         },
       ],
       feedback: null,
+      links: [],
     },
     {
       agent: 1,
@@ -442,6 +467,7 @@ export async function seedDemoOrg(db: SeedDb) {
         },
       ],
       feedback: null,
+      links: [],
     },
     {
       agent: 0,
@@ -471,6 +497,9 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Wanted to keep the item but price dropped elsewhere",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/orders/TK-20210", title: "Order TK-20210 (Cancelled)", connectorSlug: "techstore", resourceType: "order" },
+      ],
     },
     {
       agent: 1,
@@ -501,6 +530,10 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Great bulk pricing",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/products/usb-c-cable", title: "USB-C Cable", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/cart/session/CS-9044", title: "Bulk Order Cart", connectorSlug: "techstore", resourceType: "cart" },
+      ],
     },
     {
       agent: 0,
@@ -545,6 +578,11 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Very informative and helpful",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/orders/TK-20150", title: "Order TK-20150", connectorSlug: "techstore", resourceType: "order" },
+        { url: "https://techstore-demo.example.com/products/probook-15", title: "ProBook 15 Laptop", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/warranty/WRN-3350", title: "Warranty WRN-3350 (3yr)", connectorSlug: "techstore", resourceType: "warranty" },
+      ],
     },
     {
       agent: 1,
@@ -575,6 +613,11 @@ export async function seedDemoOrg(db: SeedDb) {
         comment: "Fast exchange, no hassle",
         source: "customer" as const,
       },
+      links: [
+        { url: "https://techstore-demo.example.com/orders/TK-20175", title: "Order TK-20175", connectorSlug: "techstore", resourceType: "order" },
+        { url: "https://techstore-demo.example.com/products/soundmax-pro", title: "SoundMax Pro Headphones", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/exchanges/EXC-7720", title: "Exchange EXC-7720", connectorSlug: "techstore", resourceType: "exchange" },
+      ],
     },
     {
       agent: 0,
@@ -590,6 +633,7 @@ export async function seedDemoOrg(db: SeedDb) {
         },
       ],
       feedback: null,
+      links: [],
     },
     {
       agent: 1,
@@ -610,6 +654,12 @@ export async function seedDemoOrg(db: SeedDb) {
         },
       ],
       feedback: null,
+      links: [
+        { url: "https://techstore-demo.example.com/products/ultraview-27-4k", title: "UltraView 27\" 4K Monitor", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/products/dualview-32-curved", title: "DualView 32\" Curved", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/products/studiopro-usb-mic", title: "StudioPro USB Microphone", connectorSlug: "techstore", resourceType: "product" },
+        { url: "https://techstore-demo.example.com/products/soundmax-pro", title: "SoundMax Pro Headphones", connectorSlug: "techstore", resourceType: "product" },
+      ],
     },
   ];
 
@@ -668,6 +718,22 @@ export async function seedDemoOrg(db: SeedDb) {
           comment: sessionDef.feedback.comment,
           feedbackSource: sessionDef.feedback.source,
         })
+        .onConflictDoNothing();
+    }
+
+    // Insert links
+    if (sessionDef.links.length > 0) {
+      await db
+        .insert(sessionLinks)
+        .values(
+          sessionDef.links.map((link) => ({
+            sessionId: session.id,
+            url: link.url,
+            title: link.title,
+            connectorSlug: link.connectorSlug,
+            resourceType: link.resourceType,
+          })),
+        )
         .onConflictDoNothing();
     }
   }

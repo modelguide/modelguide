@@ -44,3 +44,6 @@ drizzle/meta/
 # TanStack Router
 .tanstack/
 .vite/
+
+# Manual test payloads
+**/tests/manual/payload*.json
