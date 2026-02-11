@@ -50,7 +50,9 @@ apiRouter.openapi(healthRoute, (c) => {
 
 apiRouter.route("/agents", agentRoutes);
 apiRouter.route("/analytics", analyticsRoutes);
-apiRouter.use("/auth/*", rateLimit({ limit: 10, windowSeconds: 60 }));
+if (env.NODE_ENV !== "test") {
+  apiRouter.use("/auth/*", rateLimit({ limit: 10, windowSeconds: 60 }));
+}
 apiRouter.route("/auth", authRoutes);
 apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
