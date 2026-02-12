@@ -41,7 +41,7 @@ async function run() {
 
     // Run migrations
     console.log("Running migrations...");
-    execSync("bun run scripts/migrate.ts", {
+    execSync("bun run dist/migrate.js", {
       stdio: "inherit",
       timeout: 120_000,
     });

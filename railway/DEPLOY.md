@@ -80,7 +80,7 @@ Run the seed, overriding `DATABASE_MIGRATION_URL` to use the proxy host/port (ke
 DATABASE_MIGRATION_USER and DATABASE_MIGRATION_PASSWORD from step 3):
 
 ```bash
-railway run --service api -- sh -c 'cd modelguide-api && DATABASE_MIGRATION_URL=postgresql://$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/railway bun run src/db/seed/index.ts'
+railway run --service api -- sh -c 'cd modelguide-api && DATABASE_MIGRATION_URL=postgresql://$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/$PGDATABASE bun run src/db/seed/index.ts'
 ```
 
 ## 7. Assign public domain
@@ -90,7 +90,7 @@ railway domain --service lb
 ```
 
 Only Caddy gets a public domain. It routes:
-- `/api/*`, `/docs`, `/mcp` → `api.railway.internal:8080`
+- `/api/*`, `/docs`, `/docs/*`, `/openapi.json`, `/mcp/*`, `/webhooks/*` → `api.railway.internal:8080`
 - Everything else → `ui.railway.internal:8080`
 
 The UI uses a relative `/api` prefix — no `VITE_API_URL` needed.

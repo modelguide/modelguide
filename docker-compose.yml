@@ -23,7 +23,7 @@ services:
     build:
       context: ./modelguide-api
     container_name: modelguide-migrate
-    command: ["bun", "run", "scripts/migrate.ts"]
+    command: ["bun", "run", "dist/migrate.js"]
     environment:
       DATABASE_MIGRATION_URL: postgresql://postgres:5432/modelguide
       DATABASE_MIGRATION_USER: modelguide
@@ -41,7 +41,7 @@ services:
     container_name: modelguide-api
     environment:
       PORT: "3000"
-      NODE_ENV: test
+      NODE_ENV: development
       DATABASE_URL: postgresql://modelguide_app:modelguide_app@postgres:5432/modelguide
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars-long}
       REFRESH_JWT_SECRET: ${REFRESH_JWT_SECRET:-change-me-refresh-secret-at-least-32-chars}

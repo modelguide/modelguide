@@ -21,7 +21,7 @@ A single `docker compose up --build` starts the full stack:
 - **migrate** — one-shot container that runs `scripts/migrate.ts` (provisions `modelguide_app` role, runs Drizzle migrations, grants privileges)
 - **api** — Bun.js API server connecting as `modelguide_app` (restricted role)
 - **ui** — TanStack Start UI server
-- **caddy** — Reverse proxy on `:8080`, routing `/api/*`, `/docs*`, `/openapi.json`, `/mcp*` to API, everything else to UI
+- **caddy** — Reverse proxy on `:8080`, routing `/api/*`, `/docs`, `/docs/*`, `/openapi.json`, `/mcp` to API, everything else to UI
 
 Service dependencies ensure correct startup order: postgres (healthy) → migrate (completed) → api (healthy) → ui, caddy.
 
@@ -54,7 +54,7 @@ The migration script (`scripts/migrate.ts`) idempotently provisions `modelguide_
 
 Both API and UI use multi-stage builds for minimal image size:
 
-- **API:** `deps` (prod install) → `build` (compile) → `runtime` (dist + prod node_modules)
+- **API:** `build` (install + compile + bundle scripts) → `runtime` (dist + drizzle SQL only)
 - **UI:** `deps` (npm ci) → `build` (vite build) → `runtime` (.output only)
 
 ## Consequences

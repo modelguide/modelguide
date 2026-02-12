@@ -1,9 +1,3 @@
-# ---- deps: prod-only install ----
-FROM oven/bun:1-alpine AS deps
-WORKDIR /app
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
-
 # ---- build: full install + compile ----
 FROM oven/bun:1-alpine AS build
 WORKDIR /app
@@ -11,7 +5,10 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY tsconfig.json ./
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 RUN bun build src/index.ts --outdir dist --target bun
+RUN bun build scripts/release.ts --outfile dist/release.js --target bun
+RUN bun build scripts/migrate.ts --outfile dist/migrate.js --target bun
 
 # ---- runtime ----
 FROM oven/bun:1-alpine AS runtime
@@ -20,13 +17,8 @@ WORKDIR /app
 # Install wget for healthcheck
 RUN apk add --no-cache wget
 
-COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY drizzle/ ./drizzle/
-COPY scripts/ ./scripts/
-COPY src/lib/migration-url.ts ./src/lib/migration-url.ts
-COPY tsconfig.json ./
-COPY package.json ./
 
 # Fail build if no migration SQL files exist
 RUN ls ./drizzle/*.sql

@@ -312,14 +312,12 @@ Architecture: PostgreSQL + API + UI + load balancer (Caddy). The LB is the only 
 
 Config-as-code via `railway.toml` in each service. Full setup guide: [`railway/DEPLOY.md`](railway/DEPLOY.md).
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/TEMPLATE_ID)
-
 **Deploying changes:**
 
 ```bash
-railway up --service api       # deploy API changes
-railway up --service ui        # deploy UI changes
-cd railway/lb && railway up --service lb && cd ../..  # deploy LB config changes
+(cd modelguide-api && railway up --service api)
+(cd modelguide-ui && railway up --service ui)
+(cd railway/lb && railway up --service lb)
 ```
 
 Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (migrations) automatically on every deploy via `preDeployCommand` in `railway.toml`.
