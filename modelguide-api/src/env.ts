@@ -44,6 +44,10 @@ const envSchema = z
     // Used for ElevenLabs sync (MCP server URL, webhook URL) and integration URL display.
     // Falls back to APP_URL if not set.
     API_EXTERNAL_ADDRESS: z.string().url().optional(),
+
+    // CORS allowed origins (comma-separated). Leave empty to disable CORS.
+    // E.g. "http://localhost:5173,https://demo.example.com"
+    CORS_ORIGINS: z.string().optional(),
   })
   .refine(
     (data) => {
