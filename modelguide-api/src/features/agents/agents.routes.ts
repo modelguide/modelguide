@@ -2,6 +2,7 @@
  * Agent management routes
  */
 
+import { env } from "@/env";
 import type { Agent } from "@db/schema";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
@@ -48,6 +49,13 @@ const agentResponseSchema = z.object({
   hasElevenLabsKey: z.boolean(),
   hasWebhookSecret: z.boolean(),
   keyPrefix: z.string().nullable(),
+  integrationUrls: z
+    .object({
+      sessionInit: z.string(),
+      mcp: z.string(),
+      postCallWebhook: z.string(),
+    })
+    .optional(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });
@@ -175,6 +183,11 @@ function formatAgent(
       })()
     : undefined;
 
+  const externalBase = (env.API_EXTERNAL_ADDRESS || env.APP_URL).replace(
+    /\/$/,
+    "",
+  );
+
   return {
     id: agent.id,
     name: agent.name,
@@ -187,6 +200,11 @@ function formatAgent(
     hasElevenLabsKey: agent.hasElevenLabsKey ?? false,
     hasWebhookSecret: agent.hasWebhookSecret ?? false,
     keyPrefix: agent.keyPrefix ?? null,
+    integrationUrls: {
+      sessionInit: `${externalBase}/api/sessions`,
+      mcp: `${externalBase}/mcp/${agent.id}`,
+      postCallWebhook: `${externalBase}/webhooks/elevenlabs/${agent.id}/post-call`,
+    },
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
   };

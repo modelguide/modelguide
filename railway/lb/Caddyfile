@@ -1,6 +1,6 @@
 :{$PORT:80} {
 	@backend path /api/* /docs /docs/* /openapi.json /mcp/* /webhooks/*
-	@demo path /acme-demo*
+	@demo path /acme-demo /acme-demo/*
 
     handle @demo {
 		uri strip_prefix /acme-demo

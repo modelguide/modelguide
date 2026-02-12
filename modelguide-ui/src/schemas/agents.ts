@@ -17,6 +17,13 @@ export const agentSchema = z.object({
   hasElevenLabsKey: z.boolean(),
   hasWebhookSecret: z.boolean().optional(),
   keyPrefix: z.string().nullable().optional(),
+  integrationUrls: z
+    .object({
+      sessionInit: z.string(),
+      mcp: z.string(),
+      postCallWebhook: z.string(),
+    })
+    .optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

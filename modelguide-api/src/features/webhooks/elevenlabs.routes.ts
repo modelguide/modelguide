@@ -8,7 +8,7 @@
  */
 
 import { env } from "@/env";
-import { db } from "@db/client";
+import { forApp, forOrg } from "@db/rls";
 import { agents, sessionLinks, sessionMessages, sessions } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { and, eq } from "drizzle-orm";
@@ -35,12 +35,14 @@ async function verifySignature(
 }
 
 async function getAgentWithMetadata(agentId: string) {
-  const [agent] = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.id, agentId))
-    .limit(1);
-  return agent ?? null;
+  return forApp(async (tx) => {
+    const [agent] = await tx
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId))
+      .limit(1);
+    return agent ?? null;
+  });
 }
 
 // ============================================================================
@@ -132,16 +134,18 @@ app.post("/:agentId/post-call", async (c) => {
   const existingSessionId = dynamicVars?.mg_session_id;
 
   // 5. Idempotency: check if session with this externalId already exists
-  const [existingByExternalId] = await db
-    .select({ id: sessions.id })
-    .from(sessions)
-    .where(
-      and(
-        eq(sessions.agentId, agent.id),
-        eq(sessions.externalId, conversationId),
-      ),
-    )
-    .limit(1);
+  const [existingByExternalId] = await forOrg(agentRow.organizationId, (tx) =>
+    tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.agentId, agent.id),
+          eq(sessions.externalId, conversationId),
+        ),
+      )
+      .limit(1),
+  );
 
   if (existingByExternalId) {
     console.log(
@@ -160,7 +164,7 @@ app.post("/:agentId/post-call", async (c) => {
   let sessionId: string;
 
   try {
-    sessionId = await db.transaction(async (tx) => {
+    sessionId = await forOrg(agentRow.organizationId, async (tx) => {
       if (existingSessionId) {
         // Session was created upfront — insert transcript messages, then complete
         if (converted.messages.length > 0) {

@@ -69,7 +69,6 @@ Both sub-projects require `.env` files. The `make quickstart` command copies `.e
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `VITE_API_URL` | No | `http://localhost:8000/api` | API base URL (when not using Vite proxy) |
-| `VITE_PUBLIC_API_URL` | No | `http://localhost:3000` | Public-facing API URL for webhook URLs displayed in UI (should match API's `API_EXTERNAL_ADDRESS`) |
 | `VITE_ENABLE_DEVTOOLS` | No | `true` | Enable React/TanStack devtools |
 
 ### Generating secrets
