@@ -38,8 +38,8 @@ drizzle/meta/
 **/tests/manual/payload*.json
 
 # Claude Code
-.claude/settings.local.json
 .claude/local/
+**/.claude/settings.local.json
 
 # TanStack Router
 .tanstack/

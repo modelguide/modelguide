@@ -35,7 +35,7 @@ async function elSecretsRequest(
     method,
     headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
     body: JSON.stringify(
-      method === "PATCH" ? { type: "update", ...body } : body,
+      { type: method === "PATCH" ? "update" : "new", ...body },
     ),
   });
   if (!res.ok) {
