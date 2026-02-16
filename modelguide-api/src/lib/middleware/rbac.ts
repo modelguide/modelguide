@@ -15,7 +15,7 @@ export const Permissions = {
   // User management
   "users:read": ["admin", "support", "viewer"],
   "users:create": ["admin"],
-  "users:update": ["admin"],
+  "users:update": ["admin", "support"],
   "users:delete": ["admin"],
 
   // Agent management
