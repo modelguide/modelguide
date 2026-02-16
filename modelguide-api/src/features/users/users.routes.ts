@@ -217,7 +217,12 @@ router.get(
   requirePermission("users:read"),
   requireOrganization(),
 );
-router.patch("/:id", requireUser(), requireOrganization());
+router.patch(
+  "/:id",
+  requireUser(),
+  requirePermission("users:update"),
+  requireOrganization(),
+);
 router.delete(
   "/:id",
   requireUser(),
@@ -283,10 +288,6 @@ router.openapi(updateUserRoute, async (c) => {
   const data = c.req.valid("json");
 
   const isAdmin = currentUser.role === "admin";
-
-  if (currentUser.role === "viewer") {
-    throw Errors.forbidden("Viewer role cannot update users");
-  }
 
   if (!isAdmin && currentUser.id !== id) {
     throw Errors.forbidden(

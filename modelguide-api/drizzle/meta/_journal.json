@@ -120,6 +120,13 @@
       "when": 1770900100000,
       "tag": "0016_add-viewer-role-and-demo-users",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1770900200000,
+      "tag": "0017_drop-demo-users-table",
+      "breakpoints": true
     }
   ]
 }
