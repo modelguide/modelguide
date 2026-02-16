@@ -9,7 +9,7 @@ interface AuthState {
   isAuthenticated: boolean
   requestMagicLink: (email: string) => Promise<void>
   verifyToken: (token: string) => Promise<void>
-  demoLogin: (email: string, source?: string) => Promise<void>
+  demoLogin: (email: string) => Promise<void>
   logout: () => Promise<void>
   setAuth: (user: User, token: string) => void
   refreshAccessToken: () => Promise<boolean>
@@ -83,12 +83,12 @@ export const useAuthStore = create<AuthState>()(
         })
       },
 
-      demoLogin: async (email: string, source?: string) => {
+      demoLogin: async (email: string) => {
         const baseUrl = getApiBaseUrl()
         const response = await fetch(`${baseUrl}/auth/demo-login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, source }),
+          body: JSON.stringify({ email }),
           credentials: 'include',
         })
 

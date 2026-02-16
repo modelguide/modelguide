@@ -17,11 +17,7 @@ const router = createRouter();
 const demoLoginRequestSchema = z.object({
   email: z.string().email().openapi({
     example: "prospect@example.com",
-    description: "Visitor email for lead capture",
-  }),
-  source: z.string().max(100).optional().openapi({
-    example: "homepage-cta",
-    description: "UTM source or referrer tag",
+    description: "Visitor email (used for MX validation)",
   }),
 });
 
@@ -47,8 +43,7 @@ const demoLoginRoute = createRoute({
   path: "/auth/demo-login",
   tags: ["Authentication"],
   summary: "Demo login",
-  description:
-    "Instantly authenticates a visitor as a read-only demo user. Captures email as a lead.",
+  description: "Instantly authenticates a visitor as a read-only demo user.",
   request: {
     body: {
       content: {
@@ -74,9 +69,9 @@ const demoLoginRoute = createRoute({
 });
 
 router.openapi(demoLoginRoute, async (c) => {
-  const { email, source } = c.req.valid("json");
+  const { email } = c.req.valid("json");
 
-  const result = await demoLogin(email, source);
+  const result = await demoLogin(email);
 
   setRefreshCookie(c, result.refreshToken);
 

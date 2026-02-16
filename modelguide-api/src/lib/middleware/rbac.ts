@@ -38,7 +38,7 @@ export const Permissions = {
   "tools:unassign": ["admin"],
 
   // Secret management
-  "secrets:read": ["admin", "viewer"],
+  "secrets:read": ["admin"],
   "secrets:create": ["admin"],
   "secrets:update": ["admin"],
   "secrets:delete": ["admin"],

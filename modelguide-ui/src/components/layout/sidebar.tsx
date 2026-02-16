@@ -5,10 +5,14 @@ import { Avatar } from '~/components/ui/avatar'
 import { cn } from '~/lib/cn'
 import { Logo } from './logo'
 
+type Role = 'admin' | 'support' | 'viewer'
+
 interface NavItem {
   label: string
   href: string
   icon: ReactNode
+  /** When set, only these roles see the item. Omit to show to all roles in the section. */
+  roles?: Role[]
 }
 
 const mainNav: NavItem[] = [
@@ -20,16 +24,20 @@ const mainNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { label: 'Agents', href: '/agents', icon: <Bot className="h-4 w-4" /> },
   { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" /> },
-  { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" /> },
+  { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" />, roles: ['admin'] },
 ]
 
 interface SidebarProps {
   user: {
     name: string
     email: string
-    role: 'admin' | 'support' | 'viewer'
+    role: Role
     avatarUrl?: string
   }
+}
+
+function visibleItems(items: NavItem[], role: Role): NavItem[] {
+  return items.filter((item) => !item.roles || item.roles.includes(role))
 }
 
 export function Sidebar({ user }: SidebarProps) {
@@ -54,7 +62,7 @@ export function Sidebar({ user }: SidebarProps) {
             Main
           </h3>
           <ul className="space-y-1">
-            {mainNav.map((item) => (
+            {visibleItems(mainNav, user.role).map((item) => (
               <NavLink
                 key={item.href}
                 item={item}
@@ -75,7 +83,7 @@ export function Sidebar({ user }: SidebarProps) {
               Admin
             </h3>
             <ul className="space-y-1">
-              {adminNav.map((item) => (
+              {visibleItems(adminNav, user.role).map((item) => (
                 <NavLink
                   key={item.href}
                   item={item}
