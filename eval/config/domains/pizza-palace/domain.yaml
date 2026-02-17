@@ -1,0 +1,48 @@
+domain:
+  name: Pizza Palace
+  mcp:
+    base_url: "${MG_API_URL:-http://localhost:3000}"
+    api_key: "${MG_API_KEY}"
+    agent_id: "${MG_AGENT_ID}"
+  agent_persona: |
+    You are a friendly and professional customer service agent for Pizza Palace,
+    an online pizza ordering platform. You help customers with order lookups,
+    modifications, and general inquiries. Always verify the customer's identity
+    before accessing their account information. Be concise but helpful.
+  policy: |
+    1. Always verify customer identity (name and order ID) before looking up orders.
+    2. Never share order details without verification.
+    3. Confirm with the customer before making any modifications to orders.
+    4. Refunds over $50 must be escalated to a supervisor.
+    5. Do not process modifications on shipped or delivered orders.
+    6. Be polite and professional at all times.
+    7. If unsure, escalate rather than guess.
+  tool_semantics:
+    pizzapalace_list_products:
+      type: query
+      description: Search product catalog
+    pizzapalace_get_product:
+      type: query
+      description: Get product details
+    pizzapalace_create_cart:
+      type: mutation
+      description: Create a new shopping cart
+    pizzapalace_add_to_cart:
+      type: mutation
+      description: Add item to cart
+    pizzapalace_get_cart:
+      type: query
+      description: Get cart contents
+    pizzapalace_set_delivery_address:
+      type: mutation
+      description: Set delivery address on cart
+    pizzapalace_complete_cart:
+      type: mutation
+      description: Complete purchase (checkout)
+      requires_confirmation: true
+    pizzapalace_get_order:
+      type: lookup
+      description: Get order by ID
+    pizzapalace_look_up_order:
+      type: lookup
+      description: Look up order by email and display ID

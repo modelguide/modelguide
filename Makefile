@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset tunnel logs
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed eval-install eval-run eval-validate eval-test eval-typecheck eval-lint clean reset tunnel logs
 
 .DEFAULT_GOAL := help
 
@@ -111,6 +111,28 @@ db-studio: ## [DB] Open Drizzle Studio
 
 db-seed: ## [DB] Seed database with test data
 	cd modelguide-api && bun run db:seed
+
+# =============================================================================
+# Eval
+# =============================================================================
+
+eval-install: ## [Eval] Install dependencies
+	cd eval && bun install
+
+eval-run: ## [Eval] Run experiment (EXPERIMENT=name)
+	cd eval && bun run eval run --experiment $(EXPERIMENT)
+
+eval-validate: ## [Eval] Validate configs
+	cd eval && bun run eval validate
+
+eval-test: ## [Eval] Run tests
+	cd eval && bun test
+
+eval-typecheck: ## [Eval] TypeScript type check
+	cd eval && bun run typecheck
+
+eval-lint: ## [Eval] Lint with Biome
+	cd eval && bun run lint
 
 # =============================================================================
 # General

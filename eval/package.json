@@ -1,0 +1,24 @@
+{
+  "name": "modelguide-eval",
+  "type": "module",
+  "scripts": {
+    "eval": "bun run src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check --write .",
+    "lint-check": "biome check .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "commander": "^13.0.0",
+    "js-yaml": "^4.1.0",
+    "openai": "^4.80.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/bun": "latest",
+    "@types/js-yaml": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

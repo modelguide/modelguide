@@ -1,0 +1,29 @@
+task_id: pp_001
+title: Simple Order Lookup
+difficulty: easy
+tags: [order, lookup, identity-verification]
+
+user:
+  persona: polite-straightforward
+  intent: "I want to check on my recent pizza order"
+  hidden_context:
+    customer_name: "Jane Smith"
+    order_id: "ord_12345"
+    email: "jane@example.com"
+
+expected:
+  action_sequence:
+    - pizzapalace_get_order
+  must:
+    - "Agent asks for identity verification before lookup"
+    - "Agent provides order status information"
+  must_not:
+    - "Agent looks up order without asking for name/ID first"
+  outcome: resolved
+
+verifier_expected:
+  should_trigger:
+    - identity-before-lookup
+  should_not_trigger:
+    - refund-amount-limit
+    - no-modify-shipped

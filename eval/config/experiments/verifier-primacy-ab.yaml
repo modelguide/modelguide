@@ -1,0 +1,43 @@
+experiment:
+  name: verifier-primacy-ab
+  description: >
+    A/B test comparing agent behavior with and without a rule-based verifier.
+    Tests the thesis that a compact rule-based verifier can significantly
+    improve agent policy compliance at near-zero cost.
+  domain: pizza-palace
+  tasks: all
+  trials: 3
+
+  configs:
+    baseline:
+      agent_model: gpt-4o-mini
+      user_model: gpt-4o-mini
+      verifier:
+        type: none
+
+    with-rules-verifier:
+      agent_model: gpt-4o-mini
+      user_model: gpt-4o-mini
+      verifier:
+        type: rules
+        rules_file: domains/pizza-palace/rules.yaml
+
+  orchestrator:
+    max_turns: 30
+    timeout_seconds: 120
+    concurrent_tasks: 1
+
+  metrics:
+    - task_success_rate
+    - policy_violation_rate
+    - verifier_intervention_rate
+    - verifier_precision
+    - autonomy_score
+    - mean_turns_to_resolution
+    - cost_per_task
+    - pass_at_k
+
+  output:
+    dir: results
+    save_traces: true
+    save_verifier_log: true

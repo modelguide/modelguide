@@ -1,0 +1,112 @@
+rules:
+  - id: identity-before-lookup
+    description: Customer must provide name and order ID before any order lookup
+    severity: error
+    trigger:
+      tool: pizzapalace_get_order
+    condition:
+      conversation_must_contain:
+        - pattern: "\\b(name|my name is|I'm|I am)\\b"
+          from: user
+        - pattern: "\\b(order|#|number|id)\\b"
+          from: user
+    on_fail:
+      action: reject
+      message: "Cannot look up order without customer identity verification. Ask for their name and order ID first."
+
+  - id: identity-before-order-search
+    description: Customer must provide email before order search
+    severity: error
+    trigger:
+      tool: pizzapalace_look_up_order
+    condition:
+      conversation_must_contain:
+        - pattern: "\\b[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}\\b"
+          from: user
+    on_fail:
+      action: reject
+      message: "Cannot search orders without customer email. Ask for their email address first."
+
+  - id: confirm-before-mutation
+    description: Agent must get explicit user confirmation before any mutation
+    severity: error
+    trigger:
+      tool_type: mutation
+    condition:
+      conversation_must_contain:
+        - pattern: "\\b(yes|confirm|go ahead|please do|sure|ok|okay|proceed)\\b"
+          from: user
+          within_last_n_turns: 4
+    on_fail:
+      action: reject
+      message: "Cannot perform this action without explicit customer confirmation. Ask the customer to confirm first."
+
+  - id: no-modify-shipped
+    description: Cannot modify orders that have been shipped or delivered
+    severity: error
+    trigger:
+      tool_type: mutation
+    condition:
+      pre_check:
+        tool: pizzapalace_get_order
+        params_from:
+          orderId: order_id
+        expect:
+          status:
+            not_in: ["shipped", "delivered"]
+    on_fail:
+      action: reject
+      message: "Cannot modify this order because it has already been shipped or delivered."
+
+  - id: refund-amount-limit
+    description: Refunds over $50 must be escalated to supervisor
+    severity: error
+    trigger:
+      tool_type: mutation
+      params:
+        total:
+          gt: 50
+    condition:
+      conversation_must_contain:
+        - pattern: "\\b(refund|return|money back)\\b"
+          from: user
+    on_fail:
+      action: escalate
+      message: "Refund exceeds $50 limit. This must be escalated to a supervisor."
+
+  - id: no-share-other-customer-data
+    description: Agent must not mention other customers' data
+    severity: error
+    trigger:
+      type: agent_message
+    condition:
+      message_must_not_contain:
+        - pattern: "\\b(another customer|other order|someone else's)\\b"
+    on_fail:
+      action: redact
+      message: "Agent response contains references to other customers' data."
+
+  - id: grounded-order-id
+    description: Order ID in tool calls must come from conversation
+    severity: warning
+    trigger:
+      tool: pizzapalace_get_order
+    condition:
+      params_grounded_in_conversation:
+        - param: orderId
+          description: The order ID must have been mentioned by the user
+    on_fail:
+      action: reject
+      message: "Order ID was not provided by the customer in conversation."
+
+  - id: polite-language
+    description: Agent must not use aggressive or dismissive language
+    severity: warning
+    trigger:
+      type: agent_message
+    condition:
+      message_must_not_contain:
+        - pattern: "\\b(stupid|dumb|wrong|idiot|shut up|whatever)\\b"
+    on_fail:
+      action: rewrite
+      message: "Agent response contains inappropriate language."

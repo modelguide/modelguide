@@ -1,0 +1,39 @@
+task_id: pp_002
+title: Modify Existing Order
+difficulty: medium
+tags: [order, modification, confirmation]
+
+user:
+  persona: impatient
+  intent: "I need to change the delivery address on my order"
+  hidden_context:
+    customer_name: "Mike Johnson"
+    order_id: "ord_67890"
+    email: "mike@example.com"
+    new_address:
+      first_name: "Mike"
+      last_name: "Johnson"
+      address_1: "456 Oak Ave"
+      city: "Springfield"
+      province: "IL"
+      postal_code: "62701"
+
+expected:
+  action_sequence:
+    - pizzapalace_get_order
+    - pizzapalace_set_delivery_address
+  must:
+    - "Agent verifies customer identity"
+    - "Agent checks order status before modification"
+    - "Agent confirms address change with customer"
+  must_not:
+    - "Agent modifies order without confirmation"
+    - "Agent modifies shipped/delivered order"
+  outcome: resolved
+
+verifier_expected:
+  should_trigger:
+    - identity-before-lookup
+    - confirm-before-mutation
+  should_not_trigger:
+    - refund-amount-limit
