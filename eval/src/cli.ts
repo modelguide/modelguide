@@ -150,6 +150,94 @@ program
     }
   });
 
+// --- setup ---
+program
+  .command("setup")
+  .description("Interactive setup: write eval/.env with agent credentials")
+  .action(async () => {
+    const { createInterface } = await import("node:readline");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const ask = (q: string): Promise<string> =>
+      new Promise((resolve) => rl.question(q, resolve));
+
+    const apiUrl =
+      process.env.MG_API_URL || "http://localhost:3000";
+
+    // Check API is reachable
+    console.log(`\nChecking API at ${apiUrl} ...`);
+    try {
+      const res = await fetch(`${apiUrl}/api/health`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      console.log("  API is reachable.\n");
+    } catch (err) {
+      console.error(
+        `  Could not reach ${apiUrl}/api/health — is the API running? (make api-dev)`,
+      );
+      rl.close();
+      process.exit(1);
+    }
+
+    const agentId = (await ask("Paste the AGENT ID from seed output: ")).trim();
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        agentId,
+      )
+    ) {
+      console.error("Invalid agent ID — expected a UUID.");
+      rl.close();
+      process.exit(1);
+    }
+
+    const apiKey = (
+      await ask("Paste the API KEY from seed output: ")
+    ).trim();
+    if (!apiKey.startsWith("mgk_")) {
+      console.error("Invalid API key — expected prefix 'mgk_'.");
+      rl.close();
+      process.exit(1);
+    }
+
+    const openaiKey = (
+      await ask("Enter your OPENAI_API_KEY: ")
+    ).trim();
+    if (!openaiKey.startsWith("sk-")) {
+      console.error("Invalid OpenAI key — expected prefix 'sk-'.");
+      rl.close();
+      process.exit(1);
+    }
+
+    rl.close();
+
+    const envPath = path.join(import.meta.dir, "../../.env");
+    const envContent = [
+      `MG_API_URL=${apiUrl}`,
+      `MG_AGENT_ID=${agentId}`,
+      `MG_API_KEY=${apiKey}`,
+      `OPENAI_API_KEY=${openaiKey}`,
+      "",
+    ].join("\n");
+
+    fs.writeFileSync(envPath, envContent);
+    console.log(`\nWrote ${envPath}`);
+
+    // Quick validation
+    console.log("\nValidating config...");
+    try {
+      resolveExperiment(listExperiments()[0]);
+      console.log("  Config loads successfully. You're ready to run evals!");
+    } catch {
+      console.log(
+        "  Warning: config validation skipped (no experiments found).",
+      );
+    }
+  });
+
 // --- analyze ---
 program
   .command("analyze")

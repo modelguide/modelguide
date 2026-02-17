@@ -39,7 +39,7 @@ export class LLMClient {
         model: this.config.model,
         messages: openaiMessages,
         temperature: this.config.temperature,
-        max_tokens: this.config.maxTokens,
+        max_completion_tokens: this.config.maxTokens,
       };
 
     if (tools && tools.length > 0) {

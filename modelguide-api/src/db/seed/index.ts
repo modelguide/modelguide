@@ -309,6 +309,7 @@ async function seedOrgData(
   if (apiKey) {
     console.log("  Created API key");
     console.log("  ========================================");
+    console.log(`  AGENT ID:  ${testAgent.id}`);
     console.log("  API KEY (save this - shown only once):");
     console.log(`  ${key}`);
     console.log("  ========================================");

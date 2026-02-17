@@ -49,7 +49,18 @@ export class UserSimulator {
       .find((m) => m.role === "assistant");
 
     if (lastAssistant) {
-      if (stopConds.on_resolution) {
+      // Don't stop on resolution/escalation keywords if no tool calls have
+      // happened yet. The agent merely *mentioning* resolution or escalation
+      // in its first response (e.g. "I want to help get this resolved" or
+      // "this will need to be escalated") isn't the same as having actually
+      // taken action. Require at least one tool call before these conditions
+      // can fire, giving the agent time to verify identity, look up the order,
+      // and perform the action.
+      const hasToolCalls = history.some(
+        (m) => m.role === "assistant" && m.toolCalls?.length,
+      );
+
+      if (stopConds.on_resolution && hasToolCalls) {
         const resolutionPatterns = [
           /\b(resolved|completed|taken care of|all set|anything else)\b/i,
           /\b(is there anything else|can I help you with anything)\b/i,
@@ -59,7 +70,7 @@ export class UserSimulator {
         }
       }
 
-      if (stopConds.on_escalation) {
+      if (stopConds.on_escalation && hasToolCalls) {
         const escalationPatterns = [
           /\b(escalat|supervisor|manager|transfer)\b/i,
           /\b(I('m| am) (going to |)transfer)\b/i,

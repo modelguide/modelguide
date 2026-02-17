@@ -10,6 +10,7 @@ import type {
   ResolvedExperiment,
   RulesConfig,
   TaskConfig,
+  ToolMocksConfig,
 } from "./schemas.js";
 import {
   DomainConfigSchema,
@@ -18,6 +19,7 @@ import {
   PersonaConfigSchema,
   RulesConfigSchema,
   TaskConfigSchema,
+  ToolMocksConfigSchema,
 } from "./schemas.js";
 
 const CONFIG_DIR = path.resolve(import.meta.dir, "../../config");
@@ -88,6 +90,15 @@ export function loadDomain(name: string): DomainConfig {
  */
 export function loadRules(rulesPath: string): RulesConfig {
   return loadYaml(rulesPath, RulesConfigSchema);
+}
+
+/**
+ * Load tool mocks for a domain (optional).
+ */
+export function loadToolMocks(domain: string): ToolMocksConfig | null {
+  const filePath = path.resolve(CONFIG_DIR, `domains/${domain}/tool-mocks.yaml`);
+  if (!fs.existsSync(filePath)) return null;
+  return loadYaml(filePath, ToolMocksConfigSchema);
 }
 
 /**
@@ -176,6 +187,7 @@ export function resolveExperiment(name: string): ResolvedExperiment {
   const domain = loadDomain(exp.domain);
   const models = loadModels();
   const tasks = loadTasks(exp.domain, exp.tasks);
+  const toolMocks = loadToolMocks(exp.domain);
 
   // Collect unique persona refs from tasks
   const personaRefs = [...new Set(tasks.map((t) => t.user.persona))];
@@ -198,6 +210,7 @@ export function resolveExperiment(name: string): ResolvedExperiment {
     description: exp.description,
     domain,
     rules,
+    toolMocks,
     tasks,
     personas,
     models,

@@ -43,8 +43,8 @@ export class EvalRestClient {
       throw new Error(`Failed to create session (${res.status}): ${text}`);
     }
 
-    const json = (await res.json()) as { data: { id: string } };
-    return { id: json.data.id };
+    const json = (await res.json()) as { id: string };
+    return { id: json.id };
   }
 
   async closeSession(

@@ -241,6 +241,20 @@ export const ExperimentConfigSchema = z.object({
 
 export type ExperimentConfig = z.output<typeof ExperimentConfigSchema>;
 
+// --- Tool Mocks Config ---
+
+export const ToolMockEntrySchema = z.object({
+  match: z.record(z.string(), z.unknown()).optional(),
+  default: z.unknown().optional(),
+  response: z.unknown().optional(),
+});
+
+export const ToolMocksConfigSchema = z.object({
+  mocks: z.record(z.string(), z.array(ToolMockEntrySchema)),
+});
+
+export type ToolMocksConfig = z.output<typeof ToolMocksConfigSchema>;
+
 // --- Resolved types (after loading all refs) ---
 
 export interface ResolvedExperiment {
@@ -248,6 +262,7 @@ export interface ResolvedExperiment {
   description: string;
   domain: DomainConfig;
   rules: RulesConfig | null;
+  toolMocks: ToolMocksConfig | null;
   tasks: TaskConfig[];
   personas: Record<string, PersonaConfig>;
   models: ModelsConfig;

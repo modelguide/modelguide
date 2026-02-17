@@ -1,5 +1,6 @@
 import { LLMClient } from "./clients/llm-client.js";
 import { EvalMcpClient, toOpenAIFunctions } from "./clients/mcp-client.js";
+import type { MockToolExecutor } from "./clients/mock-tool-executor.js";
 import { EvalRestClient } from "./clients/rest-client.js";
 import type {
   DomainConfig,
@@ -31,15 +32,18 @@ interface OrchestratorConfig {
   openaiApiKey: string;
   configName: string;
   trialNumber: number;
+  mockExecutor?: MockToolExecutor;
 }
 
 export class Orchestrator {
   private config: OrchestratorConfig;
   private mcpClient: EvalMcpClient;
   private restClient: EvalRestClient;
+  private mockExecutor?: MockToolExecutor;
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
+    this.mockExecutor = config.mockExecutor;
 
     const mcp = config.domain.domain.mcp;
     this.mcpClient = new EvalMcpClient({
@@ -321,7 +325,23 @@ export class Orchestrator {
       };
     }
 
-    // Tool approved — execute via MCP with session_id injected
+    // Tool approved — execute via mock (if available) or real MCP
+    if (this.mockExecutor?.hasMock(toolCall.name)) {
+      const result = this.mockExecutor.execute(toolCall.name, toolCall.arguments);
+      const latencyMs = Date.now() - startTime;
+
+      toolCallLog.push({
+        turn,
+        toolName: toolCall.name,
+        arguments: toolCall.arguments,
+        result,
+        approved: true,
+        latencyMs,
+      });
+
+      return result;
+    }
+
     try {
       const result = await this.mcpClient.callTool(toolCall.name, {
         ...toolCall.arguments,

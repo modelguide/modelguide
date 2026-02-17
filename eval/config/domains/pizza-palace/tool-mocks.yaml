@@ -1,0 +1,230 @@
+mocks:
+  pizzapalace_get_order:
+    - match: { orderId: "ord_12345" }
+      response:
+        id: "ord_12345"
+        display_id: 12345
+        status: "processing"
+        email: "jane@example.com"
+        items:
+          - title: "Margherita Pizza"
+            quantity: 2
+            unit_price: 14.99
+        total: 29.98
+        estimated_delivery: "2026-02-17T13:30:00Z"
+        shipping_address:
+          first_name: "Jane"
+          last_name: "Smith"
+          address_1: "123 Main St"
+          city: "Springfield"
+          province: "IL"
+          postal_code: "62704"
+
+    - match: { orderId: "ord_67890" }
+      response:
+        id: "ord_67890"
+        display_id: 67890
+        status: "processing"
+        email: "mike@example.com"
+        items:
+          - title: "Pepperoni Pizza"
+            quantity: 1
+            unit_price: 16.99
+          - title: "Garlic Bread"
+            quantity: 1
+            unit_price: 5.99
+        total: 22.98
+        estimated_delivery: "2026-02-17T14:00:00Z"
+        shipping_address:
+          first_name: "Mike"
+          last_name: "Johnson"
+          address_1: "789 Elm St"
+          city: "Springfield"
+          province: "IL"
+          postal_code: "62702"
+
+    - match: { orderId: "ord_99999" }
+      response:
+        id: "ord_99999"
+        display_id: 99999
+        status: "shipped"
+        email: "alex@example.com"
+        items:
+          - title: "Supreme Pizza"
+            quantity: 3
+            unit_price: 18.99
+          - title: "Buffalo Wings"
+            quantity: 2
+            unit_price: 9.49
+        total: 75.96
+        estimated_delivery: "2026-02-17T12:00:00Z"
+        shipping_address:
+          first_name: "Alex"
+          last_name: "Rivera"
+          address_1: "321 Pine Rd"
+          city: "Springfield"
+          province: "IL"
+          postal_code: "62705"
+
+    - default:
+        error: "Order not found"
+
+  pizzapalace_look_up_order:
+    - match: { email: "jane@example.com" }
+      response:
+        orders:
+          - id: "ord_12345"
+            display_id: 12345
+            status: "processing"
+            total: 29.98
+    - match: { email: "mike@example.com" }
+      response:
+        orders:
+          - id: "ord_67890"
+            display_id: 67890
+            status: "processing"
+            total: 22.98
+    - match: { email: "alex@example.com" }
+      response:
+        orders:
+          - id: "ord_99999"
+            display_id: 99999
+            status: "shipped"
+            total: 75.96
+    - default:
+        error: "No orders found for this email"
+
+  pizzapalace_list_products:
+    - default:
+        products:
+          - id: "prod_001"
+            title: "Margherita Pizza"
+            description: "Classic tomato, mozzarella, and basil"
+            price: 14.99
+            category: "pizza"
+          - id: "prod_002"
+            title: "Pepperoni Pizza"
+            description: "Loaded with pepperoni and mozzarella"
+            price: 16.99
+            category: "pizza"
+          - id: "prod_003"
+            title: "Supreme Pizza"
+            description: "The works: pepperoni, sausage, peppers, onions, olives"
+            price: 18.99
+            category: "pizza"
+          - id: "prod_004"
+            title: "Garlic Bread"
+            description: "Toasted garlic bread with herbs"
+            price: 5.99
+            category: "sides"
+          - id: "prod_005"
+            title: "Buffalo Wings"
+            description: "Spicy buffalo wings with ranch dip"
+            price: 9.49
+            category: "sides"
+
+  pizzapalace_get_product:
+    - match: { productId: "prod_001" }
+      response:
+        id: "prod_001"
+        title: "Margherita Pizza"
+        description: "Classic tomato, mozzarella, and basil"
+        price: 14.99
+        category: "pizza"
+        variants:
+          - id: "var_001_sm"
+            title: "Small (10\")"
+            price: 10.99
+          - id: "var_001_md"
+            title: "Medium (12\")"
+            price: 14.99
+          - id: "var_001_lg"
+            title: "Large (16\")"
+            price: 18.99
+    - match: { productId: "prod_002" }
+      response:
+        id: "prod_002"
+        title: "Pepperoni Pizza"
+        description: "Loaded with pepperoni and mozzarella"
+        price: 16.99
+        category: "pizza"
+        variants:
+          - id: "var_002_sm"
+            title: "Small (10\")"
+            price: 12.99
+          - id: "var_002_md"
+            title: "Medium (12\")"
+            price: 16.99
+          - id: "var_002_lg"
+            title: "Large (16\")"
+            price: 20.99
+    - default:
+        error: "Product not found"
+
+  pizzapalace_create_cart:
+    - default:
+        id: "cart_abc123"
+        items: []
+        total: 0
+
+  pizzapalace_add_to_cart:
+    - match: { cartId: "cart_abc123" }
+      response:
+        id: "cart_abc123"
+        items:
+          - variant_id: "var_001_md"
+            title: "Margherita Pizza - Medium (12\")"
+            quantity: 1
+            unit_price: 14.99
+        total: 14.99
+    - default:
+        error: "Cart not found"
+
+  pizzapalace_get_cart:
+    - match: { cartId: "cart_abc123" }
+      response:
+        id: "cart_abc123"
+        items:
+          - variant_id: "var_001_md"
+            title: "Margherita Pizza - Medium (12\")"
+            quantity: 1
+            unit_price: 14.99
+        total: 14.99
+    - default:
+        error: "Cart not found"
+
+  pizzapalace_set_delivery_address:
+    - match: { orderId: "ord_67890" }
+      response:
+        id: "ord_67890"
+        shipping_address:
+          first_name: "Mike"
+          last_name: "Johnson"
+          address_1: "456 Oak Ave"
+          city: "Springfield"
+          province: "IL"
+          postal_code: "62701"
+        total: 22.98
+    - match: { cartId: "cart_abc123" }
+      response:
+        id: "cart_abc123"
+        shipping_address:
+          first_name: "Jane"
+          last_name: "Smith"
+          address_1: "123 Main St"
+          city: "Springfield"
+          province: "IL"
+          postal_code: "62704"
+        total: 14.99
+    - default:
+        error: "Cart or order not found"
+
+  pizzapalace_complete_cart:
+    - match: { cartId: "cart_abc123" }
+      response:
+        order_id: "ord_new_001"
+        status: "confirmed"
+        total: 14.99
+        estimated_delivery: "2026-02-17T15:00:00Z"
+    - default:
+        error: "Cart not found or already completed"

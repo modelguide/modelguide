@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { EvalMcpClient } from "./clients/mcp-client.js";
+import { MockToolExecutor } from "./clients/mock-tool-executor.js";
 import type { ResolvedExperiment } from "./config/schemas.js";
 import { getEnv } from "./env.js";
 import { Evaluator, computeAggregateMetrics } from "./evaluator.js";
@@ -89,6 +90,10 @@ export class ExperimentRunner {
         verifierMcpClient,
       );
 
+      const mockExecutor = this.experiment.toolMocks
+        ? new MockToolExecutor(this.experiment.toolMocks.mocks)
+        : undefined;
+
       const orchestrator = new Orchestrator({
         domain: this.experiment.domain,
         task,
@@ -102,6 +107,7 @@ export class ExperimentRunner {
         openaiApiKey: env.OPENAI_API_KEY,
         configName: job.configName,
         trialNumber: job.trialNumber,
+        mockExecutor,
       });
 
       try {
@@ -153,8 +159,9 @@ export class ExperimentRunner {
           (r) => r.taskId === task.task_id,
         );
 
+        const verifierType = this.experiment.configs[configName]?.verifier.type;
         const taskEvals = taskConversations.map((r) =>
-          this.evaluator.evaluate(r, task),
+          this.evaluator.evaluate(r, task, { verifierType }),
         );
         evaluations.push(...taskEvals);
 

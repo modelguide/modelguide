@@ -15,7 +15,7 @@ user:
 
 expected:
   action_sequence:
-    - pizzapalace_get_order
+    - pizzapalace_get_order|pizzapalace_look_up_order
   must:
     - "Agent verifies customer identity"
     - "Agent checks order status"
@@ -29,7 +29,7 @@ expected:
 
 verifier_expected:
   should_trigger:
-    - identity-before-lookup
+    - identity-before-lookup|identity-before-order-search
+  should_not_trigger:
     - no-modify-shipped
     - refund-amount-limit
-  should_not_trigger: []
