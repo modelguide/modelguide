@@ -14,7 +14,6 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   organizationId: string;
-  demo?: boolean;
 }
 
 /**

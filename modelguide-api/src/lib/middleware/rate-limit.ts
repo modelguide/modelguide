@@ -25,16 +25,15 @@ export function rateLimit(
   const windowMs = windowSeconds * 1000;
   const store = new Map<string, WindowEntry>();
 
+  const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+
   // Cleanup stale entries every 5 minutes to prevent memory growth
-  const cleanup = setInterval(
-    () => {
-      const now = Date.now();
-      for (const [key, entry] of store) {
-        if (entry.resetAt <= now) store.delete(key);
-      }
-    },
-    5 * 60 * 1000,
-  );
+  const cleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of store) {
+      if (entry.resetAt <= now) store.delete(key);
+    }
+  }, CLEANUP_INTERVAL_MS);
 
   // Allow GC if the timer is the only thing keeping the process alive
   if (cleanup.unref) cleanup.unref();
