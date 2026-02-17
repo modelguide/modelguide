@@ -7,7 +7,8 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
-import { magicTokens } from "@db/schema";
+import { forApp } from "@db/rls";
+import { magicTokens, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { generateJWT } from "@lib/jwt";
 import { desc, eq } from "drizzle-orm";
@@ -48,14 +49,14 @@ beforeAll(async () => {
 // ============================================================================
 
 describe("POST /api/auth/login", () => {
-  test("returns success message for valid user", async () => {
+  test("returns 202 with message for valid user", async () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: s.pizzaAdmin.email }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });
@@ -72,7 +73,7 @@ describe("POST /api/auth/login", () => {
       body: JSON.stringify({ email: s.pizzaAdmin.email }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
 
     const afterCount = await db
       .select()
@@ -123,26 +124,26 @@ describe("POST /api/auth/login", () => {
     expect(afterTokens.length).toBe(beforeTokens.length);
   });
 
-  test("returns success for non-existent user (no enumeration)", async () => {
+  test("returns 202 for non-existent user (no enumeration)", async () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "nonexistent@example.com" }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });
 
-  test("returns success for inactive user (no enumeration)", async () => {
+  test("returns 202 for inactive user (no enumeration)", async () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: s.pizzaInactive.email }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });
@@ -395,7 +396,97 @@ describe("Edge cases", () => {
       body: JSON.stringify({ email: s.pizzaAdmin.email.toUpperCase() }),
     });
 
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body).toEqual({ message: "Magic link sent" });
+  });
+});
+
+// ============================================================================
+// POST /api/auth/login - Demo path tests
+// ============================================================================
+
+describe("POST /api/auth/login - Demo path", () => {
+  test("demo viewer returns 200 with token and user", async () => {
+    const response = await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
+    });
+
     expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.token).toBeDefined();
+    expect(typeof body.token).toBe("string");
+    expect(body.user).toBeDefined();
+    expect(body.user.id).toBe(s.demoViewer.id);
+    expect(body.user.email).toBe(s.demoViewer.email);
+    expect(body.user.role).toBe("viewer");
+    expect(body.user.organizationId).toBe(s.demoOrg.id);
+  });
+
+  test("demo viewer returns refresh cookie", async () => {
+    const response = await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
+    });
+
+    expect(response.status).toBe(200);
+    const setCookie = response.headers.get("set-cookie");
+    expect(setCookie).toBeDefined();
+    expect(setCookie).toContain("refresh_token=");
+  });
+
+  test("demo viewer does not create magic token", async () => {
+    const beforeTokens = await db.select().from(magicTokens);
+
+    await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
+    });
+
+    const afterTokens = await db.select().from(magicTokens);
+    expect(afterTokens.length).toBe(beforeTokens.length);
+  });
+
+  test("demo viewer updates lastLoginAt", async () => {
+    const before = await forApp((tx) =>
+      tx.query.users.findFirst({
+        where: eq(users.id, s.demoViewer.id),
+      }),
+    );
+    const beforeLogin = before?.lastLoginAt;
+
+    await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
+    });
+
+    const after = await forApp((tx) =>
+      tx.query.users.findFirst({
+        where: eq(users.id, s.demoViewer.id),
+      }),
+    );
+
+    expect(after?.lastLoginAt).toBeDefined();
+    if (beforeLogin) {
+      expect(after!.lastLoginAt!.getTime()).toBeGreaterThanOrEqual(
+        beforeLogin.getTime(),
+      );
+    }
+  });
+
+  test("non-existent email still returns 202", async () => {
+    const response = await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "nobody@example.com" }),
+    });
+
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });

@@ -35,8 +35,13 @@ interface SessionTokens {
 /**
  * Create a new refresh session after successful authentication.
  */
-export async function createSession(user: AuthUser): Promise<SessionTokens> {
-  const ttl = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
+export async function createSession(
+  user: AuthUser,
+  options?: { refreshTtl?: string },
+): Promise<SessionTokens> {
+  const ttl = parseDuration(
+    options?.refreshTtl ?? env.REFRESH_TOKEN_EXPIRES_IN,
+  );
   const expiresAt = new Date(Date.now() + ttl * 1000);
 
   const [row] = await db

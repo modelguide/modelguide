@@ -7,9 +7,8 @@ interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
-  requestMagicLink: (email: string) => Promise<void>
+  login: (email: string) => Promise<'authenticated' | 'magic_link_sent'>
   verifyToken: (token: string) => Promise<void>
-  demoLogin: (email: string) => Promise<void>
   logout: () => Promise<void>
   setAuth: (user: User, token: string) => void
   refreshAccessToken: () => Promise<boolean>
@@ -33,7 +32,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
 
-      requestMagicLink: async (email: string) => {
+      login: async (email: string) => {
         const baseUrl = getApiBaseUrl()
         const response = await fetch(`${baseUrl}/auth/login`, {
           method: 'POST',
@@ -42,16 +41,30 @@ export const useAuthStore = create<AuthState>()(
           credentials: 'include',
         })
 
-        if (!response.ok) {
-          let message = 'Failed to send magic link'
-          try {
-            const error = await response.json()
-            message = error.message || message
-          } catch {
-            // Non-JSON error response (e.g., 502 gateway timeout)
-          }
-          throw new Error(message)
+        if (response.status === 200) {
+          // Demo viewer — instant auth
+          const data: AuthResponse = await response.json()
+          set({
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+          })
+          return 'authenticated'
         }
+
+        if (response.status === 202) {
+          return 'magic_link_sent'
+        }
+
+        // Error response
+        let message = 'Login failed'
+        try {
+          const error = await response.json()
+          message = error.message || message
+        } catch {
+          // Non-JSON error response (e.g., 502 gateway timeout)
+        }
+        throw new Error(message)
       },
 
       verifyToken: async (magicToken: string) => {
@@ -71,34 +84,6 @@ export const useAuthStore = create<AuthState>()(
             message = error.message || message
           } catch {
             // Non-JSON error response (e.g., 502 gateway timeout)
-          }
-          throw new Error(message)
-        }
-
-        const data: AuthResponse = await response.json()
-        set({
-          user: data.user,
-          token: data.token,
-          isAuthenticated: true,
-        })
-      },
-
-      demoLogin: async (email: string) => {
-        const baseUrl = getApiBaseUrl()
-        const response = await fetch(`${baseUrl}/auth/demo-login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-          credentials: 'include',
-        })
-
-        if (!response.ok) {
-          let message = 'Demo login failed'
-          try {
-            const error = await response.json()
-            message = error.message || message
-          } catch {
-            // Non-JSON error response
           }
           throw new Error(message)
         }

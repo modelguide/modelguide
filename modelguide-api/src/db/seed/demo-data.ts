@@ -34,6 +34,7 @@ export async function seedDemoOrg(db: SeedDb) {
     .values({
       name: "ModelGuide Demo",
       slug: "demo",
+      demoEnabled: true,
       settings: {
         timezone: "America/New_York",
         features: ["voice-agents", "chat-agents"],

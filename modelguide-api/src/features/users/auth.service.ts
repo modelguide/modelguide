@@ -6,7 +6,7 @@ import { env } from "@/env";
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
 import { forApp } from "@db/rls";
-import { magicTokens, users } from "@db/schema";
+import { magicTokens, organizations, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import {
@@ -18,51 +18,104 @@ import {
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { cleanupExpiredSessions, createSession } from "./refresh-token.service";
 
-/**
- * Request a magic link for login
- * Returns success even if user doesn't exist (to prevent enumeration)
- */
-export async function requestMagicLink(email: string): Promise<void> {
-  const normalizedEmail = email.toLowerCase();
-  console.info(`[auth] Magic link requested for: ${normalizedEmail}`);
+interface SessionTokens {
+  accessToken: string;
+  refreshToken: string;
+  user: AuthUser;
+}
 
-  const user = await forApp((tx) =>
-    tx.query.users.findFirst({
-      where: eq(users.email, normalizedEmail),
-    }),
+type LoginResult =
+  | { type: "magic_link_sent" }
+  | { type: "demo_authenticated"; session: SessionTokens };
+
+/**
+ * Unified login by email.
+ * Demo viewers in demo-enabled orgs get instant auth (200 + tokens).
+ * All other cases get a magic link (202 + message) — including non-existent
+ * users and inactive users (anti-enumeration).
+ */
+export async function loginByEmail(email: string): Promise<LoginResult> {
+  const normalizedEmail = email.toLowerCase();
+  console.info(`[auth] Login requested for: ${normalizedEmail}`);
+
+  // Single JOIN query: user + org to check demoEnabled
+  const row = await forApp((tx) =>
+    tx
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        organizationId: users.organizationId,
+        isActive: users.isActive,
+        demoEnabled: organizations.demoEnabled,
+      })
+      .from(users)
+      .innerJoin(organizations, eq(users.organizationId, organizations.id))
+      .where(eq(users.email, normalizedEmail))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
   );
 
-  // Silently succeed for non-existent/inactive users to prevent email enumeration
-  if (!user) {
+  // User not found or inactive — return magic_link_sent (anti-enumeration)
+  if (!row) {
     console.warn(
-      `[auth] No user found for ${normalizedEmail} — returning 200 (anti-enumeration)`,
+      `[auth] No user found for ${normalizedEmail} — returning magic_link_sent (anti-enumeration)`,
     );
-    return;
+    return { type: "magic_link_sent" };
   }
-  if (!user.isActive) {
+  if (!row.isActive) {
     console.warn(
-      `[auth] User ${normalizedEmail} is inactive — returning 200 (anti-enumeration)`,
+      `[auth] User ${normalizedEmail} is inactive — returning magic_link_sent (anti-enumeration)`,
     );
-    return;
+    return { type: "magic_link_sent" };
   }
 
+  // Demo path: viewer in a demo-enabled org → instant auth
+  if (row.demoEnabled && row.role === "viewer") {
+    console.info(
+      `[auth] Demo login for ${normalizedEmail} (viewer in demo-enabled org)`,
+    );
+
+    await forApp((tx) =>
+      tx
+        .update(users)
+        .set({ lastLoginAt: new Date() })
+        .where(eq(users.id, row.id)),
+    );
+
+    const authUser: AuthUser = {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      organizationId: row.organizationId,
+    };
+
+    const session = await createSession(authUser, { refreshTtl: "8h" });
+    return { type: "demo_authenticated", session };
+  }
+
+  // Standard path: send magic link
   const { tokenHash, link, expiresAt } = createMagicLink();
 
   await db.insert(magicTokens).values({
-    userId: user.id,
+    userId: row.id,
     tokenHash,
     expiresAt,
   });
 
   try {
-    await sendMagicLink(user.email, link, user.name);
+    await sendMagicLink(row.email, link, row.name);
     console.info(
-      `[auth] Magic link sent to ${user.email} via ${env.MAGIC_LINK_STRATEGY} strategy`,
+      `[auth] Magic link sent to ${row.email} via ${env.MAGIC_LINK_STRATEGY} strategy`,
     );
   } catch (err) {
     console.error("[auth] Failed to send magic link:", err);
-    // Swallow to preserve anti-enumeration — caller always returns 200
+    // Swallow to preserve anti-enumeration
   }
+
+  return { type: "magic_link_sent" };
 }
 
 /**

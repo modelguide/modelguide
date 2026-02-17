@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose
 
 .DEFAULT_GOAL := help
 
@@ -111,6 +111,12 @@ db-studio: ## [DB] Open Drizzle Studio
 
 db-seed: ## [DB] Seed database with test data
 	cd modelguide-api && bun run db:seed
+
+demo-enable: ## [Demo] Enable demo mode for an org (usage: make demo-enable ORG_SLUG=demo)
+	cd modelguide-api && bun run scripts/demo-toggle.ts enable $(ORG_SLUG)
+
+demo-disable: ## [Demo] Disable demo mode for an org (usage: make demo-disable ORG_SLUG=demo)
+	cd modelguide-api && bun run scripts/demo-toggle.ts disable $(ORG_SLUG)
 
 # =============================================================================
 # General

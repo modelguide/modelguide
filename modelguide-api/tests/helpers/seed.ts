@@ -22,7 +22,7 @@ export interface SeedUser {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "support";
+  role: "admin" | "support" | "viewer";
   organizationId: string;
   isActive: boolean;
 }
@@ -36,12 +36,14 @@ export interface SeedOrg {
 export interface TestSeed {
   pizzaOrg: SeedOrg;
   burgerOrg: SeedOrg;
+  demoOrg: SeedOrg;
   pizzaAdmin: SeedUser;
   pizzaSupport: SeedUser;
   pizzaInactive: SeedUser;
   burgerAdmin: SeedUser;
   burgerSupport: SeedUser;
   burgerInactive: SeedUser;
+  demoViewer: SeedUser;
   catalogId: string;
   pizzaConnectorId: string;
   burgerConnectorId: string;
@@ -63,6 +65,10 @@ export async function getTestSeed(): Promise<TestSeed> {
       .select()
       .from(organizations)
       .where(eq(organizations.slug, "burger-barn"));
+    const [demoOrgRow] = await tx
+      .select()
+      .from(organizations)
+      .where(eq(organizations.slug, "demo"));
 
     const lookupUser = async (orgId: string, email: string) => {
       const [u] = await tx
@@ -73,7 +79,7 @@ export async function getTestSeed(): Promise<TestSeed> {
         id: u.id,
         email: u.email,
         name: u.name,
-        role: u.role as "admin" | "support",
+        role: u.role as "admin" | "support" | "viewer",
         organizationId: u.organizationId,
         isActive: u.isActive,
       };
@@ -102,6 +108,10 @@ export async function getTestSeed(): Promise<TestSeed> {
     const burgerInactive = await lookupUser(
       burgerOrg.id,
       "delivered+inactive-burger-barn@resend.dev",
+    );
+    const demoViewer = await lookupUser(
+      demoOrgRow.id,
+      "demo-viewer@modelguide.dev",
     );
 
     const [catalog] = await tx
@@ -154,12 +164,18 @@ export async function getTestSeed(): Promise<TestSeed> {
         name: burgerOrg.name,
         slug: burgerOrg.slug,
       },
+      demoOrg: {
+        id: demoOrgRow.id,
+        name: demoOrgRow.name,
+        slug: demoOrgRow.slug,
+      },
       pizzaAdmin,
       pizzaSupport,
       pizzaInactive,
       burgerAdmin,
       burgerSupport,
       burgerInactive,
+      demoViewer,
       catalogId: catalog.id,
       pizzaConnectorId: pizzaConnector.id,
       burgerConnectorId: burgerConnector.id,

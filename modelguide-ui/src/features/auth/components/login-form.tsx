@@ -1,9 +1,8 @@
 import { useNavigate } from '@tanstack/react-router'
-import { AlertCircle, ArrowLeft, CheckCircle, Eye, Mail } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Label } from '~/components/ui/label'
-import { getApiBaseUrl } from '~/lib/api-base'
 import { magicLinkRequestSchema } from '~/schemas/auth'
 import { useAuthStore } from '~/stores/auth'
 
@@ -16,7 +15,8 @@ export interface LoginFormProps {
 type Step = 'email' | 'sent'
 
 export function LoginForm({ redirectTo }: LoginFormProps) {
-  const requestMagicLink = useAuthStore((s) => s.requestMagicLink)
+  const login = useAuthStore((s) => s.login)
+  const navigate = useNavigate()
 
   const [email, setEmail] = useState('')
   const [step, setStep] = useState<Step>('email')
@@ -24,18 +24,6 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   const [loading, setLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const cooldownRef = useRef<ReturnType<typeof setInterval>>(null)
-  const [demoAvailable, setDemoAvailable] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    const baseUrl = getApiBaseUrl()
-    fetch(`${baseUrl}/config`)
-      .then((r) => {
-        if (!r.ok) throw new Error('config fetch failed')
-        return r.json()
-      })
-      .then((data: { demoMode: boolean }) => setDemoAvailable(data.demoMode))
-      .catch(() => setDemoAvailable(false))
-  }, [])
 
   const startCooldown = useCallback(() => {
     setCooldown(RESEND_COOLDOWN_SECONDS)
@@ -70,11 +58,15 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
 
     setLoading(true)
     try {
-      await requestMagicLink(email)
-      setStep('sent')
-      startCooldown()
+      const outcome = await login(email)
+      if (outcome === 'authenticated') {
+        navigate({ to: redirectTo || '/' })
+      } else {
+        setStep('sent')
+        startCooldown()
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send magic link')
+      setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setLoading(false)
     }
@@ -84,8 +76,12 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
     setError(null)
     setLoading(true)
     try {
-      await requestMagicLink(email)
-      startCooldown()
+      const outcome = await login(email)
+      if (outcome === 'authenticated') {
+        navigate({ to: redirectTo || '/' })
+      } else {
+        startCooldown()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend magic link')
     } finally {
@@ -142,57 +138,35 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   }
 
   return (
-    <>
-      {demoAvailable ? <DemoSection redirectTo={redirectTo} /> : null}
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
+        <Label htmlFor="email">Email</Label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@company.com"
+          autoComplete="email"
+          disabled={loading}
+          required
+          className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-3 text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
+        />
+      </div>
 
-      {demoAvailable ? (
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-fg-subtle/20" />
-          <span className="text-xs text-fg-muted">or sign in</span>
-          <div className="h-px flex-1 bg-fg-subtle/20" />
+      {error ? (
+        <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-3 text-sm text-error">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
       ) : null}
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div>
-          <Label htmlFor="email">
-            Email
-            {demoAvailable ? (
-              <span className="ml-1 text-fg-muted font-normal">(registered users)</span>
-            ) : null}
-          </Label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            autoComplete="email"
-            disabled={loading}
-            required
-            className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-3 text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
-          />
-        </div>
+      <Button type="submit" loading={loading} className="w-full mt-2">
+        Sign in
+      </Button>
 
-        {error ? (
-          <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-3 text-sm text-error">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        ) : null}
-
-        <Button
-          type="submit"
-          variant={demoAvailable ? 'secondary' : 'primary'}
-          loading={loading}
-          className="w-full mt-2"
-        >
-          Send magic link
-        </Button>
-
-        {import.meta.env.DEV && !demoAvailable ? <DevAccounts onSelect={setEmail} /> : null}
-      </form>
-    </>
+      {import.meta.env.DEV ? <DevAccounts onSelect={setEmail} /> : null}
+    </form>
   )
 }
 
@@ -200,64 +174,6 @@ const DEV_ACCOUNTS = [
   { email: 'delivered+admin-pizza-palace@resend.dev', role: 'admin' },
   { email: 'delivered+support-pizza-palace@resend.dev', role: 'support' },
 ] as const
-
-function DemoSection({ redirectTo }: { redirectTo?: string }) {
-  const demoLogin = useAuthStore((s) => s.demoLogin)
-  const navigate = useNavigate()
-  const [demoEmail, setDemoEmail] = useState('')
-  const [demoError, setDemoError] = useState<string | null>(null)
-  const [demoLoading, setDemoLoading] = useState(false)
-
-  const handleDemoSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setDemoError(null)
-
-    const result = magicLinkRequestSchema.safeParse({ email: demoEmail })
-    if (!result.success) {
-      setDemoError(result.error.errors[0].message)
-      return
-    }
-
-    setDemoLoading(true)
-    try {
-      await demoLogin(demoEmail)
-      navigate({ to: redirectTo || '/' })
-    } catch (err) {
-      setDemoError(err instanceof Error ? err.message : 'Demo login failed')
-    } finally {
-      setDemoLoading(false)
-    }
-  }
-
-  return (
-    <form onSubmit={handleDemoSubmit} className="space-y-3">
-      <div className="flex items-center gap-2 text-sm text-fg-secondary">
-        <Eye className="h-4 w-4 text-brand-500" />
-        <span className="font-medium">Try the Demo</span>
-      </div>
-      <input
-        type="email"
-        value={demoEmail}
-        onChange={(e) => setDemoEmail(e.target.value)}
-        placeholder="your@email.com"
-        autoComplete="email"
-        disabled={demoLoading}
-        required
-        className="w-full rounded-lg border border-fg-subtle/20 bg-bg-elevated px-4 py-2.5 text-sm text-fg-primary placeholder:text-fg-subtle transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
-      />
-      {demoError ? (
-        <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-muted p-2.5 text-xs text-error">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          <span>{demoError}</span>
-        </div>
-      ) : null}
-      <Button type="submit" loading={demoLoading} className="w-full">
-        <Eye className="h-4 w-4" />
-        Start Demo
-      </Button>
-    </form>
-  )
-}
 
 function DevAccounts({ onSelect }: { onSelect: (email: string) => void }) {
   return (

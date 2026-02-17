@@ -120,6 +120,13 @@
       "when": 1770900100000,
       "tag": "0016_add-viewer-role",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1771341775302,
+      "tag": "0017_add-demo-enabled",
+      "breakpoints": true
     }
   ]
 }
