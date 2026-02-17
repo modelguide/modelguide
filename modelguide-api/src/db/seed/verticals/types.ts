@@ -143,6 +143,8 @@ export interface OrgVerticalConfig {
     name: string;
     slug: string;
     description: string;
+    /** Only "voice" is valid in the DB enum today; field exists for future types. */
+    agentType?: "voice";
   }>;
 
   // Industry-specific data for session generation

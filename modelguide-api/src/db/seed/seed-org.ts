@@ -159,7 +159,7 @@ export async function seedOrg(
         name: def.name,
         slug: def.slug,
         description: def.description,
-        agentType: "voice",
+        agentType: def.agentType ?? "voice",
         isActive: true,
         createdBy: admin.id,
       })
