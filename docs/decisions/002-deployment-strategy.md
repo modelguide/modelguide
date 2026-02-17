@@ -27,7 +27,7 @@ Service dependencies ensure correct startup order: postgres (healthy) → migrat
 
 ### Production: Railway
 
-Railway was chosen for production hosting:
+Railway was chosen for managed hosting:
 
 - Native Docker support (uses our Dockerfiles directly)
 - Managed PostgreSQL with volume snapshots
@@ -35,9 +35,11 @@ Railway was chosen for production hosting:
 - Environment variable management
 - Simple scaling model
 
-The release command (`bun run scripts/release.ts`) wraps the migration script with:
+**Deployment sequence:** DB migration (release command) → API → UI. The release command (`bun run scripts/release.ts`) wraps the migration script with:
 - PostgreSQL advisory lock to serialize concurrent deploys
 - Migration count validation
+
+Migrations run as a Railway release command before the new API image starts. The UI can be deployed independently since it only depends on the API at runtime.
 
 ### Database Role Separation
 

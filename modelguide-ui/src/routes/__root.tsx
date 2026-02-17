@@ -2,7 +2,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 
-import { useEffect, useState } from 'react'
 import { Toaster } from 'sonner'
 import { queryClient } from '~/lib/query-client'
 import appCss from '~/styles/app.css?url'
@@ -28,54 +27,7 @@ export const Route = createRootRoute({
   component: RootComponent,
 })
 
-const MSW_READY_TIMEOUT_MS = 2000
-
 function RootComponent() {
-  const [mocksReady, setMocksReady] = useState(!import.meta.env.DEV)
-
-  useEffect(() => {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return
-
-    let cancelled = false
-    const timeoutId = setTimeout(() => {
-      if (!cancelled) setMocksReady(true)
-    }, MSW_READY_TIMEOUT_MS)
-
-    async function initMocks() {
-      try {
-        const { worker } = await import('~/mocks/browser')
-        await worker.start({
-          onUnhandledRequest: 'bypass',
-          serviceWorker: {
-            url: '/mockServiceWorker.js',
-          },
-        })
-        if (!cancelled) {
-          console.log('[MSW] Mock service worker started')
-          setMocksReady(true)
-        }
-      } catch (error) {
-        console.warn('[MSW] Mock service worker failed (app will use real API):', error)
-        if (!cancelled) setMocksReady(true)
-      }
-    }
-    initMocks()
-    return () => {
-      cancelled = true
-      clearTimeout(timeoutId)
-    }
-  }, [])
-
-  if (!mocksReady) {
-    return (
-      <RootDocument>
-        <div className="flex min-h-screen items-center justify-center bg-bg-base">
-          <div className="text-fg-muted">Loading...</div>
-        </div>
-      </RootDocument>
-    )
-  }
-
   return (
     <QueryClientProvider client={queryClient}>
       <RootDocument>
