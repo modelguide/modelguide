@@ -22,9 +22,16 @@ import {
   createSession,
 } from "./refresh-token.service";
 
+export const DEMO_REFRESH_TTL = "8h";
+
+export const LOGIN_RESULT = {
+  MAGIC_LINK_SENT: "magic_link_sent",
+  DEMO_AUTHENTICATED: "demo_authenticated",
+} as const;
+
 type LoginResult =
-  | { type: "magic_link_sent" }
-  | { type: "demo_authenticated"; session: SessionTokens };
+  | { type: typeof LOGIN_RESULT.MAGIC_LINK_SENT }
+  | { type: typeof LOGIN_RESULT.DEMO_AUTHENTICATED; session: SessionTokens };
 
 /**
  * Unified login by email.
@@ -60,13 +67,13 @@ export async function loginByEmail(email: string): Promise<LoginResult> {
     console.warn(
       `[auth] No user found for ${normalizedEmail} — returning magic_link_sent (anti-enumeration)`,
     );
-    return { type: "magic_link_sent" };
+    return { type: LOGIN_RESULT.MAGIC_LINK_SENT };
   }
   if (!row.isActive) {
     console.warn(
       `[auth] User ${normalizedEmail} is inactive — returning magic_link_sent (anti-enumeration)`,
     );
-    return { type: "magic_link_sent" };
+    return { type: LOGIN_RESULT.MAGIC_LINK_SENT };
   }
 
   // Demo path: viewer in a demo-enabled org → instant auth
@@ -90,8 +97,10 @@ export async function loginByEmail(email: string): Promise<LoginResult> {
       organizationId: row.organizationId,
     };
 
-    const session = await createSession(authUser, { refreshTtl: "8h" });
-    return { type: "demo_authenticated", session };
+    const session = await createSession(authUser, {
+      refreshTtl: DEMO_REFRESH_TTL,
+    });
+    return { type: LOGIN_RESULT.DEMO_AUTHENTICATED, session };
   }
 
   // Standard path: send magic link
@@ -113,7 +122,7 @@ export async function loginByEmail(email: string): Promise<LoginResult> {
     // Swallow to preserve anti-enumeration
   }
 
-  return { type: "magic_link_sent" };
+  return { type: LOGIN_RESULT.MAGIC_LINK_SENT };
 }
 
 /**

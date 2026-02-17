@@ -3,11 +3,18 @@ import { persist } from 'zustand/middleware'
 import { getApiBaseUrl } from '~/lib/api-base'
 import type { AuthResponse, User } from '~/schemas/auth'
 
+export const LOGIN_RESULT = {
+  AUTHENTICATED: 'authenticated',
+  MAGIC_LINK_SENT: 'magic_link_sent',
+} as const
+
+export type LoginResult = (typeof LOGIN_RESULT)[keyof typeof LOGIN_RESULT]
+
 interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
-  login: (email: string) => Promise<'authenticated' | 'magic_link_sent'>
+  login: (email: string) => Promise<LoginResult>
   verifyToken: (token: string) => Promise<void>
   logout: () => Promise<void>
   setAuth: (user: User, token: string) => void
@@ -49,11 +56,11 @@ export const useAuthStore = create<AuthState>()(
             token: data.token,
             isAuthenticated: true,
           })
-          return 'authenticated'
+          return LOGIN_RESULT.AUTHENTICATED
         }
 
         if (response.status === 202) {
-          return 'magic_link_sent'
+          return LOGIN_RESULT.MAGIC_LINK_SENT
         }
 
         // Error response

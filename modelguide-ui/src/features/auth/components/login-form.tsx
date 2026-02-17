@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Label } from '~/components/ui/label'
 import { magicLinkRequestSchema } from '~/schemas/auth'
-import { useAuthStore } from '~/stores/auth'
+import { LOGIN_RESULT, useAuthStore } from '~/stores/auth'
 
 const RESEND_COOLDOWN_SECONDS = 30
 
@@ -59,7 +59,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
     setLoading(true)
     try {
       const outcome = await login(email)
-      if (outcome === 'authenticated') {
+      if (outcome === LOGIN_RESULT.AUTHENTICATED) {
         navigate({ to: redirectTo || '/' })
       } else {
         setStep('sent')
@@ -77,7 +77,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
     setLoading(true)
     try {
       const outcome = await login(email)
-      if (outcome === 'authenticated') {
+      if (outcome === LOGIN_RESULT.AUTHENTICATED) {
         navigate({ to: redirectTo || '/' })
       } else {
         startCooldown()
