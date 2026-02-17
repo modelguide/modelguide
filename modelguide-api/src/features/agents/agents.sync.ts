@@ -34,9 +34,10 @@ async function elSecretsRequest(
   const res = await fetch(url, {
     method,
     headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify(
-      method === "PATCH" ? { type: "update", ...body } : body,
-    ),
+    body: JSON.stringify({
+      type: method === "PATCH" ? "update" : "new",
+      ...body,
+    }),
   });
   if (!res.ok) {
     const text = await res.text();

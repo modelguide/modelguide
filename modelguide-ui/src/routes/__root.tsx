@@ -2,7 +2,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 
-import { useEffect, useState } from 'react'
 import { Toaster } from 'sonner'
 import { queryClient } from '~/lib/query-client'
 import appCss from '~/styles/app.css?url'
@@ -29,39 +28,6 @@ export const Route = createRootRoute({
 })
 
 function RootComponent() {
-  const [mocksReady, setMocksReady] = useState(false)
-
-  useEffect(() => {
-    async function initMocks() {
-      if (import.meta.env.DEV && typeof window !== 'undefined') {
-        try {
-          const { worker } = await import('~/mocks/browser')
-          await worker.start({
-            onUnhandledRequest: 'bypass',
-            serviceWorker: {
-              url: '/mockServiceWorker.js',
-            },
-          })
-          console.log('[MSW] Mock service worker started')
-        } catch (error) {
-          console.error('[MSW] Failed to start mock service worker:', error)
-        }
-      }
-      setMocksReady(true)
-    }
-    initMocks()
-  }, [])
-
-  if (!mocksReady && import.meta.env.DEV) {
-    return (
-      <RootDocument>
-        <div className="flex min-h-screen items-center justify-center bg-bg-base">
-          <div className="text-fg-muted">Loading...</div>
-        </div>
-      </RootDocument>
-    )
-  }
-
   return (
     <QueryClientProvider client={queryClient}>
       <RootDocument>

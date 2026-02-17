@@ -285,6 +285,43 @@ const modules = await Promise.all([
 
 📋 **Connector marketplace** — Community-built integrations
 
+## Deployment
+
+### Docker Compose (local / staging)
+
+```bash
+make docker-up       # Build and start full stack
+make docker-logs     # View logs
+make docker-rebuild  # Rebuild API + UI only
+make docker-down     # Stop all
+make docker-reset    # Stop, remove volumes, rebuild
+```
+
+Override secrets for non-dev environments via `.env.docker`:
+
+```bash
+JWT_SECRET=...
+REFRESH_JWT_SECRET=...
+ENCRYPTION_KEY=...
+MAGIC_LINK_SECRET=...
+```
+
+### Railway (production)
+
+Architecture: PostgreSQL + API + UI + load balancer (Caddy). The LB is the only public-facing service — it routes `/api/*` and `/mcp` to the API and everything else to the UI via Railway's internal network.
+
+Config-as-code via `railway.toml` in each service. Full setup guide: [`railway/DEPLOY.md`](railway/DEPLOY.md).
+
+**Deploying changes:**
+
+```bash
+(cd modelguide-api && railway up --service api)
+(cd modelguide-ui && railway up --service ui)
+(cd railway/lb && railway up --service lb)
+```
+
+Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (migrations) automatically on every deploy via `preDeployCommand` in `railway.toml`.
+
 ## Documentation
 
 | Resource | Description |
@@ -292,6 +329,7 @@ const modules = await Promise.all([
 | [MCP Integration Guide](docs/guide/mcp-integration.md) | Connect your AI agent via MCP |
 | [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools |
 | [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
+| [Deployment Guide](railway/DEPLOY.md) | Railway production deployment |
 | [Contributing](CONTRIBUTING.md) | Setup, workflow, conventions |
 
 ## Contributing

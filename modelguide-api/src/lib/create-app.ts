@@ -1,6 +1,8 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
+import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
+import { env } from "@/env";
 import type { AppBindings } from "@/types";
 import { ErrorCode, isAppError } from "@lib/errors";
 import { authMiddleware } from "@lib/middleware/auth";
@@ -25,6 +27,20 @@ export function createRouter() {
 
 export function createApp() {
   const app = createRouter();
+
+  if (env.CORS_ORIGINS) {
+    const allowed = env.CORS_ORIGINS.split(",").map((s) => s.trim());
+    app.use(
+      "*",
+      cors({
+        origin: allowed,
+        allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowHeaders: ["Content-Type", "Authorization"],
+        credentials: true,
+        maxAge: 86400,
+      }),
+    );
+  }
 
   app.use("*", authMiddleware());
 

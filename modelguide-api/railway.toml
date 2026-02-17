@@ -1,11 +1,10 @@
 [build]
-builder = "nixpacks"
-buildCommand = "bun install && bun run build"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-preDeployCommand = "DATABASE_URL=$DATABASE_MIGRATION_URL bunx drizzle-kit migrate"
-startCommand = "bun run dist/index.js"
+preDeployCommand = "bun run dist/release.js"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 10
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 3
