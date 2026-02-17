@@ -197,6 +197,8 @@ export async function seedOrg(
       .returning();
     if (apiKey) {
       console.log(`  Created API key for ${agent.name}: ${key}`);
+    } else {
+      console.log(`  API key for ${agent.name} already exists (skipped)`);
     }
   }
 

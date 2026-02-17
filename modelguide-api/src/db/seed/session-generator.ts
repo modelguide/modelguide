@@ -31,6 +31,7 @@ function randInt(min: number, max: number): number {
 }
 
 function pick<T>(arr: readonly T[]): T {
+  if (arr.length === 0) throw new Error("pick() called on empty array");
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
