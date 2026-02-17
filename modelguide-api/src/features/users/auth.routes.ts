@@ -12,7 +12,7 @@ import { createRouter } from "@lib/create-app";
 import { verifyRefreshJWT } from "@lib/jwt";
 import { csrfProtection, getCurrentUser, requireUser } from "@lib/middleware";
 import { getCookie } from "hono/cookie";
-import { loginByEmail, verifyMagicToken } from "./auth.service";
+import { LOGIN_RESULT, loginByEmail, verifyMagicToken } from "./auth.service";
 import { revokeSession, rotateRefreshToken } from "./refresh-token.service";
 
 const router = createRouter();
@@ -155,8 +155,10 @@ router.openapi(loginRoute, async (c) => {
 
   const result = await loginByEmail(email);
 
-  if (result.type === "demo_authenticated") {
-    setRefreshCookie(c, result.session.refreshToken);
+  if (result.type === LOGIN_RESULT.DEMO_AUTHENTICATED) {
+    setRefreshCookie(c, result.session.refreshToken, {
+      maxAgeSeconds: result.session.refreshTtlSeconds,
+    });
     return c.json(
       { token: result.session.accessToken, user: result.session.user },
       200,

@@ -16,8 +16,10 @@ export const REFRESH_COOKIE = useSecureCookies
 export function setRefreshCookie(
   c: Parameters<typeof setCookie>[0],
   token: string,
+  options?: { maxAgeSeconds?: number },
 ) {
-  const maxAge = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
+  const maxAge =
+    options?.maxAgeSeconds ?? parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
   setCookie(c, REFRESH_COOKIE, token, {
     httpOnly: true,
     secure: useSecureCookies,

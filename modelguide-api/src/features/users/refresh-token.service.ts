@@ -29,6 +29,7 @@ import { and, eq, lt } from "drizzle-orm";
 export interface SessionTokens {
   accessToken: string;
   refreshToken: string;
+  refreshTtlSeconds: number;
   user: AuthUser;
 }
 
@@ -58,7 +59,7 @@ export async function createSession(
     generateRefreshJWT(row.familyId, 0, user.id),
   ]);
 
-  return { accessToken, refreshToken, user };
+  return { accessToken, refreshToken, refreshTtlSeconds: ttl, user };
 }
 
 /**
@@ -169,7 +170,7 @@ export async function rotateRefreshToken(
     generateRefreshJWT(payload.familyId, newGeneration, user.id),
   ]);
 
-  return { accessToken, refreshToken, user: authUser };
+  return { accessToken, refreshToken, refreshTtlSeconds: ttl, user: authUser };
 }
 
 /**
