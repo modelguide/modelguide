@@ -28,18 +28,22 @@ type SeedDb = PostgresJsDatabase<typeof schema>;
 export async function seedDemoOrg(db: SeedDb) {
   console.log("\n--- Seeding Demo Organization ---");
 
-  // 1. Create demo org
+  // 1. Create demo org (upsert demoEnabled on re-seed)
   const [org] = await db
     .insert(organizations)
     .values({
       name: "ModelGuide Demo",
       slug: "demo",
+      demoEnabled: true,
       settings: {
         timezone: "America/New_York",
         features: ["voice-agents", "chat-agents"],
       },
     })
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: organizations.slug,
+      set: { demoEnabled: true },
+    })
     .returning();
 
   const demoOrg =

@@ -48,13 +48,6 @@ const envSchema = z
     // CORS allowed origins (comma-separated). Leave empty to disable CORS.
     // E.g. "http://localhost:5173,https://demo.example.com"
     CORS_ORIGINS: z.string().optional(),
-
-    // Demo mode
-    DEMO_MODE_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((v) => v === "true"),
-    DEMO_ORG_SLUG: z.string().default("demo"),
   })
   .refine(
     (data) => {

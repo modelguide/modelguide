@@ -12,7 +12,7 @@ import { createRouter } from "@lib/create-app";
 import { verifyRefreshJWT } from "@lib/jwt";
 import { csrfProtection, getCurrentUser, requireUser } from "@lib/middleware";
 import { getCookie } from "hono/cookie";
-import { requestMagicLink, verifyMagicToken } from "./auth.service";
+import { LOGIN_RESULT, loginByEmail, verifyMagicToken } from "./auth.service";
 import { revokeSession, rotateRefreshToken } from "./refresh-token.service";
 
 const router = createRouter();
@@ -103,14 +103,14 @@ const loginRoute = createRoute({
   method: "post",
   path: "/login",
   tags: ["Authentication"],
-  summary: "Request magic link login",
-  description: `Sends a magic link to the user's email for passwordless authentication.
+  summary: "Login (unified)",
+  description: `Unified login endpoint. Demo viewers in demo-enabled orgs are authenticated instantly (200 + tokens). All other users receive a magic link via email (202 + message).
 
 **Test with seed data:**
-- \`admin@pizza-palace.com\` / \`support@pizza-palace.com\` (Pizza Palace org)
-- \`admin@burger-barn.com\` / \`support@burger-barn.com\` (Burger Barn org)
+- \`admin@pizza-palace.com\` / \`support@pizza-palace.com\` (Pizza Palace org) → 202 magic link
+- \`demo-viewer@modelguide.dev\` (Demo org) → 200 instant auth
 
-In development mode, the magic link is printed to the console instead of being sent via email.`,
+In development mode, magic links are printed to the console instead of being sent via email.`,
   request: {
     body: {
       content: {
@@ -123,7 +123,16 @@ In development mode, the magic link is printed to the console instead of being s
   responses: {
     200: {
       description:
-        "Magic link sent (or user not found - same response for security)",
+        "Demo viewer authenticated instantly. Refresh token set as httpOnly cookie.",
+      content: {
+        "application/json": {
+          schema: verifyResponseSchema,
+        },
+      },
+    },
+    202: {
+      description:
+        "Magic link sent (or user not found — same response for security)",
       content: {
         "application/json": {
           schema: loginResponseSchema,
@@ -144,9 +153,19 @@ In development mode, the magic link is printed to the console instead of being s
 router.openapi(loginRoute, async (c) => {
   const { email } = c.req.valid("json");
 
-  await requestMagicLink(email);
+  const result = await loginByEmail(email);
 
-  return c.json({ message: "Magic link sent" }, 200);
+  if (result.type === LOGIN_RESULT.DEMO_AUTHENTICATED) {
+    setRefreshCookie(c, result.session.refreshToken, {
+      maxAgeSeconds: result.session.refreshTtlSeconds,
+    });
+    return c.json(
+      { token: result.session.accessToken, user: result.session.user },
+      200,
+    );
+  }
+
+  return c.json({ message: "Magic link sent" }, 202);
 });
 
 const verifyRoute = createRoute({

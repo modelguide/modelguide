@@ -40,6 +40,7 @@ export const organizations = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
+    demoEnabled: boolean("demo_enabled").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
