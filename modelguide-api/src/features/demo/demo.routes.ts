@@ -80,7 +80,7 @@ router.openapi(demoLoginRoute, async (c) => {
       token: result.accessToken,
       user: {
         id: result.user.id,
-        email: result.user.email,
+        email,
         name: result.user.name,
         role: result.user.role,
         organizationId: result.user.organizationId,
