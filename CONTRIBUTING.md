@@ -31,9 +31,10 @@ make ui-dev     # Dashboard at http://localhost:3001
 
 Open `http://localhost:3001`. Authentication uses **magic links** — enter your email, and the login link is printed to the API server console (no email provider needed in dev). Click the link to log in.
 
-**Dev accounts (from seed data):**
-- **Admin:** `delivered+admin-pizza-palace@resend.dev`
-- **Support:** `delivered+support-pizza-palace@resend.dev`
+**Dev accounts (from seed data — GlowBox Beauty org):**
+- **Admin:** `delivered+admin-glowbox@resend.dev`
+- **Support:** `delivered+support-glowbox@resend.dev`
+- **Viewer:** `delivered+viewer-glowbox@resend.dev`
 
 API docs are auto-generated at `http://localhost:3000/docs`.
 

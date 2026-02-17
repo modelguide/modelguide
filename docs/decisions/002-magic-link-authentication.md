@@ -115,8 +115,8 @@ The service logs every step so silent failures (like the email mismatch that mot
 vs. happy path:
 
 ```
-[auth] Magic link requested for: admin@pizza-palace.com
-[auth] Magic link sent to admin@pizza-palace.com via console strategy
+[auth] Magic link requested for: delivered+admin-glowbox@resend.dev
+[auth] Magic link sent to delivered+admin-glowbox@resend.dev via console strategy
 ```
 
 ### Environment Variables

@@ -19,9 +19,9 @@ import {
 } from "../helpers/seed";
 
 let s: TestSeed;
-let pizzaAdminHeaders: Record<string, string>;
-let pizzaAgentHeaders: Record<string, string>;
-let burgerAgentHeaders: Record<string, string>;
+let orgAAdminHeaders: Record<string, string>;
+let orgAAgentHeaders: Record<string, string>;
+let orgBAgentHeaders: Record<string, string>;
 
 /** IDs of sessions created during tests (for cleanup) */
 const createdSessionIds: string[] = [];
@@ -86,20 +86,19 @@ function parseToolResult(
 beforeAll(async () => {
   s = await getTestSeed();
 
-  // Enable core_add_messages for the pizza agent (disabled by default)
+  // Enable core_add_messages for the orgA agent (disabled by default)
   await forApp(async (tx) => {
     await tx
       .update(agents)
       .set({ metadata: { enableCoreAddMessages: true } })
-      .where(eq(agents.id, s.pizzaAgentId));
+      .where(eq(agents.id, s.orgAAgentId));
   });
 
-  [pizzaAdminHeaders, pizzaAgentHeaders, burgerAgentHeaders] =
-    await Promise.all([
-      authHeadersFor(s.pizzaAdmin),
-      agentHeadersFor(s.pizzaAgentId, s.pizzaOrg.id),
-      agentHeadersFor(s.burgerAgentId, s.burgerOrg.id),
-    ]);
+  [orgAAdminHeaders, orgAAgentHeaders, orgBAgentHeaders] = await Promise.all([
+    authHeadersFor(s.orgAAdmin),
+    agentHeadersFor(s.orgAAgentId, s.orgA.id),
+    agentHeadersFor(s.orgBAgentId, s.orgB.id),
+  ]);
 });
 
 afterAll(async () => {
@@ -112,7 +111,7 @@ afterAll(async () => {
     await tx
       .update(agents)
       .set({ metadata: {} })
-      .where(eq(agents.id, s.pizzaAgentId));
+      .where(eq(agents.id, s.orgAAgentId));
   });
 });
 
@@ -122,7 +121,7 @@ afterAll(async () => {
 
 describe("Auth & access control", () => {
   test("rejects request with no auth header", async () => {
-    const response = await request(`/mcp/${s.pizzaAgentId}`, {
+    const response = await request(`/mcp/${s.orgAAgentId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -142,10 +141,10 @@ describe("Auth & access control", () => {
   });
 
   test("rejects admin JWT (agent auth required)", async () => {
-    const response = await request(`/mcp/${s.pizzaAgentId}`, {
+    const response = await request(`/mcp/${s.orgAAgentId}`, {
       method: "POST",
       headers: {
-        ...pizzaAdminHeaders,
+        ...orgAAdminHeaders,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -165,8 +164,8 @@ describe("Auth & access control", () => {
 
   test("valid agent key connects successfully", async () => {
     const { client, transport } = await createMcpClient(
-      pizzaAgentHeaders,
-      s.pizzaAgentId,
+      orgAAgentHeaders,
+      s.orgAAgentId,
     );
 
     const serverVersion = client.getServerVersion();
@@ -187,8 +186,8 @@ describe("Tool discovery", () => {
 
   beforeAll(async () => {
     ({ client, transport } = await createMcpClient(
-      pizzaAgentHeaders,
-      s.pizzaAgentId,
+      orgAAgentHeaders,
+      s.orgAAgentId,
     ));
   });
 
@@ -210,17 +209,17 @@ describe("Tool discovery", () => {
   });
 
   test("core_add_messages is hidden when enableCoreAddMessages is not set", async () => {
-    // Burger agent has default metadata (no enableCoreAddMessages)
-    const { client: burgerClient, transport: burgerTransport } =
-      await createMcpClient(burgerAgentHeaders, s.burgerAgentId);
+    // org B agent has default metadata (no enableCoreAddMessages)
+    const { client: orgBClient, transport: orgBTransport } =
+      await createMcpClient(orgBAgentHeaders, s.orgBAgentId);
 
-    const result = await burgerClient.listTools();
+    const result = await orgBClient.listTools();
     const coreToolNames = result.tools
       .filter((t) => t.name.startsWith("core_"))
       .map((t) => t.name);
 
     expect(coreToolNames.length).toBe(0);
-    await burgerTransport.close();
+    await orgBTransport.close();
   });
 
   test("connector tools include session_id in input schema", async () => {
@@ -253,8 +252,8 @@ describe("Resource discovery", () => {
 
   beforeAll(async () => {
     ({ client, transport } = await createMcpClient(
-      pizzaAgentHeaders,
-      s.pizzaAgentId,
+      orgAAgentHeaders,
+      s.orgAAgentId,
     ));
   });
 
@@ -278,8 +277,8 @@ describe("Resource discovery", () => {
     expect(content.uri).toBe("agent://config");
 
     const data = JSON.parse((content as { text: string }).text);
-    expect(data.agent_id).toBe(s.pizzaAgentId);
-    expect(data.organization_id).toBe(s.pizzaOrg.id);
+    expect(data.agent_id).toBe(s.orgAAgentId);
+    expect(data.organization_id).toBe(s.orgA.id);
     expect(typeof data.tool_count).toBe("number");
     expect(data.tool_count).toBeGreaterThanOrEqual(1);
   });
@@ -312,11 +311,11 @@ describe("core_add_messages", () => {
 
   beforeAll(async () => {
     ({ client, transport } = await createMcpClient(
-      pizzaAgentHeaders,
-      s.pizzaAgentId,
+      orgAAgentHeaders,
+      s.orgAAgentId,
     ));
     sessionId = await createSessionViaRest(
-      pizzaAgentHeaders,
+      orgAAgentHeaders,
       "voice",
       "+1234560002",
     );
@@ -353,7 +352,7 @@ describe("core_add_messages", () => {
 
   test("messages persisted and visible via REST API", async () => {
     const response = await request(`/api/sessions/${sessionId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -374,51 +373,55 @@ describe("core_add_messages", () => {
 // ============================================================================
 
 describe("RLS isolation", () => {
-  let _pizzaClient: Client;
-  let pizzaTransport: StreamableHTTPClientTransport;
-  let burgerClient: Client;
-  let burgerTransport: StreamableHTTPClientTransport;
-  let pizzaSessionId: string;
+  let _orgAClient: Client;
+  let orgATransport: StreamableHTTPClientTransport;
+  let orgBClient: Client;
+  let orgBTransport: StreamableHTTPClientTransport;
+  let orgASessionId: string;
 
   beforeAll(async () => {
-    // Enable core_add_messages for the burger agent so the tool is registered
+    // Enable core_add_messages for the orgB agent so the tool is registered
     // and the RLS test exercises cross-org rejection at the service layer
     await forApp(async (tx) => {
       await tx
         .update(agents)
         .set({ metadata: { enableCoreAddMessages: true } })
-        .where(eq(agents.id, s.burgerAgentId));
+        .where(eq(agents.id, s.orgBAgentId));
     });
 
-    ({ client: _pizzaClient, transport: pizzaTransport } =
-      await createMcpClient(pizzaAgentHeaders, s.pizzaAgentId));
-    ({ client: burgerClient, transport: burgerTransport } =
-      await createMcpClient(burgerAgentHeaders, s.burgerAgentId));
+    ({ client: _orgAClient, transport: orgATransport } = await createMcpClient(
+      orgAAgentHeaders,
+      s.orgAAgentId,
+    ));
+    ({ client: orgBClient, transport: orgBTransport } = await createMcpClient(
+      orgBAgentHeaders,
+      s.orgBAgentId,
+    ));
 
-    pizzaSessionId = await createSessionViaRest(
-      pizzaAgentHeaders,
+    orgASessionId = await createSessionViaRest(
+      orgAAgentHeaders,
       "voice",
       "+1234560004",
     );
   });
 
   afterAll(async () => {
-    await pizzaTransport.close();
-    await burgerTransport.close();
-    // Restore burger agent metadata
+    await orgATransport.close();
+    await orgBTransport.close();
+    // Restore orgB agent metadata
     await forApp(async (tx) => {
       await tx
         .update(agents)
         .set({ metadata: {} })
-        .where(eq(agents.id, s.burgerAgentId));
+        .where(eq(agents.id, s.orgBAgentId));
     });
   });
 
-  test("Burger Barn agent cannot add messages to a Pizza Palace session", async () => {
-    const result = await burgerClient.callTool({
+  test("org B agent cannot add messages to a org A session", async () => {
+    const result = await orgBClient.callTool({
       name: "core_add_messages",
       arguments: {
-        session_id: pizzaSessionId,
+        session_id: orgASessionId,
         messages: [
           {
             role: "user",

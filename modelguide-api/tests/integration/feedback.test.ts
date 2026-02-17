@@ -16,10 +16,10 @@ import {
 } from "../helpers/seed";
 
 let s: TestSeed;
-let pizzaAdminHeaders: Record<string, string>;
-let pizzaSupportHeaders: Record<string, string>;
-let burgerAdminHeaders: Record<string, string>;
-let pizzaAgentHeaders: Record<string, string>;
+let orgAAdminHeaders: Record<string, string>;
+let orgASupportHeaders: Record<string, string>;
+let orgBAdminHeaders: Record<string, string>;
+let orgAAgentHeaders: Record<string, string>;
 
 /** IDs of sessions created during tests (for cleanup) */
 const createdSessionIds: string[] = [];
@@ -46,17 +46,13 @@ async function createTestSession(
 
 beforeAll(async () => {
   s = await getTestSeed();
-  [
-    pizzaAdminHeaders,
-    pizzaSupportHeaders,
-    burgerAdminHeaders,
-    pizzaAgentHeaders,
-  ] = await Promise.all([
-    authHeadersFor(s.pizzaAdmin),
-    authHeadersFor(s.pizzaSupport),
-    authHeadersFor(s.burgerAdmin),
-    agentHeadersFor(s.pizzaAgentId, s.pizzaOrg.id),
-  ]);
+  [orgAAdminHeaders, orgASupportHeaders, orgBAdminHeaders, orgAAgentHeaders] =
+    await Promise.all([
+      authHeadersFor(s.orgAAdmin),
+      authHeadersFor(s.orgASupport),
+      authHeadersFor(s.orgBAdmin),
+      agentHeadersFor(s.orgAAgentId, s.orgA.id),
+    ]);
 });
 
 afterAll(async () => {
@@ -78,14 +74,14 @@ describe("GET /api/sessions/:id/feedback", () => {
 
   beforeAll(async () => {
     feedbackSessionId = await createTestSession(
-      pizzaAgentHeaders,
+      orgAAgentHeaders,
       "+1112223333",
     );
 
     // Create feedback via the POST endpoint
     await request(`/api/sessions/${feedbackSessionId}/feedback`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         rating: 2,
         comment: "Great service",
@@ -98,7 +94,7 @@ describe("GET /api/sessions/:id/feedback", () => {
   test("returns feedback entries for a session (200)", async () => {
     const response = await request(
       `/api/sessions/${feedbackSessionId}/feedback`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -119,13 +115,13 @@ describe("GET /api/sessions/:id/feedback", () => {
 
   test("returns empty items when no feedback (200)", async () => {
     const sessionId = await createTestSession(
-      pizzaAgentHeaders,
+      orgAAgentHeaders,
       "nofeedback@test.com",
       "web",
     );
 
     const response = await request(`/api/sessions/${sessionId}/feedback`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -136,7 +132,7 @@ describe("GET /api/sessions/:id/feedback", () => {
   test("returns 404 for non-existent session", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/sessions/${fakeId}/feedback`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -153,7 +149,7 @@ describe("GET /api/sessions/:id/feedback", () => {
   test("rejects agent auth (401)", async () => {
     const response = await request(
       `/api/sessions/${feedbackSessionId}/feedback`,
-      { headers: pizzaAgentHeaders },
+      { headers: orgAAgentHeaders },
     );
 
     expect(response.status).toBe(401);
@@ -162,7 +158,7 @@ describe("GET /api/sessions/:id/feedback", () => {
   test("support role can list feedback (200)", async () => {
     const response = await request(
       `/api/sessions/${feedbackSessionId}/feedback`,
-      { headers: pizzaSupportHeaders },
+      { headers: orgASupportHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -181,7 +177,7 @@ describe("POST /api/sessions/:id/feedback", () => {
 
   beforeAll(async () => {
     feedbackPostSessionId = await createTestSession(
-      pizzaAgentHeaders,
+      orgAAgentHeaders,
       "+4445556666",
     );
   });
@@ -191,7 +187,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 2,
           comment: "Excellent resolution",
@@ -211,8 +207,8 @@ describe("POST /api/sessions/:id/feedback", () => {
     expect(body.feedbackSource).toBe("support");
     expect(body.feedbackTags).toEqual(["fast", "polite"]);
     // Auto-populated from authenticated user
-    expect(body.feedbackRef).toBe(s.pizzaAdmin.id);
-    expect(body.userIdentifier).toBe(s.pizzaAdmin.email);
+    expect(body.feedbackRef).toBe(s.orgAAdmin.id);
+    expect(body.userIdentifier).toBe(s.orgAAdmin.email);
     expect(body.createdAt).toBeDefined();
   });
 
@@ -221,7 +217,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 1,
           feedbackSource: "system",
@@ -243,7 +239,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaSupportHeaders,
+        headers: orgASupportHeaders,
         body: JSON.stringify({
           rating: 2,
           feedbackSource: "support",
@@ -254,8 +250,8 @@ describe("POST /api/sessions/:id/feedback", () => {
     expect(response.status).toBe(201);
     const body = await response.json();
 
-    expect(body.feedbackRef).toBe(s.pizzaSupport.id);
-    expect(body.userIdentifier).toBe(s.pizzaSupport.email);
+    expect(body.feedbackRef).toBe(s.orgASupport.id);
+    expect(body.userIdentifier).toBe(s.orgASupport.email);
   });
 
   test("upserts when same user+source submits again (201)", async () => {
@@ -263,7 +259,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 1,
           feedbackSource: "support",
@@ -276,7 +272,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 2,
           feedbackSource: "support",
@@ -302,7 +298,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaSupportHeaders,
+        headers: orgASupportHeaders,
         body: JSON.stringify({
           rating: 1,
           feedbackSource: "system",
@@ -314,7 +310,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 2,
           feedbackSource: "system",
@@ -336,7 +332,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 5,
           feedbackSource: "support",
@@ -352,7 +348,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 0,
           feedbackSource: "support",
@@ -368,7 +364,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           rating: 2,
           feedbackSource: "customer",
@@ -384,7 +380,7 @@ describe("POST /api/sessions/:id/feedback", () => {
       `/api/sessions/${feedbackPostSessionId}/feedback`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({}),
       },
     );
@@ -396,7 +392,7 @@ describe("POST /api/sessions/:id/feedback", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/sessions/${fakeId}/feedback`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         rating: 2,
         feedbackSource: "support",
@@ -428,17 +424,17 @@ describe("POST /api/sessions/:id/feedback", () => {
 // ============================================================================
 
 describe("RLS isolation — feedback", () => {
-  let pizzaFeedbackSessionId: string;
+  let orgAFeedbackSessionId: string;
 
   beforeAll(async () => {
-    pizzaFeedbackSessionId = await createTestSession(
-      pizzaAgentHeaders,
+    orgAFeedbackSessionId = await createTestSession(
+      orgAAgentHeaders,
       "+7778889999",
     );
 
-    await request(`/api/sessions/${pizzaFeedbackSessionId}/feedback`, {
+    await request(`/api/sessions/${orgAFeedbackSessionId}/feedback`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         rating: 2,
         feedbackSource: "support",
@@ -446,21 +442,21 @@ describe("RLS isolation — feedback", () => {
     });
   });
 
-  test("Burger Barn cannot list feedback on Pizza Palace session (404)", async () => {
+  test("org B cannot list feedback on org A session (404)", async () => {
     const response = await request(
-      `/api/sessions/${pizzaFeedbackSessionId}/feedback`,
-      { headers: burgerAdminHeaders },
+      `/api/sessions/${orgAFeedbackSessionId}/feedback`,
+      { headers: orgBAdminHeaders },
     );
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger Barn cannot create feedback on Pizza Palace session (404)", async () => {
+  test("org B cannot create feedback on org A session (404)", async () => {
     const response = await request(
-      `/api/sessions/${pizzaFeedbackSessionId}/feedback`,
+      `/api/sessions/${orgAFeedbackSessionId}/feedback`,
       {
         method: "POST",
-        headers: burgerAdminHeaders,
+        headers: orgBAdminHeaders,
         body: JSON.stringify({
           rating: 1,
           feedbackSource: "support",

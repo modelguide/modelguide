@@ -11,9 +11,9 @@ import { eq } from "drizzle-orm";
 import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
 let s: TestSeed;
-let pizzaAdminHeaders: Record<string, string>;
-let pizzaSupportHeaders: Record<string, string>;
-let burgerAdminHeaders: Record<string, string>;
+let orgAAdminHeaders: Record<string, string>;
+let orgASupportHeaders: Record<string, string>;
+let orgBAdminHeaders: Record<string, string>;
 
 /** IDs of sessions created during tests (for cleanup) */
 const createdSessionIds: string[] = [];
@@ -27,12 +27,11 @@ const TO = "2030-12-31";
 
 beforeAll(async () => {
   s = await getTestSeed();
-  [pizzaAdminHeaders, pizzaSupportHeaders, burgerAdminHeaders] =
-    await Promise.all([
-      authHeadersFor(s.pizzaAdmin),
-      authHeadersFor(s.pizzaSupport),
-      authHeadersFor(s.burgerAdmin),
-    ]);
+  [orgAAdminHeaders, orgASupportHeaders, orgBAdminHeaders] = await Promise.all([
+    authHeadersFor(s.orgAAdmin),
+    authHeadersFor(s.orgASupport),
+    authHeadersFor(s.orgBAdmin),
+  ]);
 
   // Create test sessions with varied statuses, channels, and feedback
   await forApp(async (tx) => {
@@ -43,32 +42,32 @@ beforeAll(async () => {
       .insert(sessions)
       .values([
         {
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "voice",
           status: "completed",
           startedAt: oneHourAgo,
           endedAt: now,
         },
         {
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "web",
           status: "completed",
           startedAt: oneHourAgo,
           endedAt: now,
         },
         {
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "voice",
           status: "abandoned",
           startedAt: oneHourAgo,
           endedAt: now,
         },
         {
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "web",
           status: "completed",
           startedAt: oneHourAgo,
@@ -163,7 +162,7 @@ describe("GET /api/analytics", () => {
   test("returns summary with valid date range (200)", async () => {
     const response = await request(
       `/api/analytics?from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -210,7 +209,7 @@ describe("GET /api/analytics", () => {
   test("counts match expected data", async () => {
     const response = await request(
       `/api/analytics?from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     const body = await response.json();
@@ -234,7 +233,7 @@ describe("GET /api/analytics", () => {
   test("accessible by support role (200)", async () => {
     const response = await request(
       `/api/analytics?from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaSupportHeaders },
+      { headers: orgASupportHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -242,8 +241,8 @@ describe("GET /api/analytics", () => {
 
   test("filters by agent_id", async () => {
     const response = await request(
-      `/api/analytics?from_date=${FROM}&to_date=${TO}&agent_id=${s.pizzaAgentId}`,
-      { headers: pizzaAdminHeaders },
+      `/api/analytics?from_date=${FROM}&to_date=${TO}&agent_id=${s.orgAAgentId}`,
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -254,7 +253,7 @@ describe("GET /api/analytics", () => {
   test("filters by channel_type", async () => {
     const response = await request(
       `/api/analytics?from_date=${FROM}&to_date=${TO}&channel_type=web`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -275,7 +274,7 @@ describe("GET /api/analytics", () => {
 
   test("requires from_date and to_date (422)", async () => {
     const response = await request("/api/analytics", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(422);
@@ -284,7 +283,7 @@ describe("GET /api/analytics", () => {
   test("requires valid from_date format (422)", async () => {
     const response = await request(
       "/api/analytics?from_date=not-a-date&to_date=2030-12-31",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(422);
@@ -293,7 +292,7 @@ describe("GET /api/analytics", () => {
   test("rejects inverted date range (422)", async () => {
     const response = await request(
       "/api/analytics?from_date=2030-01-01&to_date=2020-01-01",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(422);
@@ -303,7 +302,7 @@ describe("GET /api/analytics", () => {
     // Use a date range in the far future where no sessions exist
     const response = await request(
       "/api/analytics?from_date=2099-01-01&to_date=2099-12-31",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -324,7 +323,7 @@ describe("GET /api/analytics", () => {
   test("includes avg_messages_per_session from session messages", async () => {
     const response = await request(
       `/api/analytics?from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     const body = await response.json();
@@ -338,7 +337,7 @@ describe("GET /api/analytics", () => {
   test("includes feedback_coverage_rate", async () => {
     const response = await request(
       `/api/analytics?from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     const body = await response.json();
@@ -357,7 +356,7 @@ describe("GET /api/analytics/trends", () => {
   test("returns sessions trend with valid params (200)", async () => {
     const response = await request(
       `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -377,7 +376,7 @@ describe("GET /api/analytics/trends", () => {
   test("returns csat trend (200)", async () => {
     const response = await request(
       `/api/analytics/trends?metric=csat&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -390,7 +389,7 @@ describe("GET /api/analytics/trends", () => {
   test("returns resolution_rate trend (200)", async () => {
     const response = await request(
       `/api/analytics/trends?metric=resolution_rate&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -403,7 +402,7 @@ describe("GET /api/analytics/trends", () => {
   test("returns duration trend (200)", async () => {
     const response = await request(
       `/api/analytics/trends?metric=duration&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -417,7 +416,7 @@ describe("GET /api/analytics/trends", () => {
     for (const granularity of ["hour", "day", "week", "month"]) {
       const response = await request(
         `/api/analytics/trends?metric=sessions&granularity=${granularity}&from_date=${FROM}&to_date=${TO}`,
-        { headers: pizzaAdminHeaders },
+        { headers: orgAAdminHeaders },
       );
 
       expect(response.status).toBe(200);
@@ -428,8 +427,8 @@ describe("GET /api/analytics/trends", () => {
 
   test("filters by agent_id", async () => {
     const response = await request(
-      `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}&agent_id=${s.pizzaAgentId}`,
-      { headers: pizzaAdminHeaders },
+      `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}&agent_id=${s.orgAAgentId}`,
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -440,7 +439,7 @@ describe("GET /api/analytics/trends", () => {
   test("filters by channel_type", async () => {
     const response = await request(
       `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}&channel_type=voice`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -451,7 +450,7 @@ describe("GET /api/analytics/trends", () => {
   test("accessible by support role (200)", async () => {
     const response = await request(
       `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaSupportHeaders },
+      { headers: orgASupportHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -468,7 +467,7 @@ describe("GET /api/analytics/trends", () => {
   test("requires metric and granularity (422)", async () => {
     const response = await request(
       `/api/analytics/trends?from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(422);
@@ -477,7 +476,7 @@ describe("GET /api/analytics/trends", () => {
   test("rejects invalid metric (422)", async () => {
     const response = await request(
       `/api/analytics/trends?metric=invalid&granularity=day&from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(422);
@@ -486,7 +485,7 @@ describe("GET /api/analytics/trends", () => {
   test("rejects inverted date range (422)", async () => {
     const response = await request(
       "/api/analytics/trends?metric=sessions&granularity=day&from_date=2030-01-01&to_date=2020-01-01",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(422);
@@ -495,7 +494,7 @@ describe("GET /api/analytics/trends", () => {
   test("handles empty data range gracefully", async () => {
     const response = await request(
       "/api/analytics/trends?metric=sessions&granularity=day&from_date=2099-01-01&to_date=2099-12-31",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -514,7 +513,7 @@ describe("GET /api/analytics/agents", () => {
   test("returns agent performance with valid params (200)", async () => {
     const response = await request(
       `/api/analytics/agents?from_date=${FROM}&to_date=${TO}`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -539,29 +538,29 @@ describe("GET /api/analytics/agents", () => {
   });
 
   test("RLS isolates agent performance by org", async () => {
-    const [pizzaRes, burgerRes] = await Promise.all([
+    const [orgARes, orgBRes] = await Promise.all([
       request(`/api/analytics/agents?from_date=${FROM}&to_date=${TO}`, {
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       }),
       request(`/api/analytics/agents?from_date=${FROM}&to_date=${TO}`, {
-        headers: burgerAdminHeaders,
+        headers: orgBAdminHeaders,
       }),
     ]);
 
-    const pizzaBody = await pizzaRes.json();
-    const burgerBody = await burgerRes.json();
+    const orgABody = await orgARes.json();
+    const orgBBody = await orgBRes.json();
 
-    // Pizza Palace should have agents with sessions
-    const pizzaTotal = pizzaBody.agents.reduce(
+    // org A should have agents with sessions
+    const orgATotal = orgABody.agents.reduce(
       (sum: number, a: { total_sessions: number }) => sum + a.total_sessions,
       0,
     );
-    const burgerTotal = burgerBody.agents.reduce(
+    const orgBTotal = orgBBody.agents.reduce(
       (sum: number, a: { total_sessions: number }) => sum + a.total_sessions,
       0,
     );
 
-    expect(pizzaTotal).toBeGreaterThan(burgerTotal);
+    expect(orgATotal).toBeGreaterThan(orgBTotal);
   });
 });
 
@@ -570,59 +569,54 @@ describe("GET /api/analytics/agents", () => {
 // ============================================================================
 
 describe("RLS isolation", () => {
-  test("Burger Barn cannot see Pizza Palace analytics data", async () => {
+  test("org B cannot see org A analytics data", async () => {
     // Get both orgs' summaries and compare
-    const [pizzaRes, burgerRes] = await Promise.all([
+    const [orgARes, orgBRes] = await Promise.all([
       request(`/api/analytics?from_date=${FROM}&to_date=${TO}`, {
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       }),
       request(`/api/analytics?from_date=${FROM}&to_date=${TO}`, {
-        headers: burgerAdminHeaders,
+        headers: orgBAdminHeaders,
       }),
     ]);
 
-    const pizzaBody = await pizzaRes.json();
-    const burgerBody = await burgerRes.json();
+    const orgABody = await orgARes.json();
+    const orgBBody = await orgBRes.json();
 
-    // Pizza Palace should have our 4 test sessions (3 completed, 1 abandoned)
-    expect(pizzaBody.sessions_by_status.completed).toBeGreaterThanOrEqual(3);
-    expect(pizzaBody.sessions_by_status.abandoned).toBeGreaterThanOrEqual(1);
+    // orgA should have our 4 test sessions on top of seed data
+    expect(orgABody.sessions_by_status.completed).toBeGreaterThanOrEqual(3);
+    expect(orgABody.sessions_by_status.abandoned).toBeGreaterThanOrEqual(1);
 
-    // Burger Barn should have strictly fewer total sessions than Pizza Palace
-    // (seed creates 1 active session per org; our test adds 4 only to pizza)
-    expect(burgerBody.total_sessions).toBeLessThan(pizzaBody.total_sessions);
-
-    // Burger Barn should have no completed/abandoned sessions
-    // (seed only creates active sessions)
-    expect(burgerBody.sessions_by_status.completed).toBe(0);
-    expect(burgerBody.sessions_by_status.abandoned).toBe(0);
+    // orgA should have strictly more total sessions than orgB
+    // (both orgs have ~300 seed sessions, but our test adds 4 only to orgA)
+    expect(orgABody.total_sessions).toBeGreaterThan(orgBBody.total_sessions);
   });
 
-  test("Burger Barn trends do not include Pizza Palace sessions", async () => {
-    const [pizzaRes, burgerRes] = await Promise.all([
+  test("org B trends do not include org A sessions", async () => {
+    const [orgARes, orgBRes] = await Promise.all([
       request(
         `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}`,
-        { headers: pizzaAdminHeaders },
+        { headers: orgAAdminHeaders },
       ),
       request(
         `/api/analytics/trends?metric=sessions&granularity=day&from_date=${FROM}&to_date=${TO}`,
-        { headers: burgerAdminHeaders },
+        { headers: orgBAdminHeaders },
       ),
     ]);
 
-    const pizzaBody = await pizzaRes.json();
-    const burgerBody = await burgerRes.json();
+    const orgABody = await orgARes.json();
+    const orgBBody = await orgBRes.json();
 
-    const pizzaTotal = pizzaBody.data.reduce(
+    const orgATotal = orgABody.data.reduce(
       (sum: number, p: { value: number }) => sum + p.value,
       0,
     );
-    const burgerTotal = burgerBody.data.reduce(
+    const orgBTotal = orgBBody.data.reduce(
       (sum: number, p: { value: number }) => sum + p.value,
       0,
     );
 
-    // Pizza Palace should have strictly more sessions than Burger Barn
-    expect(pizzaTotal).toBeGreaterThan(burgerTotal);
+    // org A should have strictly more sessions than org B
+    expect(orgATotal).toBeGreaterThan(orgBTotal);
   });
 });

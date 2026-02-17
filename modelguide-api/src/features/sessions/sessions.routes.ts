@@ -149,7 +149,7 @@ const createMessageSchema = z.object({
   role: z.enum(["user", "assistant"]).openapi({ example: "user" }),
   content: z.string().optional().openapi({
     description: "Message text content",
-    example: "I'd like to order a large pepperoni pizza",
+    example: "Hi, I'd like to check on my order",
   }),
   audioUrl: z.string().url().optional().openapi({
     description: "URL to audio recording",
