@@ -26,7 +26,7 @@ import {
 } from "@lib/jwt";
 import { and, eq, lt } from "drizzle-orm";
 
-interface SessionTokens {
+export interface SessionTokens {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;

@@ -1,5 +1,5 @@
 /**
- * Authentication service for magic link authentication
+ * Authentication service (magic link + demo instant auth).
  */
 
 import { env } from "@/env";
@@ -16,13 +16,11 @@ import {
   sendMagicLink,
 } from "@lib/magic-link";
 import { and, eq, isNull, lt } from "drizzle-orm";
-import { cleanupExpiredSessions, createSession } from "./refresh-token.service";
-
-interface SessionTokens {
-  accessToken: string;
-  refreshToken: string;
-  user: AuthUser;
-}
+import {
+  type SessionTokens,
+  cleanupExpiredSessions,
+  createSession,
+} from "./refresh-token.service";
 
 type LoginResult =
   | { type: "magic_link_sent" }
