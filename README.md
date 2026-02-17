@@ -73,7 +73,9 @@ make api-dev    # API at http://localhost:3000
 make ui-dev     # Dashboard at http://localhost:3001
 ```
 
-Open `http://localhost:3001`. The seed creates a demo organization, a Pizza Palace agent with Medusa e-commerce tools, and an API key you can use to connect any voice platform.
+Open `http://localhost:3001`. The seed creates three industry-vertical organizations — each with Medusa e-commerce and Zendesk helpdesk connectors, two agents, and ~300 realistic sessions. Log in with `delivered+admin-glowbox@resend.dev` (magic link printed to API console).
+
+See [Seed Data](#seed-data) for the full list of organizations and use cases.
 
 API docs are auto-generated at `http://localhost:3000/docs`.
 
@@ -125,7 +127,7 @@ Authorization: Bearer mgk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 → tools/list returns only tools assigned to THIS agent
 → Each tool requires an active session_id
-→ Tool names are namespaced: pizzapalace_add_to_cart
+→ Tool names are namespaced: glowbox_store_add_to_cart
 ```
 
 The MCP handler creates a fresh server per request, registers only the tools that agent is authorized to use, converts JSON Schema to Zod on the fly, and validates sessions before execution.
@@ -149,7 +151,7 @@ The dashboard gives support teams what they need: session list with filters (sta
 
 ✅ **Connector System** — Code-defined manifests with real HTTP handlers. Ships with a Medusa e-commerce connector as a reference implementation (8 tools: browse products, manage carts, checkout, orders). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
 
-✅ **Tool Namespacing** — Connector instances get a unique slug. Same connector type, different instances: `pizzapalace_add_to_cart` and `burgerking_add_to_cart` coexist on the same agent.
+✅ **Tool Namespacing** — Connector instances get a unique slug. Same connector type, different instances: `glowbox_store_add_to_cart` and `clearhealth_pharmacy_add_to_cart` coexist on the same agent.
 
 ✅ **MCP Protocol** — Standard [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP. Tool discovery, execution, and resources. Works with any MCP-compatible client.
 
@@ -168,6 +170,28 @@ The dashboard gives support teams what they need: session list with filters (sta
 ✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
 
 ✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
+
+## Seed Data
+
+`make db-seed` populates three organizations that demonstrate ModelGuide across different industries. Each org gets both **Medusa** (e-commerce) and **Zendesk** (helpdesk) connectors, two agents, ~300 generated sessions with tool calls, and handwritten showcase conversations.
+
+| Organization | Slug | Industry | Use Case |
+|---|---|---|---|
+| **GlowBox Beauty** | `glowbox` | Retail / Beauty | "Where is my order?" + product recommendations. Web-dominant channel mix. Demo-enabled org for instant viewer login. |
+| **ClearHealth** | `clearhealth` | Medical Call Center | Patient support — Rx refills, appointment scheduling, insurance questions, lab results. Voice-dominant channel mix. |
+| **SteelPoint Supply** | `steelpoint` | B2B Industrial | Quotes, bulk orders, technical specs, delivery scheduling. Email/Slack-heavy channel mix. |
+
+**Session scenarios** cover 8 types: product inquiry, purchase flow, order status, return/exchange, ticket lookup, ticket creation, ticket escalation, and general questions. Each org's sessions use industry-appropriate products, ticket templates, and conversation language.
+
+**Dev accounts** (magic link auth — link printed to API console):
+
+| Org | Admin | Support | Viewer |
+|-----|-------|---------|--------|
+| GlowBox | `delivered+admin-glowbox@resend.dev` | `delivered+support-glowbox@resend.dev` | `delivered+viewer-glowbox@resend.dev` |
+| ClearHealth | `delivered+admin-clearhealth@resend.dev` | `delivered+support-clearhealth@resend.dev` | `delivered+viewer-clearhealth@resend.dev` |
+| SteelPoint | `delivered+admin-steelpoint@resend.dev` | `delivered+support-steelpoint@resend.dev` | `delivered+viewer-steelpoint@resend.dev` |
+
+The seed is config-driven — each vertical is a single TypeScript file in `modelguide-api/src/db/seed/verticals/`. Adding a new organization means creating a new config file and importing it in `seed/index.ts`.
 
 ## Tech Stack
 
@@ -268,8 +292,6 @@ const modules = await Promise.all([
 3. Run `make sync-connectors`. Your tools are now available to assign to agents via the dashboard.
 
 ## Roadmap
-
-🚧 **Zendesk connector** — Helpdesk integration with ticket management tools (create, update, comment, close)
 
 🚧 **Confirmation token flow** — Flag exists per tool, full token-based confirmation with expiry coming
 

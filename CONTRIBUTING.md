@@ -36,6 +36,8 @@ Open `http://localhost:3001`. Authentication uses **magic links** — enter your
 - **Support:** `delivered+support-glowbox@resend.dev`
 - **Viewer:** `delivered+viewer-glowbox@resend.dev`
 
+The seed creates three organizations (GlowBox Beauty, ClearHealth, SteelPoint Supply) spanning retail, medical, and B2B verticals — each with Medusa + Zendesk connectors and ~300 sessions. See the [Seed Data](README.md#seed-data) section in the README for all accounts and details.
+
 API docs are auto-generated at `http://localhost:3000/docs`.
 
 ## Environment Variables
