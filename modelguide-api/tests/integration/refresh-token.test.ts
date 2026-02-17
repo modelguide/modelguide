@@ -67,7 +67,7 @@ beforeAll(async () => {
 
 describe("Magic link flow with refresh token", () => {
   test("verify sets access token in body and refresh cookie in Set-Cookie", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const response = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -79,12 +79,12 @@ describe("Magic link flow with refresh token", () => {
     const body = await response.json();
     expect(body.token).toBeDefined();
     expect(typeof body.token).toBe("string");
-    expect(body.user.id).toBe(s.pizzaAdmin.id);
+    expect(body.user.id).toBe(s.orgAAdmin.id);
 
     // Access token has type: "access"
     const accessPayload = await verifyJWT(body.token);
     expect(accessPayload).not.toBeNull();
-    expect(accessPayload!.id).toBe(s.pizzaAdmin.id);
+    expect(accessPayload!.id).toBe(s.orgAAdmin.id);
 
     // Refresh cookie is set
     const refreshValue = extractRefreshCookie(response);
@@ -93,12 +93,12 @@ describe("Magic link flow with refresh token", () => {
     // Refresh token is valid and has correct claims
     const refreshPayload = await verifyRefreshJWT(refreshValue!);
     expect(refreshPayload).not.toBeNull();
-    expect(refreshPayload!.userId).toBe(s.pizzaAdmin.id);
+    expect(refreshPayload!.userId).toBe(s.orgAAdmin.id);
     expect(refreshPayload!.generation).toBe(0);
   });
 
   test("verify creates a security_tokens session in the DB", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const response = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -113,7 +113,7 @@ describe("Magic link flow with refresh token", () => {
     });
 
     expect(session).toBeDefined();
-    expect(session!.userId).toBe(s.pizzaAdmin.id);
+    expect(session!.userId).toBe(s.orgAAdmin.id);
     expect(session!.generation).toBe(0);
     expect(session!.isRevoked).toBe(false);
     expect(session!.expiresAt.getTime()).toBeGreaterThan(Date.now());
@@ -127,7 +127,7 @@ describe("Magic link flow with refresh token", () => {
 describe("POST /api/auth/refresh", () => {
   test("rotates refresh token and returns new access token", async () => {
     // 1. Login to get initial tokens
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
     const verifyRes = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
     );
@@ -146,7 +146,7 @@ describe("POST /api/auth/refresh", () => {
 
     const body = await refreshRes.json();
     expect(body.token).toBeDefined();
-    expect(body.user.id).toBe(s.pizzaAdmin.id);
+    expect(body.user.id).toBe(s.orgAAdmin.id);
 
     // New refresh cookie with bumped generation
     const newRefreshValue = extractRefreshCookie(refreshRes)!;
@@ -158,7 +158,7 @@ describe("POST /api/auth/refresh", () => {
 
   test("new access token is valid for authenticated endpoints", async () => {
     // 1. Login
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
     const verifyRes = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
     );
@@ -181,12 +181,12 @@ describe("POST /api/auth/refresh", () => {
 
     expect(meRes.status).toBe(200);
     const me = await meRes.json();
-    expect(me.id).toBe(s.pizzaAdmin.id);
+    expect(me.id).toBe(s.orgAAdmin.id);
   });
 
   test("old refresh token is rejected after rotation (reuse detection)", async () => {
     // 1. Login
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
     const verifyRes = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
     );
@@ -256,7 +256,7 @@ describe("POST /api/auth/refresh", () => {
 describe("Logout revokes session", () => {
   test("clears refresh cookie and revokes DB session", async () => {
     // 1. Login
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
     const verifyRes = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
     );
@@ -307,7 +307,7 @@ describe("Logout revokes session", () => {
 
 describe("CSRF protection", () => {
   test("refresh rejected without Origin header", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
     const verifyRes = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
     );
@@ -324,7 +324,7 @@ describe("CSRF protection", () => {
   });
 
   test("refresh rejected with wrong Origin", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
     const verifyRes = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
     );

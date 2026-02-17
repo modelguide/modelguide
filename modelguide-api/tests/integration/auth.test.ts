@@ -53,7 +53,7 @@ describe("POST /api/auth/login", () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaAdmin.email }),
+      body: JSON.stringify({ email: s.orgAAdmin.email }),
     });
 
     expect(response.status).toBe(202);
@@ -65,12 +65,12 @@ describe("POST /api/auth/login", () => {
     const beforeCount = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaAdmin.id));
+      .where(eq(magicTokens.userId, s.orgAAdmin.id));
 
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaAdmin.email }),
+      body: JSON.stringify({ email: s.orgAAdmin.email }),
     });
 
     expect(response.status).toBe(202);
@@ -78,12 +78,12 @@ describe("POST /api/auth/login", () => {
     const afterCount = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaAdmin.id));
+      .where(eq(magicTokens.userId, s.orgAAdmin.id));
 
     expect(afterCount.length).toBe(beforeCount.length + 1);
 
     const latestToken = await db.query.magicTokens.findFirst({
-      where: eq(magicTokens.userId, s.pizzaAdmin.id),
+      where: eq(magicTokens.userId, s.orgAAdmin.id),
       orderBy: desc(magicTokens.createdAt),
     });
     expect(latestToken).toBeDefined();
@@ -109,18 +109,18 @@ describe("POST /api/auth/login", () => {
     const beforeTokens = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaInactive.id));
+      .where(eq(magicTokens.userId, s.orgAInactive.id));
 
     await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaInactive.email }),
+      body: JSON.stringify({ email: s.orgAInactive.email }),
     });
 
     const afterTokens = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaInactive.id));
+      .where(eq(magicTokens.userId, s.orgAInactive.id));
     expect(afterTokens.length).toBe(beforeTokens.length);
   });
 
@@ -140,7 +140,7 @@ describe("POST /api/auth/login", () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaInactive.email }),
+      body: JSON.stringify({ email: s.orgAInactive.email }),
     });
 
     expect(response.status).toBe(202);
@@ -175,7 +175,7 @@ describe("POST /api/auth/login", () => {
 
 describe("GET /api/auth/verify", () => {
   test("returns JWT and user info for valid token", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const response = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -187,11 +187,11 @@ describe("GET /api/auth/verify", () => {
     expect(body.token).toBeDefined();
     expect(typeof body.token).toBe("string");
     expect(body.user).toBeDefined();
-    expect(body.user.id).toBe(s.pizzaAdmin.id);
-    expect(body.user.email).toBe(s.pizzaAdmin.email);
-    expect(body.user.name).toBe(s.pizzaAdmin.name);
+    expect(body.user.id).toBe(s.orgAAdmin.id);
+    expect(body.user.email).toBe(s.orgAAdmin.email);
+    expect(body.user.name).toBe(s.orgAAdmin.name);
     expect(body.user.role).toBe("admin");
-    expect(body.user.organizationId).toBe(s.pizzaOrg.id);
+    expect(body.user.organizationId).toBe(s.orgA.id);
   });
 
   test("returns 401 MAGIC_TOKEN_INVALID for invalid token", async () => {
@@ -205,7 +205,7 @@ describe("GET /api/auth/verify", () => {
   });
 
   test("returns 401 MAGIC_TOKEN_EXPIRED for expired token", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id, {
+    const token = await createTestMagicToken(s.orgAAdmin.id, {
       expired: true,
     });
 
@@ -219,7 +219,7 @@ describe("GET /api/auth/verify", () => {
   });
 
   test("returns 401 MAGIC_TOKEN_USED for already-used token", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id, { used: true });
+    const token = await createTestMagicToken(s.orgAAdmin.id, { used: true });
 
     const response = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -237,7 +237,7 @@ describe("GET /api/auth/verify", () => {
   });
 
   test("marks token as used after successful verification", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const response1 = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -260,11 +260,11 @@ describe("GET /api/auth/verify", () => {
 describe("GET /api/auth/me", () => {
   test("returns current user info with valid JWT", async () => {
     const authUser: AuthUser = {
-      id: s.pizzaAdmin.id,
-      email: s.pizzaAdmin.email,
-      name: s.pizzaAdmin.name,
+      id: s.orgAAdmin.id,
+      email: s.orgAAdmin.email,
+      name: s.orgAAdmin.name,
       role: "admin",
-      organizationId: s.pizzaOrg.id,
+      organizationId: s.orgA.id,
     };
     const jwt = await generateJWT(authUser);
 
@@ -274,11 +274,11 @@ describe("GET /api/auth/me", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.id).toBe(s.pizzaAdmin.id);
-    expect(body.email).toBe(s.pizzaAdmin.email);
-    expect(body.name).toBe(s.pizzaAdmin.name);
+    expect(body.id).toBe(s.orgAAdmin.id);
+    expect(body.email).toBe(s.orgAAdmin.email);
+    expect(body.name).toBe(s.orgAAdmin.name);
     expect(body.role).toBe("admin");
-    expect(body.organizationId).toBe(s.pizzaOrg.id);
+    expect(body.organizationId).toBe(s.orgA.id);
   });
 
   test("returns 401 without Authorization header", async () => {
@@ -352,7 +352,7 @@ describe("POST /api/auth/logout", () => {
 
 describe("Race conditions", () => {
   test("concurrent token verification - only one succeeds", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const requests = Array.from({ length: 5 }, () =>
       request(`/api/auth/verify?token=${encodeURIComponent(token)}`),
@@ -375,8 +375,8 @@ describe("Race conditions", () => {
 
 describe("Edge cases", () => {
   test("multiple magic links for same user - all valid until used/expired", async () => {
-    const token1 = await createTestMagicToken(s.pizzaAdmin.id);
-    const token2 = await createTestMagicToken(s.pizzaAdmin.id);
+    const token1 = await createTestMagicToken(s.orgAAdmin.id);
+    const token2 = await createTestMagicToken(s.orgAAdmin.id);
 
     const response1 = await request(
       `/api/auth/verify?token=${encodeURIComponent(token1)}`,
@@ -393,7 +393,7 @@ describe("Edge cases", () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaAdmin.email.toUpperCase() }),
+      body: JSON.stringify({ email: s.orgAAdmin.email.toUpperCase() }),
     });
 
     expect(response.status).toBe(202);

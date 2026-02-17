@@ -1,7 +1,7 @@
 /**
- * Demo session generator.
- * Produces ~300 sessions over 45 days with realistic conversations,
- * tool calls, and feedback to make the dashboard feel alive.
+ * Parameterized session generator.
+ * Produces ~300 sessions per org with realistic conversations,
+ * Medusa + Zendesk tool calls, and feedback.
  */
 
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -12,6 +12,13 @@ import {
   sessionMessages,
   sessions,
 } from "../schema";
+import type {
+  ChannelType,
+  OrgVerticalConfig,
+  Product,
+  Scenario,
+  Weighted,
+} from "./verticals/types";
 
 type SeedDb = PostgresJsDatabase<typeof schema>;
 
@@ -24,10 +31,11 @@ function randInt(min: number, max: number): number {
 }
 
 function pick<T>(arr: readonly T[]): T {
+  if (arr.length === 0) throw new Error("pick() called on empty array");
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function weightedPick<T>(items: readonly { value: T; weight: number }[]): T {
+function weightedPick<T>(items: readonly Weighted<T>[]): T {
   const total = items.reduce((s, i) => s + i.weight, 0);
   let r = Math.random() * total;
   for (const item of items) {
@@ -44,28 +52,7 @@ function weightedPick<T>(items: readonly { value: T; weight: number }[]): T {
 const SESSION_COUNT = 300;
 const DAYS_BACK = 45;
 
-type ChannelType =
-  | "web"
-  | "voice"
-  | "widget"
-  | "whatsapp"
-  | "email"
-  | "sms"
-  | "slack"
-  | "api";
-
-const CHANNELS: { value: ChannelType; weight: number }[] = [
-  { value: "web", weight: 40 },
-  { value: "voice", weight: 20 },
-  { value: "widget", weight: 15 },
-  { value: "whatsapp", weight: 10 },
-  { value: "email", weight: 8 },
-  { value: "sms", weight: 4 },
-  { value: "slack", weight: 2 },
-  { value: "api", weight: 1 },
-];
-
-/** Channels that map to the Voice Assistant agent */
+/** Channels routed to the first (voice/phone) agent */
 const VOICE_CHANNELS = new Set<ChannelType>(["voice", "sms", "whatsapp"]);
 
 /** Hourly weights — peak 10–18 */
@@ -74,72 +61,10 @@ const HOUR_WEIGHTS = [
 ];
 
 // ============================================================================
-// Product catalog
+// Default name pools (overridden by config)
 // ============================================================================
 
-interface Product {
-  name: string;
-  price: number;
-  variants: string[];
-  category: string;
-}
-
-const PRODUCTS: Product[] = [
-  {
-    name: "ProBook 15",
-    price: 1299,
-    variants: ["Silver", "Space Gray"],
-    category: "laptops",
-  },
-  {
-    name: "SoundMax Pro",
-    price: 179,
-    variants: ["Black", "Silver", "Midnight Blue"],
-    category: "audio",
-  },
-  {
-    name: 'UltraView 27"',
-    price: 449,
-    variants: ["Silver", "Black"],
-    category: "monitors",
-  },
-  {
-    name: "AudioElite Wireless",
-    price: 149,
-    variants: ["White", "Black"],
-    category: "audio",
-  },
-  {
-    name: "ClearTone ANC",
-    price: 129,
-    variants: ["White", "Gray", "Rose"],
-    category: "audio",
-  },
-  {
-    name: "ProBook 13",
-    price: 999,
-    variants: ["Silver", "Graphite"],
-    category: "laptops",
-  },
-  {
-    name: "USB-C Hub Pro",
-    price: 69,
-    variants: ["Silver"],
-    category: "accessories",
-  },
-  {
-    name: "SmartCharge 65W",
-    price: 49,
-    variants: ["White", "Black"],
-    category: "accessories",
-  },
-];
-
-// ============================================================================
-// Name & domain pools for user identifiers
-// ============================================================================
-
-const FIRST_NAMES = [
+const DEFAULT_FIRST_NAMES = [
   "Emma",
   "Liam",
   "Olivia",
@@ -167,7 +92,7 @@ const FIRST_NAMES = [
   "Nora",
 ];
 
-const LAST_NAMES = [
+const DEFAULT_LAST_NAMES = [
   "Smith",
   "Johnson",
   "Williams",
@@ -190,7 +115,7 @@ const LAST_NAMES = [
   "Walker",
 ];
 
-const DOMAINS = [
+const DEFAULT_DOMAINS = [
   "gmail.com",
   "yahoo.com",
   "outlook.com",
@@ -200,10 +125,14 @@ const DOMAINS = [
   "work.io",
 ];
 
-function makeEmail(): string {
-  const first = pick(FIRST_NAMES).toLowerCase();
-  const last = pick(LAST_NAMES).toLowerCase();
-  const domain = pick(DOMAINS);
+// ============================================================================
+// User identifier generation
+// ============================================================================
+
+function makeEmail(config: OrgVerticalConfig): string {
+  const first = pick(config.firstNames ?? DEFAULT_FIRST_NAMES).toLowerCase();
+  const last = pick(config.lastNames ?? DEFAULT_LAST_NAMES).toLowerCase();
+  const domain = pick(config.emailDomains ?? DEFAULT_DOMAINS);
   const num = randInt(1, 99);
   return `${first}.${last}${num}@${domain}`;
 }
@@ -212,61 +141,17 @@ function makePhone(): string {
   return `+1-555-${String(randInt(1000, 9999))}`;
 }
 
-function userIdentifier(channel: ChannelType): string {
+function userIdentifier(
+  channel: ChannelType,
+  config: OrgVerticalConfig,
+): string {
   if (VOICE_CHANNELS.has(channel)) return makePhone();
-  return makeEmail();
+  return makeEmail(config);
 }
-
-// ============================================================================
-// Feedback comment pools
-// ============================================================================
-
-const POSITIVE_CUSTOMER_COMMENTS = [
-  "Very helpful, thanks!",
-  "Quick and easy",
-  "Great service",
-  "Exactly what I needed",
-  "Super fast response",
-  "Really impressed with the help",
-  "Smooth experience",
-  "Couldn't be happier",
-  "The agent was very knowledgeable",
-  "Wonderful support",
-];
-
-const NEGATIVE_CUSTOMER_COMMENTS = [
-  "Could have been faster",
-  "Didn't fully resolve my issue",
-  "Had to repeat myself",
-  "Expected more detail",
-  "Confusing at first",
-  "Took too long",
-];
-
-const POSITIVE_SUPPORT_COMMENTS = [
-  "Agent followed protocol correctly",
-  "Clean conversation flow",
-  "Efficient resolution",
-  "Handled edge case well",
-  "Good tone throughout",
-];
-
-const NEGATIVE_SUPPORT_COMMENTS = [
-  "Missed upsell opportunity",
-  "Slightly off-script",
-  "Could be more concise",
-  "Should have confirmed before proceeding",
-];
 
 // ============================================================================
 // Tool-call helpers
 // ============================================================================
-
-const CONNECTOR_SLUG = "techstore";
-
-function toolName(slug: string): string {
-  return `${CONNECTOR_SLUG}_${slug}`;
-}
 
 function toolCallId(): string {
   return `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -290,31 +175,33 @@ interface ToolCallPair {
 }
 
 function makeToolCall(
-  name: string,
+  connectorSlug: string,
+  toolSlug: string,
   input: Record<string, unknown>,
   output: Record<string, unknown>,
 ): ToolCallPair {
   const id = toolCallId();
+  const name = `${connectorSlug}_${toolSlug}`;
   return {
     assistant: {
       role: "assistant",
       content: null,
       toolCallId: id,
-      toolName: toolName(name),
+      toolName: name,
       toolInput: input,
     },
     tool: {
       role: "tool",
       content: null,
       toolCallId: id,
-      toolName: toolName(name),
+      toolName: name,
       toolOutput: output,
     },
   };
 }
 
 // ============================================================================
-// Scenario generators
+// Message type
 // ============================================================================
 
 type Message = {
@@ -326,22 +213,45 @@ type Message = {
   toolOutput?: Record<string, unknown>;
 };
 
-function productInquiry(): Message[] {
-  const p1 = pick(PRODUCTS);
-  const p2 = pick(PRODUCTS.filter((p) => p !== p1));
+// ============================================================================
+// Link type
+// ============================================================================
+
+interface LinkDef {
+  url: string;
+  title: string;
+  connectorSlug?: string;
+  resourceType?: string;
+}
+
+interface ScenarioResult {
+  messages: Message[];
+  links: LinkDef[];
+}
+
+// ============================================================================
+// Medusa scenarios
+// ============================================================================
+
+function productInquiry(cfg: OrgVerticalConfig): ScenarioResult {
+  const slug = cfg.ecommerce.connectorSlug;
+  const p1 = pick(cfg.products);
+  const others = cfg.products.filter((p) => p !== p1);
+  const p2 = others.length > 0 ? pick(others) : p1;
   const msgs: Message[] = [];
 
   msgs.push({
     role: "user",
     content: pick([
       `What ${p1.category} do you have?`,
-      `I'm looking for a good ${p1.category === "audio" ? "pair of headphones" : p1.category === "laptops" ? "laptop" : p1.category === "monitors" ? "monitor" : "accessory"}.`,
+      `I'm looking for a good ${p1.category} product.`,
       `Can you tell me about the ${p1.name}?`,
       `Do you carry ${p1.category}?`,
     ]),
   });
 
   const tc1 = makeToolCall(
+    slug,
     "list_products",
     { query: p1.category },
     {
@@ -358,12 +268,10 @@ function productInquiry(): Message[] {
     content: `We have some great options! The **${p1.name}** is $${p1.price} and the **${p2.name}** is $${p2.price}. Would you like more details on either?`,
   });
 
-  msgs.push({
-    role: "user",
-    content: `Tell me more about the ${p1.name}`,
-  });
+  msgs.push({ role: "user", content: `Tell me more about the ${p1.name}` });
 
   const tc2 = makeToolCall(
+    slug,
     "get_product",
     { productId: crypto.randomUUID() },
     {
@@ -381,22 +289,26 @@ function productInquiry(): Message[] {
   });
 
   if (Math.random() > 0.5) {
-    msgs.push({
-      role: "user",
-      content: "I'll think about it, thanks!",
-    });
+    msgs.push({ role: "user", content: "I'll think about it, thanks!" });
     msgs.push({
       role: "assistant",
-      content:
-        "No problem! Feel free to reach out whenever you're ready. Have a great day!",
+      content: "No problem! Feel free to reach out whenever you're ready.",
     });
   }
 
-  return msgs;
+  const links: LinkDef[] = [p1, p2].map((p) => ({
+    url: productUrl(cfg, p),
+    title: p.name,
+    connectorSlug: slug,
+    resourceType: "product",
+  }));
+
+  return { messages: msgs, links };
 }
 
-function purchaseFlow(): Message[] {
-  const product = pick(PRODUCTS);
+function purchaseFlow(cfg: OrgVerticalConfig): ScenarioResult {
+  const slug = cfg.ecommerce.connectorSlug;
+  const product = pick(cfg.products);
   const variant = pick(product.variants);
   const msgs: Message[] = [];
   const cartId = crypto.randomUUID();
@@ -413,13 +325,14 @@ function purchaseFlow(): Message[] {
 
   msgs.push({
     role: "assistant",
-    content: `Great choice! Let me set up a cart for the ${product.name} (${variant}). One moment...`,
+    content: `Great choice! Let me set up a cart for the ${product.name} (${variant}).`,
   });
 
-  const tc1 = makeToolCall("create_cart", {}, { cartId });
+  const tc1 = makeToolCall(slug, "create_cart", {}, { cartId });
   msgs.push(tc1.assistant, tc1.tool);
 
   const tc2 = makeToolCall(
+    slug,
     "add_to_cart",
     { cartId, variantId, quantity: 1 },
     {
@@ -449,6 +362,7 @@ function purchaseFlow(): Message[] {
   });
 
   const tc3 = makeToolCall(
+    slug,
     "set_delivery_address",
     { cartId, address: `${streetNum} ${pick(streets)}` },
     { success: true },
@@ -457,21 +371,24 @@ function purchaseFlow(): Message[] {
 
   msgs.push({
     role: "assistant",
-    content: `Address saved! Here's your order summary:\n- ${product.name} (${variant}): $${product.price}\n- Shipping: Free\n- **Total: $${product.price}**\n\nShall I complete your order?`,
+    content: `Address saved! Order summary:\n- ${product.name} (${variant}): $${product.price}\n- Shipping: Free\n- **Total: $${product.price}**\n\nShall I complete your order?`,
   });
 
   msgs.push({ role: "user", content: "Yes, go ahead!" });
 
+  const orderId = `${cfg.orderPrefix}${randInt(30000, 39999)}`;
   const tc4 = makeToolCall(
+    slug,
     "complete_cart",
     { cartId },
-    { orderId: `TK-${randInt(30000, 39999)}`, status: "confirmed" },
+    { orderId, status: "confirmed" },
   );
   msgs.push(tc4.assistant, tc4.tool);
 
   msgs.push({
     role: "assistant",
-    content: `Your order is confirmed! You'll receive a confirmation email shortly. Is there anything else I can help with?`,
+    content:
+      "Your order is confirmed! You'll receive a confirmation email shortly. Is there anything else?",
   });
 
   msgs.push({
@@ -488,13 +405,29 @@ function purchaseFlow(): Message[] {
     content: "Thank you for your purchase! Have a great day!",
   });
 
-  return msgs;
+  const links: LinkDef[] = [
+    {
+      url: productUrl(cfg, product),
+      title: product.name,
+      connectorSlug: slug,
+      resourceType: "product",
+    },
+    {
+      url: `${cfg.baseUrl}/orders/${orderId}`,
+      title: `Order ${orderId}`,
+      connectorSlug: slug,
+      resourceType: "order",
+    },
+  ];
+
+  return { messages: msgs, links };
 }
 
-function orderStatus(): Message[] {
-  const orderId = `TK-${randInt(20000, 29999)}`;
+function orderStatus(cfg: OrgVerticalConfig): ScenarioResult {
+  const slug = cfg.ecommerce.connectorSlug;
+  const orderId = `${cfg.orderPrefix}${randInt(20000, 29999)}`;
+  const product = pick(cfg.products);
   const msgs: Message[] = [];
-  const product = pick(PRODUCTS);
 
   msgs.push({
     role: "user",
@@ -502,38 +435,39 @@ function orderStatus(): Message[] {
       `Where's my order ${orderId}?`,
       `Can you check order ${orderId} for me?`,
       `I'd like to check the status of order ${orderId}`,
-      `What's the status of my order?`,
+      "What's the status of my order?",
     ]),
   });
 
-  const useGetOrder = Math.random() > 0.5;
   const statusOptions = ["shipped", "processing", "delivered", "in_transit"];
-  const orderStatus = pick(statusOptions);
+  const status = pick(statusOptions);
 
-  if (useGetOrder) {
+  if (Math.random() > 0.5) {
     const tc = makeToolCall(
+      slug,
       "get_order",
       { orderId },
       {
         orderId,
-        status: orderStatus,
+        status,
         items: [{ name: product.name, quantity: 1, price: product.price }],
       },
     );
     msgs.push(tc.assistant, tc.tool);
   } else {
-    const email = makeEmail();
+    const email = makeEmail(cfg);
     msgs.push({
       role: "assistant",
-      content: "Sure! Can you provide the email address used for the order?",
+      content: "Sure! Can you provide the email used for the order?",
     });
     msgs.push({ role: "user", content: email });
     const tc = makeToolCall(
+      slug,
       "look_up_order",
       { email, orderNumber: orderId },
       {
         orderId,
-        status: orderStatus,
+        status,
         items: [{ name: product.name, quantity: 1, price: product.price }],
       },
     );
@@ -544,14 +478,10 @@ function orderStatus(): Message[] {
     shipped: `Your order ${orderId} has shipped and is on its way! Expected delivery in 2-3 business days.`,
     processing: `Your order ${orderId} is being processed. It should ship within 24 hours.`,
     delivered: `Your order ${orderId} was delivered! If you haven't received it, please check with your building or neighbors.`,
-    in_transit: `Your order ${orderId} is in transit. The tracking shows it's at the local distribution center — should arrive tomorrow.`,
+    in_transit: `Your order ${orderId} is in transit — should arrive tomorrow.`,
   };
 
-  msgs.push({
-    role: "assistant",
-    content: statusText[orderStatus],
-  });
-
+  msgs.push({ role: "assistant", content: statusText[status] });
   msgs.push({
     role: "user",
     content: pick([
@@ -560,18 +490,34 @@ function orderStatus(): Message[] {
       "Got it, appreciate the help",
     ]),
   });
-
   msgs.push({
     role: "assistant",
     content: "You're welcome! Let me know if there's anything else.",
   });
 
-  return msgs;
+  const links: LinkDef[] = [
+    {
+      url: `${cfg.baseUrl}/orders/${orderId}`,
+      title: `Order ${orderId}`,
+      connectorSlug: slug,
+      resourceType: "order",
+    },
+  ];
+  if (status === "shipped" || status === "in_transit") {
+    links.push({
+      url: `https://tracking.example.com/pkg/${crypto.randomUUID().slice(0, 12)}`,
+      title: "Shipment Tracking",
+      resourceType: "tracking",
+    });
+  }
+
+  return { messages: msgs, links };
 }
 
-function returnExchange(): Message[] {
-  const product = pick(PRODUCTS);
-  const orderId = `TK-${randInt(20000, 29999)}`;
+function returnExchange(cfg: OrgVerticalConfig): ScenarioResult {
+  const product = pick(cfg.products);
+  const orderId = `${cfg.orderPrefix}${randInt(20000, 29999)}`;
+  const slug = cfg.ecommerce.connectorSlug;
   const msgs: Message[] = [];
 
   const reasons = [
@@ -595,11 +541,7 @@ function returnExchange(): Message[] {
     role: "assistant",
     content: "I can help with that. May I ask the reason for the return?",
   });
-
-  msgs.push({
-    role: "user",
-    content: `Yeah, ${pick(reasons)}.`,
-  });
+  msgs.push({ role: "user", content: `Yeah, ${pick(reasons)}.` });
 
   msgs.push({
     role: "assistant",
@@ -614,227 +556,350 @@ function returnExchange(): Message[] {
       "Perfect, I'll send it back today",
     ]),
   });
-
   msgs.push({
     role: "assistant",
     content:
       "You're welcome! If you have any other questions, don't hesitate to reach out.",
   });
 
-  return msgs;
+  const retId = `RET-${randInt(1000, 9999)}`;
+  const links: LinkDef[] = [
+    {
+      url: `${cfg.baseUrl}/orders/${orderId}`,
+      title: `Order ${orderId}`,
+      connectorSlug: slug,
+      resourceType: "order",
+    },
+    {
+      url: productUrl(cfg, product),
+      title: product.name,
+      connectorSlug: slug,
+      resourceType: "product",
+    },
+    {
+      url: `${cfg.baseUrl}/returns/${retId}`,
+      title: `Return ${retId}`,
+      connectorSlug: slug,
+      resourceType: "return",
+    },
+  ];
+
+  return { messages: msgs, links };
 }
 
-function generalQuestion(): Message[] {
+// ============================================================================
+// Zendesk scenarios
+// ============================================================================
+
+function ticketLookup(cfg: OrgVerticalConfig): ScenarioResult {
+  const slug = cfg.helpdesk.connectorSlug;
+  const template = pick(cfg.ticketTemplates);
+  const ticketId = randInt(cfg.ticketIdRange[0], cfg.ticketIdRange[1]);
   const msgs: Message[] = [];
-
-  const qa = pick([
-    {
-      q: "Do you offer free shipping?",
-      a: "Yes! We offer free standard shipping on all orders over $50. Express shipping is available for $9.99.",
-    },
-    {
-      q: "What's your return policy?",
-      a: "We have a 30-day return policy for all items in original condition. Returns are free — we'll send you a prepaid label.",
-    },
-    {
-      q: "Do you have any current promotions?",
-      a: "We're currently running a 15% off sale on all audio products! Use code AUDIO15 at checkout.",
-    },
-    {
-      q: "What payment methods do you accept?",
-      a: "We accept all major credit cards (Visa, Mastercard, Amex), PayPal, Apple Pay, and Google Pay.",
-    },
-    {
-      q: "How long does delivery take?",
-      a: "Standard shipping takes 3-5 business days. Express shipping (1-2 days) is available at checkout.",
-    },
-    {
-      q: "Do you ship internationally?",
-      a: "Yes! We ship to over 40 countries. International shipping rates vary by destination — you can check at checkout.",
-    },
-    {
-      q: "Is the warranty transferable?",
-      a: "Our standard warranty is tied to the original purchase, but extended warranty plans are transferable. Just contact us with the new owner's details.",
-    },
-    {
-      q: "Can I change my delivery address after ordering?",
-      a: "If your order hasn't shipped yet, absolutely! Just let me know the new address and I'll update it for you.",
-    },
-  ]);
-
-  msgs.push({ role: "user", content: qa.q });
-  msgs.push({ role: "assistant", content: qa.a });
 
   msgs.push({
     role: "user",
     content: pick([
-      "Thanks!",
-      "Great, thanks for the info!",
-      "Got it, appreciate it",
-    ]),
-  });
-  msgs.push({
-    role: "assistant",
-    content: pick([
-      "Anytime! Have a great day!",
-      "Happy to help! Anything else?",
-      "You're welcome!",
+      `Can you check on my ticket #${ticketId}?`,
+      `What's the status of ticket ${ticketId}?`,
+      `I submitted a request about "${template.subject}" — any update?`,
     ]),
   });
 
-  return msgs;
+  const tc1 = makeToolCall(
+    slug,
+    "get_ticket",
+    { ticketId },
+    {
+      id: ticketId,
+      subject: template.subject,
+      status: pick(["open", "pending", "solved"]),
+      priority: template.priority,
+      tags: template.tags,
+      createdAt: new Date(Date.now() - randInt(1, 7) * 86400000).toISOString(),
+    },
+  );
+  msgs.push(tc1.assistant, tc1.tool);
+
+  const tc2 = makeToolCall(
+    slug,
+    "list_ticket_comments",
+    { ticketId },
+    {
+      comments: [
+        {
+          id: randInt(1000, 9999),
+          body: "We're looking into this and will update shortly.",
+          public: true,
+          createdAt: new Date(
+            Date.now() - randInt(1, 3) * 86400000,
+          ).toISOString(),
+        },
+      ],
+    },
+  );
+  msgs.push(tc2.assistant, tc2.tool);
+
+  msgs.push({
+    role: "assistant",
+    content: `I found your ticket #${ticketId} — "${template.subject}". It's currently being reviewed by our team. The last update says they're working on it and will follow up shortly. Would you like me to add a note to expedite it?`,
+  });
+
+  msgs.push({
+    role: "user",
+    content: pick([
+      "Yes please, it's been a while",
+      "No, that's fine. I'll wait.",
+      "Just wanted to check, thanks",
+    ]),
+  });
+
+  if (Math.random() > 0.5) {
+    msgs.push({
+      role: "assistant",
+      content:
+        "I've added a priority note to your ticket. You should hear back within 24 hours. Anything else?",
+    });
+  } else {
+    msgs.push({
+      role: "assistant",
+      content:
+        "No problem. You'll receive an email as soon as there's an update. Anything else I can help with?",
+    });
+  }
+
+  msgs.push({ role: "user", content: "That's all, thanks." });
+
+  const links: LinkDef[] = [
+    {
+      url: `${cfg.helpdeskBaseUrl}/tickets/${ticketId}`,
+      title: `Ticket #${ticketId}`,
+      connectorSlug: slug,
+      resourceType: "ticket",
+    },
+  ];
+
+  return { messages: msgs, links };
+}
+
+function ticketCreation(cfg: OrgVerticalConfig): ScenarioResult {
+  const slug = cfg.helpdesk.connectorSlug;
+  const template = pick(cfg.ticketTemplates);
+  const ticketId = randInt(cfg.ticketIdRange[0], cfg.ticketIdRange[1]);
+  const msgs: Message[] = [];
+
+  msgs.push({
+    role: "user",
+    content: pick([
+      `I have an issue — ${template.subject.toLowerCase()}.`,
+      `I need help with something: ${template.subject.toLowerCase()}.`,
+      `Can you create a support ticket? ${template.subject}`,
+    ]),
+  });
+
+  msgs.push({
+    role: "assistant",
+    content:
+      "I'm sorry to hear that. Let me create a support ticket so our team can look into this right away. Can you provide any additional details?",
+  });
+
+  msgs.push({
+    role: "user",
+    content: pick([
+      "This has been going on for a few days now.",
+      "It happened earlier today and I need it resolved quickly.",
+      "I've already tried the usual steps but nothing worked.",
+    ]),
+  });
+
+  const tc = makeToolCall(
+    slug,
+    "create_ticket",
+    {
+      subject: template.subject,
+      body: `Customer reported: ${template.subject.toLowerCase()}. Additional context provided during conversation.`,
+      priority: template.priority,
+      type: template.type,
+      tags: template.tags,
+    },
+    {
+      id: ticketId,
+      status: "new",
+      subject: template.subject,
+    },
+  );
+  msgs.push(tc.assistant, tc.tool);
+
+  msgs.push({
+    role: "assistant",
+    content: `I've created ticket #${ticketId} for you — "${template.subject}". Our team will review it and you'll receive updates via email. Is there anything else?`,
+  });
+
+  msgs.push({
+    role: "user",
+    content: pick([
+      "No, that's all. Thank you.",
+      "That's it for now.",
+      "Thanks for the help.",
+    ]),
+  });
+
+  const links: LinkDef[] = [
+    {
+      url: `${cfg.helpdeskBaseUrl}/tickets/${ticketId}`,
+      title: `Ticket #${ticketId}`,
+      connectorSlug: slug,
+      resourceType: "ticket",
+    },
+  ];
+
+  return { messages: msgs, links };
+}
+
+function ticketEscalation(cfg: OrgVerticalConfig): ScenarioResult {
+  const slug = cfg.helpdesk.connectorSlug;
+  const template = pick(cfg.ticketTemplates);
+  const ticketId = randInt(cfg.ticketIdRange[0], cfg.ticketIdRange[1]);
+  const msgs: Message[] = [];
+
+  msgs.push({
+    role: "user",
+    content: pick([
+      `Ticket #${ticketId} has been open for too long. Can you escalate it?`,
+      `I need ticket ${ticketId} prioritized — this is urgent now.`,
+      `No one has responded to my ticket #${ticketId}. I need this resolved today.`,
+    ]),
+  });
+
+  const tc1 = makeToolCall(
+    slug,
+    "get_ticket",
+    { ticketId },
+    {
+      id: ticketId,
+      subject: template.subject,
+      status: "pending",
+      priority: template.priority,
+      tags: template.tags,
+      createdAt: new Date(Date.now() - randInt(3, 10) * 86400000).toISOString(),
+    },
+  );
+  msgs.push(tc1.assistant, tc1.tool);
+
+  msgs.push({
+    role: "assistant",
+    content: `I can see ticket #${ticketId} — "${template.subject}". I understand your frustration. Let me escalate this to high priority right away.`,
+  });
+
+  const tc2 = makeToolCall(
+    slug,
+    "update_ticket",
+    {
+      ticketId,
+      priority: "urgent",
+      status: "open",
+      tags: [...template.tags, "escalated"],
+    },
+    {
+      id: ticketId,
+      status: "open",
+      priority: "urgent",
+    },
+  );
+  msgs.push(tc2.assistant, tc2.tool);
+
+  msgs.push({
+    role: "assistant",
+    content: `Done — ticket #${ticketId} has been escalated to urgent priority and reassigned to our senior team. You should receive a response within 4 hours. I apologize for the delay.`,
+  });
+
+  msgs.push({
+    role: "user",
+    content: pick([
+      "Thank you, I appreciate that.",
+      "OK, please make sure someone follows up.",
+      "Thanks for escalating.",
+    ]),
+  });
+
+  const links: LinkDef[] = [
+    {
+      url: `${cfg.helpdeskBaseUrl}/tickets/${ticketId}`,
+      title: `Ticket #${ticketId} (Escalated)`,
+      connectorSlug: slug,
+      resourceType: "ticket",
+    },
+  ];
+
+  return { messages: msgs, links };
+}
+
+// ============================================================================
+// General question scenario
+// ============================================================================
+
+function generalQuestion(cfg: OrgVerticalConfig): ScenarioResult {
+  const qa = pick(cfg.generalQA);
+  const msgs: Message[] = [
+    { role: "user", content: qa.q },
+    { role: "assistant", content: qa.a },
+    {
+      role: "user",
+      content: pick([
+        "Thanks!",
+        "Great, thanks for the info!",
+        "Got it, appreciate it",
+      ]),
+    },
+    {
+      role: "assistant",
+      content: pick([
+        "Anytime! Have a great day!",
+        "Happy to help! Anything else?",
+        "You're welcome!",
+      ]),
+    },
+  ];
+  return { messages: msgs, links: [] };
+}
+
+// ============================================================================
+// URL helpers
+// ============================================================================
+
+function productUrl(cfg: OrgVerticalConfig, product: Product): string {
+  return `${cfg.baseUrl}/products/${product.name
+    .toLowerCase()
+    .replace(/["\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")}`;
 }
 
 // ============================================================================
 // Scenario dispatch
 // ============================================================================
 
-type Scenario = "inquiry" | "purchase" | "order_status" | "return" | "general";
-
-interface LinkDef {
-  url: string;
-  title: string;
-  connectorSlug?: string;
-  resourceType?: string;
-}
-
-interface ScenarioResult {
-  messages: Message[];
-  links: LinkDef[];
-}
-
-const SCENARIOS: { value: Scenario; weight: number }[] = [
-  { value: "inquiry", weight: 30 },
-  { value: "purchase", weight: 20 },
-  { value: "order_status", weight: 20 },
-  { value: "return", weight: 15 },
-  { value: "general", weight: 15 },
-];
-
-const BASE_URL = "https://techstore-demo.example.com";
-
-function productUrl(product: Product): string {
-  return `${BASE_URL}/products/${product.name.toLowerCase().replace(/["\s]+/g, "-")}`;
-}
-
-function generateScenario(scenario: Scenario): ScenarioResult {
+function generateScenario(
+  scenario: Scenario,
+  cfg: OrgVerticalConfig,
+): ScenarioResult {
   switch (scenario) {
-    case "inquiry":
-      return inquiryWithLinks();
-    case "purchase":
-      return purchaseWithLinks();
+    case "product_inquiry":
+      return productInquiry(cfg);
+    case "purchase_flow":
+      return purchaseFlow(cfg);
     case "order_status":
-      return orderStatusWithLinks();
-    case "return":
-      return returnWithLinks();
-    case "general":
-      return { messages: generalQuestion(), links: [] };
+      return orderStatus(cfg);
+    case "return_exchange":
+      return returnExchange(cfg);
+    case "ticket_lookup":
+      return ticketLookup(cfg);
+    case "ticket_creation":
+      return ticketCreation(cfg);
+    case "ticket_escalation":
+      return ticketEscalation(cfg);
+    case "general_question":
+      return generalQuestion(cfg);
   }
-}
-
-function inquiryWithLinks(): ScenarioResult {
-  const msgs = productInquiry();
-  // Extract product names from the first assistant message
-  const products = PRODUCTS.filter((p) =>
-    msgs.some((m) => m.role === "assistant" && m.content?.includes(p.name)),
-  );
-  return {
-    messages: msgs,
-    links: products.map((p) => ({
-      url: productUrl(p),
-      title: p.name,
-      connectorSlug: CONNECTOR_SLUG,
-      resourceType: "product",
-    })),
-  };
-}
-
-function purchaseWithLinks(): ScenarioResult {
-  const msgs = purchaseFlow();
-  const products = PRODUCTS.filter((p) =>
-    msgs.some((m) => m.role === "assistant" && m.content?.includes(p.name)),
-  );
-  const orderId = msgs
-    .map((m) => m.content?.match(/TK-\d+/)?.[0])
-    .find(Boolean);
-  const links: LinkDef[] = products.map((p) => ({
-    url: productUrl(p),
-    title: p.name,
-    connectorSlug: CONNECTOR_SLUG,
-    resourceType: "product",
-  }));
-  if (orderId) {
-    links.push({
-      url: `${BASE_URL}/orders/${orderId}`,
-      title: `Order ${orderId}`,
-      connectorSlug: CONNECTOR_SLUG,
-      resourceType: "order",
-    });
-  }
-  return { messages: msgs, links };
-}
-
-function orderStatusWithLinks(): ScenarioResult {
-  const msgs = orderStatus();
-  const orderId = msgs
-    .map((m) => m.content?.match(/TK-\d+/)?.[0])
-    .find(Boolean);
-  const links: LinkDef[] = [];
-  if (orderId) {
-    links.push({
-      url: `${BASE_URL}/orders/${orderId}`,
-      title: `Order ${orderId}`,
-      connectorSlug: CONNECTOR_SLUG,
-      resourceType: "order",
-    });
-  }
-  if (
-    msgs.some(
-      (m) =>
-        m.content?.includes("shipped") || m.content?.includes("in transit"),
-    )
-  ) {
-    links.push({
-      url: `https://tracking.example.com/pkg/${crypto.randomUUID().slice(0, 12)}`,
-      title: "Shipment Tracking",
-      resourceType: "tracking",
-    });
-  }
-  return { messages: msgs, links };
-}
-
-function returnWithLinks(): ScenarioResult {
-  const msgs = returnExchange();
-  const orderId = msgs
-    .map((m) => m.content?.match(/TK-\d+/)?.[0])
-    .find(Boolean);
-  const product = PRODUCTS.find((p) =>
-    msgs.some((m) => m.content?.includes(p.name)),
-  );
-  const links: LinkDef[] = [];
-  if (orderId) {
-    links.push({
-      url: `${BASE_URL}/orders/${orderId}`,
-      title: `Order ${orderId}`,
-      connectorSlug: CONNECTOR_SLUG,
-      resourceType: "order",
-    });
-  }
-  if (product) {
-    links.push({
-      url: productUrl(product),
-      title: product.name,
-      connectorSlug: CONNECTOR_SLUG,
-      resourceType: "product",
-    });
-  }
-  links.push({
-    url: `${BASE_URL}/returns/RET-${randInt(1000, 9999)}`,
-    title: `Return RET-${randInt(1000, 9999)}`,
-    connectorSlug: CONNECTOR_SLUG,
-    resourceType: "return",
-  });
-  return { messages: msgs, links };
 }
 
 // ============================================================================
@@ -868,7 +933,6 @@ function distributeSessions(): Date[] {
     }
   }
 
-  // Fill remaining if needed
   while (dates.length < SESSION_COUNT) {
     const day = randInt(1, DAYS_BACK);
     const d = new Date(now);
@@ -884,15 +948,16 @@ function distributeSessions(): Date[] {
 // Main generator
 // ============================================================================
 
-export async function generateDemoSessions(
+export async function generateSessions(
   db: SeedDb,
   orgId: string,
   agents: { id: string; name: string }[],
+  config: OrgVerticalConfig,
 ): Promise<void> {
-  const voiceAgent = agents.find((a) => a.name.includes("Voice"));
-  const chatAgent = agents.find((a) => a.name.includes("Chat"));
-  if (!voiceAgent || !chatAgent) {
-    console.warn("  Skipping generated sessions: agents not found");
+  const voiceAgent = agents[0];
+  const chatAgent = agents[1] ?? agents[0];
+  if (!voiceAgent) {
+    console.warn("  Skipping generated sessions: no agents");
     return;
   }
 
@@ -913,11 +978,10 @@ export async function generateDemoSessions(
     endedAt: Date | null;
   }[] = [];
 
-  // Track scenario per session for message generation
   const sessionScenarios: { scenario: Scenario; startedAt: Date }[] = [];
 
   for (const startedAt of dates) {
-    const channel = weightedPick(CHANNELS);
+    const channel = weightedPick(config.channelWeights);
     const agentId = VOICE_CHANNELS.has(channel) ? voiceAgent.id : chatAgent.id;
     const isToday = startedAt >= todayStart;
 
@@ -936,7 +1000,7 @@ export async function generateDemoSessions(
         ? null
         : new Date(startedAt.getTime() + durationMinutes * 60 * 1000);
 
-    const scenario = weightedPick(SCENARIOS);
+    const scenario = weightedPick(config.scenarioWeights);
 
     sessionValues.push({
       id: crypto.randomUUID(),
@@ -944,7 +1008,7 @@ export async function generateDemoSessions(
       agentId,
       channelType: channel,
       status,
-      userIdentifier: userIdentifier(channel),
+      userIdentifier: userIdentifier(channel, config),
       startedAt,
       endedAt,
     });
@@ -955,7 +1019,7 @@ export async function generateDemoSessions(
   // Batch insert sessions
   await db.insert(sessions).values(sessionValues).onConflictDoNothing();
 
-  // Generate and batch insert messages
+  // Generate messages and links
   const allMessages: {
     id: string;
     sessionId: string;
@@ -981,12 +1045,11 @@ export async function generateDemoSessions(
   for (let i = 0; i < sessionValues.length; i++) {
     const session = sessionValues[i];
     const { scenario, startedAt } = sessionScenarios[i];
-    const result = generateScenario(scenario);
+    const result = generateScenario(scenario, config);
     let msgs = result.messages;
 
-    // Abandoned sessions: user dropped off mid-conversation
+    // Abandoned sessions: user dropped off early
     if (session.status === "abandoned") {
-      // Keep first 2-3 messages (opening exchange, maybe one more user msg)
       const cutoff = Math.min(msgs.length, randInt(2, 3));
       msgs = msgs.slice(0, cutoff);
     }
@@ -1021,7 +1084,7 @@ export async function generateDemoSessions(
     }
   }
 
-  // Insert messages in chunks of 500 to avoid parameter limits
+  // Insert messages in chunks
   const MSG_CHUNK = 500;
   for (let i = 0; i < allMessages.length; i += MSG_CHUNK) {
     await db
@@ -1030,7 +1093,7 @@ export async function generateDemoSessions(
       .onConflictDoNothing();
   }
 
-  // Generate and batch insert feedback
+  // Generate feedback
   const feedbackValues: {
     id: string;
     sessionId: string;
@@ -1050,8 +1113,8 @@ export async function generateDemoSessions(
         sessionId: session.id,
         rating: positive ? 2 : 1,
         comment: positive
-          ? pick(POSITIVE_CUSTOMER_COMMENTS)
-          : pick(NEGATIVE_CUSTOMER_COMMENTS),
+          ? pick(config.feedback.positiveCustomer)
+          : pick(config.feedback.negativeCustomer),
         feedbackSource: "customer",
       });
     }
@@ -1064,27 +1127,28 @@ export async function generateDemoSessions(
         sessionId: session.id,
         rating: positive ? 2 : 1,
         comment: positive
-          ? pick(POSITIVE_SUPPORT_COMMENTS)
-          : pick(NEGATIVE_SUPPORT_COMMENTS),
+          ? pick(config.feedback.positiveSupport)
+          : pick(config.feedback.negativeSupport),
         feedbackSource: "support",
       });
     }
   }
 
   if (feedbackValues.length > 0) {
-    await db
-      .insert(sessionFeedback)
-      .values(feedbackValues)
-      .onConflictDoNothing();
+    for (let i = 0; i < feedbackValues.length; i += MSG_CHUNK) {
+      await db
+        .insert(sessionFeedback)
+        .values(feedbackValues.slice(i, i + MSG_CHUNK))
+        .onConflictDoNothing();
+    }
   }
 
   // Insert links in chunks
   if (allLinks.length > 0) {
-    const LINK_CHUNK = 500;
-    for (let i = 0; i < allLinks.length; i += LINK_CHUNK) {
+    for (let i = 0; i < allLinks.length; i += MSG_CHUNK) {
       await db
         .insert(sessionLinks)
-        .values(allLinks.slice(i, i + LINK_CHUNK))
+        .values(allLinks.slice(i, i + MSG_CHUNK))
         .onConflictDoNothing();
     }
   }

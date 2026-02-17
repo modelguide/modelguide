@@ -35,8 +35,9 @@ make ui-dev
 
 **Dev accounts (seed data):** Authentication uses magic links — enter your email and the login link is printed to the API console.
 
-- Admin: `delivered+admin-pizza-palace@resend.dev`
-- Support: `delivered+support-pizza-palace@resend.dev`
+- Admin: `delivered+admin-glowbox@resend.dev`
+- Support: `delivered+support-glowbox@resend.dev`
+- Viewer: `delivered+viewer-glowbox@resend.dev`
 
 ## Directory Structure
 

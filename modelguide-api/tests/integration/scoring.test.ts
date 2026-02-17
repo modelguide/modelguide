@@ -50,7 +50,7 @@ async function getTrends(metric: string, granularity = "day", extra = "") {
 
 beforeAll(async () => {
   s = await getTestSeed();
-  headers = await authHeadersFor(s.pizzaAdmin);
+  headers = await authHeadersFor(s.orgAAdmin);
 
   const base = new Date("2098-06-15T12:00:00Z");
   const baseEnd = new Date("2098-06-15T12:30:00Z"); // 30 min sessions
@@ -63,8 +63,8 @@ beforeAll(async () => {
       .values([
         {
           // [0] completed, voice
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "voice",
           status: "completed",
           startedAt: base,
@@ -72,8 +72,8 @@ beforeAll(async () => {
         },
         {
           // [1] completed, web
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "web",
           status: "completed",
           startedAt: base,
@@ -81,8 +81,8 @@ beforeAll(async () => {
         },
         {
           // [2] completed, voice
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "voice",
           status: "completed",
           startedAt: base,
@@ -90,8 +90,8 @@ beforeAll(async () => {
         },
         {
           // [3] completed, web
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "web",
           status: "completed",
           startedAt: base,
@@ -99,8 +99,8 @@ beforeAll(async () => {
         },
         {
           // [4] abandoned, voice
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "voice",
           status: "abandoned",
           startedAt: base,
@@ -108,8 +108,8 @@ beforeAll(async () => {
         },
         {
           // [5] active, web (no endedAt)
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "web",
           status: "active",
           startedAt: base,
@@ -384,9 +384,9 @@ describe("Filtered scoring", () => {
   });
 
   test("agent filter scopes to specific agent", async () => {
-    const body = await getSummary(`&agent_id=${s.pizzaAgentId}`);
+    const body = await getSummary(`&agent_id=${s.orgAAgentId}`);
 
-    // All our test sessions use pizzaAgentId
+    // All our test sessions use orgAAgentId
     expect(body.total_sessions).toBe(6);
   });
 });
@@ -568,16 +568,16 @@ describe("Score edge cases", () => {
         .insert(sessions)
         .values([
           {
-            organizationId: s.pizzaOrg.id,
-            agentId: s.pizzaAgentId,
+            organizationId: s.orgA.id,
+            agentId: s.orgAAgentId,
             channelType: "web",
             status: "completed",
             startedAt: new Date("2097-03-15T10:00:00Z"),
             endedAt: new Date("2097-03-15T10:30:00Z"),
           },
           {
-            organizationId: s.pizzaOrg.id,
-            agentId: s.pizzaAgentId,
+            organizationId: s.orgA.id,
+            agentId: s.orgAAgentId,
             channelType: "web",
             status: "completed",
             startedAt: new Date("2097-03-15T11:00:00Z"),
@@ -624,16 +624,16 @@ describe("Score edge cases", () => {
         .insert(sessions)
         .values([
           {
-            organizationId: s.pizzaOrg.id,
-            agentId: s.pizzaAgentId,
+            organizationId: s.orgA.id,
+            agentId: s.orgAAgentId,
             channelType: "web",
             status: "completed",
             startedAt: new Date("2097-04-15T10:00:00Z"),
             endedAt: new Date("2097-04-15T10:30:00Z"),
           },
           {
-            organizationId: s.pizzaOrg.id,
-            agentId: s.pizzaAgentId,
+            organizationId: s.orgA.id,
+            agentId: s.orgAAgentId,
             channelType: "web",
             status: "completed",
             startedAt: new Date("2097-04-15T11:00:00Z"),
@@ -684,8 +684,8 @@ describe("Score edge cases", () => {
       const [session] = await tx
         .insert(sessions)
         .values({
-          organizationId: s.pizzaOrg.id,
-          agentId: s.pizzaAgentId,
+          organizationId: s.orgA.id,
+          agentId: s.orgAAgentId,
           channelType: "web",
           status: "completed",
           startedAt: new Date("2097-05-15T10:00:00Z"),

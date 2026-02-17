@@ -12,9 +12,9 @@ import { withRLSTransaction } from "../helpers/rls";
 import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
 let s: TestSeed;
-let pizzaAdminHeaders: Record<string, string>;
-let pizzaSupportHeaders: Record<string, string>;
-let burgerAdminHeaders: Record<string, string>;
+let orgAAdminHeaders: Record<string, string>;
+let orgASupportHeaders: Record<string, string>;
+let orgBAdminHeaders: Record<string, string>;
 
 /** IDs of secrets created during tests (for cleanup) */
 const createdSecretIds: string[] = [];
@@ -25,9 +25,9 @@ function request(path: string, options?: RequestInit) {
 
 beforeAll(async () => {
   s = await getTestSeed();
-  pizzaAdminHeaders = await authHeadersFor(s.pizzaAdmin);
-  pizzaSupportHeaders = await authHeadersFor(s.pizzaSupport);
-  burgerAdminHeaders = await authHeadersFor(s.burgerAdmin);
+  orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
+  orgASupportHeaders = await authHeadersFor(s.orgASupport);
+  orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
 });
 
 afterAll(async () => {
@@ -48,13 +48,13 @@ describe("POST /api/secrets", () => {
   test("creates secret and returns metadata without value (201)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Test API Key",
         value: "sk_live_test_12345",
         secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
 
@@ -65,7 +65,7 @@ describe("POST /api/secrets", () => {
     expect(body.name).toBe("Test API Key");
     expect(body.secretType).toBe("api_key");
     expect(body.ownerType).toBe("connector");
-    expect(body.ownerId).toBe(s.pizzaConnectorId);
+    expect(body.ownerId).toBe(s.orgAMedusaConnectorId);
     expect(body.createdAt).toBeDefined();
     // Value must NEVER be returned
     expect(body.value).toBeUndefined();
@@ -77,13 +77,13 @@ describe("POST /api/secrets", () => {
   test("stores encrypted value in DB (not plaintext)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Encryption Check",
         value: "my_plaintext_secret",
         secretType: "credentials",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
 
@@ -92,7 +92,7 @@ describe("POST /api/secrets", () => {
     createdSecretIds.push(body.id);
 
     // Read directly from DB to verify encryption
-    const [dbSecret] = await withRLSTransaction(s.pizzaOrg.id, (tx) =>
+    const [dbSecret] = await withRLSTransaction(s.orgA.id, (tx) =>
       tx.select().from(secrets).where(eq(secrets.id, body.id)),
     );
 
@@ -108,7 +108,7 @@ describe("POST /api/secrets", () => {
     const fakeConnectorId = "00000000-0000-0000-0000-000000000000";
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Bad Owner",
         value: "some_value",
@@ -126,7 +126,7 @@ describe("POST /api/secrets", () => {
   test("validates required fields (422)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Missing fields" }),
     });
 
@@ -136,13 +136,13 @@ describe("POST /api/secrets", () => {
   test("rejects empty name (422)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "",
         value: "some_value",
         secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
 
@@ -158,7 +158,7 @@ describe("POST /api/secrets", () => {
         value: "secret",
         secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
 
@@ -168,13 +168,13 @@ describe("POST /api/secrets", () => {
   test("rejects support role (403)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
       body: JSON.stringify({
         name: "Support Attempt",
         value: "secret",
         secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
 
@@ -189,7 +189,7 @@ describe("POST /api/secrets", () => {
 describe("GET /api/secrets", () => {
   test("lists secrets with pagination, never returns encrypted values", async () => {
     const response = await request("/api/secrets", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -212,7 +212,7 @@ describe("GET /api/secrets", () => {
 
   test("supports pagination parameters", async () => {
     const response = await request("/api/secrets?page=1&pageSize=5", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -228,7 +228,7 @@ describe("GET /api/secrets", () => {
 
   test("rejects support role (403)", async () => {
     const response = await request("/api/secrets", {
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(403);
@@ -245,13 +245,13 @@ describe("GET /api/secrets/:id", () => {
   beforeAll(async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Get Target",
         value: "get_me",
         secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
     const body = await response.json();
@@ -261,7 +261,7 @@ describe("GET /api/secrets/:id", () => {
 
   test("returns secret metadata without value (200)", async () => {
     const response = await request(`/api/secrets/${testSecretId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -271,7 +271,7 @@ describe("GET /api/secrets/:id", () => {
     expect(body.name).toBe("Get Target");
     expect(body.secretType).toBe("api_key");
     expect(body.ownerType).toBe("connector");
-    expect(body.ownerId).toBe(s.pizzaConnectorId);
+    expect(body.ownerId).toBe(s.orgAMedusaConnectorId);
     expect(body.createdAt).toBeDefined();
     expect(body.value).toBeUndefined();
     expect(body.encryptedValue).toBeUndefined();
@@ -280,7 +280,7 @@ describe("GET /api/secrets/:id", () => {
   test("returns 404 for non-existent secret", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/secrets/${fakeId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -296,7 +296,7 @@ describe("GET /api/secrets/:id", () => {
 
   test("rejects support role (403)", async () => {
     const response = await request(`/api/secrets/${testSecretId}`, {
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(403);
@@ -313,13 +313,13 @@ describe("PATCH /api/secrets/:id", () => {
   beforeAll(async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Update Target",
         value: "original_value",
         secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
     const body = await response.json();
@@ -330,7 +330,7 @@ describe("PATCH /api/secrets/:id", () => {
   test("updates name only", async () => {
     const response = await request(`/api/secrets/${updateSecretId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Updated Name" }),
     });
 
@@ -343,19 +343,19 @@ describe("PATCH /api/secrets/:id", () => {
   });
 
   test("updates value only (re-encrypts)", async () => {
-    const [before] = await withRLSTransaction(s.pizzaOrg.id, (tx) =>
+    const [before] = await withRLSTransaction(s.orgA.id, (tx) =>
       tx.select().from(secrets).where(eq(secrets.id, updateSecretId)),
     );
 
     const response = await request(`/api/secrets/${updateSecretId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ value: "new_secret_value" }),
     });
 
     expect(response.status).toBe(200);
 
-    const [after] = await withRLSTransaction(s.pizzaOrg.id, (tx) =>
+    const [after] = await withRLSTransaction(s.orgA.id, (tx) =>
       tx.select().from(secrets).where(eq(secrets.id, updateSecretId)),
     );
 
@@ -364,13 +364,13 @@ describe("PATCH /api/secrets/:id", () => {
 
   test("updates both name and value", async () => {
     const beforeResponse = await request(`/api/secrets/${updateSecretId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
     const before = await beforeResponse.json();
 
     const response = await request(`/api/secrets/${updateSecretId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Both Updated", value: "both_new_value" }),
     });
 
@@ -385,7 +385,7 @@ describe("PATCH /api/secrets/:id", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/secrets/${fakeId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Ghost" }),
     });
 
@@ -397,7 +397,7 @@ describe("PATCH /api/secrets/:id", () => {
   test("validates at least one field required (422)", async () => {
     const response = await request(`/api/secrets/${updateSecretId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({}),
     });
 
@@ -413,26 +413,26 @@ describe("DELETE /api/secrets/:id", () => {
   test("deletes secret (204)", async () => {
     const createResponse = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Delete Target",
         value: "delete_me",
         secretType: "credentials",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
     const { id } = await createResponse.json();
 
     const response = await request(`/api/secrets/${id}`, {
       method: "DELETE",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(204);
 
     // Verify it's gone
-    const result = await withRLSTransaction(s.pizzaOrg.id, (tx) =>
+    const result = await withRLSTransaction(s.orgA.id, (tx) =>
       tx.select().from(secrets).where(eq(secrets.id, id)),
     );
     expect(result.length).toBe(0);
@@ -442,7 +442,7 @@ describe("DELETE /api/secrets/:id", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/secrets/${fakeId}`, {
       method: "DELETE",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -456,59 +456,59 @@ describe("DELETE /api/secrets/:id", () => {
 // ============================================================================
 
 describe("RLS isolation", () => {
-  let pizzaSecretId: string;
+  let orgASecretId: string;
 
   beforeAll(async () => {
     const response = await request("/api/secrets", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Pizza Only",
-        value: "pizza_secret",
+        value: "orgA_secret",
         secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.pizzaConnectorId,
+        ownerId: s.orgAMedusaConnectorId,
       }),
     });
     const body = await response.json();
-    pizzaSecretId = body.id;
-    createdSecretIds.push(pizzaSecretId);
+    orgASecretId = body.id;
+    createdSecretIds.push(orgASecretId);
   });
 
-  test("secrets from Pizza Palace not visible to Burger Barn", async () => {
+  test("secrets from org A not visible to org B", async () => {
     const response = await request("/api/secrets", {
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
     const ids = body.data.map((s: { id: string }) => s.id);
-    expect(ids).not.toContain(pizzaSecretId);
+    expect(ids).not.toContain(orgASecretId);
   });
 
-  test("Burger Barn cannot get Pizza Palace secret (404 due to RLS)", async () => {
-    const response = await request(`/api/secrets/${pizzaSecretId}`, {
-      headers: burgerAdminHeaders,
+  test("org B cannot get org A secret (404 due to RLS)", async () => {
+    const response = await request(`/api/secrets/${orgASecretId}`, {
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger Barn cannot update Pizza Palace secret (404 due to RLS)", async () => {
-    const response = await request(`/api/secrets/${pizzaSecretId}`, {
+  test("org B cannot update org A secret (404 due to RLS)", async () => {
+    const response = await request(`/api/secrets/${orgASecretId}`, {
       method: "PATCH",
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
       body: JSON.stringify({ name: "Hijacked" }),
     });
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger Barn cannot delete Pizza Palace secret (404 due to RLS)", async () => {
-    const response = await request(`/api/secrets/${pizzaSecretId}`, {
+  test("org B cannot delete org A secret (404 due to RLS)", async () => {
+    const response = await request(`/api/secrets/${orgASecretId}`, {
       method: "DELETE",
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(404);

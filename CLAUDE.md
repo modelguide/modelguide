@@ -96,9 +96,9 @@ modelguide-api/src/
 
 ### Key Concepts
 
-- **Connectors Catalog:** Read-only registry of connector types (Medusa shipped as reference)
+- **Connectors Catalog:** Read-only registry of connector types (Medusa + Zendesk shipped)
 - **Connectors:** Org-specific instances with config referencing secrets by UUID
-- **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `pizzapalace_add_to_cart`)
+- **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `glowbox_store_add_to_cart`)
 - **Core Tools:** Built-in platform tools (`core_add_messages`)
 - **requires_confirmation:** Tools that need user confirmation before execution
 
@@ -187,5 +187,6 @@ export const Route = createFileRoute('/_authenticated')({
 ```
 
 **Dev Accounts (seed data — magic link auth, link printed to API console):**
-- Admin: `delivered+admin-pizza-palace@resend.dev`
-- Support: `delivered+support-pizza-palace@resend.dev`
+- Admin: `delivered+admin-glowbox@resend.dev`
+- Support: `delivered+support-glowbox@resend.dev`
+- Viewer: `delivered+viewer-glowbox@resend.dev`

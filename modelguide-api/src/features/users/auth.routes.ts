@@ -23,9 +23,9 @@ const router = createRouter();
 
 const loginRequestSchema = z.object({
   email: z.string().email().openapi({
-    example: "admin@pizza-palace.com",
+    example: "delivered+admin-glowbox@resend.dev",
     description:
-      "User's email address. Seed users: admin@pizza-palace.com, support@pizza-palace.com, admin@burger-barn.com, support@burger-barn.com",
+      "User's email address. Seed users: delivered+admin-glowbox@resend.dev, delivered+support-glowbox@resend.dev",
   }),
 });
 
@@ -46,17 +46,17 @@ const verifyResponseSchema = z.object({
         example: "550e8400-e29b-41d4-a716-446655440000",
       }),
       email: z.string().email().openapi({
-        example: "admin@pizza-palace.com",
+        example: "delivered+admin-glowbox@resend.dev",
       }),
       name: z.string().openapi({
-        example: "Admin User",
+        example: "Rachel Kim",
       }),
       role: z.enum(["admin", "support", "viewer"]).openapi({
         example: "admin",
       }),
       organizationId: z.string().uuid().openapi({
         example: "550e8400-e29b-41d4-a716-446655440001",
-        description: "Organization ID (Pizza Palace or Burger Barn)",
+        description: "Organization ID",
       }),
     })
     .openapi({
@@ -69,10 +69,10 @@ const meResponseSchema = z.object({
     example: "550e8400-e29b-41d4-a716-446655440000",
   }),
   email: z.string().email().openapi({
-    example: "admin@pizza-palace.com",
+    example: "delivered+admin-glowbox@resend.dev",
   }),
   name: z.string().openapi({
-    example: "Admin User",
+    example: "Rachel Kim",
   }),
   role: z.enum(["admin", "support", "viewer"]).openapi({
     example: "admin",
@@ -80,7 +80,7 @@ const meResponseSchema = z.object({
   }),
   organizationId: z.string().uuid().openapi({
     example: "550e8400-e29b-41d4-a716-446655440001",
-    description: "Organization ID (Pizza Palace or Burger Barn)",
+    description: "Organization ID",
   }),
 });
 
@@ -106,9 +106,9 @@ const loginRoute = createRoute({
   summary: "Login (unified)",
   description: `Unified login endpoint. Demo viewers in demo-enabled orgs are authenticated instantly (200 + tokens). All other users receive a magic link via email (202 + message).
 
-**Test with seed data:**
-- \`admin@pizza-palace.com\` / \`support@pizza-palace.com\` (Pizza Palace org) → 202 magic link
-- \`demo-viewer@modelguide.dev\` (Demo org) → 200 instant auth
+**Test with seed data (GlowBox Beauty org):**
+- \`delivered+admin-glowbox@resend.dev\` / \`delivered+support-glowbox@resend.dev\` → 202 magic link
+- \`delivered+viewer-glowbox@resend.dev\` (demo viewer) → 200 instant auth
 
 In development mode, magic links are printed to the console instead of being sent via email.`,
   request: {
@@ -343,7 +343,7 @@ const meRoute = createRoute({
 **Requires:** Bearer JWT token in Authorization header.
 
 **How to get a token:**
-1. POST /api/auth/login with \`{"email": "admin@pizza-palace.com"}\`
+1. POST /api/auth/login with \`{"email": "delivered+admin-glowbox@resend.dev"}\`
 2. Copy the token from the console magic link URL
 3. GET /api/auth/verify?token=YOUR_TOKEN to receive a JWT
 4. Use the JWT below as Bearer token`,
