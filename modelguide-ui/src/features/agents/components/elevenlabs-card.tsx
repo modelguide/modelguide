@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Key } from 'lucide-react'
+import { Info, Key } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Input } from '~/components/ui/input'
 import { Select } from '~/components/ui/select'
+import { Tooltip } from '~/components/ui/tooltip'
 import { api } from '~/lib/api'
 import type { Agent, AgentPlatform } from '~/schemas/agents'
 import { SyncDialog } from './sync-dialog'
@@ -134,7 +135,24 @@ export function ElevenLabsCard({ agent, isAdmin }: ElevenLabsCardProps) {
 
                 {/* ElevenLabs API Key */}
                 <div>
-                  <dt className="text-xs font-medium text-fg-muted">ElevenLabs API Key</dt>
+                  <dt className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+                    ElevenLabs API Key
+                    <Tooltip
+                      content={
+                        <div className="space-y-1">
+                          <p className="font-medium">Required API key permissions:</p>
+                          <ul className="list-disc pl-3.5">
+                            <li>Conversational AI (read/write)</li>
+                            <li>Webhooks (write)</li>
+                          </ul>
+                        </div>
+                      }
+                      side="top"
+                      className="whitespace-normal max-w-56"
+                    >
+                      <Info className="h-3.5 w-3.5 cursor-help" />
+                    </Tooltip>
+                  </dt>
                   <dd className="mt-1">
                     <div className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3 max-w-md">
                       <Key className="h-4 w-4 text-fg-muted" />
