@@ -55,7 +55,9 @@ git push --force-with-lease origin feat/my-feature
 
 ### What happens next
 
+- **CLA check** — if this is your first contribution, you'll be asked to sign our Contributor License Agreement (see [below](#contributor-license-agreement-cla)). It's a one-time, one-click process
 - CI runs automatically (lint, typecheck, tests)
+- A maintainer will approve CI to run on your fork
 - A maintainer will review your PR — we aim to respond within a few business days
 - We may suggest changes; push additional commits to the same branch
 - Once approved, a maintainer will merge your PR
@@ -265,6 +267,24 @@ Check [open issues](https://github.com/modelguide/modelguide/issues) for `good f
 ## Security
 
 Found a vulnerability? **Do not open a public issue.** See [SECURITY.md](SECURITY.md) for responsible disclosure instructions.
+
+## Contributor License Agreement (CLA)
+
+We use a [Contributor License Agreement](https://en.wikipedia.org/wiki/Contributor_License_Agreement) to ensure contributions can be distributed under the project's license.
+
+When you open your first pull request, a bot will comment asking you to sign the CLA. To accept, reply with a comment on the PR:
+
+```
+@microsoft-github-policy-service agree
+```
+
+If you're contributing on behalf of a company:
+
+```
+@microsoft-github-policy-service agree company="Your Company"
+```
+
+This is a one-time process — once signed, all future PRs are covered. Your PR cannot be merged until the CLA is signed.
 
 ## License
 

@@ -21,6 +21,7 @@
 
 ## Checklist
 
+- [ ] [CLA signed](CONTRIBUTING.md#contributor-license-agreement-cla) (first-time contributors)
 - [ ] Tests pass (`make api-test && make ui-test`)
 - [ ] Types check (`make api-typecheck && make ui-typecheck`)
 - [ ] Lint passes (`make api-lint-check && make ui-lint`)
