@@ -14,6 +14,14 @@ railway init
 railway link
 ```
 
+If the project and services already exist, link each one from its directory:
+
+```bash
+(cd modelguide-api && railway link --service api)
+(cd modelguide-ui && railway link --service ui)
+(cd railway/lb && railway link --service lb)
+```
+
 ## 2. Add services
 
 ```bash
@@ -66,21 +74,37 @@ From the repo root:
 (cd railway/lb && railway up --service lb)
 ```
 
-## 6. Seed database (one-time)
+## 6. Migrate and seed database (one-time)
 
 `railway run` executes locally, so the DB needs a public endpoint. Railway
-enables TCP proxy on Postgres by default. Link the proxy vars to the api
-service:
+enables TCP proxy on Postgres by default. Link the proxy vars (including
+`PGDATABASE`) to the api service:
 
 ```bash
-railway variables --set 'POSTGRES_TCP_PROXY_DOMAIN=${{Postgres.RAILWAY_TCP_PROXY_DOMAIN}}' --set 'POSTGRES_TCP_PROXY_PORT=${{Postgres.RAILWAY_TCP_PROXY_PORT}}' --service api
+railway variables \
+  --set 'POSTGRES_TCP_PROXY_DOMAIN=${{Postgres.RAILWAY_TCP_PROXY_DOMAIN}}' \
+  --set 'POSTGRES_TCP_PROXY_PORT=${{Postgres.RAILWAY_TCP_PROXY_PORT}}' \
+  --set 'PGDATABASE=${{Postgres.PGDATABASE}}' \
+  --service api
 ```
 
-Run the seed, overriding `DATABASE_MIGRATION_URL` to use the proxy host/port (keeps
-DATABASE_MIGRATION_USER and DATABASE_MIGRATION_PASSWORD from step 3):
+Run the migration first (provisions the `modelguide_app` role and runs Drizzle
+migrations), then seed. Both commands override `DATABASE_MIGRATION_URL` to use
+the TCP proxy. Credentials come from `DATABASE_MIGRATION_USER` and
+`DATABASE_MIGRATION_PASSWORD` set in step 3 (used internally by
+`getMigrationConnectionString()`). `APP_DB_PASSWORD` (also from step 3)
+provisions the app role.
 
 ```bash
-railway run --service api -- sh -c 'cd modelguide-api && DATABASE_MIGRATION_URL=postgresql://$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/$PGDATABASE bun run src/db/seed/index.ts'
+# Migrate (provisions roles + runs Drizzle migrations)
+railway run --service api -- sh -c 'cd modelguide-api && \
+  DATABASE_MIGRATION_URL=postgresql://$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/$PGDATABASE \
+  bun run scripts/migrate.ts'
+
+# Seed
+railway run --service api -- sh -c 'cd modelguide-api && \
+  DATABASE_MIGRATION_URL=postgresql://$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/$PGDATABASE \
+  bun run src/db/seed/index.ts'
 ```
 
 ## 7. Assign public domain
@@ -95,7 +119,30 @@ Only Caddy gets a public domain. It routes:
 
 The UI uses a relative `/api` prefix — no `VITE_API_URL` needed.
 
-## 8. Verify
+## 8. Set domain-dependent variables
+
+These variables require the public domain assigned in step 7. Setting them
+triggers an automatic API redeploy on Railway.
+
+```bash
+railway variables \
+  --set 'APP_URL=https://<your-lb-domain>.up.railway.app' \
+  --set 'MAGIC_LINK_STRATEGY=resend' \
+  --set 'RESEND_API_KEY=re_xxxxxxxxxxxx' \
+  --set 'RESEND_FROM_EMAIL=noreply@yourdomain.com' \
+  --service api
+```
+
+- `APP_URL` — public domain (from step 7). Used for CSRF origin validation and magic link URLs
+- `MAGIC_LINK_STRATEGY=resend` — switches from `console` (dev) to Resend email delivery
+- `RESEND_API_KEY` — Resend API key
+- `RESEND_FROM_EMAIL` — sender address (must be verified in Resend)
+
+Optional:
+
+- `API_EXTERNAL_ADDRESS` — public API URL for ElevenLabs/webhook sync (falls back to `APP_URL`)
+
+## 9. Verify
 
 ```bash
 railway logs --service api --follow
