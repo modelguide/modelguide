@@ -9,6 +9,7 @@ export type { ConnectorFetcher as MedusaFetcher };
 
 export function createMedusaFetcher(
   config: Record<string, string>,
+  timeoutMs?: number,
 ): ConnectorFetcher {
   const baseUrl = config.baseUrl?.replace(/\/+$/, "");
   if (!baseUrl) {
@@ -24,7 +25,7 @@ export function createMedusaFetcher(
     headers["x-publishable-api-key"] = config.publishableKey;
   }
 
-  return createBaseFetcher(baseUrl, headers, "Medusa");
+  return createBaseFetcher(baseUrl, headers, "Medusa", timeoutMs);
 }
 
 export function createMedusaAdminFetcher(

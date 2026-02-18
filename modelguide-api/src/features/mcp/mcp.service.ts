@@ -1,15 +1,15 @@
 import { forOrg } from "@db/rls";
-import { connectorTools, connectors, secrets } from "@db/schema";
+import { connectorTools, connectors } from "@db/schema";
 import { listAgentConnectors } from "@features/agents/agents.service";
 import { getConnectorManifest } from "@features/connectors/catalog/registry";
 import type { ToolExecutionResult } from "@features/connectors/catalog/types";
 import {
   getCatalogEntry,
   getConnectorById,
+  resolveConnectorConfig,
 } from "@features/connectors/connectors.service";
-import { decryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { ResolvedTool } from "./mcp.types";
 
 /**
@@ -90,42 +90,21 @@ export async function getAgentTools(
 }
 
 /**
- * Resolve connector config, replacing secret references with decrypted values.
+ * Resolve connector config by ID. Fetches connector + catalog, then delegates
+ * to the shared resolveConnectorConfig for secret decryption.
  */
-export async function resolveConnectorConfig(
+export async function resolveConnectorConfigById(
   orgId: string,
   connectorId: string,
 ): Promise<Record<string, string>> {
   const connector = await getConnectorById(orgId, connectorId);
   const catalog = await getCatalogEntry(connector.connectorCatalogId);
 
-  const configSchema = (catalog.configSchema ?? {}) as Record<
-    string,
-    { type: string }
-  >;
-  const rawConfig = (connector.config ?? {}) as Record<string, unknown>;
-
-  const connectorSecrets = await forOrg(orgId, (tx) =>
-    tx.select().from(secrets).where(eq(secrets.ownerType, "connector")),
+  const { resolved } = await resolveConnectorConfig(
+    orgId,
+    connector,
+    catalog.configSchema,
   );
-
-  const secretById = new Map(connectorSecrets.map((s) => [s.id, s]));
-
-  const resolved: Record<string, string> = {};
-
-  for (const [key, fieldSchema] of Object.entries(configSchema)) {
-    const value = rawConfig[key];
-    if (value === undefined || value === null) continue;
-
-    if (fieldSchema.type === "secret" && typeof value === "string") {
-      const secret = secretById.get(value);
-      if (secret) {
-        resolved[key] = await decryptSecret(secret.encryptedValue);
-      }
-    } else {
-      resolved[key] = String(value);
-    }
-  }
 
   return resolved;
 }

@@ -310,10 +310,11 @@ export const Errors = {
     );
   },
 
-  connectorNotConfigured(id?: string) {
+  connectorNotConfigured(id?: string, details?: Record<string, unknown>) {
     return new AppError(
       ErrorCode.CONNECTOR_NOT_CONFIGURED,
       id ? `Connector not configured: ${id}` : "Connector is not configured",
+      details,
     );
   },
 

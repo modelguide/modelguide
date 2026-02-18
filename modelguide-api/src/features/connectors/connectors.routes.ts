@@ -21,6 +21,7 @@ import {
   listCatalog,
   listConnectorTools,
   listConnectors,
+  pingConnector,
   updateConnector,
   updateConnectorTool,
 } from "./connectors.service";
@@ -486,6 +487,54 @@ router.openapi(deleteConnectorRoute, async (c) => {
   await deleteConnector(orgId, id);
 
   return c.body(null, 204);
+});
+
+// POST /:id/ping
+router.post(
+  "/:id/ping",
+  requireUser(),
+  requirePermission("connectors:read"),
+  requireOrganization(),
+);
+
+const healthCheckResponseSchema = z.object({
+  status: z.enum(["healthy", "error"]),
+  latencyMs: z.number(),
+  message: z.string().optional(),
+  checkedAt: z.string(),
+});
+
+const pingRoute = createRoute({
+  method: "post",
+  path: "/{id}/ping",
+  tags: ["Connectors"],
+  summary: "Ping connector",
+  description:
+    "Tests connectivity to the external service by calling a lightweight health endpoint.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: connectorIdParams,
+  },
+  responses: {
+    200: {
+      description: "Health check result",
+      content: {
+        "application/json": { schema: healthCheckResponseSchema },
+      },
+    },
+    400: errorResponse("Connector inactive or not configured"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Connector not found"),
+  },
+});
+
+router.openapi(pingRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const result = await pingConnector(orgId, id);
+
+  return c.json(result, 200);
 });
 
 // GET /:id/tools

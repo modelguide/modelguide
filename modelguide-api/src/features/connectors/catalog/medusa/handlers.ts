@@ -4,6 +4,7 @@
  */
 
 import { withConnector } from "../lib/http-client";
+import type { HealthCheckResult } from "../types";
 import { createMedusaAdminFetcher, createMedusaFetcher } from "./client";
 
 const withMedusa = withConnector(createMedusaFetcher);
@@ -223,3 +224,30 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+export async function healthCheck(
+  config: Record<string, string>,
+): Promise<HealthCheckResult> {
+  const start = performance.now();
+  const checkedAt = new Date().toISOString();
+  try {
+    const fetcher = createMedusaFetcher(config, 5_000);
+    await fetcher("/store/products", { params: { limit: "1" } });
+    return {
+      status: "healthy",
+      latencyMs: Math.round(performance.now() - start),
+      checkedAt,
+    };
+  } catch (err) {
+    return {
+      status: "error",
+      latencyMs: Math.round(performance.now() - start),
+      message: err instanceof Error ? err.message : String(err),
+      checkedAt,
+    };
+  }
+}

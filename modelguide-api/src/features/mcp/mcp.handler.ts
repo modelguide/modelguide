@@ -17,7 +17,7 @@ import { CORE_TOOL_COUNT, registerCoreTools } from "./core-tools";
 import {
   executeTool,
   getAgentTools,
-  resolveConnectorConfig,
+  resolveConnectorConfigById,
 } from "./mcp.service";
 import { type ResolvedTool, mcpErrorResponse, mcpResponse } from "./mcp.types";
 import { jsonSchemaToZod } from "./schema-utils";
@@ -167,7 +167,10 @@ function registerConnectorTools(
 
         await validateActiveSession(orgId, sessionId, agentId);
 
-        const config = await resolveConnectorConfig(orgId, tool.connectorId);
+        const config = await resolveConnectorConfigById(
+          orgId,
+          tool.connectorId,
+        );
         const result = await executeTool(
           orgId,
           tool.connectorId,
