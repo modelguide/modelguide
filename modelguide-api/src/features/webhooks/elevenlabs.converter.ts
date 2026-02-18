@@ -28,6 +28,7 @@ interface ConvertedMessage {
   toolName: string | null;
   toolInput: Record<string, unknown> | null;
   toolOutput: Record<string, unknown> | null;
+  toolStatus: "success" | "error" | null;
   modelUsed: string | null;
 
   latencyMs: number | null;
@@ -219,6 +220,7 @@ export function convertPostCallToSession(
         toolName: null,
         toolInput: null,
         toolOutput: null,
+        toolStatus: null,
         modelUsed:
           turnMetrics?.convai_tts_model ??
           turnMetrics?.convai_asr_provider ??
@@ -238,6 +240,7 @@ export function convertPostCallToSession(
       const resultValue = matched
         ? parseResultValue(matched.result.result_value)
         : null;
+      const isError = matched?.result.is_error === true;
       const latencyMs = matched?.result.tool_latency_secs
         ? Math.round(matched.result.tool_latency_secs * 1000)
         : null;
@@ -248,6 +251,7 @@ export function convertPostCallToSession(
         toolName,
         toolInput: params,
         toolOutput: resultValue,
+        toolStatus: matched ? (isError ? "error" : "success") : null,
         modelUsed: null,
 
         latencyMs,
@@ -264,6 +268,7 @@ export function convertPostCallToSession(
         toolName: tr.tool_name ?? "unknown",
         toolInput: null,
         toolOutput: parseResultValue(tr.result_value),
+        toolStatus: tr.is_error === true ? "error" : "success",
         modelUsed: null,
 
         latencyMs: tr.tool_latency_secs
