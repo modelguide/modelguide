@@ -272,19 +272,9 @@ Found a vulnerability? **Do not open a public issue.** See [SECURITY.md](SECURIT
 
 We use a [Contributor License Agreement](https://en.wikipedia.org/wiki/Contributor_License_Agreement) to ensure contributions can be distributed under the project's license.
 
-When you open your first pull request, a bot will comment asking you to sign the CLA. To accept, reply with a comment on the PR:
+When you open your first pull request, the [CLA Assistant](https://cla-assistant.io/) bot will automatically comment with a link to sign the agreement. Just click the link, review the CLA, and accept — it takes seconds.
 
-```
-@microsoft-github-policy-service agree
-```
-
-If you're contributing on behalf of a company:
-
-```
-@microsoft-github-policy-service agree company="Your Company"
-```
-
-This is a one-time process — once signed, all future PRs are covered. Your PR cannot be merged until the CLA is signed.
+This is a one-time process — once signed, all your future PRs are covered. Your PR cannot be merged until the CLA is signed.
 
 ## License
 
