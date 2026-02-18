@@ -95,6 +95,17 @@ export const connectorToolUpdateSchema = z.object({
 
 export type ConnectorToolUpdate = z.infer<typeof connectorToolUpdateSchema>
 
+// --- Health check ---
+
+export const healthCheckResultSchema = z.object({
+  status: z.enum(['healthy', 'error']),
+  latencyMs: z.number(),
+  message: z.string().optional(),
+  checkedAt: z.string(),
+})
+
+export type HealthCheckResult = z.infer<typeof healthCheckResultSchema>
+
 // --- Helpers ---
 
 /**

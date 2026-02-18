@@ -57,6 +57,11 @@ describe("Zendesk manifest", () => {
     expect(zendeskManifest.configSchema.apiToken.type).toBe("secret");
   });
 
+  test("healthCheck is a function", () => {
+    expect(zendeskManifest.healthCheck).toBeDefined();
+    expect(typeof zendeskManifest.healthCheck).toBe("function");
+  });
+
   test("tool names match expected set", () => {
     const toolNames = zendeskManifest.tools.map((t) => t.catalog.name);
     expect(toolNames).toContain("List Tickets");

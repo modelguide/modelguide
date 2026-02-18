@@ -59,6 +59,11 @@ describe("Medusa manifest", () => {
     expect(medusaManifest.configSchema.secretApiKey.type).toBe("secret");
   });
 
+  test("healthCheck is a function", () => {
+    expect(medusaManifest.healthCheck).toBeDefined();
+    expect(typeof medusaManifest.healthCheck).toBe("function");
+  });
+
   test("tool names match expected set", () => {
     const toolNames = medusaManifest.tools.map((t) => t.catalog.name);
     expect(toolNames).toContain("List Products");

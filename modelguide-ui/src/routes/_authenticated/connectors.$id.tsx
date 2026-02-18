@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Clock, Settings, Trash2 } from 'lucide-react'
+import { HTTPError } from 'ky'
+import { ArrowLeft, Clock, Settings, Trash2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -18,6 +19,7 @@ import type {
   ConnectorTool,
   ConnectorToolUpdate,
   ConnectorUpdate,
+  HealthCheckResult,
 } from '~/schemas/connectors'
 import { isConnectorConfigured } from '~/schemas/connectors'
 import { useAuthStore } from '~/stores/auth'
@@ -116,6 +118,7 @@ function ConnectorDetailPage() {
       ) : connector && catalogEntry ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <DetailsCard connector={connector} catalogEntry={catalogEntry} isAdmin={isAdmin} />
+          <ConnectionStatusCard connectorId={id} />
           <ConfigurationCard
             key={connector.updatedAt}
             connector={connector}
@@ -138,6 +141,85 @@ function ConnectorDetailPage() {
         </div>
       ) : null}
     </div>
+  )
+}
+
+function ConnectionStatusCard({ connectorId }: { connectorId: string }) {
+  const [errorMessage, setErrorMessage] = useState<string>()
+
+  const pingMutation = useMutation({
+    mutationFn: () => api.post(`connectors/${connectorId}/ping`).json<HealthCheckResult>(),
+    onMutate: () => {
+      setErrorMessage(undefined)
+    },
+    onError: async (error) => {
+      if (error instanceof HTTPError) {
+        try {
+          const body = (await error.response.json()) as { message?: string }
+          setErrorMessage(body.message ?? 'Health check failed')
+        } catch {
+          setErrorMessage('Health check failed')
+        }
+      } else {
+        setErrorMessage(error.message)
+      }
+    },
+  })
+
+  const result = pingMutation.data
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Zap className="h-4 w-4" />
+          Connection Status
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {pingMutation.isPending ? (
+            <div className="flex items-center gap-2">
+              <Spinner size="sm" />
+              <span className="text-sm text-fg-secondary">Testing connection...</span>
+            </div>
+          ) : result ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant={result.status === 'healthy' ? 'success' : 'error'} dot>
+                  {result.status === 'healthy' ? 'Connected' : 'Connection failed'}
+                </Badge>
+                <span className="font-mono text-xs text-fg-muted">{result.latencyMs}ms</span>
+              </div>
+              {result.status === 'error' && result.message ? (
+                <p className="text-xs text-fg-muted">{result.message}</p>
+              ) : null}
+              <p className="text-xs text-fg-muted">Checked just now</p>
+            </div>
+          ) : pingMutation.isError ? (
+            <div className="space-y-2">
+              <Badge variant="error" dot>
+                Error
+              </Badge>
+              <p className="text-xs text-fg-muted">{errorMessage ?? 'Health check failed'}</p>
+            </div>
+          ) : (
+            <p className="text-sm text-fg-muted">
+              Test the connection to verify credentials and service availability.
+            </p>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => pingMutation.mutate()}
+            disabled={pingMutation.isPending}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            Test Connection
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

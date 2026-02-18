@@ -10,6 +10,7 @@ import {
   createTicket,
   getTicket,
   getUser,
+  healthCheck,
   listTicketComments,
   listTickets,
   searchTickets,
@@ -311,6 +312,7 @@ const zendeskManifest: ConnectorManifest = {
   authMethods: ["basic"],
   iconUrl: "/logos/zendesk.svg",
   tools,
+  healthCheck,
 };
 
 export default zendeskManifest;

@@ -3,10 +3,11 @@
  * Tests the full HTTP request/response cycle with RLS isolation
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
 import { connectors } from "@db/schema";
+import { loadAllManifests } from "@features/connectors/catalog/registry";
 import { eq } from "drizzle-orm";
 import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
@@ -27,6 +28,7 @@ beforeAll(async () => {
   orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
   orgASupportHeaders = await authHeadersFor(s.orgASupport);
   orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
+  await loadAllManifests();
 });
 
 afterAll(async () => {
@@ -604,6 +606,106 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
     });
 
     expect(response.status).toBe(404);
+  });
+});
+
+// ============================================================================
+// POST /api/connectors/:id/ping - Health check
+// ============================================================================
+
+describe("POST /api/connectors/:id/ping", () => {
+  const originalFetch = globalThis.fetch;
+
+  /**
+   * Mock globalThis.fetch for external connector health-check calls.
+   * The Hono app uses app.fetch() (not globalThis.fetch) so this only
+   * intercepts the outbound HTTP call the healthCheck function makes.
+   */
+  function mockExternalFetch() {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ products: [], count: 0 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    ) as typeof fetch;
+  }
+
+  function restoreFetch() {
+    globalThis.fetch = originalFetch;
+  }
+
+  test("returns 200 with health check result shape", async () => {
+    mockExternalFetch();
+    try {
+      const response = await request(
+        `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+        {
+          method: "POST",
+          headers: orgAAdminHeaders,
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+
+      expect(body.status).toBeOneOf(["healthy", "error"]);
+      expect(typeof body.latencyMs).toBe("number");
+      expect(body.checkedAt).toBeTruthy();
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  test("returns 404 for non-existent connector", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const response = await request(`/api/connectors/${fakeId}/ping`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 for cross-org connector (RLS)", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+      {
+        method: "POST",
+        headers: orgBAdminHeaders,
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("accessible by support role", async () => {
+    mockExternalFetch();
+    try {
+      const response = await request(
+        `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+        {
+          method: "POST",
+          headers: orgASupportHeaders,
+        },
+      );
+
+      expect(response.status).toBe(200);
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  test("returns 401 for unauthenticated request", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+      {
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(401);
   });
 });
 

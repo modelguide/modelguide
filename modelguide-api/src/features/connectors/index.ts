@@ -13,4 +13,6 @@ export {
   deleteConnector,
   listConnectorTools,
   updateConnectorTool,
+  resolveConnectorConfig,
+  pingConnector,
 } from "./connectors.service";
