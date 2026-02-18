@@ -302,7 +302,7 @@ function formatMessage(message: SessionMessage) {
     toolName: message.toolName,
     toolInput: message.toolInput ?? null,
     toolOutput: message.toolOutput ?? null,
-    toolStatus: message.toolStatus ?? null,
+    toolStatus: (message.toolStatus as "success" | "error" | null) ?? null,
     modelUsed: message.modelUsed,
     tokensUsed: message.tokensUsed,
     latencyMs: message.latencyMs,
