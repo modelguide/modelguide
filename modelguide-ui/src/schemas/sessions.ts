@@ -27,6 +27,7 @@ export const sessionMessageSchema = z.object({
   toolName: z.string().optional(),
   toolInput: z.record(z.unknown()).optional(),
   toolOutput: z.record(z.unknown()).optional(),
+  toolStatus: z.enum(['success', 'error']).nullable().optional(),
   status: z.enum(['success', 'error']).optional(),
   latencyMs: z.number().optional(),
   audioDurationMs: z.number().optional(),

@@ -196,6 +196,7 @@ function makeToolCall(
       toolCallId: id,
       toolName: name,
       toolOutput: output,
+      toolStatus: "success",
     },
   };
 }
@@ -211,6 +212,7 @@ type Message = {
   toolName?: string;
   toolInput?: Record<string, unknown>;
   toolOutput?: Record<string, unknown>;
+  toolStatus?: "success" | "error";
 };
 
 // ============================================================================
@@ -1029,6 +1031,7 @@ export async function generateSessions(
     toolName: string | undefined;
     toolInput: Record<string, unknown> | undefined;
     toolOutput: Record<string, unknown> | undefined;
+    toolStatus: string | undefined;
     createdAt: Date;
     occurredAt: Date;
   }[] = [];
@@ -1067,6 +1070,7 @@ export async function generateSessions(
         toolName: msg.toolName,
         toolInput: msg.toolInput,
         toolOutput: msg.toolOutput,
+        toolStatus: msg.toolStatus,
         createdAt: ts,
         occurredAt: ts,
       });

@@ -564,6 +564,7 @@ export const sessionMessages = pgTable(
     toolName: varchar("tool_name", { length: 255 }),
     toolInput: jsonb("tool_input").$type<Record<string, unknown>>(),
     toolOutput: jsonb("tool_output").$type<Record<string, unknown>>(),
+    toolStatus: varchar("tool_status", { length: 10 }),
     modelUsed: varchar("model_used", { length: 100 }),
     tokensUsed: integer("tokens_used"),
     latencyMs: integer("latency_ms"),
