@@ -28,6 +28,10 @@ Create ADRs in `docs/decisions/` for significant decisions:
 - **Format:** `NNN-short-title.md` (e.g., `001-refresh-token-rotation.md`)
 - **Sections:** Status, Context, Decision (with rationale), Consequences
 
+## Environment Variables
+
+Env vars are validated in `modelguide-api/src/env.ts` (Zod). When adding or renaming a variable, also update `railway/DEPLOY.md` (steps 3 and 8 list the production vars).
+
 ## Commands
 
 ```bash
