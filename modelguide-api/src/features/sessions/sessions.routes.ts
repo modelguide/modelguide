@@ -167,6 +167,7 @@ const createMessageSchema = z.object({
         toolInput: z.record(z.unknown()).optional(),
         toolOutput: z.record(z.unknown()).optional(),
         latencyMs: z.number().int().positive().optional(),
+        toolStatus: z.enum(["success", "error"]).optional(),
       }),
     )
     .optional()
@@ -302,7 +303,7 @@ function formatMessage(message: SessionMessage) {
     toolName: message.toolName,
     toolInput: message.toolInput ?? null,
     toolOutput: message.toolOutput ?? null,
-    toolStatus: (message.toolStatus as "success" | "error" | null) ?? null,
+    toolStatus: message.toolStatus ?? null,
     modelUsed: message.modelUsed,
     tokensUsed: message.tokensUsed,
     latencyMs: message.latencyMs,

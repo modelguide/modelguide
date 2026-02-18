@@ -183,6 +183,7 @@ function makeToolCall(
 ): ToolCallPair {
   const id = toolCallId();
   const name = `${connectorSlug}_${toolSlug}`;
+  const isError = Math.random() < 0.08;
   return {
     assistant: {
       role: "assistant",
@@ -196,8 +197,10 @@ function makeToolCall(
       content: null,
       toolCallId: id,
       toolName: name,
-      toolOutput: output,
-      toolStatus: "success",
+      toolOutput: isError
+        ? { error: "Internal server error", code: "TOOL_ERROR" }
+        : output,
+      toolStatus: isError ? "error" : "success",
     },
   };
 }
@@ -1032,7 +1035,7 @@ export async function generateSessions(
     toolName: string | undefined;
     toolInput: Record<string, unknown> | undefined;
     toolOutput: Record<string, unknown> | undefined;
-    toolStatus: string | undefined;
+    toolStatus: "success" | "error" | undefined;
     createdAt: Date;
     occurredAt: Date;
   }[] = [];
