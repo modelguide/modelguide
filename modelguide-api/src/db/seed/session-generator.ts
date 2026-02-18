@@ -171,6 +171,7 @@ interface ToolCallPair {
     toolCallId: string;
     toolName: string;
     toolOutput: Record<string, unknown>;
+    toolStatus: "success" | "error";
   };
 }
 
