@@ -293,6 +293,7 @@ export interface MessageData {
     toolInput?: Record<string, unknown>;
     toolOutput?: Record<string, unknown>;
     latencyMs?: number;
+    toolStatus?: "success" | "error";
   }>;
 }
 
@@ -360,6 +361,7 @@ export async function addMessages(
             toolInput: tc.toolInput ?? null,
             toolOutput: tc.toolOutput ?? null,
             latencyMs: tc.latencyMs ?? null,
+            toolStatus: tc.toolStatus ?? null,
             occurredAt: msg.occurredAt ?? null,
           });
         }

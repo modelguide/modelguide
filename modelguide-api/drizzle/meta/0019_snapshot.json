@@ -1,6 +1,6 @@
 {
-  "id": "147ea285-404a-44ad-987e-f2db5ed48fd2",
-  "prevId": "8c1b56af-99fe-47d8-8ba2-99271936b461",
+  "id": "c00a7c81-7d10-4c01-897e-5b7a2c2db8d7",
+  "prevId": "147ea285-404a-44ad-987e-f2db5ed48fd2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1646,7 +1646,8 @@
         },
         "tool_status": {
           "name": "tool_status",
-          "type": "varchar(10)",
+          "type": "tool_status",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         }
@@ -2095,6 +2096,14 @@
         "admin",
         "support",
         "viewer"
+      ]
+    },
+    "public.tool_status": {
+      "name": "tool_status",
+      "schema": "public",
+      "values": [
+        "success",
+        "error"
       ]
     }
   },

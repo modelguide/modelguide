@@ -82,6 +82,11 @@ export const messageRoleEnum = pgEnum("message_role", [
 ]);
 
 /**
+ * Tool call execution status
+ */
+export const toolStatusEnum = pgEnum("tool_status", ["success", "error"]);
+
+/**
  * Feedback sources
  */
 export const feedbackSourceEnum = pgEnum("feedback_source", [
