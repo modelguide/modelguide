@@ -1,23 +1,27 @@
 /**
  * ElevenLabs webhook handlers
  *
- * POST /:agentId/post-call — post_call_transcription after call ends
+ * POST /:agentId/conversation-init — conversation initiation at call start (API key auth)
+ * POST /:agentId/post-call          — post_call_transcription after call ends (HMAC auth)
  *
  * Tool calls during conversation go through the MCP endpoint (/mcp).
- * Auth is via HMAC signature verification using the agent's webhook_hmac_secret.
  */
 
 import { env } from "@/env";
 import { forApp, forOrg } from "@db/rls";
 import { agents, sessionLinks, sessionMessages, sessions } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { getAgentSecretByType } from "@features/secrets";
 import { extractLinks } from "@features/sessions/link-extraction";
+import { verifyApiKey } from "@lib/middleware/auth";
 import { convertPostCallToSession } from "./elevenlabs.converter";
-import { postCallTranscriptionPayloadSchema } from "./elevenlabs.schemas";
+import {
+  conversationInitRequestSchema,
+  postCallTranscriptionPayloadSchema,
+} from "./elevenlabs.schemas";
 
 const app = new Hono();
 
@@ -254,6 +258,120 @@ app.post("/:agentId/post-call", async (c) => {
   );
 
   return c.json({ received: true, session_id: sessionId });
+});
+
+// ============================================================================
+// POST /:agentId/conversation-init — conversation initiation webhook (call start)
+// ============================================================================
+
+app.post("/:agentId/conversation-init", async (c) => {
+  const agentId = c.req.param("agentId");
+  const apiKeyHeader = c.req.header("x-mg-api-key");
+
+  // 1. Authenticate via API key header
+  if (!apiKeyHeader) {
+    console.warn(
+      `[webhook/conversation-init] Missing x-mg-api-key header for agent=${agentId}`,
+    );
+    return c.json({ error: "Missing x-mg-api-key header" }, 401);
+  }
+
+  const authAgent = await verifyApiKey(apiKeyHeader);
+  if (!authAgent) {
+    console.warn(
+      `[webhook/conversation-init] Invalid API key for agent=${agentId}`,
+    );
+    return c.json({ error: "Invalid API key" }, 401);
+  }
+
+  // 2. Verify the API key belongs to the requested agent
+  if (authAgent.id !== agentId) {
+    console.warn(
+      `[webhook/conversation-init] API key agent mismatch: key=${authAgent.id} url=${agentId}`,
+    );
+    return c.json({ error: "API key does not match agent" }, 403);
+  }
+
+  // 3. Parse request body
+  const rawBody = await c.req.json().catch(() => ({}));
+  const parsed = conversationInitRequestSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    console.error(
+      "[webhook/conversation-init] Validation failed:",
+      JSON.stringify(parsed.error.flatten()),
+    );
+    return c.json(
+      { error: "Invalid payload", details: parsed.error.flatten() },
+      400,
+    );
+  }
+
+  const { caller_id, called_number, call_sid } = parsed.data;
+
+  // 4. Idempotency: if call_sid is present, check for existing active session
+  if (call_sid) {
+    const [existing] = await forOrg(authAgent.organizationId, (tx) =>
+      tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.agentId, agentId),
+            eq(sessions.status, "active"),
+            sql`${sessions.metadata}->>'call_sid' = ${call_sid}`,
+          ),
+        )
+        .limit(1),
+    );
+
+    if (existing) {
+      console.log(
+        `[webhook/conversation-init] Idempotent hit: call_sid=${call_sid} session=${existing.id}`,
+      );
+      return c.json({
+        type: "conversation_initiation_client_data" as const,
+        dynamic_variables: { mg_session_id: existing.id },
+      });
+    }
+  }
+
+  // 5. Create new session
+  let sessionId: string;
+  try {
+    sessionId = await forOrg(authAgent.organizationId, async (tx) => {
+      const [session] = await tx
+        .insert(sessions)
+        .values({
+          organizationId: authAgent.organizationId,
+          agentId,
+          channelType: "voice",
+          status: "active",
+          userIdentifier: caller_id ?? null,
+          metadata: {
+            ...(caller_id ? { caller_id } : {}),
+            ...(called_number ? { called_number } : {}),
+            ...(call_sid ? { call_sid } : {}),
+          },
+        })
+        .returning({ id: sessions.id });
+      return session.id;
+    });
+  } catch (err) {
+    console.error(
+      `[webhook/conversation-init] DB error creating session for agent=${agentId}`,
+      err,
+    );
+    return c.json({ error: "Failed to create session" }, 500);
+  }
+
+  console.log(
+    `[webhook/conversation-init] Created session=${sessionId} agent=${agentId}${caller_id ? ` caller=${caller_id}` : ""}${call_sid ? ` call_sid=${call_sid}` : ""}`,
+  );
+
+  return c.json({
+    type: "conversation_initiation_client_data" as const,
+    dynamic_variables: { mg_session_id: sessionId },
+  });
 });
 
 export default app;

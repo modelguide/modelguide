@@ -54,6 +54,7 @@ const agentResponseSchema = z.object({
       sessionInit: z.string(),
       mcp: z.string(),
       postCallWebhook: z.string(),
+      conversationInitWebhook: z.string(),
     })
     .optional(),
   createdAt: z.string(),
@@ -204,6 +205,7 @@ function formatAgent(
       sessionInit: `${externalBase}/api/sessions`,
       mcp: `${externalBase}/mcp/${agent.id}`,
       postCallWebhook: `${externalBase}/webhooks/elevenlabs/${agent.id}/post-call`,
+      conversationInitWebhook: `${externalBase}/webhooks/elevenlabs/${agent.id}/conversation-init`,
     },
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,

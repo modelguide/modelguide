@@ -21,6 +21,32 @@ export const dynamicVariablesSchema = z
 export type DynamicVariables = z.infer<typeof dynamicVariablesSchema>;
 
 // ============================================================================
+// Conversation Initiation Webhook (call start)
+// ============================================================================
+
+export const conversationInitRequestSchema = z
+  .object({
+    caller_id: z.string().optional(),
+    agent_id: z.string().optional(),
+    called_number: z.string().optional(),
+    call_sid: z.string().optional(),
+  })
+  .passthrough();
+
+export type ConversationInitRequest = z.infer<
+  typeof conversationInitRequestSchema
+>;
+
+export const conversationInitResponseSchema = z.object({
+  type: z.literal("conversation_initiation_client_data"),
+  dynamic_variables: z.record(z.union([z.string(), z.number(), z.boolean()])),
+});
+
+export type ConversationInitResponse = z.infer<
+  typeof conversationInitResponseSchema
+>;
+
+// ============================================================================
 // Tool Call Webhook
 // ============================================================================
 
