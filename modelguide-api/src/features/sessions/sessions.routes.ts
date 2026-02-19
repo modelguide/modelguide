@@ -154,6 +154,10 @@ const createMessageSchema = z.object({
   audioUrl: z.string().url().optional().openapi({
     description: "URL to audio recording",
   }),
+  occurredAt: z.string().datetime().optional().openapi({
+    description:
+      "When the message occurred (ISO 8601). Defaults to now if omitted.",
+  }),
   toolCalls: z
     .array(
       z.object({
@@ -548,8 +552,11 @@ router.openapi(addMessageRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const agent = getCurrentAgent(c);
   const { id } = c.req.valid("param");
-  const body = c.req.valid("json");
-  const messages = await addMessage(orgId, id, agent.id, body);
+  const { occurredAt, ...rest } = c.req.valid("json");
+  const messages = await addMessage(orgId, id, agent.id, {
+    ...rest,
+    occurredAt: occurredAt ? new Date(occurredAt) : undefined,
+  });
 
   return c.json({ data: messages.map(formatMessage) }, 201);
 });
