@@ -182,10 +182,12 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
         </Card>
       )}
 
-      {/* Transcript */}
+      {/* Transcript / Details */}
       <Card>
         <CardHeader>
-          <CardTitle>Transcript</CardTitle>
+          <CardTitle>
+            {['voice', 'web', 'widget'].includes(session.channelType) ? 'Transcript' : 'Exchange'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Transcript messages={session.messages || []} />

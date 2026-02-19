@@ -20,7 +20,7 @@ export function TranscriptMessage({ message }: TranscriptMessageProps) {
         input={message.toolInput || {}}
         output={message.toolOutput || {}}
         status={message.status || 'success'}
-        latencyMs={message.latencyMs || 0}
+        latencyMs={message.latencyMs}
       />
     )
   }

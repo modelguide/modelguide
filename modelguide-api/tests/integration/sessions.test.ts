@@ -518,6 +518,76 @@ describe("POST /api/sessions/:id/messages", () => {
     expect(toolMsg.toolName).toBe("glowbox_store_get_menu");
   });
 
+  test("extracts session link from MCP-wrapped tool output (201)", async () => {
+    // Create a fresh active session for this test
+    const sessionRes = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "email",
+        userIdentifier: "customer@test.com",
+      }),
+    });
+    expect(sessionRes.status).toBe(201);
+    const { id: linkSessionId } = (await sessionRes.json()) as { id: string };
+    createdSessionIds.push(linkSessionId);
+
+    // MCP tool output format: { content: [{ type: "text", text: "<json string>" }] }
+    // The inner JSON has a top-level "url" field that should be extracted as a session link.
+    const mcpToolOutput = {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            data: { id: "order_abc123", display_id: 42, status: "pending" },
+            url: "https://admin.example.com/app/orders/order_abc123",
+          }),
+        },
+      ],
+    };
+
+    const msgRes = await request(`/api/sessions/${linkSessionId}/messages`, {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        role: "assistant",
+        content: "I found your order.",
+        toolCalls: [
+          {
+            toolCallId: "call_mcp_1",
+            toolName: "acme_store_look_up_order",
+            toolInput: { email: "customer@test.com", displayId: 42 },
+            toolOutput: mcpToolOutput,
+          },
+        ],
+      }),
+    });
+
+    expect(msgRes.status).toBe(201);
+
+    // Fetch session detail and verify the link was extracted
+    const detailRes = await request(`/api/sessions/${linkSessionId}`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(detailRes.status).toBe(200);
+    const detail = (await detailRes.json()) as {
+      links: {
+        url: string;
+        title: string | null;
+        resourceType: string | null;
+      }[];
+    };
+
+    expect(detail.links).toBeArray();
+    expect(detail.links.length).toBe(1);
+    expect(detail.links[0].url).toBe(
+      "https://admin.example.com/app/orders/order_abc123",
+    );
+    expect(detail.links[0].resourceType).toBe("order");
+    expect(detail.links[0].title).toBe("Order #42");
+  });
+
   test("rejects message to ended session (409)", async () => {
     // End the session first
     await request(`/api/sessions/${messageSessionId}`, {
