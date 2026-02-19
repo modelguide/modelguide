@@ -101,12 +101,13 @@ async function seedAll(db: SeedDb) {
   }
 }
 
-const EXPECTED_COUNTS: Record<string, number> = {
+const MIN_ROW_COUNTS: Record<string, number> = {
   organizations: 3,
-  users: 9, // minimum: 3 per org
+  users: 9, // 3 per org
   agents: 6,
   connectors: 6,
-  sessions: 300, // at least 300 generated per org, plus handwritten
+  connector_tools: 1,
+  sessions: 300, // ~300 generated per org, plus handwritten
   session_messages: 100,
   session_feedback: 50,
 };
@@ -114,26 +115,26 @@ const EXPECTED_COUNTS: Record<string, number> = {
 async function verifySeed(db: SeedDb): Promise<boolean> {
   console.log("\nVerifying seed data...");
 
-  const rows = await db.execute<{ tbl: string; count: number }>(sql`
-    SELECT 'organizations' AS tbl, count(*)::int AS count FROM organizations
-    UNION ALL SELECT 'users', count(*)::int FROM users
-    UNION ALL SELECT 'agents', count(*)::int FROM agents
-    UNION ALL SELECT 'connectors', count(*)::int FROM connectors
-    UNION ALL SELECT 'connector_tools', count(*)::int FROM connector_tools
-    UNION ALL SELECT 'sessions', count(*)::int FROM sessions
-    UNION ALL SELECT 'session_messages', count(*)::int FROM session_messages
-    UNION ALL SELECT 'session_feedback', count(*)::int FROM session_feedback
-  `);
+  const tables = Object.keys(MIN_ROW_COUNTS);
+  const counts: Record<string, number> = {};
+
+  for (const tbl of tables) {
+    const [row] = await db.execute<{ count: number }>(
+      sql`SELECT count(*)::int AS count FROM ${sql.identifier(tbl)}`,
+    );
+    counts[tbl] = row.count;
+  }
 
   let ok = true;
-  const widest = Math.max(...rows.map((r) => r.tbl.length));
+  const widest = Math.max(...tables.map((t) => t.length));
 
-  for (const { tbl, count } of rows) {
-    const expected = EXPECTED_COUNTS[tbl];
-    const fail = expected !== undefined && count < expected;
+  for (const tbl of tables) {
+    const count = counts[tbl];
+    const min = MIN_ROW_COUNTS[tbl];
+    const fail = count < min;
     const marker = fail ? "FAIL" : " ok ";
     console.log(
-      `  [${marker}] ${tbl.padEnd(widest)}  ${count}${fail ? `  (expected >= ${expected})` : ""}`,
+      `  [${marker}] ${tbl.padEnd(widest)}  ${count}${fail ? `  (expected >= ${min})` : ""}`,
     );
     if (fail) ok = false;
   }
