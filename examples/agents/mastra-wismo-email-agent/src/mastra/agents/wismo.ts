@@ -83,7 +83,6 @@ export async function runWismoAgent(params: {
         stepStartMs = now;
         const stepIndex = stepLatenciesMs.length - 1;
         logger.debug({ stepIndex, latencyMs }, "Step finished");
-
         stepPostPromises.push(
           postStepMessages(sessionId, step as Step, latencyMs).catch((err) =>
             logger.error({ err, stepIndex, sessionId }, "Failed to post step messages"),

@@ -237,7 +237,7 @@ export async function postStepMessages(
   step: Step,
   stepLatencyMs: number,
 ): Promise<void> {
-  const occurredAt = step.response?.timestamp?.toISOString();
+  const occurredAt = (step.response?.timestamp ?? new Date()).toISOString();
   const messages = extractStepMessages(step, occurredAt, stepLatencyMs);
   await Promise.all(messages.map((msg) => postMessage(sessionId, msg)));
 }
