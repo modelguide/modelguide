@@ -1,0 +1,61 @@
+# ModelGuide
+
+> Open-source AI contact center platform (MIT). Sits between your AI agents and business systems — providing tool management, session recording, observability, and analytics via the Model Context Protocol (MCP). Self-hosted alternative to Sierra, Decagon, and other closed SaaS platforms. No vendor lock-in, no per-resolution pricing.
+
+ModelGuide does not run your AI agent or own the voice stack. It provides the operational infrastructure to run AI agents in production: connectors that expose business systems as MCP tools, full session recording with tool call traces, multi-tenant configuration with RBAC, and analytics dashboards for CX leaders.
+
+Key capabilities:
+- **Tool layer**: Connectors expose business systems (e-commerce, helpdesk, calendars) as tools any AI agent can call via MCP. One TypeScript file per connector.
+- **Observation layer**: Every session recorded with full tool call traces — inputs, outputs, latency, errors, CSAT scores, internal QA evaluations.
+- **Configuration layer**: Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap voice platforms without rebuilding your backend.
+- **Analytics layer**: Resolution rates, escalation trends, CSAT scores, session volume by channel.
+
+Tech stack: Hono + Bun.js (API), MCP protocol via `@modelcontextprotocol/sdk`, PostgreSQL 16 + Drizzle ORM, TanStack Start + React 19 (dashboard), JWT + magic link auth, MIT license.
+
+## Quick Start
+
+- [README — Quick Start](https://github.com/modelguide/modelguide#quick-start): Clone, `make quickstart`, then `make api-dev` + `make ui-dev`. Requires Docker 24+, Bun 1.1+, Node 22+.
+- [Contributing Guide](https://github.com/modelguide/modelguide/blob/main/CONTRIBUTING.md): Full dev setup, environment variables, branching conventions, testing commands.
+
+## Guides
+
+- [MCP Integration Guide](https://github.com/modelguide/modelguide/blob/main/docs/guide/mcp-integration.md): Connect your AI agent via MCP — authentication with API keys (`mgk_...`), tool discovery (`tools/list`), session lifecycle (`core_create_session` → tool calls → `core_end_session`), confirmation flows for destructive actions.
+- [Admin Guide](https://github.com/modelguide/modelguide/blob/main/docs/guide/admin-guide.md): Dashboard workflow — create encrypted secrets, configure connector instances, create agents with API keys, assign tools, verify with test calls.
+- [ElevenLabs Voice Setup](https://github.com/modelguide/modelguide/blob/main/docs/elevenlabs-setup.md): Integrate ElevenLabs voice agents with ModelGuide.
+
+## Connectors
+
+- [Building a Connector](https://github.com/modelguide/modelguide#adding-a-connector): Each connector is a single TypeScript file with a `ConnectorManifest` — includes name, config schema, auth methods, and tool handlers with JSON Schema inputs. Register in `registry.ts`, run `make sync-connectors`.
+- [Medusa Connector (reference)](https://github.com/modelguide/modelguide/tree/main/modelguide-api/src/features/connectors/catalog/medusa): Ships as reference implementation — 8 tools for e-commerce (browse products, manage carts, checkout, order tracking).
+
+## MCP Protocol
+
+- [MCP Endpoint](https://github.com/modelguide/modelguide#agents-connect-via-mcp): `POST /mcp` with `Authorization: Bearer mgk_...`. Streamable HTTP transport. Creates a fresh MCP server per request scoped to the agent's permissions. Tool names are namespaced by connector instance (e.g., `glowbox_store_add_to_cart`).
+- [Core Tools](https://github.com/modelguide/modelguide/blob/main/docs/guide/mcp-integration.md): Built-in session lifecycle tools — `core_create_session`, `core_add_messages`, `core_rate_session`, `core_end_session`. Always available to all agents.
+
+## Architecture
+
+- [Project Structure](https://github.com/modelguide/modelguide#project-structure): Monorepo — `modelguide-api/` (Hono API + MCP server), `modelguide-ui/` (TanStack Start dashboard), `docker/` (PostgreSQL + RLS), `docs/`, `examples/`.
+- [Architecture Decision Records](https://github.com/modelguide/modelguide/tree/main/docs/decisions): ADR-001 Refresh Token Rotation, ADR-002 Magic Link Authentication.
+- [Security Policy](https://github.com/modelguide/modelguide/blob/main/SECURITY.md): Vulnerability reporting process.
+
+## Deployment
+
+- [Docker Compose](https://github.com/modelguide/modelguide#docker-compose-local--staging): `make docker-up` for full local stack. Override secrets via `.env.docker`.
+- [Railway Production Guide](https://github.com/modelguide/modelguide/blob/main/railway/DEPLOY.md): PostgreSQL + API + UI + Caddy load balancer. Config-as-code via `railway.toml`.
+
+## Seed Data & Demo
+
+- [Seed Data](https://github.com/modelguide/modelguide#seed-data): Three industry-vertical orgs pre-configured — GlowBox Beauty (retail), ClearHealth (medical call center), SteelPoint Supply (B2B industrial). Each with Medusa + Zendesk connectors, two agents, ~300 realistic sessions.
+- [Example: ElevenLabs Agent](https://github.com/modelguide/modelguide/tree/main/examples/elevenlabs-agent): Voice agent integration example.
+- [Example: Customer App (Acme)](https://github.com/modelguide/modelguide/tree/main/examples/customer-apps/acme): Reference customer-facing application.
+
+## API Reference
+
+- [Auto-Generated API Docs](https://github.com/modelguide/modelguide#features): OpenAPI 3.1 spec from Hono route definitions, Scalar UI at `/docs` when running locally.
+
+## Optional
+
+- [UI Structure](https://github.com/modelguide/modelguide/blob/main/docs/UI_STRUCTURE.md): Dashboard component organization and routing.
+- [Makefile Commands](https://github.com/modelguide/modelguide/blob/main/Makefile): All dev commands — `make api-dev`, `make ui-dev`, `make api-test`, `make db-seed`, `make sync-connectors`, etc.
+- [CLAUDE.md](https://github.com/modelguide/modelguide/blob/main/CLAUDE.md): AI coding agent context file for contributing to the codebase.
