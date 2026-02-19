@@ -1,34 +1,10 @@
-import { RequestContext } from "@mastra/core/request-context";
-import { MCPClient } from "@mastra/mcp";
 import { Hono } from "hono";
 import { z } from "zod";
-import { apiBaseUrl, config } from "../config.js";
 import { extractEmailAddress, sendEmail, stripQuotedReply } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
-import type { Step } from "../lib/modelguide.js";
-import {
-  logAgentTurns,
-  patchSessionStatus,
-  postStepMessages,
-  postUserMessage,
-} from "../lib/modelguide.js";
-import { wismoAgent, wismoRequestContextSchema } from "../mastra/agents/wismo.js";
-
-function tryParseJson(text: string): unknown {
-  // Find the last complete {...} block — the final JSON output from the agent
-  let lastMatch: string | null = null;
-  const re = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    lastMatch = m[0];
-  }
-  if (!lastMatch) return null;
-  try {
-    return JSON.parse(lastMatch);
-  } catch {
-    return null;
-  }
-}
+import { createSession, patchSessionStatus, postUserMessage } from "../lib/modelguide.js";
+import { runWismoAgent } from "../mastra/agents/wismo.js";
+import { config } from "../config.js";
 
 // Resend email.received webhook — body is NOT included, must be fetched separately
 const resendWebhookPayloadSchema = z.object({
@@ -44,45 +20,6 @@ const resendWebhookPayloadSchema = z.object({
     message_id: z.string().optional(),
   }),
 });
-
-// Structured output schema — agent's final JSON-only message
-const agentOutputSchema = z.object({
-  ticketId: z.number().int().optional(),
-  replyBody: z.string(),
-  escalated: z.boolean().default(false),
-});
-
-/**
- * Pre-create a ModelGuide session before running the agent.
- * MCP tools call validateActiveSession() on every invocation, so a real DB session
- * must exist before any MCP tool call can succeed.
- */
-async function createSession(params: {
-  senderEmail: string;
-  externalId: string;
-}): Promise<string> {
-  const res = await fetch(`${apiBaseUrl}/api/sessions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.MCP_API_KEY}`,
-    },
-    body: JSON.stringify({
-      channelType: "email",
-      userIdentifier: params.senderEmail,
-      externalId: params.externalId,
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to create session: ${res.status} ${text}`);
-  }
-
-  const data = (await res.json()) as { id: string };
-  logger.info({ sessionId: data.id, senderEmail: params.senderEmail }, "Session created");
-  return data.id;
-}
 
 export const webhookRouter = new Hono();
 
@@ -190,8 +127,7 @@ webhookRouter.post("/", async (c) => {
   logger.info({ email_id, senderEmail, subject, bodyLength: emailBody.length }, "Processing inbound email");
 
   // Pre-create a ModelGuide session. MCP tools require a valid, active session_id
-  // in the DB before they will execute — createSession also derives agentId from the
-  // mgk_... API key on the server side, so no explicit agentId needed in the body.
+  // in the DB before they will execute.
   let sessionId: string;
   try {
     sessionId = await createSession({ senderEmail, externalId: email_id });
@@ -203,92 +139,9 @@ webhookRouter.post("/", async (c) => {
   // Store the inbound email immediately — persisted even if the agent crashes
   await postUserMessage(sessionId, { from, to, subject, body: emailBody, receivedAt });
 
-  // Per-request MCPClient — isolated connection per email
-  const mcpClient = new MCPClient({
-    servers: {
-      modelguide: {
-        url: new URL(config.MCP_SERVER_URL),
-        requestInit: {
-          headers: { Authorization: `Bearer ${config.MCP_API_KEY}` },
-        },
-        timeout: 30_000,       // per-request MCP tool call timeout
-        connectTimeout: 15_000, // protocol handshake timeout (default 3s too short for cold starts)
-      },
-    },
-  });
-
-  let agentOutput: z.infer<typeof agentOutputSchema>;
-  let steps: Step[];
-  let stepLatenciesMs: number[] = [];
-
-  try {
-    const toolsets = await mcpClient.listToolsets();
-    logger.debug({ tools: Object.keys(toolsets) }, "MCP toolsets loaded");
-
-    // Pass session_id and sender email via RequestContext — keeps them out of the
-    // user prompt and makes them available to agent instructions and tools cleanly.
-    const requestContext = new RequestContext<z.infer<typeof wismoRequestContextSchema>>();
-    requestContext.set("sessionId", sessionId);
-    requestContext.set("senderEmail", senderEmail);
-
-    logger.debug({ sessionId, senderEmail, subject }, "Agent prompt");
-
-    let stepStartMs = Date.now();
-
-    // Collect per-step posting promises — we fire them off in onStepFinish and
-    // await all of them after generate() completes, so the agent doesn't block
-    // waiting for HTTP round-trips between steps.
-    const stepPostPromises: Promise<void>[] = [];
-
-    const result = await wismoAgent.generate(emailBody, {
-      toolsets,
-      requestContext,
-      maxSteps: 5,
-      onStepFinish: (step) => {
-        const now = Date.now();
-        const latencyMs = now - stepStartMs;
-        stepLatenciesMs.push(latencyMs);
-        stepStartMs = now;
-        const stepIndex = stepLatenciesMs.length - 1;
-        logger.debug({ stepIndex, latencyMs }, "Step finished");
-
-        // Post this step's messages immediately (non-blocking)
-        // occurredAt is derived from step.response.timestamp inside postStepMessages
-        stepPostPromises.push(
-          postStepMessages(sessionId, step as Step, latencyMs).catch((err) =>
-            logger.error({ err, stepIndex, sessionId }, "Failed to post step messages"),
-          ),
-        );
-      },
-    });
-
-    // Wait for all in-flight step posts before proceeding
-    await Promise.all(stepPostPromises);
-
-    steps = result.steps as Step[];
-    logger.debug({ stepsCount: steps.length, stepLatenciesMs }, "Agent steps collected");
-
-    // The model reliably places the final JSON in the last step's text.
-    // structuredOutput + jsonPromptInjection fails to extract it when the model
-    // embeds JSON inside a reasoning step rather than a standalone message.
-    const lastStepText = [...steps].reverse().find((s) => s.text)?.text ?? "";
-    const parsed = agentOutputSchema.safeParse(tryParseJson(lastStepText));
-    if (parsed.success) {
-      agentOutput = parsed.data;
-    } else {
-      logger.warn(
-        { lastStepText, parseError: parsed.error.flatten() },
-        "Agent output JSON parse failed — using fallback reply",
-      );
-      agentOutput = { replyBody: "We received your message and will follow up shortly.", escalated: false };
-    }
-
-    logAgentTurns(steps, stepLatenciesMs);
-  } finally {
-    await mcpClient.disconnect();
-  }
-
-  const { replyBody, escalated: isEscalated, ticketId } = agentOutput;
+  // Run the agent
+  const { output, steps } = await runWismoAgent({ sessionId, senderEmail, emailBody });
+  const { replyBody, escalated: isEscalated, ticketId } = output;
 
   if (ticketId) {
     logger.info({ ticketId, sessionId, escalated: isEscalated }, "Zendesk ticket created");
