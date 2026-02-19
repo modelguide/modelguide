@@ -7,7 +7,7 @@ export interface ToolCallBlockProps {
   input: Record<string, unknown>
   output: Record<string, unknown>
   status: 'success' | 'error'
-  latencyMs: number
+  latencyMs?: number | null
 }
 
 export function ToolCallBlock({ toolName, input, output, status, latencyMs }: ToolCallBlockProps) {
@@ -53,7 +53,9 @@ export function ToolCallBlock({ toolName, input, output, status, latencyMs }: To
               <X className="h-3.5 w-3.5 text-error" />
             )}
           </div>
-          <span className="font-sans text-xs text-fg-muted">{latencyMs}ms</span>
+          {latencyMs ? (
+            <span className="font-sans text-xs text-fg-muted">{latencyMs}ms</span>
+          ) : null}
         </div>
 
         {expanded ? (

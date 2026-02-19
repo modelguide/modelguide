@@ -169,7 +169,10 @@ export async function getSessionById(orgId: string, sessionId: string) {
         .select()
         .from(sessionMessages)
         .where(eq(sessionMessages.sessionId, sessionId))
-        .orderBy(asc(sessionMessages.occurredAt)),
+        .orderBy(
+          asc(sessionMessages.occurredAt),
+          asc(sessionMessages.createdAt),
+        ),
       tx
         .select()
         .from(sessionFeedback)
@@ -289,6 +292,7 @@ export interface MessageData {
     toolName: string;
     toolInput?: Record<string, unknown>;
     toolOutput?: Record<string, unknown>;
+    latencyMs?: number;
   }>;
 }
 
@@ -322,13 +326,24 @@ export async function addMessages(
     const rows: (typeof sessionMessages.$inferInsert)[] = [];
 
     for (const msg of messages) {
-      rows.push({
-        sessionId,
-        role: msg.role as (typeof sessionMessages.role.enumValues)[number],
-        content: msg.content ?? null,
-        audioUrl: msg.audioUrl ?? null,
-        occurredAt: msg.occurredAt ?? null,
-      });
+      // Skip the assistant wrapper row when it has no content — the tool rows
+      // below carry all the information and the empty row just shows as a blank
+      // message in the transcript.
+      const isEmptyAssistant =
+        msg.role === "assistant" &&
+        !msg.content &&
+        !msg.audioUrl &&
+        !!msg.toolCalls?.length;
+
+      if (!isEmptyAssistant) {
+        rows.push({
+          sessionId,
+          role: msg.role as (typeof sessionMessages.role.enumValues)[number],
+          content: msg.content ?? null,
+          audioUrl: msg.audioUrl ?? null,
+          occurredAt: msg.occurredAt ?? null,
+        });
+      }
 
       if (msg.role === "assistant" && msg.toolCalls?.length) {
         for (const tc of msg.toolCalls) {
@@ -340,6 +355,7 @@ export async function addMessages(
             toolName: tc.toolName,
             toolInput: tc.toolInput ?? null,
             toolOutput: tc.toolOutput ?? null,
+            latencyMs: tc.latencyMs ?? null,
             occurredAt: msg.occurredAt ?? null,
           });
         }

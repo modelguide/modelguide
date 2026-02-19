@@ -161,6 +161,7 @@ const createMessageSchema = z.object({
         toolName: z.string(),
         toolInput: z.record(z.unknown()).optional(),
         toolOutput: z.record(z.unknown()).optional(),
+        latencyMs: z.number().int().positive().optional(),
       }),
     )
     .optional()

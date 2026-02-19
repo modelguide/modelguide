@@ -1,0 +1,25 @@
+{
+  "name": "mastra-wismo-email-agent",
+  "version": "1.0.0",
+  "description": "WISMO email agent built with Mastra.ai + ModelGuide MCP",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
+    "hono": "^4",
+    "resend": "^3",
+    "pino": "^9",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.9",
+    "@types/node": "^20",
+    "mastra": "latest",
+    "typescript": "^5"
+  }
+}

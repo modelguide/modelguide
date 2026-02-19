@@ -17,6 +17,30 @@ interface ToolOutputWithUrl {
 }
 
 /**
+ * Unwrap MCP tool output envelope.
+ * MCP servers return { content: [{ type: "text", text: "<json string>" }] }.
+ * If the output has that shape, parse the inner JSON and use it instead.
+ */
+function unwrapMcpOutput(output: ToolOutputWithUrl): ToolOutputWithUrl {
+  const content = output.content;
+  if (!Array.isArray(content) || content.length === 0) return output;
+  const first = content[0] as { type?: string; text?: string };
+  if (first.type !== "text" || typeof first.text !== "string") return output;
+  try {
+    const parsed = JSON.parse(first.text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as ToolOutputWithUrl;
+    }
+  } catch {
+    console.warn(
+      "[link-extraction] MCP envelope text is not valid JSON — skipping unwrap:",
+      first.text?.slice(0, 120),
+    );
+  }
+  return output;
+}
+
+/**
  * Extract external links from a list of tool call outputs.
  */
 export function extractLinks(
@@ -28,7 +52,8 @@ export function extractLinks(
   for (const tc of toolCalls) {
     if (!tc.toolOutput) continue;
 
-    const url = tc.toolOutput.url;
+    const output = unwrapMcpOutput(tc.toolOutput);
+    const url = output.url;
     if (!url || typeof url !== "string" || seen.has(url)) continue;
     seen.add(url);
 
@@ -36,7 +61,7 @@ export function extractLinks(
     const connectorSlug = parts[0] || null;
     const resourceType = deriveResourceType(parts.slice(1));
     const title = deriveTitle(
-      tc.toolOutput.data as Record<string, unknown> | undefined,
+      output.data as Record<string, unknown> | undefined,
       resourceType,
     );
 
