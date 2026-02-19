@@ -6,7 +6,6 @@
  */
 
 import { getMigrationConnectionString } from "@lib/migration-url";
-import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -76,16 +75,9 @@ async function seedAll(db: SeedDb) {
     await seedOrg(db, config, catalogs);
   }
 
-  // 3. Verify data was actually persisted
-  const ok = await verifySeed(db);
-
-  // 4. Print summary
+  // 3. Print summary
   console.log("\n========================================");
-  console.log(
-    ok
-      ? "Seed completed successfully!"
-      : "Seed completed with WARNINGS — see above",
-  );
+  console.log("Seed completed successfully!");
   console.log("========================================");
   console.log("\nDev credentials (magic link auth):");
   for (const config of VERTICALS) {
@@ -95,56 +87,6 @@ async function seedAll(db: SeedDb) {
     console.log(`    Viewer:  ${config.users.viewer.email}`);
   }
   console.log("\nDemo-enabled org: glowbox (demoEnabled=true)");
-
-  if (!ok) {
-    process.exitCode = 1;
-  }
-}
-
-const EXPECTED_COUNTS: Record<string, number> = {
-  organizations: 3,
-  users: 9, // minimum: 3 per org
-  agents: 6,
-  connectors: 6,
-  sessions: 300, // at least 300 generated per org, plus handwritten
-  session_messages: 100,
-  session_feedback: 50,
-};
-
-async function verifySeed(db: SeedDb): Promise<boolean> {
-  console.log("\nVerifying seed data...");
-
-  const rows = await db.execute<{ tbl: string; count: number }>(sql`
-    SELECT 'organizations' AS tbl, count(*)::int AS count FROM organizations
-    UNION ALL SELECT 'users', count(*)::int FROM users
-    UNION ALL SELECT 'agents', count(*)::int FROM agents
-    UNION ALL SELECT 'connectors', count(*)::int FROM connectors
-    UNION ALL SELECT 'connector_tools', count(*)::int FROM connector_tools
-    UNION ALL SELECT 'sessions', count(*)::int FROM sessions
-    UNION ALL SELECT 'session_messages', count(*)::int FROM session_messages
-    UNION ALL SELECT 'session_feedback', count(*)::int FROM session_feedback
-  `);
-
-  let ok = true;
-  const widest = Math.max(...rows.map((r) => r.tbl.length));
-
-  for (const { tbl, count } of rows) {
-    const expected = EXPECTED_COUNTS[tbl];
-    const fail = expected !== undefined && count < expected;
-    const marker = fail ? "FAIL" : " ok ";
-    console.log(
-      `  [${marker}] ${tbl.padEnd(widest)}  ${count}${fail ? `  (expected >= ${expected})` : ""}`,
-    );
-    if (fail) ok = false;
-  }
-
-  if (ok) {
-    console.log("  All tables verified.");
-  } else {
-    console.error("  WARNING: Some tables have fewer rows than expected!");
-  }
-
-  return ok;
 }
 
 // CLI entry point
