@@ -109,6 +109,28 @@ export const setDeliveryAddress = withMedusa(async (fetcher, ctx) => {
 
 export const completeCart = withMedusa(async (fetcher, ctx) => {
   const { cartId } = ctx.input as { cartId: string };
+
+  // Step 1: Fetch cart to get payment_collection id
+  const cartData = await fetcher<{
+    cart: { payment_collection?: { id: string } };
+  }>(`/store/carts/${cartId}`);
+
+  const paymentCollectionId = cartData.cart?.payment_collection?.id;
+  if (!paymentCollectionId) {
+    return {
+      success: false,
+      error:
+        "Cart has no payment collection. Add items and a shipping address first.",
+    };
+  }
+
+  // Step 2: Initialize payment session with Medusa's built-in system provider
+  await fetcher<Record<string, unknown>>(
+    `/store/payment-collections/${paymentCollectionId}/payment-sessions`,
+    { method: "POST", body: { provider_id: "pp_system_default" } },
+  );
+
+  // Step 3: Complete the cart
   const data = await fetcher<Record<string, unknown>>(
     `/store/carts/${cartId}/complete`,
     { method: "POST" },
