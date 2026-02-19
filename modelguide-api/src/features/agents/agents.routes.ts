@@ -42,7 +42,7 @@ const agentResponseSchema = z.object({
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
-  agentType: z.enum(["voice"]),
+  modality: z.enum(["voice", "text"]),
   agentPlatform: z.enum(["custom", "elevenlabs"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
@@ -93,7 +93,7 @@ const createAgentSchema = z.object({
     .optional()
     .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
-  agentType: z.enum(["voice"]).default("voice").optional(),
+  modality: z.enum(["voice", "text"]).default("voice").optional(),
   agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -142,10 +142,10 @@ const listAgentsQuerySchema = paginationSchema.extend({
     .boolean()
     .optional()
     .openapi({ description: "Filter by active status" }),
-  agentType: z
-    .enum(["voice"])
+  modality: z
+    .enum(["voice", "text"])
     .optional()
-    .openapi({ description: "Filter by agent type" }),
+    .openapi({ description: "Filter by modality" }),
   agentPlatform: z
     .enum(["custom", "elevenlabs"])
     .optional()
@@ -193,7 +193,7 @@ function formatAgent(
     name: agent.name,
     slug: agent.slug,
     description: agent.description,
-    agentType: agent.agentType,
+    modality: agent.modality,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
     metadata,
@@ -255,12 +255,12 @@ const listAgentsRoute = createRoute({
 
 router.openapi(listAgentsRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const { page, pageSize, isActive, agentType, agentPlatform } =
+  const { page, pageSize, isActive, modality, agentPlatform } =
     c.req.valid("query");
   const result = await listAgents(
     orgId,
     { page, pageSize },
-    { isActive, agentType, agentPlatform },
+    { isActive, modality, agentPlatform },
   );
 
   return c.json(

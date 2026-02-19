@@ -18,11 +18,11 @@ import {
 
 import {
   agentPlatformEnum,
-  agentTypeEnum,
   channelTypeEnum,
   connectorTypeEnum,
   feedbackSourceEnum,
   messageRoleEnum,
+  modalityEnum,
   ownerTypeEnum,
   secretTypeEnum,
   sessionStatusEnum,
@@ -361,7 +361,7 @@ export const agents = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
-    agentType: agentTypeEnum("agent_type").notNull().default("voice"),
+    modality: modalityEnum("modality").notNull().default("voice"),
     agentPlatform: agentPlatformEnum("agent_platform")
       .notNull()
       .default("custom"),

@@ -364,8 +364,8 @@ function AgentDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-fg-muted">Type</dt>
-                  <dd className="mt-1 text-sm text-fg-primary capitalize">{agent.agentType}</dd>
+                  <dt className="text-xs font-medium text-fg-muted">Modality</dt>
+                  <dd className="mt-1 text-sm text-fg-primary capitalize">{agent.modality}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium text-fg-muted">ID</dt>

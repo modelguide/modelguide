@@ -63,7 +63,7 @@ describe("GET /api/agents", () => {
     const agent = body.data[0];
     expect(agent.id).toBeDefined();
     expect(agent.name).toBeDefined();
-    expect(agent.agentType).toBeDefined();
+    expect(agent.modality).toBeDefined();
     expect(agent.isActive).toBeDefined();
     expect(agent.createdAt).toBeDefined();
   });
@@ -81,8 +81,8 @@ describe("GET /api/agents", () => {
     }
   });
 
-  test("filters by agentType=voice (200)", async () => {
-    const response = await request("/api/agents?agentType=voice", {
+  test("filters by modality=voice (200)", async () => {
+    const response = await request("/api/agents?modality=voice", {
       headers: orgAAdminHeaders,
     });
 
@@ -90,7 +90,7 @@ describe("GET /api/agents", () => {
     const body = await response.json();
 
     for (const agent of body.data) {
-      expect(agent.agentType).toBe("voice");
+      expect(agent.modality).toBe("voice");
     }
   });
 
@@ -121,7 +121,7 @@ describe("POST /api/agents", () => {
       body: JSON.stringify({
         name: "Test Agent Create",
         description: "Test agent for creation",
-        agentType: "voice",
+        modality: "voice",
       }),
     });
 
@@ -131,7 +131,7 @@ describe("POST /api/agents", () => {
     expect(body.id).toBeDefined();
     expect(body.name).toBe("Test Agent Create");
     expect(body.description).toBe("Test agent for creation");
-    expect(body.agentType).toBe("voice");
+    expect(body.modality).toBe("voice");
     expect(body.apiKey).toBeDefined();
     expect(body.createdAt).toBeDefined();
 
@@ -208,7 +208,7 @@ describe("GET /api/agents/:id", () => {
 
     expect(body.id).toBe(s.orgAAgentId);
     expect(body.name).toBeDefined();
-    expect(body.agentType).toBeDefined();
+    expect(body.modality).toBeDefined();
     expect(body.systemPrompt).toBeUndefined();
   });
 
