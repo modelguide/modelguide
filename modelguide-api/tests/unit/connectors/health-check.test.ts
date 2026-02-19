@@ -106,6 +106,26 @@ describe("Medusa healthCheck", () => {
     expect(result.message).toBeTruthy();
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
+
+  test("returns error for private IP baseUrl (SSRF protection)", async () => {
+    const result = await healthCheck({
+      baseUrl: "http://169.254.169.254",
+      publishableKey: "pk_test_abc",
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("private or internal");
+  });
+
+  test("returns error for localhost baseUrl (SSRF protection)", async () => {
+    const result = await healthCheck({
+      baseUrl: "http://localhost:8080",
+      publishableKey: "pk_test_abc",
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("private or internal");
+  });
 });
 
 // ============================================================================
