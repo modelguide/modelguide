@@ -31,6 +31,7 @@ export const catalogEntrySchema = z.object({
   authMethods: z.array(z.string()).nullable(),
   iconUrl: z.string().nullable(),
   isActive: z.boolean(),
+  hasHealthCheck: z.boolean(),
   createdAt: z.string(),
 })
 

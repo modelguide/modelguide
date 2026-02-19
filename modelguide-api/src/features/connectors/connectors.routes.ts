@@ -13,6 +13,7 @@ import {
 } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
+import { getConnectorManifest } from "./catalog/registry";
 import {
   createConnector,
   deleteConnector,
@@ -51,6 +52,7 @@ const catalogResponseSchema = z.object({
   authMethods: z.array(z.string()).nullable(),
   iconUrl: z.string().nullable(),
   isActive: z.boolean(),
+  hasHealthCheck: z.boolean(),
   createdAt: z.string(),
 });
 
@@ -153,6 +155,7 @@ const toolIdParams = z.object({
 // ============================================================================
 
 function formatCatalog(entry: ConnectorCatalog) {
+  const manifest = getConnectorManifest(entry.slug);
   return {
     id: entry.id,
     name: entry.name,
@@ -164,6 +167,7 @@ function formatCatalog(entry: ConnectorCatalog) {
     authMethods: entry.authMethods,
     iconUrl: entry.iconUrl,
     isActive: entry.isActive,
+    hasHealthCheck: !!manifest?.healthCheck,
     createdAt: entry.createdAt.toISOString(),
   };
 }

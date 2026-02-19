@@ -118,7 +118,7 @@ function ConnectorDetailPage() {
       ) : connector && catalogEntry ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <DetailsCard connector={connector} catalogEntry={catalogEntry} isAdmin={isAdmin} />
-          <ConnectionStatusCard connectorId={id} />
+          {catalogEntry.hasHealthCheck ? <ConnectionStatusCard connectorId={id} /> : null}
           <ConfigurationCard
             key={connector.updatedAt}
             connector={connector}

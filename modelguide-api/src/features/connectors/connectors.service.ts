@@ -253,7 +253,7 @@ export async function updateConnectorTool(
  */
 export async function resolveConnectorConfig(
   orgId: string,
-  connector: { config: unknown },
+  connector: { id: string; config: unknown },
   catalogConfigSchema: unknown,
 ): Promise<{ resolved: Record<string, string>; missingFields: string[] }> {
   const configSchema = (catalogConfigSchema ?? {}) as Record<
@@ -263,7 +263,15 @@ export async function resolveConnectorConfig(
   const rawConfig = (connector.config ?? {}) as Record<string, unknown>;
 
   const connectorSecrets = await forOrg(orgId, (tx) =>
-    tx.select().from(secrets).where(eq(secrets.ownerType, "connector")),
+    tx
+      .select()
+      .from(secrets)
+      .where(
+        and(
+          eq(secrets.ownerType, "connector"),
+          eq(secrets.ownerId, connector.id),
+        ),
+      ),
   );
   const secretById = new Map(connectorSecrets.map((s) => [s.id, s]));
 
