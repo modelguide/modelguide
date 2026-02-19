@@ -1,10 +1,122 @@
 import { Agent } from "@mastra/core/agent";
+import { RequestContext } from "@mastra/core/request-context";
+import { MCPClient } from "@mastra/mcp";
 import { z } from "zod";
+import { config } from "../../config.js";
+import { logger } from "../../lib/logger.js";
+import { type Step, logAgentTurns, postStepMessages } from "../../lib/modelguide.js";
 
 export const wismoRequestContextSchema = z.object({
   sessionId: z.string(),
   senderEmail: z.string().email(),
 });
+
+// Structured output schema — agent's final JSON-only message
+export const agentOutputSchema = z.object({
+  ticketId: z.number().int().optional(),
+  replyBody: z.string(),
+  escalated: z.boolean().default(false),
+});
+
+export type AgentOutput = z.infer<typeof agentOutputSchema>;
+
+/** Extract the last complete {...} block from agent text output */
+function tryParseJson(text: string): unknown {
+  let lastMatch: string | null = null;
+  const re = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    lastMatch = m[0];
+  }
+  if (!lastMatch) return null;
+  try {
+    return JSON.parse(lastMatch);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run the WISMO agent for a single email.
+ * Manages the MCP client lifecycle, step collection, and output parsing.
+ */
+export async function runWismoAgent(params: {
+  sessionId: string;
+  senderEmail: string;
+  emailBody: string;
+}): Promise<{ output: AgentOutput; steps: Step[] }> {
+  const { sessionId, senderEmail, emailBody } = params;
+
+  const mcpClient = new MCPClient({
+    servers: {
+      modelguide: {
+        url: new URL(config.MCP_SERVER_URL),
+        requestInit: {
+          headers: { Authorization: `Bearer ${config.MCP_API_KEY}` },
+        },
+        timeout: 30_000,
+        connectTimeout: 15_000,
+      },
+    },
+  });
+
+  try {
+    const toolsets = await mcpClient.listToolsets();
+    logger.debug({ tools: Object.keys(toolsets) }, "MCP toolsets loaded");
+
+    const requestContext = new RequestContext<z.infer<typeof wismoRequestContextSchema>>();
+    requestContext.set("sessionId", sessionId);
+    requestContext.set("senderEmail", senderEmail);
+
+    let stepStartMs = Date.now();
+    const stepLatenciesMs: number[] = [];
+    const stepPostPromises: Promise<void>[] = [];
+
+    const result = await wismoAgent.generate(emailBody, {
+      toolsets,
+      requestContext,
+      maxSteps: 5,
+      onStepFinish: (step) => {
+        const now = Date.now();
+        const latencyMs = now - stepStartMs;
+        stepLatenciesMs.push(latencyMs);
+        stepStartMs = now;
+        const stepIndex = stepLatenciesMs.length - 1;
+        logger.debug({ stepIndex, latencyMs }, "Step finished");
+
+        stepPostPromises.push(
+          postStepMessages(sessionId, step as Step, latencyMs).catch((err) =>
+            logger.error({ err, stepIndex, sessionId }, "Failed to post step messages"),
+          ),
+        );
+      },
+    });
+
+    await Promise.all(stepPostPromises);
+
+    const steps = result.steps as Step[];
+    logger.debug({ stepsCount: steps.length, stepLatenciesMs }, "Agent steps collected");
+
+    const lastStepText = [...steps].reverse().find((s) => s.text)?.text ?? "";
+    const parsed = agentOutputSchema.safeParse(tryParseJson(lastStepText));
+
+    let output: AgentOutput;
+    if (parsed.success) {
+      output = parsed.data;
+    } else {
+      logger.warn(
+        { lastStepText, parseError: parsed.error.flatten() },
+        "Agent output JSON parse failed — using fallback reply",
+      );
+      output = { replyBody: "We received your message and will follow up shortly.", escalated: false };
+    }
+
+    logAgentTurns(steps, stepLatenciesMs);
+    return { output, steps };
+  } finally {
+    await mcpClient.disconnect();
+  }
+}
 
 export const wismoAgent = new Agent({
   id: "wismo-agent",

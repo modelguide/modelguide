@@ -162,6 +162,35 @@ const authHeaders = {
 };
 
 /**
+ * Pre-create a ModelGuide session before running the agent.
+ * MCP tools call validateActiveSession() on every invocation, so a real DB session
+ * must exist before any MCP tool call can succeed.
+ */
+export async function createSession(params: {
+  senderEmail: string;
+  externalId: string;
+}): Promise<string> {
+  const res = await fetch(`${apiBaseUrl}/api/sessions`, {
+    method: "POST",
+    headers: authHeaders,
+    body: JSON.stringify({
+      channelType: "email",
+      userIdentifier: params.senderEmail,
+      externalId: params.externalId,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to create session: ${res.status} ${text}`);
+  }
+
+  const data = (await res.json()) as { id: string };
+  logger.info({ sessionId: data.id, senderEmail: params.senderEmail }, "Session created");
+  return data.id;
+}
+
+/**
  * POST a single message to an existing session.
  * Errors are logged but never thrown.
  */
