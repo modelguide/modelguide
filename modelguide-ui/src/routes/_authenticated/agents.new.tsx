@@ -23,7 +23,7 @@ function NewAgentPage() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [agentType, setAgentType] = useState<'voice'>('voice')
+  const [modality, setModality] = useState<'voice' | 'text'>('voice')
   const [agentPlatform, setAgentPlatform] = useState<AgentPlatform>('custom')
   const [elevenlabsAgentId, setElevenlabsAgentId] = useState('')
   const [newAgent, setNewAgent] = useState<AgentWithKey | null>(null)
@@ -40,7 +40,7 @@ function NewAgentPage() {
     createMutation.mutate({
       name,
       description: description || undefined,
-      agentType,
+      modality,
       agentPlatform,
       metadata:
         agentPlatform === 'elevenlabs' && elevenlabsAgentId
@@ -92,11 +92,12 @@ function NewAgentPage() {
             </label>
 
             <Select
-              label="Agent Type"
-              value={agentType}
-              onChange={(e) => setAgentType(e.target.value as 'voice')}
+              label="Modality"
+              value={modality}
+              onChange={(e) => setModality(e.target.value as 'voice' | 'text')}
             >
               <option value="voice">Voice</option>
+              <option value="text">Text</option>
             </Select>
 
             <Select

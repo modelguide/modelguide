@@ -36,9 +36,9 @@ export const secretTypeEnum = pgEnum("secret_type", [
 export const ownerTypeEnum = pgEnum("owner_type", ["connector", "agent"]);
 
 /**
- * Agent types (voice only for V1)
+ * Agent modalities
  */
-export const agentTypeEnum = pgEnum("agent_type", ["voice"]);
+export const modalityEnum = pgEnum("modality", ["voice", "text"]);
 
 /**
  * Agent platform — where the agent runs

@@ -244,7 +244,7 @@ describe("Agents RLS", () => {
         return tx.insert(agents).values({
           organizationId: s.orgB.id,
           name: "Forbidden Agent",
-          agentType: "voice",
+          modality: "voice",
         });
       }),
     ).rejects.toThrow();

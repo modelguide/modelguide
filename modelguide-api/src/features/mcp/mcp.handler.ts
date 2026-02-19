@@ -73,7 +73,7 @@ function registerResources(
     id: string;
     name: string;
     organizationId: string;
-    agentType: string;
+    modality: string;
   },
   tools: ResolvedTool[],
   coreToolCount: number,
@@ -87,7 +87,7 @@ function registerResources(
           agent_id: agent.id,
           agent_name: agent.name,
           organization_id: agent.organizationId,
-          agent_type: agent.agentType,
+          modality: agent.modality,
           tool_count: tools.length + coreToolCount,
         }),
       },

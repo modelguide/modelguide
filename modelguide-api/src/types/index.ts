@@ -17,9 +17,9 @@ export interface AuthUser {
 }
 
 /**
- * Agent types for AI agents
+ * Agent modalities
  */
-export type AgentType = "voice";
+export type Modality = "voice" | "text";
 
 /**
  * Authenticated agent information
@@ -28,7 +28,7 @@ export interface AuthAgent {
   id: string;
   name: string;
   organizationId: string;
-  agentType: AgentType;
+  modality: Modality;
   isActive: boolean;
   metadata: Record<string, unknown>;
 }

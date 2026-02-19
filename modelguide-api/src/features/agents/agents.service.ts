@@ -23,7 +23,7 @@ import {
 } from "@lib/pagination";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 
-type AgentType = (typeof agents.agentType.enumValues)[number];
+type Modality = (typeof agents.modality.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
 
 /** Convert a name to a URL-safe slug */
@@ -61,7 +61,7 @@ export async function listAgents(
   pagination: PaginationParams,
   filters?: {
     isActive?: boolean;
-    agentType?: AgentType;
+    modality?: Modality;
     agentPlatform?: AgentPlatform;
   },
 ) {
@@ -73,8 +73,8 @@ export async function listAgents(
     if (filters?.isActive !== undefined) {
       conditions.push(eq(agents.isActive, filters.isActive));
     }
-    if (filters?.agentType) {
-      conditions.push(eq(agents.agentType, filters.agentType));
+    if (filters?.modality) {
+      conditions.push(eq(agents.modality, filters.modality));
     }
     if (filters?.agentPlatform) {
       conditions.push(eq(agents.agentPlatform, filters.agentPlatform));
@@ -157,7 +157,7 @@ export async function createAgent(
     name: string;
     slug?: string;
     description?: string;
-    agentType?: AgentType;
+    modality?: Modality;
     agentPlatform?: AgentPlatform;
     metadata?: Record<string, unknown>;
   },
@@ -173,7 +173,7 @@ export async function createAgent(
         name: data.name,
         slug,
         description: data.description,
-        agentType: data.agentType ?? "voice",
+        modality: data.modality ?? "voice",
         agentPlatform: data.agentPlatform ?? "custom",
         metadata: data.metadata ?? {},
         isActive: false,

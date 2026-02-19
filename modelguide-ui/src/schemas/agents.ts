@@ -10,7 +10,7 @@ export const agentSchema = z.object({
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
-  agentType: z.enum(['voice']),
+  modality: z.enum(['voice', 'text']),
   agentPlatform: z.enum(agentPlatforms),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
@@ -33,7 +33,7 @@ export type Agent = z.infer<typeof agentSchema>
 export const agentCreateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
-  agentType: z.enum(['voice']),
+  modality: z.enum(['voice', 'text']),
   agentPlatform: z.enum(agentPlatforms).optional(),
   metadata: z.record(z.unknown()).optional(),
 })
