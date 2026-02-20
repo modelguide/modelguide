@@ -1,10 +1,12 @@
+import { convert } from "html-to-text";
+import { Webhook } from "svix";
 import { Hono } from "hono";
 import { z } from "zod";
 import { extractEmailAddress, sendEmail, stripQuotedReply } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
 import { createSession, patchSessionStatus, postUserMessage } from "../lib/modelguide.js";
 import { runWismoAgent } from "../mastra/agents/wismo.js";
-import { config } from "../config.js";
+import { config, isDev } from "../config.js";
 
 // Resend email.received webhook — body is NOT included, must be fetched separately
 const resendWebhookPayloadSchema = z.object({
@@ -24,9 +26,29 @@ const resendWebhookPayloadSchema = z.object({
 export const webhookRouter = new Hono();
 
 webhookRouter.post("/", async (c) => {
+  let rawBody: string;
+  try {
+    rawBody = await c.req.text();
+  } catch {
+    return c.json({ error: "Failed to read request body" }, 400);
+  }
+
+  if (!isDev) {
+    const wh = new Webhook(config.RESEND_WEBHOOK_SECRET!);
+    try {
+      wh.verify(rawBody, {
+        "svix-id": c.req.header("svix-id") ?? "",
+        "svix-timestamp": c.req.header("svix-timestamp") ?? "",
+        "svix-signature": c.req.header("svix-signature") ?? "",
+      });
+    } catch {
+      return c.json({ error: "Invalid signature" }, 401);
+    }
+  }
+
   let body: unknown;
   try {
-    body = await c.req.json();
+    body = JSON.parse(rawBody);
   } catch {
     return c.json({ error: "Invalid JSON" }, 400);
   }
@@ -104,7 +126,7 @@ webhookRouter.post("/", async (c) => {
     "Fetched email content",
   );
 
-  const rawText = fullEmail.text ?? (fullEmail.html ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const rawText = fullEmail.text ?? convert(fullEmail.html ?? "", { wordwrap: false });
   logger.debug({ rawText }, "Raw email text before stripping");
   const emailBody = stripQuotedReply(rawText);
   logger.debug({ emailBody }, "Email body after stripping quoted reply");

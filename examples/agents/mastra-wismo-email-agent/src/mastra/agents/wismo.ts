@@ -22,16 +22,27 @@ export type AgentOutput = z.infer<typeof agentOutputSchema>;
 
 /** Extract the last complete {...} block from agent text output */
 function tryParseJson(text: string): unknown {
-  let lastMatch: string | null = null;
-  const re = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    lastMatch = m[0];
-  }
-  if (!lastMatch) return null;
   try {
-    return JSON.parse(lastMatch);
+    const parsed = JSON.parse(text.trim());
+    logger.debug({ textLength: text.length }, "tryParseJson: direct parse succeeded");
+    return parsed;
   } catch {
+    logger.debug({ textLength: text.length }, "tryParseJson: direct parse failed, falling back to regex extraction");
+  }
+  const re = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+  let lastMatch: string | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) { lastMatch = m[0]; }
+  if (!lastMatch) {
+    logger.warn({ text }, "tryParseJson: no JSON block found in agent output");
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(lastMatch);
+    logger.debug({ matchLength: lastMatch.length }, "tryParseJson: regex extraction succeeded");
+    return parsed;
+  } catch {
+    logger.warn({ lastMatch }, "tryParseJson: regex-extracted block is not valid JSON");
     return null;
   }
 }

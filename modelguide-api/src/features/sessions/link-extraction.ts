@@ -32,10 +32,7 @@ function unwrapMcpOutput(output: ToolOutputWithUrl): ToolOutputWithUrl {
       return parsed as ToolOutputWithUrl;
     }
   } catch {
-    console.warn(
-      "[link-extraction] MCP envelope text is not valid JSON — skipping unwrap:",
-      first.text?.slice(0, 120),
-    );
+    // Not valid JSON — return the original output as-is
   }
   return output;
 }
