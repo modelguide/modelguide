@@ -93,6 +93,12 @@ function toRecord(value: unknown): Record<string, unknown> {
  * Stored as the first message in the session.
  */
 export function buildEmailUserMessage(email: EmailContext): MessageData {
+  // Normalize receivedAt to ISO 8601 — Resend's created_at may not be in that format.
+  let occurredAt: string | undefined;
+  if (email.receivedAt) {
+    const d = new Date(email.receivedAt);
+    occurredAt = isNaN(d.getTime()) ? undefined : d.toISOString();
+  }
   return {
     role: "user",
     content: [
@@ -102,7 +108,7 @@ export function buildEmailUserMessage(email: EmailContext): MessageData {
       ``,
       email.body,
     ].join("\n"),
-    occurredAt: email.receivedAt,
+    occurredAt,
   };
 }
 
