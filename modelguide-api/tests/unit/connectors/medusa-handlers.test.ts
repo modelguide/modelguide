@@ -240,18 +240,28 @@ describe("Medusa handlers", () => {
   });
 
   // ----------------------------------------------------------------
-  // Complete Cart (3-step: fetch cart → payment session → complete)
+  // Complete Cart (4-step: fetch cart → list providers → payment session → complete)
   // ----------------------------------------------------------------
   describe("completeCart", () => {
-    test("happy path: fetches cart, creates payment session, completes", async () => {
+    test("happy path: fetches cart, resolves provider, creates session, completes", async () => {
       mockFetchSequence([
         {
           status: 200,
           body: {
             cart: {
               id: "cart_abc",
+              region_id: "reg_us",
               payment_collection: { id: "paycol_1" },
             },
+          },
+        },
+        {
+          status: 200,
+          body: {
+            payment_providers: [
+              { id: "pp_stripe" },
+              { id: "pp_system_default" },
+            ],
           },
         },
         {
@@ -266,24 +276,30 @@ describe("Medusa handlers", () => {
 
       const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
       expect(result.success).toBe(true);
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
 
       // Call 1: GET cart
       const [cartUrl, cartOpts] = fetchMock.mock.calls[0];
       expect(cartUrl).toBe("https://api.test-store.com/store/carts/cart_abc");
       expect(cartOpts.method).toBe("GET");
 
-      // Call 2: POST payment session with system default provider
-      const [sessionUrl, sessionOpts] = fetchMock.mock.calls[1];
+      // Call 2: GET payment providers for region
+      const [providersUrl, providersOpts] = fetchMock.mock.calls[1];
+      expect(providersUrl).toContain("/store/payment-providers");
+      expect(providersUrl).toContain("region_id=reg_us");
+      expect(providersOpts.method).toBe("GET");
+
+      // Call 3: POST payment session with first available provider
+      const [sessionUrl, sessionOpts] = fetchMock.mock.calls[2];
       expect(sessionUrl).toBe(
         "https://api.test-store.com/store/payment-collections/paycol_1/payment-sessions",
       );
       expect(sessionOpts.method).toBe("POST");
       const sessionBody = JSON.parse(sessionOpts.body);
-      expect(sessionBody.provider_id).toBe("pp_system_default");
+      expect(sessionBody.provider_id).toBe("pp_stripe");
 
-      // Call 3: POST complete
-      const [completeUrl, completeOpts] = fetchMock.mock.calls[2];
+      // Call 4: POST complete
+      const [completeUrl, completeOpts] = fetchMock.mock.calls[3];
       expect(completeUrl).toBe(
         "https://api.test-store.com/store/carts/cart_abc/complete",
       );
@@ -294,7 +310,7 @@ describe("Medusa handlers", () => {
       mockFetchSequence([
         {
           status: 200,
-          body: { cart: { id: "cart_abc" } },
+          body: { cart: { id: "cart_abc", region_id: "reg_us" } },
         },
       ]);
 
@@ -304,6 +320,30 @@ describe("Medusa handlers", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    test("returns error when no payment providers available", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              region_id: "reg_us",
+              payment_collection: { id: "paycol_1" },
+            },
+          },
+        },
+        {
+          status: 200,
+          body: { payment_providers: [] },
+        },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("No payment providers");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
     test("returns error when payment session creation fails", async () => {
       mockFetchSequence([
         {
@@ -311,9 +351,14 @@ describe("Medusa handlers", () => {
           body: {
             cart: {
               id: "cart_abc",
+              region_id: "reg_us",
               payment_collection: { id: "paycol_1" },
             },
           },
+        },
+        {
+          status: 200,
+          body: { payment_providers: [{ id: "pp_stripe" }] },
         },
         {
           status: 400,
@@ -324,7 +369,7 @@ describe("Medusa handlers", () => {
       const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
       expect(result.success).toBe(false);
       expect(result.error).toContain("400");
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
   });
 
