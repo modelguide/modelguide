@@ -132,7 +132,8 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
   if (!regionId) {
     return {
       success: false,
-      error: "Cart has no region. Cannot determine available payment providers.",
+      error:
+        "Cart has no region. Cannot determine available payment providers.",
     };
   }
 
