@@ -9,17 +9,20 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@mastra/core": "latest",
-    "@mastra/mcp": "latest",
+    "@mastra/core": "^1.4.0",
+    "@mastra/mcp": "^1.0.1",
     "hono": "^4",
-    "resend": "^3",
+    "html-to-text": "^9.0.5",
     "pino": "^9",
+    "resend": "^3",
+    "svix": "^1",
     "zod": "^3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.9",
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "^20",
-    "mastra": "latest",
+    "mastra": "^1.3.1",
     "typescript": "^5"
   }
 }

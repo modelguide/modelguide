@@ -326,6 +326,10 @@ export async function addMessages(
     const rows: (typeof sessionMessages.$inferInsert)[] = [];
 
     for (const msg of messages) {
+      // Safe: each postStepMessages() call uses a distinct occurredAt.
+      // If batching tool-only messages with identical timestamps,
+      // keep the wrapper row or add an explicit sequence column.
+      //
       // Skip the assistant wrapper row when it has no content — the tool rows
       // below carry all the information and the empty row just shows as a blank
       // message in the transcript.
