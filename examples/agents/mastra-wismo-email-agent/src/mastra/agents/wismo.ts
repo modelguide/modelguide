@@ -4,7 +4,7 @@ import { MCPClient } from "@mastra/mcp";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { logger } from "../../lib/logger.js";
-import { type Step, logAgentTurns, postStepMessages } from "../../lib/modelguide.js";
+import { type Step, logAgentTurns, postStepMessages } from "../../lib/modelguide.client.js";
 
 export const wismoRequestContextSchema = z.object({
   sessionId: z.string(),
