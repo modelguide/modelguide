@@ -107,6 +107,12 @@ export const setDeliveryAddress = withMedusa(async (fetcher, ctx) => {
   return { success: true, data };
 });
 
+// Auto-initiates a payment session before completing the cart.
+// Medusa v2 requires a payment session on the cart's payment collection, but
+// in agent-driven flows there is no checkout UI for the customer to pick a
+// payment method. We resolve the first available provider for the cart's region
+// and create the session automatically. See ADR-003 for rationale and future
+// extension options (explicit provider selection, payment links).
 export const completeCart = withMedusa(async (fetcher, ctx) => {
   const { cartId } = ctx.input as { cartId: string };
 
