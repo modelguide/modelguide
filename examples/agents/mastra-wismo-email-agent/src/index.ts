@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { config } from "./config.js";
 import { logger } from "./lib/logger.js";
-import { webhookRouter } from "./routes/webhook.js";
+import { webhookRouter } from "./routes/resend.webhooks.js";
 
 const app = new Hono();
 

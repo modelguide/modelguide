@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { extractEmailAddress, sendEmail, stripQuotedReply } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
-import { createSession, patchSessionStatus, postUserMessage } from "../lib/modelguide.js";
+import { createSession, patchSessionStatus, postUserMessage } from "../lib/modelguide.client.js";
 import { runWismoAgent } from "../mastra/agents/wismo.js";
 import { config, isDev } from "../config.js";
 
@@ -34,6 +34,9 @@ webhookRouter.post("/", async (c) => {
   }
 
   if (!isDev) {
+    // Resend signs webhooks via Svix. Verification must use the raw request body —
+    // parsing JSON and re-stringifying it breaks the signature even if the content
+    // is identical. See: https://docs.svix.com/receiving/verifying-payloads/how
     const wh = new Webhook(config.RESEND_WEBHOOK_SECRET!);
     try {
       wh.verify(rawBody, {
