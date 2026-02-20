@@ -11,7 +11,7 @@ export const wismoRequestContextSchema = z.object({
   senderEmail: z.string().email(),
 });
 
-// Structured output schema — agent's final JSON-only message
+// Structured output schema
 export const agentOutputSchema = z.object({
   ticketId: z.number().int().optional(),
   replyBody: z.string(),
@@ -19,33 +19,6 @@ export const agentOutputSchema = z.object({
 });
 
 export type AgentOutput = z.infer<typeof agentOutputSchema>;
-
-/** Extract the last complete {...} block from agent text output */
-function tryParseJson(text: string): unknown {
-  try {
-    const parsed = JSON.parse(text.trim());
-    logger.debug({ textLength: text.length }, "tryParseJson: direct parse succeeded");
-    return parsed;
-  } catch {
-    logger.debug({ textLength: text.length }, "tryParseJson: direct parse failed, falling back to regex extraction");
-  }
-  const re = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-  let lastMatch: string | null = null;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) { lastMatch = m[0]; }
-  if (!lastMatch) {
-    logger.warn({ text }, "tryParseJson: no JSON block found in agent output");
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(lastMatch);
-    logger.debug({ matchLength: lastMatch.length }, "tryParseJson: regex extraction succeeded");
-    return parsed;
-  } catch {
-    logger.warn({ lastMatch }, "tryParseJson: regex-extracted block is not valid JSON");
-    return null;
-  }
-}
 
 /**
  * Run the WISMO agent for a single email.
@@ -87,6 +60,15 @@ export async function runWismoAgent(params: {
       toolsets,
       requestContext,
       maxSteps: 5,
+      structuredOutput: {
+        schema: agentOutputSchema,
+        // Use a separate model for structuring so the main agent retains full tool access.
+        // Anthropic ignores tools when response_format:json is active ("direct" mode),
+        // so we delegate JSON extraction to a second cheap call ("processor" mode).
+        model: "anthropic/claude-haiku-4-5-20251001",
+        errorStrategy: "fallback",
+        fallbackValue: { replyBody: "We received your message and will follow up shortly.", escalated: false },
+      },
       onStepFinish: (step) => {
         const now = Date.now();
         const latencyMs = now - stepStartMs;
@@ -107,19 +89,8 @@ export async function runWismoAgent(params: {
     const steps = result.steps as Step[];
     logger.debug({ stepsCount: steps.length, stepLatenciesMs }, "Agent steps collected");
 
-    const lastStepText = [...steps].reverse().find((s) => s.text)?.text ?? "";
-    const parsed = agentOutputSchema.safeParse(tryParseJson(lastStepText));
-
-    let output: AgentOutput;
-    if (parsed.success) {
-      output = parsed.data;
-    } else {
-      logger.warn(
-        { lastStepText, parseError: parsed.error.flatten() },
-        "Agent output JSON parse failed — using fallback reply",
-      );
-      output = { replyBody: "We received your message and will follow up shortly.", escalated: false };
-    }
+    const output = result.object as AgentOutput;
+    logger.debug({ output }, "Agent structured output received");
 
     logAgentTurns(steps, stepLatenciesMs);
     return { output, steps };
@@ -131,7 +102,7 @@ export async function runWismoAgent(params: {
 export const wismoAgent = new Agent({
   id: "wismo-agent",
   name: "wismo-agent",
-  model: "anthropic/claude-sonnet-4-6",
+  model: "anthropic/claude-haiku-4-5-20251001",
   requestContextSchema: wismoRequestContextSchema,
 
   // Instructions are a function so session_id and sender email are injected
@@ -189,10 +160,6 @@ Always address the customer's specific question using the data returned by the t
 ## Tool errors
 
 Do not expose technical details. Tell the customer there is a temporary issue and the support team will follow up within 24 hours.
-
-## Output format
-
-Your FINAL message must be ONLY the raw JSON object — nothing before it, nothing after it, no markdown, no code fences, no explanation. Any reasoning must happen in prior steps before the final JSON-only message.
 
 ## Tone
 
