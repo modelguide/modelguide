@@ -320,6 +320,25 @@ describe("Medusa handlers", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    test("returns error when cart has no region", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              payment_collection: { id: "paycol_1" },
+            },
+          },
+        },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("no region");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
     test("returns error when no payment providers available", async () => {
       mockFetchSequence([
         {
