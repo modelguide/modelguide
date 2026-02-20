@@ -293,7 +293,12 @@ app.post("/:agentId/conversation-init", async (c) => {
   }
 
   // 3. Parse request body
-  const rawBody = await c.req.json().catch(() => ({}));
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
   const parsed = conversationInitRequestSchema.safeParse(rawBody);
   if (!parsed.success) {
     console.error(
