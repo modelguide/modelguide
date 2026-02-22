@@ -12,6 +12,7 @@ import {
   getCart,
   getOrder,
   getProduct,
+  healthCheck,
   listProducts,
   lookUpOrder,
   setDeliveryAddress,
@@ -265,6 +266,7 @@ const medusaManifest: ConnectorManifest = {
   authMethods: ["api_key"],
   iconUrl: "/logos/medusa.svg",
   tools,
+  healthCheck,
 };
 
 export default medusaManifest;

@@ -4,6 +4,8 @@
  */
 
 import { withConnector } from "../lib/http-client";
+import { runHealthCheck } from "../lib/run-health-check";
+import type { HealthCheckResult } from "../types";
 import { createMedusaAdminFetcher, createMedusaFetcher } from "./client";
 
 const withMedusa = withConnector(createMedusaFetcher);
@@ -105,8 +107,62 @@ export const setDeliveryAddress = withMedusa(async (fetcher, ctx) => {
   return { success: true, data };
 });
 
+// Auto-initiates a payment session before completing the cart.
+// Medusa v2 requires a payment session on the cart's payment collection, but
+// in agent-driven flows there is no checkout UI for the customer to pick a
+// payment method. We resolve the first available provider for the cart's region
+// and create the session automatically. See ADR-003 for rationale and future
+// extension options (explicit provider selection, payment links).
 export const completeCart = withMedusa(async (fetcher, ctx) => {
   const { cartId } = ctx.input as { cartId: string };
+
+  // Step 1: Fetch cart to get payment_collection id and region
+  const cartData = await fetcher<{
+    cart: {
+      payment_collection?: { id: string };
+      region_id?: string;
+      region?: { id: string };
+    };
+  }>(`/store/carts/${cartId}`);
+
+  const paymentCollectionId = cartData.cart?.payment_collection?.id;
+  if (!paymentCollectionId) {
+    return {
+      success: false,
+      error:
+        "Cart has no payment collection. Add items and a shipping address first.",
+    };
+  }
+
+  const regionId = cartData.cart?.region_id ?? cartData.cart?.region?.id;
+  if (!regionId) {
+    return {
+      success: false,
+      error:
+        "Cart has no region. Cannot determine available payment providers.",
+    };
+  }
+
+  // Step 2: Look up available payment providers for the cart's region
+  const { payment_providers } = await fetcher<{
+    payment_providers: { id: string }[];
+  }>("/store/payment-providers", { params: { region_id: regionId } });
+
+  const providerId = payment_providers?.[0]?.id;
+  if (!providerId) {
+    return {
+      success: false,
+      error: "No payment providers available for this region.",
+    };
+  }
+
+  // Step 3: Initialize payment session with the first available provider
+  await fetcher<Record<string, unknown>>(
+    `/store/payment-collections/${paymentCollectionId}/payment-sessions`,
+    { method: "POST", body: { provider_id: providerId } },
+  );
+
+  // Step 4: Complete the cart
   const data = await fetcher<Record<string, unknown>>(
     `/store/carts/${cartId}/complete`,
     { method: "POST" },
@@ -223,3 +279,16 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+export function healthCheck(
+  config: Record<string, string>,
+): Promise<HealthCheckResult> {
+  return runHealthCheck(async () => {
+    const fetcher = createMedusaFetcher(config, 5_000);
+    await fetcher("/store/products", { params: { limit: "1" } });
+  });
+}

@@ -16,7 +16,7 @@ export const userSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   name: z.string(),
-  role: z.enum(['admin', 'support']),
+  role: z.enum(['admin', 'support', 'viewer']),
   organizationId: z.string().uuid(),
 })
 

@@ -26,17 +26,23 @@ import {
 } from "@lib/jwt";
 import { and, eq, lt } from "drizzle-orm";
 
-interface SessionTokens {
+export interface SessionTokens {
   accessToken: string;
   refreshToken: string;
+  refreshTtlSeconds: number;
   user: AuthUser;
 }
 
 /**
  * Create a new refresh session after successful authentication.
  */
-export async function createSession(user: AuthUser): Promise<SessionTokens> {
-  const ttl = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
+export async function createSession(
+  user: AuthUser,
+  options?: { refreshTtl?: string },
+): Promise<SessionTokens> {
+  const ttl = parseDuration(
+    options?.refreshTtl ?? env.REFRESH_TOKEN_EXPIRES_IN,
+  );
   const expiresAt = new Date(Date.now() + ttl * 1000);
 
   const [row] = await db
@@ -53,7 +59,7 @@ export async function createSession(user: AuthUser): Promise<SessionTokens> {
     generateRefreshJWT(row.familyId, 0, user.id),
   ]);
 
-  return { accessToken, refreshToken, user };
+  return { accessToken, refreshToken, refreshTtlSeconds: ttl, user };
 }
 
 /**
@@ -164,7 +170,7 @@ export async function rotateRefreshToken(
     generateRefreshJWT(payload.familyId, newGeneration, user.id),
   ]);
 
-  return { accessToken, refreshToken, user: authUser };
+  return { accessToken, refreshToken, refreshTtlSeconds: ttl, user: authUser };
 }
 
 /**

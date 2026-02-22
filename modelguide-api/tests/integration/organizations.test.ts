@@ -16,32 +16,32 @@ beforeAll(async () => {
 
 describe("GET /api/organizations/:id", () => {
   test("admin can get own organization", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
-    const response = await request(`/api/organizations/${s.pizzaOrg.id}`, {
+    const headers = await authHeadersFor(s.orgAAdmin);
+    const response = await request(`/api/organizations/${s.orgA.id}`, {
       headers,
     });
     expect(response.status).toBe(200);
 
     const body = await response.json();
-    expect(body.id).toBe(s.pizzaOrg.id);
-    expect(body.name).toBe(s.pizzaOrg.name);
-    expect(body.slug).toBe(s.pizzaOrg.slug);
+    expect(body.id).toBe(s.orgA.id);
+    expect(body.name).toBe(s.orgA.name);
+    expect(body.slug).toBe(s.orgA.slug);
   });
 
   test("support can get own organization", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
-    const response = await request(`/api/organizations/${s.pizzaOrg.id}`, {
+    const headers = await authHeadersFor(s.orgASupport);
+    const response = await request(`/api/organizations/${s.orgA.id}`, {
       headers,
     });
     expect(response.status).toBe(200);
 
     const body = await response.json();
-    expect(body.id).toBe(s.pizzaOrg.id);
+    expect(body.id).toBe(s.orgA.id);
   });
 
   test("returns 404 for non-existent org", async () => {
     const fakeOrgId = "00000000-0000-0000-0000-000000000000";
-    const headers = await authHeadersFor(s.pizzaAdmin);
+    const headers = await authHeadersFor(s.orgAAdmin);
     const response = await request(`/api/organizations/${fakeOrgId}`, {
       headers,
     });
@@ -49,34 +49,34 @@ describe("GET /api/organizations/:id", () => {
   });
 
   test("requesting different org returns 404 (RLS prevents access)", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
-    const response = await request(`/api/organizations/${s.burgerOrg.id}`, {
+    const headers = await authHeadersFor(s.orgAAdmin);
+    const response = await request(`/api/organizations/${s.orgB.id}`, {
       headers,
     });
     expect(response.status).toBe(404);
   });
 
   test("returns 401 without auth", async () => {
-    const response = await request(`/api/organizations/${s.pizzaOrg.id}`);
+    const response = await request(`/api/organizations/${s.orgA.id}`);
     expect(response.status).toBe(401);
   });
 });
 
 describe("Organizations RLS (database-level)", () => {
   test("forOrg(orgA) can only see org A", async () => {
-    const result = await withRLSTransaction(s.pizzaOrg.id, async (tx) => {
+    const result = await withRLSTransaction(s.orgA.id, async (tx) => {
       return tx.select().from(organizations);
     });
     expect(result.length).toBe(1);
-    expect(result[0].id).toBe(s.pizzaOrg.id);
+    expect(result[0].id).toBe(s.orgA.id);
   });
 
   test("forOrg(orgB) can only see org B", async () => {
-    const result = await withRLSTransaction(s.burgerOrg.id, async (tx) => {
+    const result = await withRLSTransaction(s.orgB.id, async (tx) => {
       return tx.select().from(organizations);
     });
     expect(result.length).toBe(1);
-    expect(result[0].id).toBe(s.burgerOrg.id);
+    expect(result[0].id).toBe(s.orgB.id);
   });
 
   test("without RLS context, no organizations returned", async () => {

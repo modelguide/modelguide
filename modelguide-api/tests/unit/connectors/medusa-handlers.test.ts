@@ -54,6 +54,32 @@ function mockFetchError(status: number, body: string) {
   globalThis.fetch = fetchMock as typeof fetch;
 }
 
+/**
+ * Queues sequential fetch responses — each call to fetch consumes the next
+ * response in order. Useful for handlers that make multiple API calls.
+ */
+function mockFetchSequence(
+  responses: Array<{ status: number; body: unknown }>,
+) {
+  let callIndex = 0;
+  fetchMock = mock(() => {
+    const res = responses[callIndex++];
+    if (!res) {
+      return Promise.reject(new Error("Unexpected extra fetch call"));
+    }
+    return Promise.resolve(
+      new Response(
+        typeof res.body === "string" ? res.body : JSON.stringify(res.body),
+        {
+          status: res.status,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+  });
+  globalThis.fetch = fetchMock as typeof fetch;
+}
+
 afterAll(() => {
   globalThis.fetch = originalFetch;
 });
@@ -214,19 +240,155 @@ describe("Medusa handlers", () => {
   });
 
   // ----------------------------------------------------------------
-  // Complete Cart
+  // Complete Cart (4-step: fetch cart → list providers → payment session → complete)
   // ----------------------------------------------------------------
   describe("completeCart", () => {
-    test("calls POST /store/carts/:id/complete", async () => {
-      mockFetchSuccess({ type: "order", order: { id: "order_1" } });
+    test("happy path: fetches cart, resolves provider, creates session, completes", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              region_id: "reg_us",
+              payment_collection: { id: "paycol_1" },
+            },
+          },
+        },
+        {
+          status: 200,
+          body: {
+            payment_providers: [
+              { id: "pp_stripe" },
+              { id: "pp_system_default" },
+            ],
+          },
+        },
+        {
+          status: 200,
+          body: { payment_session: { id: "payses_1" } },
+        },
+        {
+          status: 200,
+          body: { type: "order", order: { id: "order_1" } },
+        },
+      ]);
+
       const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
       expect(result.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
 
-      const [url, opts] = fetchMock.mock.calls[0];
-      expect(url).toBe(
+      // Call 1: GET cart
+      const [cartUrl, cartOpts] = fetchMock.mock.calls[0];
+      expect(cartUrl).toBe("https://api.test-store.com/store/carts/cart_abc");
+      expect(cartOpts.method).toBe("GET");
+
+      // Call 2: GET payment providers for region
+      const [providersUrl, providersOpts] = fetchMock.mock.calls[1];
+      expect(providersUrl).toContain("/store/payment-providers");
+      expect(providersUrl).toContain("region_id=reg_us");
+      expect(providersOpts.method).toBe("GET");
+
+      // Call 3: POST payment session with first available provider
+      const [sessionUrl, sessionOpts] = fetchMock.mock.calls[2];
+      expect(sessionUrl).toBe(
+        "https://api.test-store.com/store/payment-collections/paycol_1/payment-sessions",
+      );
+      expect(sessionOpts.method).toBe("POST");
+      const sessionBody = JSON.parse(sessionOpts.body);
+      expect(sessionBody.provider_id).toBe("pp_stripe");
+
+      // Call 4: POST complete
+      const [completeUrl, completeOpts] = fetchMock.mock.calls[3];
+      expect(completeUrl).toBe(
         "https://api.test-store.com/store/carts/cart_abc/complete",
       );
-      expect(opts.method).toBe("POST");
+      expect(completeOpts.method).toBe("POST");
+    });
+
+    test("returns error when cart has no payment collection", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: { cart: { id: "cart_abc", region_id: "reg_us" } },
+        },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("no payment collection");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("returns error when cart has no region", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              payment_collection: { id: "paycol_1" },
+            },
+          },
+        },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("no region");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("returns error when no payment providers available", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              region_id: "reg_us",
+              payment_collection: { id: "paycol_1" },
+            },
+          },
+        },
+        {
+          status: 200,
+          body: { payment_providers: [] },
+        },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("No payment providers");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test("returns error when payment session creation fails", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              region_id: "reg_us",
+              payment_collection: { id: "paycol_1" },
+            },
+          },
+        },
+        {
+          status: 200,
+          body: { payment_providers: [{ id: "pp_stripe" }] },
+        },
+        {
+          status: 400,
+          body: '{"message":"Invalid payment provider"}',
+        },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("400");
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -302,32 +464,6 @@ function makeAdminCtx(
     organizationId: "org-1",
     connectorId: "conn-1",
   };
-}
-
-/**
- * Queues sequential fetch responses — each call to fetch consumes the next
- * response in order. Useful for handlers that make multiple API calls.
- */
-function mockFetchSequence(
-  responses: Array<{ status: number; body: unknown }>,
-) {
-  let callIndex = 0;
-  fetchMock = mock(() => {
-    const res = responses[callIndex++];
-    if (!res) {
-      return Promise.reject(new Error("Unexpected extra fetch call"));
-    }
-    return Promise.resolve(
-      new Response(
-        typeof res.body === "string" ? res.body : JSON.stringify(res.body),
-        {
-          status: res.status,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    );
-  });
-  globalThis.fetch = fetchMock as typeof fetch;
 }
 
 describe("lookUpOrder (Admin API)", () => {

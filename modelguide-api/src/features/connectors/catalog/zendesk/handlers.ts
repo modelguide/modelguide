@@ -4,6 +4,8 @@
  */
 
 import { withConnector } from "../lib/http-client";
+import { runHealthCheck } from "../lib/run-health-check";
+import type { HealthCheckResult } from "../types";
 import { createZendeskFetcher } from "./client";
 
 const withZendesk = withConnector(createZendeskFetcher);
@@ -203,3 +205,16 @@ export const getUser = withZendesk(async (fetcher, ctx) => {
   const data = await fetcher<Record<string, unknown>>(`/users/${userId}.json`);
   return { success: true, data };
 });
+
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+export function healthCheck(
+  config: Record<string, string>,
+): Promise<HealthCheckResult> {
+  return runHealthCheck(async () => {
+    const fetcher = createZendeskFetcher(config, 5_000);
+    await fetcher("/account");
+  });
+}

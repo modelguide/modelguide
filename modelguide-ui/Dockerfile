@@ -1,13 +1,25 @@
-FROM node:22-alpine AS build
+# ---- deps ----
+FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN NODE_ENV=development npm ci --ignore-scripts
+RUN npm ci --ignore-scripts
+
+# ---- build ----
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build
 
-FROM node:22-alpine
+# ---- runtime ----
+FROM node:22-alpine AS runtime
 WORKDIR /app
-COPY --from=build /app/.output .output
-ENV NODE_ENV=production
+COPY --from=build /app/.output ./.output
+
+USER node
 EXPOSE 3001
+ENV PORT=3001
+
 CMD ["node", ".output/server/index.mjs"]

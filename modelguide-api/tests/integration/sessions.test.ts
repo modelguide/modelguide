@@ -16,10 +16,10 @@ import {
 } from "../helpers/seed";
 
 let s: TestSeed;
-let pizzaAdminHeaders: Record<string, string>;
-let burgerAdminHeaders: Record<string, string>;
-let pizzaAgentHeaders: Record<string, string>;
-let burgerAgentHeaders: Record<string, string>;
+let orgAAdminHeaders: Record<string, string>;
+let orgBAdminHeaders: Record<string, string>;
+let orgAAgentHeaders: Record<string, string>;
+let orgBAgentHeaders: Record<string, string>;
 
 /** IDs of sessions created during tests (for cleanup) */
 const createdSessionIds: string[] = [];
@@ -30,17 +30,13 @@ function request(path: string, options?: RequestInit) {
 
 beforeAll(async () => {
   s = await getTestSeed();
-  [
-    pizzaAdminHeaders,
-    burgerAdminHeaders,
-    pizzaAgentHeaders,
-    burgerAgentHeaders,
-  ] = await Promise.all([
-    authHeadersFor(s.pizzaAdmin),
-    authHeadersFor(s.burgerAdmin),
-    agentHeadersFor(s.pizzaAgentId, s.pizzaOrg.id),
-    agentHeadersFor(s.burgerAgentId, s.burgerOrg.id),
-  ]);
+  [orgAAdminHeaders, orgBAdminHeaders, orgAAgentHeaders, orgBAgentHeaders] =
+    await Promise.all([
+      authHeadersFor(s.orgAAdmin),
+      authHeadersFor(s.orgBAdmin),
+      agentHeadersFor(s.orgAAgentId, s.orgA.id),
+      agentHeadersFor(s.orgBAgentId, s.orgB.id),
+    ]);
 });
 
 afterAll(async () => {
@@ -62,7 +58,7 @@ describe("POST /api/sessions", () => {
   test("creates session with valid agent key (201)", async () => {
     const response = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+1234567890",
@@ -74,7 +70,7 @@ describe("POST /api/sessions", () => {
     const body = await response.json();
 
     expect(body.id).toBeDefined();
-    expect(body.agentId).toBe(s.pizzaAgentId);
+    expect(body.agentId).toBe(s.orgAAgentId);
     expect(body.status).toBe("active");
     expect(body.channelType).toBe("voice");
     expect(body.userIdentifier).toBe("+1234567890");
@@ -87,7 +83,7 @@ describe("POST /api/sessions", () => {
   test("creates session with externalId (201)", async () => {
     const response = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         externalId: "ext-12345",
         channelType: "web",
@@ -107,7 +103,7 @@ describe("POST /api/sessions", () => {
   test("rejects user auth (must be agent) (401)", async () => {
     const response = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+1234567890",
@@ -133,7 +129,7 @@ describe("POST /api/sessions", () => {
   test("validates required fields (422)", async () => {
     const response = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({}),
     });
 
@@ -148,7 +144,7 @@ describe("POST /api/sessions", () => {
 describe("GET /api/sessions", () => {
   test("returns paginated sessions for org (200)", async () => {
     const response = await request("/api/sessions", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -171,7 +167,7 @@ describe("GET /api/sessions", () => {
 
   test("filters by status (200)", async () => {
     const response = await request("/api/sessions?status=active", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -183,21 +179,21 @@ describe("GET /api/sessions", () => {
   });
 
   test("filters by agentId (200)", async () => {
-    const response = await request(`/api/sessions?agentId=${s.pizzaAgentId}`, {
-      headers: pizzaAdminHeaders,
+    const response = await request(`/api/sessions?agentId=${s.orgAAgentId}`, {
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
     for (const session of body.data) {
-      expect(session.agentId).toBe(s.pizzaAgentId);
+      expect(session.agentId).toBe(s.orgAAgentId);
     }
   });
 
   test("filters by channelType (200)", async () => {
     const response = await request("/api/sessions?channelType=voice", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -216,7 +212,7 @@ describe("GET /api/sessions", () => {
 
   test("rejects agent auth (must be user) (401)", async () => {
     const response = await request("/api/sessions", {
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
     });
 
     expect(response.status).toBe(401);
@@ -234,7 +230,7 @@ describe("GET /api/sessions/:id", () => {
     // Create a session with a message for detail testing
     const createRes = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+9999999999",
@@ -247,7 +243,7 @@ describe("GET /api/sessions/:id", () => {
     // Add a message
     await request(`/api/sessions/${detailSessionId}/messages`, {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "user",
         content: "Hello, I want to order a pizza",
@@ -257,7 +253,7 @@ describe("GET /api/sessions/:id", () => {
 
   test("returns session with messages and feedback (200)", async () => {
     const response = await request(`/api/sessions/${detailSessionId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -275,7 +271,7 @@ describe("GET /api/sessions/:id", () => {
     // Add a second message
     await request(`/api/sessions/${detailSessionId}/messages`, {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "assistant",
         content: "What size pizza would you like?",
@@ -283,7 +279,7 @@ describe("GET /api/sessions/:id", () => {
     });
 
     const response = await request(`/api/sessions/${detailSessionId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     const body = await response.json();
@@ -293,7 +289,7 @@ describe("GET /api/sessions/:id", () => {
   test("returns 404 for non-existent session", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/sessions/${fakeId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -316,7 +312,7 @@ describe("PATCH /api/sessions/:id", () => {
   beforeAll(async () => {
     const response = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+5555555555",
@@ -330,7 +326,7 @@ describe("PATCH /api/sessions/:id", () => {
   test("updates status from active to completed (200)", async () => {
     const response = await request(`/api/sessions/${updateSessionId}`, {
       method: "PATCH",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({ status: "completed" }),
     });
 
@@ -346,7 +342,7 @@ describe("PATCH /api/sessions/:id", () => {
     // updateSessionId is now "completed", try to update again
     const response = await request(`/api/sessions/${updateSessionId}`, {
       method: "PATCH",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({ status: "abandoned" }),
     });
 
@@ -367,7 +363,7 @@ describe("PATCH /api/sessions/:id", () => {
     // Create a new active session for this test
     const createRes = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+7777777777",
@@ -378,7 +374,7 @@ describe("PATCH /api/sessions/:id", () => {
 
     const response = await request(`/api/sessions/${created.id}`, {
       method: "PATCH",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({}),
     });
 
@@ -396,7 +392,7 @@ describe("POST /api/sessions/:id/messages", () => {
   beforeAll(async () => {
     const response = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+8888888888",
@@ -411,7 +407,7 @@ describe("POST /api/sessions/:id/messages", () => {
     // First message
     const res1 = await request(`/api/sessions/${messageSessionId}/messages`, {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "user",
         content: "I want a large pepperoni pizza",
@@ -429,7 +425,7 @@ describe("POST /api/sessions/:id/messages", () => {
     // Second message
     const res2 = await request(`/api/sessions/${messageSessionId}/messages`, {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "assistant",
         content: "Great choice! What size?",
@@ -446,7 +442,7 @@ describe("POST /api/sessions/:id/messages", () => {
     // Create a fresh session
     const createRes = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+9990009999",
@@ -458,7 +454,7 @@ describe("POST /api/sessions/:id/messages", () => {
     const [res1, res2] = await Promise.all([
       request(`/api/sessions/${created.id}/messages`, {
         method: "POST",
-        headers: pizzaAgentHeaders,
+        headers: orgAAgentHeaders,
         body: JSON.stringify({
           role: "user",
           content: "First concurrent message",
@@ -466,7 +462,7 @@ describe("POST /api/sessions/:id/messages", () => {
       }),
       request(`/api/sessions/${created.id}/messages`, {
         method: "POST",
-        headers: pizzaAgentHeaders,
+        headers: orgAAgentHeaders,
         body: JSON.stringify({
           role: "user",
           content: "Second concurrent message",
@@ -490,14 +486,14 @@ describe("POST /api/sessions/:id/messages", () => {
       `/api/sessions/${messageSessionId}/messages`,
       {
         method: "POST",
-        headers: pizzaAgentHeaders,
+        headers: orgAAgentHeaders,
         body: JSON.stringify({
           role: "assistant",
           content: "Let me look up the menu for you.",
           toolCalls: [
             {
               toolCallId: "call_123",
-              toolName: "pizzapalace_get_menu",
+              toolName: "glowbox_store_get_menu",
               toolInput: { category: "pizza" },
               toolOutput: { items: ["pepperoni", "margherita"] },
             },
@@ -519,14 +515,84 @@ describe("POST /api/sessions/:id/messages", () => {
     const toolMsg = body.data[1];
     expect(toolMsg.role).toBe("tool");
     expect(toolMsg.toolCallId).toBe("call_123");
-    expect(toolMsg.toolName).toBe("pizzapalace_get_menu");
+    expect(toolMsg.toolName).toBe("glowbox_store_get_menu");
+  });
+
+  test("extracts session link from MCP-wrapped tool output (201)", async () => {
+    // Create a fresh active session for this test
+    const sessionRes = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "email",
+        userIdentifier: "customer@test.com",
+      }),
+    });
+    expect(sessionRes.status).toBe(201);
+    const { id: linkSessionId } = (await sessionRes.json()) as { id: string };
+    createdSessionIds.push(linkSessionId);
+
+    // MCP tool output format: { content: [{ type: "text", text: "<json string>" }] }
+    // The inner JSON has a top-level "url" field that should be extracted as a session link.
+    const mcpToolOutput = {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            data: { id: "order_abc123", display_id: 42, status: "pending" },
+            url: "https://admin.example.com/app/orders/order_abc123",
+          }),
+        },
+      ],
+    };
+
+    const msgRes = await request(`/api/sessions/${linkSessionId}/messages`, {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        role: "assistant",
+        content: "I found your order.",
+        toolCalls: [
+          {
+            toolCallId: "call_mcp_1",
+            toolName: "acme_store_look_up_order",
+            toolInput: { email: "customer@test.com", displayId: 42 },
+            toolOutput: mcpToolOutput,
+          },
+        ],
+      }),
+    });
+
+    expect(msgRes.status).toBe(201);
+
+    // Fetch session detail and verify the link was extracted
+    const detailRes = await request(`/api/sessions/${linkSessionId}`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(detailRes.status).toBe(200);
+    const detail = (await detailRes.json()) as {
+      links: {
+        url: string;
+        title: string | null;
+        resourceType: string | null;
+      }[];
+    };
+
+    expect(detail.links).toBeArray();
+    expect(detail.links.length).toBe(1);
+    expect(detail.links[0].url).toBe(
+      "https://admin.example.com/app/orders/order_abc123",
+    );
+    expect(detail.links[0].resourceType).toBe("order");
+    expect(detail.links[0].title).toBe("Order #42");
   });
 
   test("rejects message to ended session (409)", async () => {
     // End the session first
     await request(`/api/sessions/${messageSessionId}`, {
       method: "PATCH",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({ status: "completed" }),
     });
 
@@ -534,7 +600,7 @@ describe("POST /api/sessions/:id/messages", () => {
       `/api/sessions/${messageSessionId}/messages`,
       {
         method: "POST",
-        headers: pizzaAgentHeaders,
+        headers: orgAAgentHeaders,
         body: JSON.stringify({
           role: "user",
           content: "One more thing...",
@@ -567,57 +633,57 @@ describe("POST /api/sessions/:id/messages", () => {
 // ============================================================================
 
 describe("RLS isolation", () => {
-  let pizzaSessionId: string;
+  let orgASessionId: string;
 
   beforeAll(async () => {
-    // Create a session in pizza org
+    // Create a session in orgA
     const response = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+1111111111",
       }),
     });
     const body = await response.json();
-    pizzaSessionId = body.id;
-    createdSessionIds.push(pizzaSessionId);
+    orgASessionId = body.id;
+    createdSessionIds.push(orgASessionId);
   });
 
-  test("Burger Barn cannot see Pizza Palace sessions in list (200)", async () => {
+  test("org B cannot see org A sessions in list (200)", async () => {
     const response = await request("/api/sessions", {
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
     const ids = body.data.map((s: { id: string }) => s.id);
-    expect(ids).not.toContain(pizzaSessionId);
+    expect(ids).not.toContain(orgASessionId);
   });
 
-  test("Burger Barn cannot get Pizza Palace session by ID (404)", async () => {
-    const response = await request(`/api/sessions/${pizzaSessionId}`, {
-      headers: burgerAdminHeaders,
+  test("org B cannot get org A session by ID (404)", async () => {
+    const response = await request(`/api/sessions/${orgASessionId}`, {
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger agent cannot update Pizza Palace session (404)", async () => {
-    const response = await request(`/api/sessions/${pizzaSessionId}`, {
+  test("org B agent cannot update org A session (404)", async () => {
+    const response = await request(`/api/sessions/${orgASessionId}`, {
       method: "PATCH",
-      headers: burgerAgentHeaders,
+      headers: orgBAgentHeaders,
       body: JSON.stringify({ status: "completed" }),
     });
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger agent cannot add message to Pizza Palace session (404)", async () => {
-    const response = await request(`/api/sessions/${pizzaSessionId}/messages`, {
+  test("org B agent cannot add message to org A session (404)", async () => {
+    const response = await request(`/api/sessions/${orgASessionId}/messages`, {
       method: "POST",
-      headers: burgerAgentHeaders,
+      headers: orgBAgentHeaders,
       body: JSON.stringify({
         role: "user",
         content: "Cross-org attack attempt",
@@ -636,7 +702,7 @@ describe("PATCH /api/sessions/:id (additional)", () => {
   test("updates status from active to abandoned (200)", async () => {
     const createRes = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "web",
         userIdentifier: "abandon-test@test.com",
@@ -647,7 +713,7 @@ describe("PATCH /api/sessions/:id (additional)", () => {
 
     const response = await request(`/api/sessions/${created.id}`, {
       method: "PATCH",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({ status: "abandoned" }),
     });
 
@@ -661,7 +727,7 @@ describe("PATCH /api/sessions/:id (additional)", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/sessions/${fakeId}`, {
       method: "PATCH",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({ status: "completed" }),
     });
 
@@ -677,7 +743,7 @@ describe("POST /api/sessions/:id/messages (additional)", () => {
   test("creates message with audioUrl (201)", async () => {
     const createRes = await request("/api/sessions", {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
         userIdentifier: "+4444444444",
@@ -688,7 +754,7 @@ describe("POST /api/sessions/:id/messages (additional)", () => {
 
     const response = await request(`/api/sessions/${created.id}/messages`, {
       method: "POST",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "user",
         content: "Voice message",
@@ -718,7 +784,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
     for (const channel of ["web", "sms", "sms"]) {
       const res = await request("/api/sessions", {
         method: "POST",
-        headers: pizzaAgentHeaders,
+        headers: orgAAgentHeaders,
         body: JSON.stringify({
           channelType: channel,
           userIdentifier: `filter-${channel}-${Date.now()}@test.com`,
@@ -732,7 +798,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
     // Complete one session so we can test date-range and status filters
     await request(`/api/sessions/${filterSessionIds[0]}`, {
       method: "PATCH",
-      headers: pizzaAgentHeaders,
+      headers: orgAAgentHeaders,
       body: JSON.stringify({ status: "completed" }),
     });
 
@@ -751,7 +817,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
     // Use a date far in the past — should return all sessions
     const response = await request(
       "/api/sessions?startedAfter=2020-01-01T00:00:00Z",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -763,7 +829,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
     // Use a date far in the past — should return zero sessions
     const response = await request(
       "/api/sessions?startedBefore=2020-01-01T00:00:00Z",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -773,7 +839,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
 
   test("filters by hasFeedback=true (200)", async () => {
     const response = await request("/api/sessions?hasFeedback=true", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -787,7 +853,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
 
   test("filters by hasFeedback=false (200)", async () => {
     const response = await request("/api/sessions?hasFeedback=false", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -801,7 +867,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
   test("sorts by started_at ascending (200)", async () => {
     const response = await request(
       "/api/sessions?sortBy=started_at&sortOrder=asc",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -817,7 +883,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
   test("sorts by status (200)", async () => {
     const response = await request(
       "/api/sessions?sortBy=status&sortOrder=asc",
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -827,7 +893,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
 
   test("paginates with pageSize=1 and returns correct totalPages (200)", async () => {
     const response = await request("/api/sessions?page=1&pageSize=1", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -843,7 +909,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
 
   test("returns page 2 results (200)", async () => {
     const response = await request("/api/sessions?page=2&pageSize=1", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -857,10 +923,10 @@ describe("GET /api/sessions (filtering & sorting)", () => {
   test("page 1 and page 2 return different sessions (200)", async () => {
     const [res1, res2] = await Promise.all([
       request("/api/sessions?page=1&pageSize=1", {
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       }),
       request("/api/sessions?page=2&pageSize=1", {
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       }),
     ]);
 

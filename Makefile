@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed eval-install eval-run eval-validate eval-test eval-typecheck eval-lint clean reset tunnel logs
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose eval-install eval-run eval-validate eval-test eval-typecheck eval-lint
 
 .DEFAULT_GOAL := help
 
@@ -112,6 +112,12 @@ db-studio: ## [DB] Open Drizzle Studio
 db-seed: ## [DB] Seed database with test data
 	cd modelguide-api && bun run db:seed
 
+demo-enable: ## [Demo] Enable demo mode for an org (usage: make demo-enable ORG_SLUG=demo)
+	cd modelguide-api && bun run scripts/demo-toggle.ts enable $(ORG_SLUG)
+
+demo-disable: ## [Demo] Disable demo mode for an org (usage: make demo-disable ORG_SLUG=demo)
+	cd modelguide-api && bun run scripts/demo-toggle.ts disable $(ORG_SLUG)
+
 # =============================================================================
 # Eval
 # =============================================================================
@@ -150,3 +156,28 @@ tunnel: ## Start ngrok tunnel to dev server
 
 logs: ## View Docker container logs
 	docker compose logs -f postgres
+
+# =============================================================================
+# Docker (full stack)
+# =============================================================================
+
+docker-up: ## [Docker] Build and start full stack (API + UI + Postgres + Caddy)
+	docker compose up -d --build
+
+docker-down: ## [Docker] Stop all containers
+	docker compose down
+
+docker-logs: ## [Docker] View all container logs
+	docker compose logs -f
+
+docker-rebuild: ## [Docker] Rebuild and restart API + UI (skip postgres)
+	docker compose up -d --build api ui caddy
+
+docker-reset: ## [Docker] Stop containers, remove volumes, rebuild
+	docker compose down -v
+	docker compose up -d --build
+
+docker-expose: ## [Docker] Show exposed ports
+	@echo "Caddy (reverse proxy): http://localhost:8080"
+	@echo "API (direct):          http://localhost:3000"
+	@echo "PostgreSQL:            localhost:5434"

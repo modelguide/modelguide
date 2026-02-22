@@ -1,9 +1,10 @@
+import { useNavigate } from '@tanstack/react-router'
 import { AlertCircle, ArrowLeft, CheckCircle, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Label } from '~/components/ui/label'
 import { magicLinkRequestSchema } from '~/schemas/auth'
-import { useAuthStore } from '~/stores/auth'
+import { LOGIN_RESULT, useAuthStore } from '~/stores/auth'
 
 const RESEND_COOLDOWN_SECONDS = 30
 
@@ -14,7 +15,8 @@ export interface LoginFormProps {
 type Step = 'email' | 'sent'
 
 export function LoginForm({ redirectTo }: LoginFormProps) {
-  const requestMagicLink = useAuthStore((s) => s.requestMagicLink)
+  const login = useAuthStore((s) => s.login)
+  const navigate = useNavigate()
 
   const [email, setEmail] = useState('')
   const [step, setStep] = useState<Step>('email')
@@ -56,11 +58,15 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
 
     setLoading(true)
     try {
-      await requestMagicLink(email)
-      setStep('sent')
-      startCooldown()
+      const outcome = await login(email)
+      if (outcome === LOGIN_RESULT.AUTHENTICATED) {
+        navigate({ to: redirectTo || '/' })
+      } else {
+        setStep('sent')
+        startCooldown()
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send magic link')
+      setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setLoading(false)
     }
@@ -70,8 +76,12 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
     setError(null)
     setLoading(true)
     try {
-      await requestMagicLink(email)
-      startCooldown()
+      const outcome = await login(email)
+      if (outcome === LOGIN_RESULT.AUTHENTICATED) {
+        navigate({ to: redirectTo || '/' })
+      } else {
+        startCooldown()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend magic link')
     } finally {
@@ -152,7 +162,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
       ) : null}
 
       <Button type="submit" loading={loading} className="w-full mt-2">
-        Send magic link
+        Sign in
       </Button>
 
       {import.meta.env.DEV ? <DevAccounts onSelect={setEmail} /> : null}

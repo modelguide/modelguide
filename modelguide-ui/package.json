@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite dev",
+    "msw:init": "msw init public --save",
     "build": "vite build && tsc --noEmit",
     "preview": "vite preview",
     "lint": "biome check .",

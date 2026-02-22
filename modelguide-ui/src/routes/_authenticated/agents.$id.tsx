@@ -364,8 +364,8 @@ function AgentDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-fg-muted">Type</dt>
-                  <dd className="mt-1 text-sm text-fg-primary capitalize">{agent.agentType}</dd>
+                  <dt className="text-xs font-medium text-fg-muted">Modality</dt>
+                  <dd className="mt-1 text-sm text-fg-primary capitalize">{agent.modality}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium text-fg-muted">ID</dt>
@@ -430,22 +430,21 @@ function AgentDetailPage() {
               </p>
               <div className="space-y-3">
                 {(() => {
-                  const baseUrl = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:3000'
                   const hasHmac = agent.hasWebhookSecret ?? false
                   const urls = [
                     {
                       label: 'Session Init',
-                      url: `${baseUrl}/api/sessions`,
+                      url: agent.integrationUrls?.sessionInit ?? '',
                       description: 'POST — create session before starting a call',
                     },
                     {
                       label: 'MCP Endpoint',
-                      url: `${baseUrl}/mcp/${agent.id}`,
+                      url: agent.integrationUrls?.mcp ?? '',
                       description: 'POST — tool calls during conversation (MCP protocol)',
                     },
                     {
                       label: 'Post-Call Webhook',
-                      url: `${baseUrl}/webhooks/elevenlabs/${agent.id}/post-call`,
+                      url: agent.integrationUrls?.postCallWebhook ?? '',
                       description: 'POST — transcript storage after call',
                       hmac: isElevenLabs,
                     },

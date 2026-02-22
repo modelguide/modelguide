@@ -1,5 +1,4 @@
-import type { LucideIcon } from 'lucide-react'
-import { ExternalLink, Link, Package, Ticket } from 'lucide-react'
+import { ExternalLink, Link, type LucideIcon, Package, Ticket } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -183,10 +182,12 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
         </Card>
       )}
 
-      {/* Transcript */}
+      {/* Transcript / Details */}
       <Card>
         <CardHeader>
-          <CardTitle>Transcript</CardTitle>
+          <CardTitle>
+            {['voice', 'web', 'widget'].includes(session.channelType) ? 'Transcript' : 'Exchange'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Transcript messages={session.messages || []} />
@@ -252,6 +253,7 @@ function ExternalLinkRow({ link }: { link: SessionLink }) {
     </a>
   )
 }
+
 function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>

@@ -4,7 +4,13 @@
 
 import { db } from "@db/client";
 import { forOrg } from "@db/rls";
-import { connectorTools, connectors, connectorsCatalog } from "@db/schema";
+import {
+  connectorTools,
+  connectors,
+  connectorsCatalog,
+  secrets,
+} from "@db/schema";
+import { decryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
@@ -12,6 +18,8 @@ import {
   getOffset,
 } from "@lib/pagination";
 import { and, asc, count, eq } from "drizzle-orm";
+import { getConnectorManifest } from "./catalog/registry";
+import type { HealthCheckResult } from "./catalog/types";
 
 // ============================================================================
 // Catalog queries (no RLS — global table)
@@ -233,4 +241,102 @@ export async function updateConnectorTool(
   }
 
   return updated;
+}
+
+// ============================================================================
+// Config resolution (shared by ping + MCP tool execution)
+// ============================================================================
+
+/**
+ * Resolve connector config, replacing secret references with decrypted values.
+ * Accepts already-fetched connector + catalog to avoid redundant DB queries.
+ */
+export async function resolveConnectorConfig(
+  orgId: string,
+  connector: { id: string; config: unknown },
+  catalogConfigSchema: unknown,
+): Promise<{ resolved: Record<string, string>; missingFields: string[] }> {
+  const configSchema = (catalogConfigSchema ?? {}) as Record<
+    string,
+    { type: string; required?: boolean }
+  >;
+  const rawConfig = (connector.config ?? {}) as Record<string, unknown>;
+
+  const connectorSecrets = await forOrg(orgId, (tx) =>
+    tx
+      .select()
+      .from(secrets)
+      .where(
+        and(
+          eq(secrets.ownerType, "connector"),
+          eq(secrets.ownerId, connector.id),
+        ),
+      ),
+  );
+  const secretById = new Map(connectorSecrets.map((s) => [s.id, s]));
+
+  const resolved: Record<string, string> = {};
+  const missingFields: string[] = [];
+
+  for (const [key, fieldSchema] of Object.entries(configSchema)) {
+    const value = rawConfig[key];
+
+    if (value === undefined || value === null) {
+      if (fieldSchema.required) {
+        missingFields.push(key);
+      }
+      continue;
+    }
+
+    if (fieldSchema.type === "secret" && typeof value === "string") {
+      const secret = secretById.get(value);
+      if (secret) {
+        resolved[key] = await decryptSecret(secret.encryptedValue);
+      } else if (fieldSchema.required) {
+        missingFields.push(key);
+      }
+    } else {
+      resolved[key] = String(value);
+    }
+  }
+
+  return { resolved, missingFields };
+}
+
+// ============================================================================
+// Health check / ping
+// ============================================================================
+
+export async function pingConnector(
+  orgId: string,
+  connectorId: string,
+): Promise<HealthCheckResult> {
+  const connector = await getConnectorById(orgId, connectorId);
+
+  if (!connector.isActive) {
+    throw Errors.connectorInactive(connectorId);
+  }
+
+  const catalog = await getCatalogEntry(connector.connectorCatalogId);
+  const manifest = getConnectorManifest(catalog.slug);
+
+  if (!manifest?.healthCheck) {
+    throw Errors.validationError(
+      `Connector type "${catalog.slug}" does not support health checks`,
+    );
+  }
+
+  const { resolved, missingFields } = await resolveConnectorConfig(
+    orgId,
+    connector,
+    catalog.configSchema,
+  );
+
+  if (missingFields.length > 0) {
+    throw Errors.connectorNotConfigured(connectorId, {
+      missingFields,
+    });
+  }
+
+  return manifest.healthCheck(resolved);
 }

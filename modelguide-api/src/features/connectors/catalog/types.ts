@@ -33,6 +33,13 @@ export interface ConfigFieldSchema {
 
 export type ConnectorType = "api" | "webhook" | "database" | "messaging";
 
+export interface HealthCheckResult {
+  status: "healthy" | "error";
+  latencyMs: number;
+  message?: string;
+  checkedAt: string; // ISO-8601
+}
+
 export interface ConnectorManifest {
   name: string;
   slug: string;
@@ -42,4 +49,5 @@ export interface ConnectorManifest {
   authMethods: string[];
   iconUrl: string;
   tools: ConnectorToolDefinition[];
+  healthCheck?: (config: Record<string, string>) => Promise<HealthCheckResult>;
 }

@@ -31,6 +31,7 @@ export const catalogEntrySchema = z.object({
   authMethods: z.array(z.string()).nullable(),
   iconUrl: z.string().nullable(),
   isActive: z.boolean(),
+  hasHealthCheck: z.boolean(),
   createdAt: z.string(),
 })
 
@@ -94,6 +95,17 @@ export const connectorToolUpdateSchema = z.object({
 })
 
 export type ConnectorToolUpdate = z.infer<typeof connectorToolUpdateSchema>
+
+// --- Health check ---
+
+export const healthCheckResultSchema = z.object({
+  status: z.enum(['healthy', 'error']),
+  latencyMs: z.number(),
+  message: z.string().optional(),
+  checkedAt: z.string(),
+})
+
+export type HealthCheckResult = z.infer<typeof healthCheckResultSchema>
 
 // --- Helpers ---
 

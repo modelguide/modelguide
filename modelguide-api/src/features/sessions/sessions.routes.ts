@@ -149,10 +149,14 @@ const createMessageSchema = z.object({
   role: z.enum(["user", "assistant"]).openapi({ example: "user" }),
   content: z.string().optional().openapi({
     description: "Message text content",
-    example: "I'd like to order a large pepperoni pizza",
+    example: "Hi, I'd like to check on my order",
   }),
   audioUrl: z.string().url().optional().openapi({
     description: "URL to audio recording",
+  }),
+  occurredAt: z.string().datetime().optional().openapi({
+    description:
+      "When the message occurred (ISO 8601). Defaults to now if omitted.",
   }),
   toolCalls: z
     .array(
@@ -161,6 +165,7 @@ const createMessageSchema = z.object({
         toolName: z.string(),
         toolInput: z.record(z.unknown()).optional(),
         toolOutput: z.record(z.unknown()).optional(),
+        latencyMs: z.number().int().positive().optional(),
       }),
     )
     .optional()
@@ -547,8 +552,11 @@ router.openapi(addMessageRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const agent = getCurrentAgent(c);
   const { id } = c.req.valid("param");
-  const body = c.req.valid("json");
-  const messages = await addMessage(orgId, id, agent.id, body);
+  const { occurredAt, ...rest } = c.req.valid("json");
+  const messages = await addMessage(orgId, id, agent.id, {
+    ...rest,
+    occurredAt: occurredAt ? new Date(occurredAt) : undefined,
+  });
 
   return c.json({ data: messages.map(formatMessage) }, 201);
 });

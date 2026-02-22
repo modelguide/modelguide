@@ -5,11 +5,14 @@ import { Avatar } from '~/components/ui/avatar'
 import { cn } from '~/lib/cn'
 import { Logo } from './logo'
 
+type Role = 'admin' | 'support' | 'viewer'
+
 interface NavItem {
   label: string
   href: string
   icon: ReactNode
-  adminOnly?: boolean
+  /** When set, only these roles see the item. Omit to show to all roles in the section. */
+  roles?: Role[]
 }
 
 const mainNav: NavItem[] = [
@@ -19,23 +22,27 @@ const mainNav: NavItem[] = [
 ]
 
 const adminNav: NavItem[] = [
-  { label: 'Agents', href: '/agents', icon: <Bot className="h-4 w-4" />, adminOnly: true },
-  { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" />, adminOnly: true },
-  { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" />, adminOnly: true },
+  { label: 'Agents', href: '/agents', icon: <Bot className="h-4 w-4" /> },
+  { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" /> },
+  { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" />, roles: ['admin'] },
 ]
 
 interface SidebarProps {
   user: {
     name: string
     email: string
-    role: 'admin' | 'support'
+    role: Role
     avatarUrl?: string
   }
 }
 
+function visibleItems(items: NavItem[], role: Role): NavItem[] {
+  return items.filter((item) => !item.roles || item.roles.includes(role))
+}
+
 export function Sidebar({ user }: SidebarProps) {
   const location = useLocation()
-  const isAdmin = user.role === 'admin'
+  const canBrowseAdmin = user.role === 'admin' || user.role === 'viewer'
 
   return (
     <aside className="relative flex h-screen w-[260px] flex-col border-r border-fg-subtle/10 bg-bg-elevated">
@@ -55,7 +62,7 @@ export function Sidebar({ user }: SidebarProps) {
             Main
           </h3>
           <ul className="space-y-1">
-            {mainNav.map((item) => (
+            {visibleItems(mainNav, user.role).map((item) => (
               <NavLink
                 key={item.href}
                 item={item}
@@ -70,13 +77,13 @@ export function Sidebar({ user }: SidebarProps) {
         </div>
 
         {/* Admin Section */}
-        {isAdmin && (
+        {canBrowseAdmin && (
           <div>
             <h3 className="mb-3 px-3 font-display text-[10px] font-semibold uppercase tracking-[0.2em] text-fg-subtle">
               Admin
             </h3>
             <ul className="space-y-1">
-              {adminNav.map((item) => (
+              {visibleItems(adminNav, user.role).map((item) => (
                 <NavLink
                   key={item.href}
                   item={item}

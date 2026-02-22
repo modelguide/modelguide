@@ -2,45 +2,20 @@
  * Authentication routes for magic link login with refresh token rotation
  */
 
-import { env } from "@/env";
 import { createRoute, z } from "@hono/zod-openapi";
+import {
+  REFRESH_COOKIE,
+  clearRefreshCookie,
+  setRefreshCookie,
+} from "@lib/cookies";
 import { createRouter } from "@lib/create-app";
-import { parseDuration, verifyRefreshJWT } from "@lib/jwt";
+import { verifyRefreshJWT } from "@lib/jwt";
 import { csrfProtection, getCurrentUser, requireUser } from "@lib/middleware";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { requestMagicLink, verifyMagicToken } from "./auth.service";
+import { getCookie } from "hono/cookie";
+import { LOGIN_RESULT, loginByEmail, verifyMagicToken } from "./auth.service";
 import { revokeSession, rotateRefreshToken } from "./refresh-token.service";
 
 const router = createRouter();
-
-// ============================================================================
-// Cookie helpers
-// ============================================================================
-
-const useSecureCookies = new URL(env.APP_URL).protocol === "https:";
-const REFRESH_COOKIE = useSecureCookies
-  ? "__Host-refresh_token"
-  : "refresh_token";
-
-function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
-  const maxAge = parseDuration(env.REFRESH_TOKEN_EXPIRES_IN);
-  setCookie(c, REFRESH_COOKIE, token, {
-    httpOnly: true,
-    secure: useSecureCookies,
-    sameSite: "Strict",
-    path: "/",
-    maxAge,
-  });
-}
-
-function clearRefreshCookie(c: Parameters<typeof deleteCookie>[0]) {
-  deleteCookie(c, REFRESH_COOKIE, {
-    httpOnly: true,
-    secure: useSecureCookies,
-    sameSite: "Strict",
-    path: "/",
-  });
-}
 
 // ============================================================================
 // Schemas
@@ -48,9 +23,9 @@ function clearRefreshCookie(c: Parameters<typeof deleteCookie>[0]) {
 
 const loginRequestSchema = z.object({
   email: z.string().email().openapi({
-    example: "admin@pizza-palace.com",
+    example: "delivered+admin-glowbox@resend.dev",
     description:
-      "User's email address. Seed users: admin@pizza-palace.com, support@pizza-palace.com, admin@burger-barn.com, support@burger-barn.com",
+      "User's email address. Seed users: delivered+admin-glowbox@resend.dev, delivered+support-glowbox@resend.dev",
   }),
 });
 
@@ -71,17 +46,17 @@ const verifyResponseSchema = z.object({
         example: "550e8400-e29b-41d4-a716-446655440000",
       }),
       email: z.string().email().openapi({
-        example: "admin@pizza-palace.com",
+        example: "delivered+admin-glowbox@resend.dev",
       }),
       name: z.string().openapi({
-        example: "Admin User",
+        example: "Rachel Kim",
       }),
-      role: z.enum(["admin", "support"]).openapi({
+      role: z.enum(["admin", "support", "viewer"]).openapi({
         example: "admin",
       }),
       organizationId: z.string().uuid().openapi({
         example: "550e8400-e29b-41d4-a716-446655440001",
-        description: "Organization ID (Pizza Palace or Burger Barn)",
+        description: "Organization ID",
       }),
     })
     .openapi({
@@ -94,18 +69,18 @@ const meResponseSchema = z.object({
     example: "550e8400-e29b-41d4-a716-446655440000",
   }),
   email: z.string().email().openapi({
-    example: "admin@pizza-palace.com",
+    example: "delivered+admin-glowbox@resend.dev",
   }),
   name: z.string().openapi({
-    example: "Admin User",
+    example: "Rachel Kim",
   }),
-  role: z.enum(["admin", "support"]).openapi({
+  role: z.enum(["admin", "support", "viewer"]).openapi({
     example: "admin",
     description: "User role: admin has full access, support has limited access",
   }),
   organizationId: z.string().uuid().openapi({
     example: "550e8400-e29b-41d4-a716-446655440001",
-    description: "Organization ID (Pizza Palace or Burger Barn)",
+    description: "Organization ID",
   }),
 });
 
@@ -128,14 +103,14 @@ const loginRoute = createRoute({
   method: "post",
   path: "/login",
   tags: ["Authentication"],
-  summary: "Request magic link login",
-  description: `Sends a magic link to the user's email for passwordless authentication.
+  summary: "Login (unified)",
+  description: `Unified login endpoint. Demo viewers in demo-enabled orgs are authenticated instantly (200 + tokens). All other users receive a magic link via email (202 + message).
 
-**Test with seed data:**
-- \`admin@pizza-palace.com\` / \`support@pizza-palace.com\` (Pizza Palace org)
-- \`admin@burger-barn.com\` / \`support@burger-barn.com\` (Burger Barn org)
+**Test with seed data (GlowBox Beauty org):**
+- \`delivered+admin-glowbox@resend.dev\` / \`delivered+support-glowbox@resend.dev\` → 202 magic link
+- \`delivered+viewer-glowbox@resend.dev\` (demo viewer) → 200 instant auth
 
-In development mode, the magic link is printed to the console instead of being sent via email.`,
+In development mode, magic links are printed to the console instead of being sent via email.`,
   request: {
     body: {
       content: {
@@ -148,7 +123,16 @@ In development mode, the magic link is printed to the console instead of being s
   responses: {
     200: {
       description:
-        "Magic link sent (or user not found - same response for security)",
+        "Demo viewer authenticated instantly. Refresh token set as httpOnly cookie.",
+      content: {
+        "application/json": {
+          schema: verifyResponseSchema,
+        },
+      },
+    },
+    202: {
+      description:
+        "Magic link sent (or user not found — same response for security)",
       content: {
         "application/json": {
           schema: loginResponseSchema,
@@ -169,9 +153,19 @@ In development mode, the magic link is printed to the console instead of being s
 router.openapi(loginRoute, async (c) => {
   const { email } = c.req.valid("json");
 
-  await requestMagicLink(email);
+  const result = await loginByEmail(email);
 
-  return c.json({ message: "Magic link sent" }, 200);
+  if (result.type === LOGIN_RESULT.DEMO_AUTHENTICATED) {
+    setRefreshCookie(c, result.session.refreshToken, {
+      maxAgeSeconds: result.session.refreshTtlSeconds,
+    });
+    return c.json(
+      { token: result.session.accessToken, user: result.session.user },
+      200,
+    );
+  }
+
+  return c.json({ message: "Magic link sent" }, 202);
 });
 
 const verifyRoute = createRoute({
@@ -349,7 +343,7 @@ const meRoute = createRoute({
 **Requires:** Bearer JWT token in Authorization header.
 
 **How to get a token:**
-1. POST /api/auth/login with \`{"email": "admin@pizza-palace.com"}\`
+1. POST /api/auth/login with \`{"email": "delivered+admin-glowbox@resend.dev"}\`
 2. Copy the token from the console magic link URL
 3. GET /api/auth/verify?token=YOUR_TOKEN to receive a JWT
 4. Use the JWT below as Bearer token`,

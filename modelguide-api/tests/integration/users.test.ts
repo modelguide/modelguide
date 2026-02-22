@@ -34,7 +34,7 @@ afterAll(async () => {
 
 describe("GET /api/users", () => {
   test("admin can list users", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
+    const headers = await authHeadersFor(s.orgAAdmin);
     const response = await request("/api/users", { headers });
     expect(response.status).toBe(200);
 
@@ -46,7 +46,7 @@ describe("GET /api/users", () => {
   });
 
   test("support can list users", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
+    const headers = await authHeadersFor(s.orgASupport);
     const response = await request("/api/users", { headers });
     expect(response.status).toBe(200);
 
@@ -55,7 +55,7 @@ describe("GET /api/users", () => {
   });
 
   test("pagination works", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
+    const headers = await authHeadersFor(s.orgAAdmin);
     const response = await request("/api/users?page=1&pageSize=1", { headers });
     expect(response.status).toBe(200);
 
@@ -78,7 +78,7 @@ describe("GET /api/users", () => {
 
 describe("POST /api/users", () => {
   test("admin can create user", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
+    const headers = await authHeadersFor(s.orgAAdmin);
     const email = `new_user_${Date.now()}@test.com`;
 
     const response = await request("/api/users", {
@@ -97,13 +97,13 @@ describe("POST /api/users", () => {
   });
 
   test("duplicate email returns 409", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
+    const headers = await authHeadersFor(s.orgAAdmin);
 
     const response = await request("/api/users", {
       method: "POST",
       headers,
       body: JSON.stringify({
-        email: s.pizzaAdmin.email,
+        email: s.orgAAdmin.email,
         name: "Duplicate",
         role: "support",
       }),
@@ -115,7 +115,7 @@ describe("POST /api/users", () => {
   });
 
   test("support cannot create user (403)", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
+    const headers = await authHeadersFor(s.orgASupport);
 
     const response = await request("/api/users", {
       method: "POST",
@@ -136,30 +136,30 @@ describe("POST /api/users", () => {
 
 describe("GET /api/users/:id", () => {
   test("admin can get any user", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
-    const response = await request(`/api/users/${s.pizzaSupport.id}`, {
+    const headers = await authHeadersFor(s.orgAAdmin);
+    const response = await request(`/api/users/${s.orgASupport.id}`, {
       headers,
     });
     expect(response.status).toBe(200);
 
     const body = await response.json();
-    expect(body.id).toBe(s.pizzaSupport.id);
-    expect(body.organizationId).toBe(s.pizzaOrg.id);
+    expect(body.id).toBe(s.orgASupport.id);
+    expect(body.organizationId).toBe(s.orgA.id);
   });
 
   test("support can get self", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
-    const response = await request(`/api/users/${s.pizzaSupport.id}`, {
+    const headers = await authHeadersFor(s.orgASupport);
+    const response = await request(`/api/users/${s.orgASupport.id}`, {
       headers,
     });
     expect(response.status).toBe(200);
 
     const body = await response.json();
-    expect(body.id).toBe(s.pizzaSupport.id);
+    expect(body.id).toBe(s.orgASupport.id);
   });
 
   test("404 for missing user", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
+    const headers = await authHeadersFor(s.orgAAdmin);
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/users/${fakeId}`, { headers });
     expect(response.status).toBe(404);
@@ -172,8 +172,8 @@ describe("GET /api/users/:id", () => {
 
 describe("PATCH /api/users/:id", () => {
   test("admin can update user name", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
-    const response = await request(`/api/users/${s.pizzaSupport.id}`, {
+    const headers = await authHeadersFor(s.orgAAdmin);
+    const response = await request(`/api/users/${s.orgASupport.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ name: "Updated Support" }),
@@ -184,7 +184,7 @@ describe("PATCH /api/users/:id", () => {
     expect(body.name).toBe("Updated Support");
 
     // Restore original name
-    await request(`/api/users/${s.pizzaSupport.id}`, {
+    await request(`/api/users/${s.orgASupport.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ name: "Support User" }),
@@ -192,8 +192,8 @@ describe("PATCH /api/users/:id", () => {
   });
 
   test("support can update own name", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
-    const response = await request(`/api/users/${s.pizzaSupport.id}`, {
+    const headers = await authHeadersFor(s.orgASupport);
+    const response = await request(`/api/users/${s.orgASupport.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ name: "My New Name" }),
@@ -204,7 +204,7 @@ describe("PATCH /api/users/:id", () => {
     expect(body.name).toBe("My New Name");
 
     // Restore
-    await request(`/api/users/${s.pizzaSupport.id}`, {
+    await request(`/api/users/${s.orgASupport.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ name: "Support User" }),
@@ -212,8 +212,8 @@ describe("PATCH /api/users/:id", () => {
   });
 
   test("support cannot change role", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
-    const response = await request(`/api/users/${s.pizzaSupport.id}`, {
+    const headers = await authHeadersFor(s.orgASupport);
+    const response = await request(`/api/users/${s.orgASupport.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ role: "admin" }),
@@ -222,8 +222,8 @@ describe("PATCH /api/users/:id", () => {
   });
 
   test("support cannot update other users", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
-    const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
+    const headers = await authHeadersFor(s.orgASupport);
+    const response = await request(`/api/users/${s.orgAAdmin.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ name: "Hacked" }),
@@ -232,8 +232,8 @@ describe("PATCH /api/users/:id", () => {
   });
 
   test("admin cannot demote themselves", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
-    const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
+    const headers = await authHeadersFor(s.orgAAdmin);
+    const response = await request(`/api/users/${s.orgAAdmin.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ role: "support" }),
@@ -242,8 +242,8 @@ describe("PATCH /api/users/:id", () => {
   });
 
   test("empty body returns 422", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
-    const response = await request(`/api/users/${s.pizzaSupport.id}`, {
+    const headers = await authHeadersFor(s.orgAAdmin);
+    const response = await request(`/api/users/${s.orgASupport.id}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({}),
@@ -259,7 +259,7 @@ describe("PATCH /api/users/:id", () => {
 describe("DELETE /api/users/:id", () => {
   test("admin can deactivate user", async () => {
     // Create a user to deactivate
-    const headers = await authHeadersFor(s.pizzaAdmin);
+    const headers = await authHeadersFor(s.orgAAdmin);
     const email = `deactivate_${Date.now()}@test.com`;
 
     const createResponse = await request("/api/users", {
@@ -283,8 +283,8 @@ describe("DELETE /api/users/:id", () => {
   });
 
   test("support cannot deactivate users (403)", async () => {
-    const headers = await authHeadersFor(s.pizzaSupport);
-    const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
+    const headers = await authHeadersFor(s.orgASupport);
+    const response = await request(`/api/users/${s.orgAAdmin.id}`, {
       method: "DELETE",
       headers,
     });
@@ -292,8 +292,8 @@ describe("DELETE /api/users/:id", () => {
   });
 
   test("admin cannot deactivate themselves", async () => {
-    const headers = await authHeadersFor(s.pizzaAdmin);
-    const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
+    const headers = await authHeadersFor(s.orgAAdmin);
+    const response = await request(`/api/users/${s.orgAAdmin.id}`, {
       method: "DELETE",
       headers,
     });
@@ -307,22 +307,22 @@ describe("DELETE /api/users/:id", () => {
 
 describe("Cross-org access blocked", () => {
   test("org B admin cannot see org A users", async () => {
-    const headers = await authHeadersFor(s.burgerAdmin);
-    const response = await request(`/api/users/${s.pizzaAdmin.id}`, {
+    const headers = await authHeadersFor(s.orgBAdmin);
+    const response = await request(`/api/users/${s.orgAAdmin.id}`, {
       headers,
     });
     expect(response.status).toBe(404);
   });
 
   test("org B admin list only shows org B users", async () => {
-    const headers = await authHeadersFor(s.burgerAdmin);
+    const headers = await authHeadersFor(s.orgBAdmin);
     const response = await request("/api/users", { headers });
     expect(response.status).toBe(200);
 
     const body = await response.json();
     for (const user of body.data) {
-      expect(user.id).not.toBe(s.pizzaAdmin.id);
-      expect(user.id).not.toBe(s.pizzaSupport.id);
+      expect(user.id).not.toBe(s.orgAAdmin.id);
+      expect(user.id).not.toBe(s.orgASupport.id);
     }
   });
 });

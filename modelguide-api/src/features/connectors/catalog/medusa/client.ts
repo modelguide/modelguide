@@ -4,16 +4,18 @@
  */
 
 import { type ConnectorFetcher, createBaseFetcher } from "../lib/http-client";
+import { validateBaseUrl } from "../lib/validate-url";
 
 export type { ConnectorFetcher as MedusaFetcher };
 
 export function createMedusaFetcher(
   config: Record<string, string>,
+  timeoutMs?: number,
 ): ConnectorFetcher {
-  const baseUrl = config.baseUrl?.replace(/\/+$/, "");
-  if (!baseUrl) {
+  if (!config.baseUrl) {
     throw new Error("Medusa baseUrl is required");
   }
+  const baseUrl = validateBaseUrl(config.baseUrl, "Medusa");
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -24,16 +26,16 @@ export function createMedusaFetcher(
     headers["x-publishable-api-key"] = config.publishableKey;
   }
 
-  return createBaseFetcher(baseUrl, headers, "Medusa");
+  return createBaseFetcher(baseUrl, headers, "Medusa", timeoutMs);
 }
 
 export function createMedusaAdminFetcher(
   config: Record<string, string>,
 ): ConnectorFetcher {
-  const baseUrl = config.baseUrl?.replace(/\/+$/, "");
-  if (!baseUrl) {
+  if (!config.baseUrl) {
     throw new Error("Medusa baseUrl is required");
   }
+  const baseUrl = validateBaseUrl(config.baseUrl, "Medusa");
 
   const secretApiKey = config.secretApiKey;
   if (!secretApiKey) {

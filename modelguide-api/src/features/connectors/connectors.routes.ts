@@ -13,6 +13,7 @@ import {
 } from "@lib/middleware";
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
+import { getConnectorManifest } from "./catalog/registry";
 import {
   createConnector,
   deleteConnector,
@@ -21,6 +22,7 @@ import {
   listCatalog,
   listConnectorTools,
   listConnectors,
+  pingConnector,
   updateConnector,
   updateConnectorTool,
 } from "./connectors.service";
@@ -50,6 +52,7 @@ const catalogResponseSchema = z.object({
   authMethods: z.array(z.string()).nullable(),
   iconUrl: z.string().nullable(),
   isActive: z.boolean(),
+  hasHealthCheck: z.boolean(),
   createdAt: z.string(),
 });
 
@@ -152,6 +155,7 @@ const toolIdParams = z.object({
 // ============================================================================
 
 function formatCatalog(entry: ConnectorCatalog) {
+  const manifest = getConnectorManifest(entry.slug);
   return {
     id: entry.id,
     name: entry.name,
@@ -163,6 +167,7 @@ function formatCatalog(entry: ConnectorCatalog) {
     authMethods: entry.authMethods,
     iconUrl: entry.iconUrl,
     isActive: entry.isActive,
+    hasHealthCheck: !!manifest?.healthCheck,
     createdAt: entry.createdAt.toISOString(),
   };
 }
@@ -486,6 +491,54 @@ router.openapi(deleteConnectorRoute, async (c) => {
   await deleteConnector(orgId, id);
 
   return c.body(null, 204);
+});
+
+// POST /:id/ping
+router.post(
+  "/:id/ping",
+  requireUser(),
+  requirePermission("connectors:read"),
+  requireOrganization(),
+);
+
+const healthCheckResponseSchema = z.object({
+  status: z.enum(["healthy", "error"]),
+  latencyMs: z.number(),
+  message: z.string().optional(),
+  checkedAt: z.string(),
+});
+
+const pingRoute = createRoute({
+  method: "post",
+  path: "/{id}/ping",
+  tags: ["Connectors"],
+  summary: "Ping connector",
+  description:
+    "Tests connectivity to the external service by calling a lightweight health endpoint.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: connectorIdParams,
+  },
+  responses: {
+    200: {
+      description: "Health check result",
+      content: {
+        "application/json": { schema: healthCheckResponseSchema },
+      },
+    },
+    400: errorResponse("Connector inactive or not configured"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Connector not found"),
+  },
+});
+
+router.openapi(pingRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const result = await pingConnector(orgId, id);
+
+  return c.json(result, 200);
 });
 
 // GET /:id/tools

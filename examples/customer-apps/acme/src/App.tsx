@@ -3,21 +3,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const LS_KEY = "acme-corp-config";
 
-function loadConfig(): { apiKey: string; agentId: string } {
+function loadConfig(): { apiUrl: string; apiKey: string; agentId: string } {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { apiKey: parsed.apiKey ?? "", agentId: parsed.agentId ?? "" };
+      return { apiUrl: parsed.apiUrl ?? "", apiKey: parsed.apiKey ?? "", agentId: parsed.agentId ?? "" };
     }
   } catch {}
-  return { apiKey: "", agentId: "" };
+  return { apiUrl: "", apiKey: "", agentId: "" };
 }
 
 type Message = { source: "user" | "ai"; text: string; ts: number };
 
 export function App() {
   const saved = useRef(loadConfig());
+  const [apiUrl, setApiUrl] = useState(saved.current.apiUrl);
   const [apiKey, setApiKey] = useState(saved.current.apiKey);
   const [agentId, setAgentId] = useState(saved.current.agentId);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -27,11 +28,11 @@ export function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [callDuration, setCallDuration] = useState(0);
   const callStart = useRef<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify({ apiKey, agentId }));
-  }, [apiKey, agentId]);
+    localStorage.setItem(LS_KEY, JSON.stringify({ apiUrl, apiKey, agentId }));
+  }, [apiUrl, apiKey, agentId]);
 
   const conversation = useConversation({
     onMessage: (props: { message: string; source: "user" | "ai" }) => {
@@ -50,7 +51,8 @@ export function App() {
     setStarting(true);
     setCallDuration(0);
     try {
-      const res = await fetch("/api/sessions", {
+      const baseUrl = apiUrl.replace(/\/+$/, "") || "";
+      const res = await fetch(`${baseUrl}/api/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -74,6 +76,7 @@ export function App() {
 
       await conversation.startSession({
         agentId,
+        connectionType: "webrtc",
         dynamicVariables: {
           mg_session_id: session.id,
           mg_user_id: "demo-user",
@@ -91,7 +94,7 @@ export function App() {
     } finally {
       setStarting(false);
     }
-  }, [apiKey, agentId, conversation]);
+  }, [apiUrl, apiKey, agentId, conversation]);
 
   const endCall = useCallback(async () => {
     clearInterval(timerRef.current);
@@ -139,6 +142,16 @@ export function App() {
             <div className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
               Configuration
             </div>
+            <Field label="ModelGuide API URL">
+              <input
+                type="text"
+                placeholder="https://your-api.railway.app"
+                value={apiUrl}
+                onChange={(e) => setApiUrl(e.target.value)}
+                className="input-field"
+                disabled={isConnected || isConnecting}
+              />
+            </Field>
             <Field label="ModelGuide API Key">
               <input
                 type="password"

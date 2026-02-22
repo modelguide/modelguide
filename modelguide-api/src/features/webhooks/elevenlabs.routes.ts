@@ -8,7 +8,7 @@
  */
 
 import { env } from "@/env";
-import { db } from "@db/client";
+import { forApp, forOrg } from "@db/rls";
 import { agents, sessionLinks, sessionMessages, sessions } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { and, eq } from "drizzle-orm";
@@ -35,12 +35,14 @@ async function verifySignature(
 }
 
 async function getAgentWithMetadata(agentId: string) {
-  const [agent] = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.id, agentId))
-    .limit(1);
-  return agent ?? null;
+  return forApp(async (tx) => {
+    const [agent] = await tx
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId))
+      .limit(1);
+    return agent ?? null;
+  });
 }
 
 // ============================================================================
@@ -75,6 +77,8 @@ app.post("/:agentId/post-call", async (c) => {
   }
 
   // 2. Verify webhook signature with agent-specific secret
+  // Dev-only: allow skipping HMAC for manual replay scripts (replay-post-call.ts).
+  // Safe in production because NODE_ENV !== "development".
   const skipHmac =
     env.NODE_ENV === "development" && c.req.header("x-skip-hmac") === "true";
 
@@ -131,17 +135,28 @@ app.post("/:agentId/post-call", async (c) => {
   const converted = convertPostCallToSession(data, dynamicVars, conversationId);
   const existingSessionId = dynamicVars?.mg_session_id;
 
-  // 5. Idempotency: check if session with this externalId already exists
-  const [existingByExternalId] = await db
-    .select({ id: sessions.id })
-    .from(sessions)
-    .where(
-      and(
-        eq(sessions.agentId, agent.id),
-        eq(sessions.externalId, conversationId),
-      ),
-    )
-    .limit(1);
+  // 5. Extract external resource links from tool outputs
+  const toolMessages = converted.messages
+    .filter((m) => m.role === "tool" && m.toolOutput)
+    .map((m) => ({
+      toolName: m.toolName ?? "",
+      toolOutput: m.toolOutput,
+    }));
+  const linkRows = extractLinks(toolMessages);
+
+  // 6. Idempotency: check if session with this externalId already exists
+  const [existingByExternalId] = await forOrg(agentRow.organizationId, (tx) =>
+    tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.agentId, agent.id),
+          eq(sessions.externalId, conversationId),
+        ),
+      )
+      .limit(1),
+  );
 
   if (existingByExternalId) {
     console.log(
@@ -150,17 +165,11 @@ app.post("/:agentId/post-call", async (c) => {
     return c.json({ received: true, session_id: existingByExternalId.id });
   }
 
-  // 6. Extract links from tool outputs
-  const toolMessages = converted.messages
-    .filter((m) => m.role === "tool" && m.toolOutput)
-    .map((m) => ({ toolName: m.toolName ?? "", toolOutput: m.toolOutput }));
-  const linkRows = extractLinks(toolMessages);
-
   // 7. Store session + messages + links in a transaction
   let sessionId: string;
 
   try {
-    sessionId = await db.transaction(async (tx) => {
+    sessionId = await forOrg(agentRow.organizationId, async (tx) => {
       if (existingSessionId) {
         // Session was created upfront — insert transcript messages, then complete
         if (converted.messages.length > 0) {

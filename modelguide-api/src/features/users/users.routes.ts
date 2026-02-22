@@ -28,7 +28,7 @@ const userResponseSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   name: z.string(),
-  role: z.enum(["admin", "support"]),
+  role: z.enum(["admin", "support", "viewer"]),
   organizationId: z.string().uuid(),
   isActive: z.boolean(),
   lastLoginAt: z.string().nullable(),
@@ -66,7 +66,7 @@ function formatUser(user: {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: user.role as "admin" | "support",
+    role: user.role as "admin" | "support" | "viewer",
     organizationId: user.organizationId,
     isActive: user.isActive,
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
@@ -217,7 +217,12 @@ router.get(
   requirePermission("users:read"),
   requireOrganization(),
 );
-router.patch("/:id", requireUser(), requireOrganization());
+router.patch(
+  "/:id",
+  requireUser(),
+  requirePermission("users:update"),
+  requireOrganization(),
+);
 router.delete(
   "/:id",
   requireUser(),

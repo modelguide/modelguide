@@ -3,17 +3,18 @@
  * Tests the full HTTP request/response cycle with RLS isolation
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
 import { connectors } from "@db/schema";
+import { loadAllManifests } from "@features/connectors/catalog/registry";
 import { eq } from "drizzle-orm";
 import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
 let s: TestSeed;
-let pizzaAdminHeaders: Record<string, string>;
-let pizzaSupportHeaders: Record<string, string>;
-let burgerAdminHeaders: Record<string, string>;
+let orgAAdminHeaders: Record<string, string>;
+let orgASupportHeaders: Record<string, string>;
+let orgBAdminHeaders: Record<string, string>;
 
 /** IDs of connectors created during tests (for cleanup) */
 const createdConnectorIds: string[] = [];
@@ -24,9 +25,10 @@ function request(path: string, options?: RequestInit) {
 
 beforeAll(async () => {
   s = await getTestSeed();
-  pizzaAdminHeaders = await authHeadersFor(s.pizzaAdmin);
-  pizzaSupportHeaders = await authHeadersFor(s.pizzaSupport);
-  burgerAdminHeaders = await authHeadersFor(s.burgerAdmin);
+  orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
+  orgASupportHeaders = await authHeadersFor(s.orgASupport);
+  orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
+  await loadAllManifests();
 });
 
 afterAll(async () => {
@@ -47,7 +49,7 @@ afterAll(async () => {
 describe("GET /api/connectors/catalog", () => {
   test("returns active catalog entries with pagination (200)", async () => {
     const response = await request("/api/connectors/catalog", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -67,7 +69,7 @@ describe("GET /api/connectors/catalog", () => {
 
   test("accessible by support role (200)", async () => {
     const response = await request("/api/connectors/catalog", {
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -86,14 +88,17 @@ describe("GET /api/connectors/catalog", () => {
 
 describe("GET /api/connectors/catalog/:catalogId", () => {
   test("returns single catalog entry with tools array (200)", async () => {
-    const response = await request(`/api/connectors/catalog/${s.catalogId}`, {
-      headers: pizzaAdminHeaders,
-    });
+    const response = await request(
+      `/api/connectors/catalog/${s.medusaCatalogId}`,
+      {
+        headers: orgAAdminHeaders,
+      },
+    );
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
-    expect(body.id).toBe(s.catalogId);
+    expect(body.id).toBe(s.medusaCatalogId);
     expect(body.name).toBeDefined();
     expect(body.slug).toBeDefined();
     expect(body.tools).toBeArray();
@@ -104,16 +109,19 @@ describe("GET /api/connectors/catalog/:catalogId", () => {
   test("returns 404 for non-existent catalog entry", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/connectors/catalog/${fakeId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
   test("accessible by support role (200)", async () => {
-    const response = await request(`/api/connectors/catalog/${s.catalogId}`, {
-      headers: pizzaSupportHeaders,
-    });
+    const response = await request(
+      `/api/connectors/catalog/${s.medusaCatalogId}`,
+      {
+        headers: orgASupportHeaders,
+      },
+    );
 
     expect(response.status).toBe(200);
   });
@@ -127,9 +135,9 @@ describe("POST /api/connectors", () => {
   test("creates connector instance (201)", async () => {
     const response = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "Test Medusa Store",
         slug: "test-medusa-store",
         config: { baseUrl: "https://test.medusa.com" },
@@ -142,7 +150,7 @@ describe("POST /api/connectors", () => {
     expect(body.id).toBeDefined();
     expect(body.name).toBe("Test Medusa Store");
     expect(body.slug).toBe("test-medusa-store");
-    expect(body.connectorCatalogId).toBe(s.catalogId);
+    expect(body.connectorCatalogId).toBe(s.medusaCatalogId);
     expect(body.isActive).toBe(true);
     expect(body.createdAt).toBeDefined();
 
@@ -152,9 +160,9 @@ describe("POST /api/connectors", () => {
   test("auto-creates connector_tools matching catalog tool count", async () => {
     const response = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "Tool Count Test",
         slug: "tool-count-test",
       }),
@@ -167,7 +175,7 @@ describe("POST /api/connectors", () => {
     // Get the tools
     const toolsResponse = await request(
       `/api/connectors/${connector.id}/tools`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(toolsResponse.status).toBe(200);
@@ -187,9 +195,9 @@ describe("POST /api/connectors", () => {
     // Create first
     const first = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "Duplicate Test",
         slug: "duplicate-slug-test",
       }),
@@ -201,9 +209,9 @@ describe("POST /api/connectors", () => {
     // Create second with same slug
     const second = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "Duplicate Test 2",
         slug: "duplicate-slug-test",
       }),
@@ -215,7 +223,7 @@ describe("POST /api/connectors", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         connectorCatalogId: fakeId,
         name: "Bad Catalog",
@@ -229,9 +237,9 @@ describe("POST /api/connectors", () => {
   test("rejects support role (403)", async () => {
     const response = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "Support Attempt",
         slug: "support-attempt",
       }),
@@ -243,7 +251,7 @@ describe("POST /api/connectors", () => {
   test("validates required fields (422)", async () => {
     const response = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Missing fields" }),
     });
 
@@ -255,7 +263,7 @@ describe("POST /api/connectors", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "No Auth",
         slug: "no-auth",
       }),
@@ -272,7 +280,7 @@ describe("POST /api/connectors", () => {
 describe("GET /api/connectors", () => {
   test("returns org connectors with pagination (200)", async () => {
     const response = await request("/api/connectors", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -286,7 +294,7 @@ describe("GET /api/connectors", () => {
 
   test("supports pagination parameters", async () => {
     const response = await request("/api/connectors?page=1&pageSize=5", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -296,7 +304,7 @@ describe("GET /api/connectors", () => {
 
   test("accessible by support role (200)", async () => {
     const response = await request("/api/connectors", {
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -309,14 +317,17 @@ describe("GET /api/connectors", () => {
 
 describe("GET /api/connectors/:id", () => {
   test("returns connector details (200)", async () => {
-    const response = await request(`/api/connectors/${s.pizzaConnectorId}`, {
-      headers: pizzaAdminHeaders,
-    });
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}`,
+      {
+        headers: orgAAdminHeaders,
+      },
+    );
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
-    expect(body.id).toBe(s.pizzaConnectorId);
+    expect(body.id).toBe(s.orgAMedusaConnectorId);
     expect(body.name).toBeDefined();
     expect(body.slug).toBeDefined();
     expect(body.isActive).toBeDefined();
@@ -325,7 +336,7 @@ describe("GET /api/connectors/:id", () => {
   test("returns 404 for non-existent connector", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/connectors/${fakeId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -342,9 +353,9 @@ describe("PATCH /api/connectors/:id", () => {
   beforeAll(async () => {
     const response = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "Update Target",
         slug: "update-target",
       }),
@@ -357,7 +368,7 @@ describe("PATCH /api/connectors/:id", () => {
   test("updates name (200)", async () => {
     const response = await request(`/api/connectors/${updateConnectorId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Updated Name" }),
     });
 
@@ -369,7 +380,7 @@ describe("PATCH /api/connectors/:id", () => {
   test("updates config (200)", async () => {
     const response = await request(`/api/connectors/${updateConnectorId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ config: { baseUrl: "https://new.url" } }),
     });
 
@@ -381,7 +392,7 @@ describe("PATCH /api/connectors/:id", () => {
   test("updates isActive (200)", async () => {
     const response = await request(`/api/connectors/${updateConnectorId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ isActive: false }),
     });
 
@@ -393,7 +404,7 @@ describe("PATCH /api/connectors/:id", () => {
   test("rejects support role (403)", async () => {
     const response = await request(`/api/connectors/${updateConnectorId}`, {
       method: "PATCH",
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
       body: JSON.stringify({ name: "Hijacked" }),
     });
 
@@ -403,7 +414,7 @@ describe("PATCH /api/connectors/:id", () => {
   test("rejects empty body (422)", async () => {
     const response = await request(`/api/connectors/${updateConnectorId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({}),
     });
 
@@ -414,7 +425,7 @@ describe("PATCH /api/connectors/:id", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/connectors/${fakeId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Ghost" }),
     });
 
@@ -430,9 +441,9 @@ describe("DELETE /api/connectors/:id", () => {
   test("deletes connector and cascading tools (204)", async () => {
     const createResponse = await request("/api/connectors", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
-        connectorCatalogId: s.catalogId,
+        connectorCatalogId: s.medusaCatalogId,
         name: "Delete Target",
         slug: "delete-target",
       }),
@@ -441,7 +452,7 @@ describe("DELETE /api/connectors/:id", () => {
 
     // Verify tools exist
     const toolsResponse = await request(`/api/connectors/${id}/tools`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
     const toolsBody = await toolsResponse.json();
     expect(toolsBody.data.length).toBeGreaterThan(0);
@@ -449,14 +460,14 @@ describe("DELETE /api/connectors/:id", () => {
     // Delete
     const response = await request(`/api/connectors/${id}`, {
       method: "DELETE",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(204);
 
     // Verify it's gone
     const getResponse = await request(`/api/connectors/${id}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
     expect(getResponse.status).toBe(404);
   });
@@ -465,17 +476,20 @@ describe("DELETE /api/connectors/:id", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/connectors/${fakeId}`, {
       method: "DELETE",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
   test("rejects support role (403)", async () => {
-    const response = await request(`/api/connectors/${s.pizzaConnectorId}`, {
-      method: "DELETE",
-      headers: pizzaSupportHeaders,
-    });
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}`,
+      {
+        method: "DELETE",
+        headers: orgASupportHeaders,
+      },
+    );
 
     expect(response.status).toBe(403);
   });
@@ -488,8 +502,8 @@ describe("DELETE /api/connectors/:id", () => {
 describe("GET /api/connectors/:id/tools", () => {
   test("returns tools for connector (200)", async () => {
     const response = await request(
-      `/api/connectors/${s.pizzaConnectorId}/tools`,
-      { headers: pizzaAdminHeaders },
+      `/api/connectors/${s.orgAMedusaConnectorId}/tools`,
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -500,7 +514,7 @@ describe("GET /api/connectors/:id/tools", () => {
 
     const tool = body.data[0];
     expect(tool.id).toBeDefined();
-    expect(tool.connectorId).toBe(s.pizzaConnectorId);
+    expect(tool.connectorId).toBe(s.orgAMedusaConnectorId);
     expect(tool.name).toBeDefined();
     expect(tool.slug).toBeDefined();
     expect(tool.isActive).toBeDefined();
@@ -509,7 +523,7 @@ describe("GET /api/connectors/:id/tools", () => {
   test("returns 404 for non-existent connector", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/connectors/${fakeId}/tools`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -517,8 +531,8 @@ describe("GET /api/connectors/:id/tools", () => {
 
   test("accessible by support role (200)", async () => {
     const response = await request(
-      `/api/connectors/${s.pizzaConnectorId}/tools`,
-      { headers: pizzaSupportHeaders },
+      `/api/connectors/${s.orgAMedusaConnectorId}/tools`,
+      { headers: orgASupportHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -533,10 +547,10 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
   let testToolId: string;
 
   beforeAll(async () => {
-    // Get a tool from the pizza connector
+    // Get a tool from the orgA connector
     const response = await request(
-      `/api/connectors/${s.pizzaConnectorId}/tools`,
-      { headers: pizzaAdminHeaders },
+      `/api/connectors/${s.orgAMedusaConnectorId}/tools`,
+      { headers: orgAAdminHeaders },
     );
     const body = await response.json();
     testToolId = body.data[0].id;
@@ -545,7 +559,7 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
   test("updates isActive (200)", async () => {
     const response = await request(`/api/connectors/tools/${testToolId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ isActive: false }),
     });
 
@@ -556,7 +570,7 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
     // Restore
     await request(`/api/connectors/tools/${testToolId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ isActive: true }),
     });
   });
@@ -564,7 +578,7 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
   test("updates timeoutSeconds (200)", async () => {
     const response = await request(`/api/connectors/tools/${testToolId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ timeoutSeconds: 60 }),
     });
 
@@ -576,7 +590,7 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
   test("rejects empty body (422)", async () => {
     const response = await request(`/api/connectors/tools/${testToolId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({}),
     });
 
@@ -587,7 +601,7 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/connectors/tools/${fakeId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ isActive: true }),
     });
 
@@ -596,53 +610,162 @@ describe("PATCH /api/connectors/tools/:toolId", () => {
 });
 
 // ============================================================================
+// POST /api/connectors/:id/ping - Health check
+// ============================================================================
+
+describe("POST /api/connectors/:id/ping", () => {
+  const originalFetch = globalThis.fetch;
+
+  /**
+   * Mock globalThis.fetch for external connector health-check calls.
+   * The Hono app uses app.fetch() (not globalThis.fetch) so this only
+   * intercepts the outbound HTTP call the healthCheck function makes.
+   */
+  function mockExternalFetch() {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ products: [], count: 0 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    ) as typeof fetch;
+  }
+
+  function restoreFetch() {
+    globalThis.fetch = originalFetch;
+  }
+
+  test("returns 200 with health check result shape", async () => {
+    mockExternalFetch();
+    try {
+      const response = await request(
+        `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+        {
+          method: "POST",
+          headers: orgAAdminHeaders,
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+
+      expect(body.status).toBeOneOf(["healthy", "error"]);
+      expect(typeof body.latencyMs).toBe("number");
+      expect(body.checkedAt).toBeTruthy();
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  test("returns 404 for non-existent connector", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const response = await request(`/api/connectors/${fakeId}/ping`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 for cross-org connector (RLS)", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+      {
+        method: "POST",
+        headers: orgBAdminHeaders,
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("accessible by support role", async () => {
+    mockExternalFetch();
+    try {
+      const response = await request(
+        `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+        {
+          method: "POST",
+          headers: orgASupportHeaders,
+        },
+      );
+
+      expect(response.status).toBe(200);
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  test("returns 401 for unauthenticated request", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}/ping`,
+      {
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(401);
+  });
+});
+
+// ============================================================================
 // RLS isolation
 // ============================================================================
 
 describe("RLS isolation", () => {
-  test("Burger Barn cannot see Pizza Palace connectors in list", async () => {
+  test("org B cannot see org A connectors in list", async () => {
     const response = await request("/api/connectors", {
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
     const ids = body.data.map((c: { id: string }) => c.id);
-    expect(ids).not.toContain(s.pizzaConnectorId);
+    expect(ids).not.toContain(s.orgAMedusaConnectorId);
   });
 
-  test("Burger Barn cannot get Pizza Palace connector by ID (404)", async () => {
-    const response = await request(`/api/connectors/${s.pizzaConnectorId}`, {
-      headers: burgerAdminHeaders,
-    });
-
-    expect(response.status).toBe(404);
-  });
-
-  test("Burger Barn cannot update Pizza Palace connector (404)", async () => {
-    const response = await request(`/api/connectors/${s.pizzaConnectorId}`, {
-      method: "PATCH",
-      headers: burgerAdminHeaders,
-      body: JSON.stringify({ name: "Hijacked" }),
-    });
-
-    expect(response.status).toBe(404);
-  });
-
-  test("Burger Barn cannot delete Pizza Palace connector (404)", async () => {
-    const response = await request(`/api/connectors/${s.pizzaConnectorId}`, {
-      method: "DELETE",
-      headers: burgerAdminHeaders,
-    });
-
-    expect(response.status).toBe(404);
-  });
-
-  test("Burger Barn cannot see Pizza Palace connector tools (404)", async () => {
+  test("org B cannot get org A connector by ID (404)", async () => {
     const response = await request(
-      `/api/connectors/${s.pizzaConnectorId}/tools`,
-      { headers: burgerAdminHeaders },
+      `/api/connectors/${s.orgAMedusaConnectorId}`,
+      {
+        headers: orgBAdminHeaders,
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("org B cannot update org A connector (404)", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}`,
+      {
+        method: "PATCH",
+        headers: orgBAdminHeaders,
+        body: JSON.stringify({ name: "Hijacked" }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("org B cannot delete org A connector (404)", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}`,
+      {
+        method: "DELETE",
+        headers: orgBAdminHeaders,
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("org B cannot see org A connector tools (404)", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}/tools`,
+      { headers: orgBAdminHeaders },
     );
 
     expect(response.status).toBe(404);

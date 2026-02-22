@@ -2,6 +2,9 @@
  * Test seed data lookup helper.
  * Looks up data created by src/db/seed (run in integration-preload).
  * Caches results so DB is queried only once across all test files.
+ *
+ * Uses generic orgA/orgB naming so tests are org-name-agnostic.
+ * orgA = GlowBox Beauty (glowbox, demoEnabled), orgB = ClearHealth (clearhealth).
  */
 
 import type { AuthUser } from "@/types";
@@ -22,7 +25,7 @@ export interface SeedUser {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "support";
+  role: "admin" | "support" | "viewer";
   organizationId: string;
   isActive: boolean;
 }
@@ -34,19 +37,26 @@ export interface SeedOrg {
 }
 
 export interface TestSeed {
-  pizzaOrg: SeedOrg;
-  burgerOrg: SeedOrg;
-  pizzaAdmin: SeedUser;
-  pizzaSupport: SeedUser;
-  pizzaInactive: SeedUser;
-  burgerAdmin: SeedUser;
-  burgerSupport: SeedUser;
-  burgerInactive: SeedUser;
-  catalogId: string;
-  pizzaConnectorId: string;
-  burgerConnectorId: string;
-  pizzaAgentId: string;
-  burgerAgentId: string;
+  orgA: SeedOrg;
+  orgB: SeedOrg;
+  /** Demo org (same as orgA — GlowBox has demoEnabled=true) */
+  demoOrg: SeedOrg;
+  orgAAdmin: SeedUser;
+  orgASupport: SeedUser;
+  orgAInactive: SeedUser;
+  orgBAdmin: SeedUser;
+  orgBSupport: SeedUser;
+  orgBInactive: SeedUser;
+  /** Demo viewer (viewer user in demo-enabled orgA) */
+  demoViewer: SeedUser;
+  medusaCatalogId: string;
+  zendeskCatalogId: string;
+  orgAMedusaConnectorId: string;
+  orgAZendeskConnectorId: string;
+  orgBMedusaConnectorId: string;
+  orgBZendeskConnectorId: string;
+  orgAAgentId: string;
+  orgBAgentId: string;
 }
 
 let _cache: TestSeed | null = null;
@@ -55,14 +65,14 @@ export async function getTestSeed(): Promise<TestSeed> {
   if (_cache) return _cache;
 
   _cache = await forApp(async (tx) => {
-    const [pizzaOrg] = await tx
+    const [orgA] = await tx
       .select()
       .from(organizations)
-      .where(eq(organizations.slug, "pizza-palace"));
-    const [burgerOrg] = await tx
+      .where(eq(organizations.slug, "glowbox"));
+    const [orgB] = await tx
       .select()
       .from(organizations)
-      .where(eq(organizations.slug, "burger-barn"));
+      .where(eq(organizations.slug, "clearhealth"));
 
     const lookupUser = async (orgId: string, email: string) => {
       const [u] = await tx
@@ -73,98 +83,125 @@ export async function getTestSeed(): Promise<TestSeed> {
         id: u.id,
         email: u.email,
         name: u.name,
-        role: u.role as "admin" | "support",
+        role: u.role as "admin" | "support" | "viewer",
         organizationId: u.organizationId,
         isActive: u.isActive,
       };
     };
 
-    const pizzaAdmin = await lookupUser(
-      pizzaOrg.id,
-      "delivered+admin-pizza-palace@resend.dev",
+    const orgAAdmin = await lookupUser(
+      orgA.id,
+      "delivered+admin-glowbox@resend.dev",
     );
-    const pizzaSupport = await lookupUser(
-      pizzaOrg.id,
-      "delivered+support-pizza-palace@resend.dev",
+    const orgASupport = await lookupUser(
+      orgA.id,
+      "delivered+support-glowbox@resend.dev",
     );
-    const pizzaInactive = await lookupUser(
-      pizzaOrg.id,
-      "delivered+inactive-pizza-palace@resend.dev",
+    const orgAInactive = await lookupUser(
+      orgA.id,
+      "delivered+inactive-glowbox@resend.dev",
     );
-    const burgerAdmin = await lookupUser(
-      burgerOrg.id,
-      "delivered+admin-burger-barn@resend.dev",
+    const orgBAdmin = await lookupUser(
+      orgB.id,
+      "delivered+admin-clearhealth@resend.dev",
     );
-    const burgerSupport = await lookupUser(
-      burgerOrg.id,
-      "delivered+support-burger-barn@resend.dev",
+    const orgBSupport = await lookupUser(
+      orgB.id,
+      "delivered+support-clearhealth@resend.dev",
     );
-    const burgerInactive = await lookupUser(
-      burgerOrg.id,
-      "delivered+inactive-burger-barn@resend.dev",
+    const orgBInactive = await lookupUser(
+      orgB.id,
+      "delivered+inactive-clearhealth@resend.dev",
+    );
+    const demoViewer = await lookupUser(
+      orgA.id,
+      "demo-viewer-glowbox@modelguide.dev",
     );
 
-    const [catalog] = await tx
+    const [medusaCatalog] = await tx
       .select()
       .from(connectorsCatalog)
       .where(eq(connectorsCatalog.slug, "medusa"));
+    const [zendeskCatalog] = await tx
+      .select()
+      .from(connectorsCatalog)
+      .where(eq(connectorsCatalog.slug, "zendesk"));
 
-    const [pizzaConnector] = await tx
+    const [orgAMedusaConnector] = await tx
       .select()
       .from(connectors)
       .where(
         and(
-          eq(connectors.organizationId, pizzaOrg.id),
-          eq(connectors.slug, "pizzapalace"),
+          eq(connectors.organizationId, orgA.id),
+          eq(connectors.slug, "glowbox_store"),
         ),
       );
-    const [burgerConnector] = await tx
+    const [orgAZendeskConnector] = await tx
       .select()
       .from(connectors)
       .where(
         and(
-          eq(connectors.organizationId, burgerOrg.id),
-          eq(connectors.slug, "burgerbarn"),
+          eq(connectors.organizationId, orgA.id),
+          eq(connectors.slug, "glowbox_support"),
+        ),
+      );
+    const [orgBMedusaConnector] = await tx
+      .select()
+      .from(connectors)
+      .where(
+        and(
+          eq(connectors.organizationId, orgB.id),
+          eq(connectors.slug, "clearhealth_pharmacy"),
+        ),
+      );
+    const [orgBZendeskConnector] = await tx
+      .select()
+      .from(connectors)
+      .where(
+        and(
+          eq(connectors.organizationId, orgB.id),
+          eq(connectors.slug, "clearhealth_support"),
         ),
       );
 
-    const [pizzaAgent] = await tx
+    const [orgAAgent] = await tx
       .select()
       .from(agents)
       .where(
         and(
-          eq(agents.organizationId, pizzaOrg.id),
-          eq(agents.name, "pizza-palace Order Agent"),
+          eq(agents.organizationId, orgA.id),
+          eq(agents.name, "GlowBox Voice Concierge"),
         ),
       );
-    const [burgerAgent] = await tx
+    const [orgBAgent] = await tx
       .select()
       .from(agents)
       .where(
         and(
-          eq(agents.organizationId, burgerOrg.id),
-          eq(agents.name, "burger-barn Order Agent"),
+          eq(agents.organizationId, orgB.id),
+          eq(agents.name, "ClearHealth Phone Assistant"),
         ),
       );
 
     return {
-      pizzaOrg: { id: pizzaOrg.id, name: pizzaOrg.name, slug: pizzaOrg.slug },
-      burgerOrg: {
-        id: burgerOrg.id,
-        name: burgerOrg.name,
-        slug: burgerOrg.slug,
-      },
-      pizzaAdmin,
-      pizzaSupport,
-      pizzaInactive,
-      burgerAdmin,
-      burgerSupport,
-      burgerInactive,
-      catalogId: catalog.id,
-      pizzaConnectorId: pizzaConnector.id,
-      burgerConnectorId: burgerConnector.id,
-      pizzaAgentId: pizzaAgent.id,
-      burgerAgentId: burgerAgent.id,
+      orgA: { id: orgA.id, name: orgA.name, slug: orgA.slug },
+      orgB: { id: orgB.id, name: orgB.name, slug: orgB.slug },
+      demoOrg: { id: orgA.id, name: orgA.name, slug: orgA.slug },
+      orgAAdmin,
+      orgASupport,
+      orgAInactive,
+      orgBAdmin,
+      orgBSupport,
+      orgBInactive,
+      demoViewer,
+      medusaCatalogId: medusaCatalog.id,
+      zendeskCatalogId: zendeskCatalog.id,
+      orgAMedusaConnectorId: orgAMedusaConnector.id,
+      orgAZendeskConnectorId: orgAZendeskConnector.id,
+      orgBMedusaConnectorId: orgBMedusaConnector.id,
+      orgBZendeskConnectorId: orgBZendeskConnector.id,
+      orgAAgentId: orgAAgent.id,
+      orgBAgentId: orgBAgent.id,
     };
   });
 

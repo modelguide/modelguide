@@ -7,7 +7,8 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import type { AuthUser } from "@/types";
 import { db } from "@db/client";
-import { magicTokens } from "@db/schema";
+import { forApp } from "@db/rls";
+import { magicTokens, users } from "@db/schema";
 import { hashMagicToken } from "@lib/crypto";
 import { generateJWT } from "@lib/jwt";
 import { desc, eq } from "drizzle-orm";
@@ -48,14 +49,14 @@ beforeAll(async () => {
 // ============================================================================
 
 describe("POST /api/auth/login", () => {
-  test("returns success message for valid user", async () => {
+  test("returns 202 with message for valid user", async () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaAdmin.email }),
+      body: JSON.stringify({ email: s.orgAAdmin.email }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });
@@ -64,25 +65,25 @@ describe("POST /api/auth/login", () => {
     const beforeCount = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaAdmin.id));
+      .where(eq(magicTokens.userId, s.orgAAdmin.id));
 
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaAdmin.email }),
+      body: JSON.stringify({ email: s.orgAAdmin.email }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
 
     const afterCount = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaAdmin.id));
+      .where(eq(magicTokens.userId, s.orgAAdmin.id));
 
     expect(afterCount.length).toBe(beforeCount.length + 1);
 
     const latestToken = await db.query.magicTokens.findFirst({
-      where: eq(magicTokens.userId, s.pizzaAdmin.id),
+      where: eq(magicTokens.userId, s.orgAAdmin.id),
       orderBy: desc(magicTokens.createdAt),
     });
     expect(latestToken).toBeDefined();
@@ -108,41 +109,41 @@ describe("POST /api/auth/login", () => {
     const beforeTokens = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaInactive.id));
+      .where(eq(magicTokens.userId, s.orgAInactive.id));
 
     await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaInactive.email }),
+      body: JSON.stringify({ email: s.orgAInactive.email }),
     });
 
     const afterTokens = await db
       .select()
       .from(magicTokens)
-      .where(eq(magicTokens.userId, s.pizzaInactive.id));
+      .where(eq(magicTokens.userId, s.orgAInactive.id));
     expect(afterTokens.length).toBe(beforeTokens.length);
   });
 
-  test("returns success for non-existent user (no enumeration)", async () => {
+  test("returns 202 for non-existent user (no enumeration)", async () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "nonexistent@example.com" }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });
 
-  test("returns success for inactive user (no enumeration)", async () => {
+  test("returns 202 for inactive user (no enumeration)", async () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaInactive.email }),
+      body: JSON.stringify({ email: s.orgAInactive.email }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });
@@ -174,7 +175,7 @@ describe("POST /api/auth/login", () => {
 
 describe("GET /api/auth/verify", () => {
   test("returns JWT and user info for valid token", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const response = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -186,11 +187,11 @@ describe("GET /api/auth/verify", () => {
     expect(body.token).toBeDefined();
     expect(typeof body.token).toBe("string");
     expect(body.user).toBeDefined();
-    expect(body.user.id).toBe(s.pizzaAdmin.id);
-    expect(body.user.email).toBe(s.pizzaAdmin.email);
-    expect(body.user.name).toBe(s.pizzaAdmin.name);
+    expect(body.user.id).toBe(s.orgAAdmin.id);
+    expect(body.user.email).toBe(s.orgAAdmin.email);
+    expect(body.user.name).toBe(s.orgAAdmin.name);
     expect(body.user.role).toBe("admin");
-    expect(body.user.organizationId).toBe(s.pizzaOrg.id);
+    expect(body.user.organizationId).toBe(s.orgA.id);
   });
 
   test("returns 401 MAGIC_TOKEN_INVALID for invalid token", async () => {
@@ -204,7 +205,7 @@ describe("GET /api/auth/verify", () => {
   });
 
   test("returns 401 MAGIC_TOKEN_EXPIRED for expired token", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id, {
+    const token = await createTestMagicToken(s.orgAAdmin.id, {
       expired: true,
     });
 
@@ -218,7 +219,7 @@ describe("GET /api/auth/verify", () => {
   });
 
   test("returns 401 MAGIC_TOKEN_USED for already-used token", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id, { used: true });
+    const token = await createTestMagicToken(s.orgAAdmin.id, { used: true });
 
     const response = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -236,7 +237,7 @@ describe("GET /api/auth/verify", () => {
   });
 
   test("marks token as used after successful verification", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const response1 = await request(
       `/api/auth/verify?token=${encodeURIComponent(token)}`,
@@ -259,11 +260,11 @@ describe("GET /api/auth/verify", () => {
 describe("GET /api/auth/me", () => {
   test("returns current user info with valid JWT", async () => {
     const authUser: AuthUser = {
-      id: s.pizzaAdmin.id,
-      email: s.pizzaAdmin.email,
-      name: s.pizzaAdmin.name,
+      id: s.orgAAdmin.id,
+      email: s.orgAAdmin.email,
+      name: s.orgAAdmin.name,
       role: "admin",
-      organizationId: s.pizzaOrg.id,
+      organizationId: s.orgA.id,
     };
     const jwt = await generateJWT(authUser);
 
@@ -273,11 +274,11 @@ describe("GET /api/auth/me", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.id).toBe(s.pizzaAdmin.id);
-    expect(body.email).toBe(s.pizzaAdmin.email);
-    expect(body.name).toBe(s.pizzaAdmin.name);
+    expect(body.id).toBe(s.orgAAdmin.id);
+    expect(body.email).toBe(s.orgAAdmin.email);
+    expect(body.name).toBe(s.orgAAdmin.name);
     expect(body.role).toBe("admin");
-    expect(body.organizationId).toBe(s.pizzaOrg.id);
+    expect(body.organizationId).toBe(s.orgA.id);
   });
 
   test("returns 401 without Authorization header", async () => {
@@ -351,7 +352,7 @@ describe("POST /api/auth/logout", () => {
 
 describe("Race conditions", () => {
   test("concurrent token verification - only one succeeds", async () => {
-    const token = await createTestMagicToken(s.pizzaAdmin.id);
+    const token = await createTestMagicToken(s.orgAAdmin.id);
 
     const requests = Array.from({ length: 5 }, () =>
       request(`/api/auth/verify?token=${encodeURIComponent(token)}`),
@@ -374,8 +375,8 @@ describe("Race conditions", () => {
 
 describe("Edge cases", () => {
   test("multiple magic links for same user - all valid until used/expired", async () => {
-    const token1 = await createTestMagicToken(s.pizzaAdmin.id);
-    const token2 = await createTestMagicToken(s.pizzaAdmin.id);
+    const token1 = await createTestMagicToken(s.orgAAdmin.id);
+    const token2 = await createTestMagicToken(s.orgAAdmin.id);
 
     const response1 = await request(
       `/api/auth/verify?token=${encodeURIComponent(token1)}`,
@@ -392,10 +393,100 @@ describe("Edge cases", () => {
     const response = await request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: s.pizzaAdmin.email.toUpperCase() }),
+      body: JSON.stringify({ email: s.orgAAdmin.email.toUpperCase() }),
+    });
+
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body).toEqual({ message: "Magic link sent" });
+  });
+});
+
+// ============================================================================
+// POST /api/auth/login - Demo path tests
+// ============================================================================
+
+describe("POST /api/auth/login - Demo path", () => {
+  test("demo viewer returns 200 with token and user", async () => {
+    const response = await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
     });
 
     expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.token).toBeDefined();
+    expect(typeof body.token).toBe("string");
+    expect(body.user).toBeDefined();
+    expect(body.user.id).toBe(s.demoViewer.id);
+    expect(body.user.email).toBe(s.demoViewer.email);
+    expect(body.user.role).toBe("viewer");
+    expect(body.user.organizationId).toBe(s.demoOrg.id);
+  });
+
+  test("demo viewer returns refresh cookie", async () => {
+    const response = await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
+    });
+
+    expect(response.status).toBe(200);
+    const setCookie = response.headers.get("set-cookie");
+    expect(setCookie).toBeDefined();
+    expect(setCookie).toContain("refresh_token=");
+  });
+
+  test("demo viewer does not create magic token", async () => {
+    const beforeTokens = await db.select().from(magicTokens);
+
+    await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
+    });
+
+    const afterTokens = await db.select().from(magicTokens);
+    expect(afterTokens.length).toBe(beforeTokens.length);
+  });
+
+  test("demo viewer updates lastLoginAt", async () => {
+    const before = await forApp((tx) =>
+      tx.query.users.findFirst({
+        where: eq(users.id, s.demoViewer.id),
+      }),
+    );
+    const beforeLogin = before?.lastLoginAt;
+
+    await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: s.demoViewer.email }),
+    });
+
+    const after = await forApp((tx) =>
+      tx.query.users.findFirst({
+        where: eq(users.id, s.demoViewer.id),
+      }),
+    );
+
+    expect(after?.lastLoginAt).toBeDefined();
+    if (beforeLogin) {
+      expect(after!.lastLoginAt!.getTime()).toBeGreaterThanOrEqual(
+        beforeLogin.getTime(),
+      );
+    }
+  });
+
+  test("non-existent email still returns 202", async () => {
+    const response = await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "nobody@example.com" }),
+    });
+
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toEqual({ message: "Magic link sent" });
   });

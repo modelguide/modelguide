@@ -23,7 +23,7 @@ function request(path: string, options?: RequestInit) {
 
 beforeAll(async () => {
   s = await getTestSeed();
-  adminHeaders = await authHeadersFor(s.pizzaAdmin);
+  adminHeaders = await authHeadersFor(s.orgAAdmin);
 
   // Look up the Zendesk catalog entry
   const catalogResponse = await request("/api/connectors/catalog", {

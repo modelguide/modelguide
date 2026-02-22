@@ -1,8 +1,11 @@
 -- ============================================================================
--- Database Roles
+-- Database Roles (local dev only)
 -- ============================================================================
 -- modelguide (superuser) - used for migrations, owns tables
 -- modelguide_app - used by application, subject to RLS
+--
+-- In production, scripts/migrate.ts is the canonical role provisioner.
+-- This file only runs on first `docker compose up` (postgres entrypoint).
 
 CREATE ROLE modelguide_app WITH LOGIN PASSWORD 'modelguide_app' NOSUPERUSER;
 

@@ -11,9 +11,9 @@ import { eq, inArray } from "drizzle-orm";
 import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
 let s: TestSeed;
-let pizzaAdminHeaders: Record<string, string>;
-let pizzaSupportHeaders: Record<string, string>;
-let burgerAdminHeaders: Record<string, string>;
+let orgAAdminHeaders: Record<string, string>;
+let orgASupportHeaders: Record<string, string>;
+let orgBAdminHeaders: Record<string, string>;
 
 /** IDs of agents created during tests (for cleanup) */
 const createdAgentIds: string[] = [];
@@ -24,9 +24,9 @@ function request(path: string, options?: RequestInit) {
 
 beforeAll(async () => {
   s = await getTestSeed();
-  pizzaAdminHeaders = await authHeadersFor(s.pizzaAdmin);
-  pizzaSupportHeaders = await authHeadersFor(s.pizzaSupport);
-  burgerAdminHeaders = await authHeadersFor(s.burgerAdmin);
+  orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
+  orgASupportHeaders = await authHeadersFor(s.orgASupport);
+  orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
 });
 
 afterAll(async () => {
@@ -49,7 +49,7 @@ afterAll(async () => {
 describe("GET /api/agents", () => {
   test("returns seeded agents with pagination (200)", async () => {
     const response = await request("/api/agents", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -63,14 +63,14 @@ describe("GET /api/agents", () => {
     const agent = body.data[0];
     expect(agent.id).toBeDefined();
     expect(agent.name).toBeDefined();
-    expect(agent.agentType).toBeDefined();
+    expect(agent.modality).toBeDefined();
     expect(agent.isActive).toBeDefined();
     expect(agent.createdAt).toBeDefined();
   });
 
   test("filters by isActive=true (200)", async () => {
     const response = await request("/api/agents?isActive=true", {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -81,22 +81,22 @@ describe("GET /api/agents", () => {
     }
   });
 
-  test("filters by agentType=voice (200)", async () => {
-    const response = await request("/api/agents?agentType=voice", {
-      headers: pizzaAdminHeaders,
+  test("filters by modality=voice (200)", async () => {
+    const response = await request("/api/agents?modality=voice", {
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
     for (const agent of body.data) {
-      expect(agent.agentType).toBe("voice");
+      expect(agent.modality).toBe("voice");
     }
   });
 
   test("accessible by support role (200)", async () => {
     const response = await request("/api/agents", {
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -117,11 +117,11 @@ describe("POST /api/agents", () => {
   test("creates agent + returns API key (201)", async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Test Agent Create",
         description: "Test agent for creation",
-        agentType: "voice",
+        modality: "voice",
       }),
     });
 
@@ -131,7 +131,7 @@ describe("POST /api/agents", () => {
     expect(body.id).toBeDefined();
     expect(body.name).toBe("Test Agent Create");
     expect(body.description).toBe("Test agent for creation");
-    expect(body.agentType).toBe("voice");
+    expect(body.modality).toBe("voice");
     expect(body.apiKey).toBeDefined();
     expect(body.createdAt).toBeDefined();
 
@@ -141,7 +141,7 @@ describe("POST /api/agents", () => {
   test("creates agent inactive by default", async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Test Agent Inactive Default",
       }),
@@ -157,7 +157,7 @@ describe("POST /api/agents", () => {
   test("API key starts with mgk_", async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Test Agent Key Format",
       }),
@@ -173,7 +173,7 @@ describe("POST /api/agents", () => {
   test("rejects support role (403)", async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
       body: JSON.stringify({
         name: "Support Attempt",
       }),
@@ -185,7 +185,7 @@ describe("POST /api/agents", () => {
   test("rejects missing name (422)", async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({}),
     });
 
@@ -199,23 +199,23 @@ describe("POST /api/agents", () => {
 
 describe("GET /api/agents/:id", () => {
   test("returns agent detail (200)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}`, {
-      headers: pizzaAdminHeaders,
+    const response = await request(`/api/agents/${s.orgAAgentId}`, {
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
-    expect(body.id).toBe(s.pizzaAgentId);
+    expect(body.id).toBe(s.orgAAgentId);
     expect(body.name).toBeDefined();
-    expect(body.agentType).toBeDefined();
+    expect(body.modality).toBeDefined();
     expect(body.systemPrompt).toBeUndefined();
   });
 
   test("returns 404 for non-existent agent", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/agents/${fakeId}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -232,7 +232,7 @@ describe("PATCH /api/agents/:id", () => {
   beforeAll(async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Update Target Agent" }),
     });
     const body = await response.json();
@@ -243,7 +243,7 @@ describe("PATCH /api/agents/:id", () => {
   test("updates name and description (200)", async () => {
     const response = await request(`/api/agents/${updateAgentId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Updated Agent Name",
         description: "Updated description",
@@ -259,7 +259,7 @@ describe("PATCH /api/agents/:id", () => {
   test("rejects support role (403)", async () => {
     const response = await request(`/api/agents/${updateAgentId}`, {
       method: "PATCH",
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
       body: JSON.stringify({ name: "Hijacked" }),
     });
 
@@ -269,7 +269,7 @@ describe("PATCH /api/agents/:id", () => {
   test("rejects empty body (422)", async () => {
     const response = await request(`/api/agents/${updateAgentId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({}),
     });
 
@@ -280,7 +280,7 @@ describe("PATCH /api/agents/:id", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/agents/${fakeId}`, {
       method: "PATCH",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Ghost" }),
     });
 
@@ -296,20 +296,20 @@ describe("DELETE /api/agents/:id", () => {
   test("deletes agent (204)", async () => {
     const createResponse = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Delete Target Agent" }),
     });
     const { id } = await createResponse.json();
 
     const response = await request(`/api/agents/${id}`, {
       method: "DELETE",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(204);
 
     const getResponse = await request(`/api/agents/${id}`, {
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
     expect(getResponse.status).toBe(404);
   });
@@ -318,16 +318,16 @@ describe("DELETE /api/agents/:id", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/agents/${fakeId}`, {
       method: "DELETE",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
   test("rejects support role (403)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}`, {
+    const response = await request(`/api/agents/${s.orgAAgentId}`, {
       method: "DELETE",
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(403);
@@ -344,7 +344,7 @@ describe("POST /api/agents/:id/activate", () => {
   beforeAll(async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Activation Test Agent" }),
     });
     const body = await response.json();
@@ -355,7 +355,7 @@ describe("POST /api/agents/:id/activate", () => {
   test("sets isActive=true (200)", async () => {
     const response = await request(`/api/agents/${activateAgentId}/activate`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -366,7 +366,7 @@ describe("POST /api/agents/:id/activate", () => {
   test("rejects support role (403)", async () => {
     const response = await request(`/api/agents/${activateAgentId}/activate`, {
       method: "POST",
-      headers: pizzaSupportHeaders,
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(403);
@@ -376,7 +376,7 @@ describe("POST /api/agents/:id/activate", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/agents/${fakeId}/activate`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -393,7 +393,7 @@ describe("POST /api/agents/:id/deactivate", () => {
   beforeAll(async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Deactivation Test Agent" }),
     });
     const body = await response.json();
@@ -403,7 +403,7 @@ describe("POST /api/agents/:id/deactivate", () => {
     // Activate first
     await request(`/api/agents/${deactivateAgentId}/activate`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
   });
 
@@ -412,7 +412,7 @@ describe("POST /api/agents/:id/deactivate", () => {
       `/api/agents/${deactivateAgentId}/deactivate`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       },
     );
 
@@ -426,7 +426,7 @@ describe("POST /api/agents/:id/deactivate", () => {
       `/api/agents/${deactivateAgentId}/deactivate`,
       {
         method: "POST",
-        headers: pizzaSupportHeaders,
+        headers: orgASupportHeaders,
       },
     );
 
@@ -437,7 +437,7 @@ describe("POST /api/agents/:id/deactivate", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/agents/${fakeId}/deactivate`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -455,7 +455,7 @@ describe("POST /api/agents/:id/regenerate-key", () => {
   beforeAll(async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Regen Key Test Agent" }),
     });
     const body = await response.json();
@@ -469,7 +469,7 @@ describe("POST /api/agents/:id/regenerate-key", () => {
       `/api/agents/${regenAgentId}/regenerate-key`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       },
     );
 
@@ -487,7 +487,7 @@ describe("POST /api/agents/:id/regenerate-key", () => {
       `/api/agents/${regenAgentId}/regenerate-key`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       },
     );
 
@@ -502,7 +502,7 @@ describe("POST /api/agents/:id/regenerate-key", () => {
       `/api/agents/${regenAgentId}/regenerate-key`,
       {
         method: "POST",
-        headers: pizzaSupportHeaders,
+        headers: orgASupportHeaders,
       },
     );
 
@@ -513,7 +513,7 @@ describe("POST /api/agents/:id/regenerate-key", () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const response = await request(`/api/agents/${fakeId}/regenerate-key`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(404);
@@ -531,7 +531,7 @@ describe("Agent Connector Tools", () => {
   beforeAll(async () => {
     const response = await request("/api/agents", {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({ name: "Connector Test Agent" }),
     });
     const body = await response.json();
@@ -539,8 +539,8 @@ describe("Agent Connector Tools", () => {
     createdAgentIds.push(connectorAgentId);
 
     const toolsResponse = await request(
-      `/api/connectors/${s.pizzaConnectorId}/tools`,
-      { headers: pizzaAdminHeaders },
+      `/api/connectors/${s.orgAMedusaConnectorId}/tools`,
+      { headers: orgAAdminHeaders },
     );
     const toolsBody = await toolsResponse.json();
     toolSlugs = toolsBody.data.map((t: { slug: string }) => t.slug);
@@ -551,9 +551,9 @@ describe("Agent Connector Tools", () => {
       `/api/agents/${connectorAgentId}/connectors`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
-          connectorId: s.pizzaConnectorId,
+          connectorId: s.orgAMedusaConnectorId,
           tools: [
             {
               slug: toolSlugs[0],
@@ -578,7 +578,7 @@ describe("Agent Connector Tools", () => {
   test("GET /:id/connectors lists assigned connectors + tools (200)", async () => {
     const response = await request(
       `/api/agents/${connectorAgentId}/connectors`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
 
     expect(response.status).toBe(200);
@@ -588,7 +588,7 @@ describe("Agent Connector Tools", () => {
     expect(body.data.length).toBeGreaterThanOrEqual(1);
 
     const connector = body.data[0];
-    expect(connector.connectorId).toBe(s.pizzaConnectorId);
+    expect(connector.connectorId).toBe(s.orgAMedusaConnectorId);
     expect(connector.connectorSlug).toBeDefined();
     expect(connector.connectorName).toBeDefined();
     expect(connector.tools).toBeArray();
@@ -597,10 +597,10 @@ describe("Agent Connector Tools", () => {
 
   test("PATCH /:id/connectors/:connectorId updates tool settings (200)", async () => {
     const response = await request(
-      `/api/agents/${connectorAgentId}/connectors/${s.pizzaConnectorId}`,
+      `/api/agents/${connectorAgentId}/connectors/${s.orgAMedusaConnectorId}`,
       {
         method: "PATCH",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           tools: [
             {
@@ -623,9 +623,9 @@ describe("Agent Connector Tools", () => {
       `/api/agents/${connectorAgentId}/connectors`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
-          connectorId: s.pizzaConnectorId,
+          connectorId: s.orgAMedusaConnectorId,
           tools: [{ slug: toolSlugs[0], isEnabled: true }],
         }),
       },
@@ -640,7 +640,7 @@ describe("Agent Connector Tools", () => {
       `/api/agents/${connectorAgentId}/connectors`,
       {
         method: "POST",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
         body: JSON.stringify({
           connectorId: fakeId,
           tools: [{ slug: "add_to_cart" }],
@@ -656,9 +656,9 @@ describe("Agent Connector Tools", () => {
       `/api/agents/${connectorAgentId}/connectors`,
       {
         method: "POST",
-        headers: pizzaSupportHeaders,
+        headers: orgASupportHeaders,
         body: JSON.stringify({
-          connectorId: s.pizzaConnectorId,
+          connectorId: s.orgAMedusaConnectorId,
           tools: [{ slug: toolSlugs[2] }],
         }),
       },
@@ -669,10 +669,10 @@ describe("Agent Connector Tools", () => {
 
   test("DELETE /:id/connectors/:connectorId removes assignment (204)", async () => {
     const response = await request(
-      `/api/agents/${connectorAgentId}/connectors/${s.pizzaConnectorId}`,
+      `/api/agents/${connectorAgentId}/connectors/${s.orgAMedusaConnectorId}`,
       {
         method: "DELETE",
-        headers: pizzaAdminHeaders,
+        headers: orgAAdminHeaders,
       },
     );
 
@@ -680,13 +680,13 @@ describe("Agent Connector Tools", () => {
 
     const listResponse = await request(
       `/api/agents/${connectorAgentId}/connectors`,
-      { headers: pizzaAdminHeaders },
+      { headers: orgAAdminHeaders },
     );
     const body = await listResponse.json();
-    const pizzaConnector = body.data.find(
-      (c: { connectorId: string }) => c.connectorId === s.pizzaConnectorId,
+    const orgAConnector = body.data.find(
+      (c: { connectorId: string }) => c.connectorId === s.orgAMedusaConnectorId,
     );
-    expect(pizzaConnector).toBeUndefined();
+    expect(orgAConnector).toBeUndefined();
   });
 });
 
@@ -696,8 +696,8 @@ describe("Agent Connector Tools", () => {
 
 describe("GET /api/agents/:id/connectors (seeded)", () => {
   test("returns seeded agent connectors grouped by connector (200)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}/connectors`, {
-      headers: pizzaAdminHeaders,
+    const response = await request(`/api/agents/${s.orgAAgentId}/connectors`, {
+      headers: orgAAdminHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -712,8 +712,8 @@ describe("GET /api/agents/:id/connectors (seeded)", () => {
   });
 
   test("accessible by support role (200)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}/connectors`, {
-      headers: pizzaSupportHeaders,
+    const response = await request(`/api/agents/${s.orgAAgentId}/connectors`, {
+      headers: orgASupportHeaders,
     });
 
     expect(response.status).toBe(200);
@@ -725,51 +725,51 @@ describe("GET /api/agents/:id/connectors (seeded)", () => {
 // ============================================================================
 
 describe("RLS isolation", () => {
-  test("Burger Barn cannot see Pizza Palace agents in list", async () => {
+  test("org B cannot see org A agents in list", async () => {
     const response = await request("/api/agents", {
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
 
     const ids = body.data.map((a: { id: string }) => a.id);
-    expect(ids).not.toContain(s.pizzaAgentId);
+    expect(ids).not.toContain(s.orgAAgentId);
   });
 
-  test("Burger Barn cannot get Pizza Palace agent by ID (404)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}`, {
-      headers: burgerAdminHeaders,
+  test("org B cannot get org A agent by ID (404)", async () => {
+    const response = await request(`/api/agents/${s.orgAAgentId}`, {
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger Barn cannot update Pizza Palace agent (404)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}`, {
+  test("org B cannot update org A agent (404)", async () => {
+    const response = await request(`/api/agents/${s.orgAAgentId}`, {
       method: "PATCH",
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
       body: JSON.stringify({ name: "Hijacked" }),
     });
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger Barn cannot delete Pizza Palace agent (404)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}`, {
+  test("org B cannot delete org A agent (404)", async () => {
+    const response = await request(`/api/agents/${s.orgAAgentId}`, {
       method: "DELETE",
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
-  test("Burger Barn cannot assign connectors to Pizza Palace agent (404)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}/connectors`, {
+  test("org B cannot assign connectors to org A agent (404)", async () => {
+    const response = await request(`/api/agents/${s.orgAAgentId}/connectors`, {
       method: "POST",
-      headers: burgerAdminHeaders,
+      headers: orgBAdminHeaders,
       body: JSON.stringify({
-        connectorId: s.pizzaConnectorId,
+        connectorId: s.orgAMedusaConnectorId,
         tools: [{ slug: "add_to_cart" }],
       }),
     });
@@ -777,21 +777,21 @@ describe("RLS isolation", () => {
     expect(response.status).toBe(404);
   });
 
-  test("Burger Barn cannot see Pizza Palace agent connectors (404)", async () => {
-    const response = await request(`/api/agents/${s.pizzaAgentId}/connectors`, {
-      headers: burgerAdminHeaders,
+  test("org B cannot see org A agent connectors (404)", async () => {
+    const response = await request(`/api/agents/${s.orgAAgentId}/connectors`, {
+      headers: orgBAdminHeaders,
     });
 
     expect(response.status).toBe(404);
   });
 
   test("cannot assign cross-org connector to own agent (404)", async () => {
-    // Pizza Palace admin tries to assign Burger Barn's connector
-    const response = await request(`/api/agents/${s.pizzaAgentId}/connectors`, {
+    // org A admin tries to assign org B's connector
+    const response = await request(`/api/agents/${s.orgAAgentId}/connectors`, {
       method: "POST",
-      headers: pizzaAdminHeaders,
+      headers: orgAAdminHeaders,
       body: JSON.stringify({
-        connectorId: s.burgerConnectorId,
+        connectorId: s.orgBMedusaConnectorId,
         tools: [{ slug: "add_to_cart" }],
       }),
     });

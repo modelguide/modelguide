@@ -17,6 +17,9 @@ export {
 // CSRF middleware
 export { csrfProtection } from "./csrf";
 
+// Rate limiting middleware
+export { rateLimit } from "./rate-limit";
+
 // RBAC middleware
 export {
   requirePermission,

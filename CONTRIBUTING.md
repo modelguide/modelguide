@@ -2,7 +2,69 @@
 
 Thank you for your interest in contributing to ModelGuide! This guide covers everything you need to get started.
 
-## Prerequisites
+## How to Contribute
+
+We follow the **fork & pull request** workflow — you don't need write access to this repo.
+
+### 1. Fork & clone
+
+```bash
+# Fork via GitHub UI, then:
+git clone https://github.com/<your-username>/modelguide.git
+cd modelguide
+git remote add upstream https://github.com/modelguide/modelguide.git
+```
+
+### 2. Create a branch
+
+Always branch from an up-to-date `main`:
+
+```bash
+git fetch upstream
+git checkout -b feat/my-feature upstream/main
+```
+
+Use descriptive branch names: `feat/zendesk-connector`, `fix/session-filter-bug`, `docs/setup-guide`.
+
+### 3. Make your changes
+
+See [First-Time Setup](#first-time-setup) below to get the project running locally. Follow the [Code Conventions](#code-conventions) section for style guidance.
+
+### 4. Push & open a PR
+
+```bash
+git push origin feat/my-feature
+```
+
+Then open a pull request against `modelguide/modelguide:main` on GitHub. Fill in the PR template — describe **what** you changed and **why**.
+
+### 5. Keeping your fork up to date
+
+```bash
+git fetch upstream
+git rebase upstream/main
+```
+
+If your PR branch falls behind `main`, rebase before requesting review:
+
+```bash
+git checkout feat/my-feature
+git rebase upstream/main
+git push --force-with-lease origin feat/my-feature
+```
+
+### What happens next
+
+- **CLA check** — if this is your first contribution, you'll be asked to sign our Contributor License Agreement (see [below](#contributor-license-agreement-cla)). It's a one-time, one-click process
+- CI runs automatically (lint, typecheck, tests)
+- A maintainer will approve CI to run on your fork
+- A maintainer will review your PR — we aim to respond within a few business days
+- We may suggest changes; push additional commits to the same branch
+- Once approved, a maintainer will merge your PR
+
+## First-Time Setup
+
+### Prerequisites
 
 | Tool | Version | Purpose |
 |------|---------|---------|
@@ -11,13 +73,9 @@ Thank you for your interest in contributing to ModelGuide! This guide covers eve
 | [Node.js](https://nodejs.org) | 22+ | UI build tooling (TanStack Start) |
 | [Git](https://git-scm.com) | 2.40+ | Version control |
 
-## First-Time Setup
+### Quick start
 
 ```bash
-# Clone the repository
-git clone https://github.com/modelguide/modelguide.git
-cd modelguide
-
 # One-command setup: starts Postgres, installs deps, runs migrations + seed
 make quickstart
 ```
@@ -31,11 +89,22 @@ make ui-dev     # Dashboard at http://localhost:3001
 
 Open `http://localhost:3001`. Authentication uses **magic links** — enter your email, and the login link is printed to the API server console (no email provider needed in dev). Click the link to log in.
 
-**Dev accounts (from seed data):**
-- **Admin:** `delivered+admin-pizza-palace@resend.dev`
-- **Support:** `delivered+support-pizza-palace@resend.dev`
+**Dev accounts (from seed data — GlowBox Beauty org):**
+- **Admin:** `delivered+admin-glowbox@resend.dev`
+- **Support:** `delivered+support-glowbox@resend.dev`
+- **Viewer:** `delivered+viewer-glowbox@resend.dev`
+
+The seed creates three organizations (GlowBox Beauty, ClearHealth, SteelPoint Supply) spanning retail, medical, and B2B verticals — each with Medusa + Zendesk connectors and ~300 sessions. See the [Seed Data](README.md#seed-data) section in the README for all accounts and details.
 
 API docs are auto-generated at `http://localhost:3000/docs`.
+
+### Git hooks
+
+We use [Lefthook](https://lefthook.dev/) for pre-commit and pre-push checks. Install it to catch lint and type errors before pushing:
+
+```bash
+lefthook install
+```
 
 ## Environment Variables
 
@@ -69,7 +138,6 @@ Both sub-projects require `.env` files. The `make quickstart` command copies `.e
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `VITE_API_URL` | No | `http://localhost:8000/api` | API base URL (when not using Vite proxy) |
-| `VITE_PUBLIC_API_URL` | No | `http://localhost:3000` | Public-facing API URL for webhook URLs displayed in UI (should match API's `API_EXTERNAL_ADDRESS`) |
 | `VITE_ENABLE_DEVTOOLS` | No | `true` | Enable React/TanStack devtools |
 
 ### Generating secrets
@@ -84,13 +152,7 @@ openssl rand -base64 32
 
 ## Development Workflow
 
-### Branching
-
-1. Fork the repo and create a branch from `main`
-2. Use descriptive branch names: `feat/zendesk-connector`, `fix/session-filter-bug`
-3. Keep PRs focused — one feature or fix per PR
-
-### Running Tests
+### Running tests
 
 ```bash
 make api-test              # All API tests (unit + integration)
@@ -99,7 +161,7 @@ make api-test-integration  # Integration tests (requires running Postgres)
 make ui-test               # UI component tests
 ```
 
-### Type Checking & Linting
+### Type checking & linting
 
 ```bash
 make api-typecheck         # API TypeScript check
@@ -108,13 +170,13 @@ make api-lint-check        # API lint (check only)
 make ui-lint               # UI lint (Biome)
 ```
 
-### All Make Targets
+### All Make targets
 
 Run `make help` to see every available command.
 
 ## Code Conventions
 
-### Project Structure
+### Project structure
 
 Both API and UI use **feature-based directories**. Related routes, services, schemas, and components live together:
 
@@ -126,12 +188,12 @@ src/features/
 └── ...
 ```
 
-### File Naming
+### File naming
 
 - **kebab-case** for all files: `agent-form.tsx`, `auth.routes.ts`
 - Routes: `name.tsx` or `name.$param.tsx` (TanStack Router convention)
 
-### API Path Aliases
+### API path aliases
 
 Configured in `modelguide-api/tsconfig.json`:
 
@@ -140,17 +202,17 @@ Configured in `modelguide-api/tsconfig.json`:
 - `@db/*` → `./src/db/*`
 - `@/*` → `./src/*`
 
-### UI Path Alias
+### UI path alias
 
 Configured in `modelguide-ui/tsconfig.json`:
 
 - `~/` → `./src/`
 
-### Typed Routes (API)
+### Typed routes (API)
 
 All API routes use Hono + `@hono/zod-openapi` for request/response validation and automatic OpenAPI spec generation.
 
-### UI Component Patterns
+### UI component patterns
 
 - **CVA** (class-variance-authority) for component variants
 - **TanStack Query** for data fetching
@@ -201,6 +263,18 @@ Don't create ADRs for routine feature work — only for decisions where "why" ma
 4. Request review
 
 Check [open issues](https://github.com/modelguide/modelguide/issues) for `good first issue` labels if you're looking for a place to start.
+
+## Security
+
+Found a vulnerability? **Do not open a public issue.** See [SECURITY.md](SECURITY.md) for responsible disclosure instructions.
+
+## Contributor License Agreement (CLA)
+
+We use a [Contributor License Agreement](https://en.wikipedia.org/wiki/Contributor_License_Agreement) to ensure contributions can be distributed under the project's license.
+
+When you open your first pull request, the [CLA Assistant](https://cla-assistant.io/) bot will automatically comment with a link to sign the agreement. Just click the link, review the CLA, and accept — it takes seconds.
+
+This is a one-time process — once signed, all your future PRs are covered. Your PR cannot be merged until the CLA is signed.
 
 ## License
 

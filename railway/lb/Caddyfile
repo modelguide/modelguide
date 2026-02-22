@@ -1,0 +1,18 @@
+:{$PORT:80} {
+	@backend path /api/* /docs /docs/* /openapi.json /mcp/* /webhooks/*
+	@demo path /acme-demo /acme-demo/*
+
+    handle @demo {
+		uri strip_prefix /acme-demo
+		reverse_proxy http://acme-demo.railway.internal:8080
+	}
+
+
+	handle @backend {
+		reverse_proxy http://api.railway.internal:8080
+	}
+
+	handle {
+		reverse_proxy http://ui.railway.internal:8080
+	}
+}

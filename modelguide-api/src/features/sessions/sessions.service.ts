@@ -11,7 +11,6 @@ import {
   sessionMessages,
   sessions,
 } from "@db/schema";
-import { extractLinks } from "@features/sessions/link-extraction";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
@@ -19,6 +18,7 @@ import {
   getOffset,
 } from "@lib/pagination";
 import { and, asc, count, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { extractLinks } from "./link-extraction";
 
 // ============================================================================
 // Types
@@ -169,7 +169,10 @@ export async function getSessionById(orgId: string, sessionId: string) {
         .select()
         .from(sessionMessages)
         .where(eq(sessionMessages.sessionId, sessionId))
-        .orderBy(asc(sessionMessages.occurredAt)),
+        .orderBy(
+          asc(sessionMessages.occurredAt),
+          asc(sessionMessages.createdAt),
+        ),
       tx
         .select()
         .from(sessionFeedback)
@@ -289,6 +292,7 @@ export interface MessageData {
     toolName: string;
     toolInput?: Record<string, unknown>;
     toolOutput?: Record<string, unknown>;
+    latencyMs?: number;
   }>;
 }
 
@@ -322,13 +326,28 @@ export async function addMessages(
     const rows: (typeof sessionMessages.$inferInsert)[] = [];
 
     for (const msg of messages) {
-      rows.push({
-        sessionId,
-        role: msg.role as (typeof sessionMessages.role.enumValues)[number],
-        content: msg.content ?? null,
-        audioUrl: msg.audioUrl ?? null,
-        occurredAt: msg.occurredAt ?? null,
-      });
+      // Safe: each postStepMessages() call uses a distinct occurredAt.
+      // If batching tool-only messages with identical timestamps,
+      // keep the wrapper row or add an explicit sequence column.
+      //
+      // Skip the assistant wrapper row when it has no content — the tool rows
+      // below carry all the information and the empty row just shows as a blank
+      // message in the transcript.
+      const isEmptyAssistant =
+        msg.role === "assistant" &&
+        !msg.content &&
+        !msg.audioUrl &&
+        !!msg.toolCalls?.length;
+
+      if (!isEmptyAssistant) {
+        rows.push({
+          sessionId,
+          role: msg.role as (typeof sessionMessages.role.enumValues)[number],
+          content: msg.content ?? null,
+          audioUrl: msg.audioUrl ?? null,
+          occurredAt: msg.occurredAt ?? null,
+        });
+      }
 
       if (msg.role === "assistant" && msg.toolCalls?.length) {
         for (const tc of msg.toolCalls) {
@@ -340,6 +359,7 @@ export async function addMessages(
             toolName: tc.toolName,
             toolInput: tc.toolInput ?? null,
             toolOutput: tc.toolOutput ?? null,
+            latencyMs: tc.latencyMs ?? null,
             occurredAt: msg.occurredAt ?? null,
           });
         }
@@ -348,7 +368,7 @@ export async function addMessages(
 
     const inserted = await tx.insert(sessionMessages).values(rows).returning();
 
-    // Extract external links from tool call outputs
+    // Extract external resource links from tool call outputs
     const toolCallsWithOutput = messages
       .flatMap((msg) => msg.toolCalls ?? [])
       .filter((tc) => tc.toolOutput)

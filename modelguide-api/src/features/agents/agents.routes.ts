@@ -2,6 +2,7 @@
  * Agent management routes
  */
 
+import { env } from "@/env";
 import type { Agent } from "@db/schema";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
@@ -41,13 +42,20 @@ const agentResponseSchema = z.object({
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
-  agentType: z.enum(["voice"]),
+  modality: z.enum(["voice", "text"]),
   agentPlatform: z.enum(["custom", "elevenlabs"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
   hasElevenLabsKey: z.boolean(),
   hasWebhookSecret: z.boolean(),
   keyPrefix: z.string().nullable(),
+  integrationUrls: z
+    .object({
+      sessionInit: z.string(),
+      mcp: z.string(),
+      postCallWebhook: z.string(),
+    })
+    .optional(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });
@@ -85,7 +93,7 @@ const createAgentSchema = z.object({
     .optional()
     .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
-  agentType: z.enum(["voice"]).default("voice").optional(),
+  modality: z.enum(["voice", "text"]).default("voice").optional(),
   agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -134,10 +142,10 @@ const listAgentsQuerySchema = paginationSchema.extend({
     .boolean()
     .optional()
     .openapi({ description: "Filter by active status" }),
-  agentType: z
-    .enum(["voice"])
+  modality: z
+    .enum(["voice", "text"])
     .optional()
-    .openapi({ description: "Filter by agent type" }),
+    .openapi({ description: "Filter by modality" }),
   agentPlatform: z
     .enum(["custom", "elevenlabs"])
     .optional()
@@ -175,18 +183,28 @@ function formatAgent(
       })()
     : undefined;
 
+  const externalBase = (env.API_EXTERNAL_ADDRESS || env.APP_URL).replace(
+    /\/$/,
+    "",
+  );
+
   return {
     id: agent.id,
     name: agent.name,
     slug: agent.slug,
     description: agent.description,
-    agentType: agent.agentType,
+    modality: agent.modality,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
     metadata,
     hasElevenLabsKey: agent.hasElevenLabsKey ?? false,
     hasWebhookSecret: agent.hasWebhookSecret ?? false,
     keyPrefix: agent.keyPrefix ?? null,
+    integrationUrls: {
+      sessionInit: `${externalBase}/api/sessions`,
+      mcp: `${externalBase}/mcp/${agent.id}`,
+      postCallWebhook: `${externalBase}/webhooks/elevenlabs/${agent.id}/post-call`,
+    },
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
   };
@@ -237,12 +255,12 @@ const listAgentsRoute = createRoute({
 
 router.openapi(listAgentsRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const { page, pageSize, isActive, agentType, agentPlatform } =
+  const { page, pageSize, isActive, modality, agentPlatform } =
     c.req.valid("query");
   const result = await listAgents(
     orgId,
     { page, pageSize },
-    { isActive, agentType, agentPlatform },
+    { isActive, modality, agentPlatform },
   );
 
   return c.json(

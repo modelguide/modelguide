@@ -17,7 +17,7 @@ import { CORE_TOOL_COUNT, registerCoreTools } from "./core-tools";
 import {
   executeTool,
   getAgentTools,
-  resolveConnectorConfig,
+  resolveConnectorConfigById,
 } from "./mcp.service";
 import { type ResolvedTool, mcpErrorResponse, mcpResponse } from "./mcp.types";
 import { jsonSchemaToZod } from "./schema-utils";
@@ -73,7 +73,7 @@ function registerResources(
     id: string;
     name: string;
     organizationId: string;
-    agentType: string;
+    modality: string;
   },
   tools: ResolvedTool[],
   coreToolCount: number,
@@ -87,7 +87,7 @@ function registerResources(
           agent_id: agent.id,
           agent_name: agent.name,
           organization_id: agent.organizationId,
-          agent_type: agent.agentType,
+          modality: agent.modality,
           tool_count: tools.length + coreToolCount,
         }),
       },
@@ -167,7 +167,10 @@ function registerConnectorTools(
 
         await validateActiveSession(orgId, sessionId, agentId);
 
-        const config = await resolveConnectorConfig(orgId, tool.connectorId);
+        const config = await resolveConnectorConfigById(
+          orgId,
+          tool.connectorId,
+        );
         const result = await executeTool(
           orgId,
           tool.connectorId,

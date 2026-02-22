@@ -10,6 +10,7 @@ export type { ConnectorFetcher as ZendeskFetcher };
 
 export function createZendeskFetcher(
   config: Record<string, string>,
+  timeoutMs?: number,
 ): ConnectorFetcher {
   const { subdomain, email, apiToken } = config;
 
@@ -31,5 +32,6 @@ export function createZendeskFetcher(
       Authorization: `Basic ${credentials}`,
     },
     "Zendesk",
+    timeoutMs,
   );
 }
