@@ -1,17 +1,39 @@
-# SOP Simulation System
+# SOP Simulation System and Audience Simulation
 
-> **Scope:** This document covers the SOP concept, evaluation engine, audience simulation, and manager onboarding flow. For implementation details (database schema, API surface, seed data, implementation plan), see the [full technical specification](../../.claude/local/sop-system-spec.md) §8–§13.
+> **Scope:** This document covers the SOP concept, evaluation engine, audience simulation, and manager onboarding flow.
 
 ---
 
-## 1. What Is an SOP
+
+## 1. TLDR: SOP + Audience Simulation = Fast Onboarding
+
+By combining **SOPs** (machine-readable "golden path" definitions) with **Audience Simulation** (LLM-driven synthetic customers), ModelGuide lets a Manager validate AI Agent behavior for a specific project **before going live** — no real customer traffic needed.
+
+ModelGuide provides the Manager with three adjustable levers:
+
+| Lever | What it controls | Ships as template? |
+|---|---|---|
+| **SOP** | What the agent should do — which tools to call, in what order, with what checks | Yes — global SOP templates per connector type |
+| **Persona** | How the simulated customer behaves — tone, patience, cooperativeness | Yes — polite, impatient, adversarial built-in |
+| **Agent** | The AI agent's system prompt, model, and connected tools | Configured per org |
+
+The Manager adjusts these levers and runs a simulation. The system drives a realistic conversation between the Persona and the Agent through real MCP tools, then auto-evaluates the resulting session against the SOP. The full cycle takes under two minutes:
+
+```
+Write/Adjust SOP (30 min) → Run Simulation (5 min) → See Compliance Result (instant)
+```
+
+This tight loop works for initial SOP authoring, agent prompt tuning, regression testing before model upgrades, and stress-testing with adversarial personas — all before a single real customer interacts with the agent.
+
+---
 
 An **SOP (Standard Operating Procedure)** is a declarative description of the "golden path" for a specific customer interaction scenario. It captures what an AI agent SHOULD do — which tools to call, in what order, with what preconditions — and provides a machine-readable way to verify whether a completed session followed that path.
 
-SOPs serve two purposes:
+SOPs serve three purposes:
 
 1. **Post-session evaluation** — Match applicable SOPs against a completed session transcript, verify each step, produce a compliance score.
 2. **Operational visibility** — Dashboard metrics on pass rates, failing steps, and coverage give admins actionable insight into agent quality.
+3. **Fast project onboarding** — SOP combined with Audience Simulation lets a Manager onboard a new project and verify the AI Agent will behave according to SOP before any real customer interaction.
 
 ---
 
@@ -117,33 +139,6 @@ Resolution examples across all three verticals:
 | SteelPoint Supply | medusa | `steelpoint_catalog` | `steelpoint_catalog_list_products` |
 | SteelPoint Supply | zendesk | `steelpoint_support` | `steelpoint_support_update_ticket` |
 
-### 3.5 Relationship to Existing Eval Package
-
-The `eval/` package and SOPs are complementary — same underlying concepts, different execution contexts:
-
-| Dimension | eval/ Package | SOP Definitions |
-|---|---|---|
-| **Context** | Offline experimentation | Production evaluation |
-| **Sessions** | Simulated (LLM user + LLM agent) | Real (actual customer conversations) |
-| **Tools** | Mock tool handlers | Real tool calls recorded in session_messages |
-| **Trigger** | CLI / CI pipeline | Session completion event or manual trigger |
-| **Results** | JSON report files | `sop_eval_runs` table (queryable, dashboardable) |
-| **Authoring** | YAML files in `eval/config/` | DB rows via API + dashboard UI |
-
-Concept mapping between the two:
-
-| eval/ YAML | SOP Equivalent |
-|---|---|
-| `task.expected.action_sequence` | `tool_sequence` evaluator |
-| `task.expected.must[i]` | `llm_judge` evaluator (criterion = the must string) |
-| `task.expected.must_not[i]` | `no_tool_called` (tool) or `llm_judge` (behavioral) |
-| `task.expected.outcome` | `metadata.expectedOutcome` |
-| `rule.trigger.tool` | SOP trigger `{ type: "tool_used" }` |
-| `rule.condition.conversation_must_contain` | `confirmation_requested` or `llm_judge` |
-| `rule.condition.pre_check.expect` | `tool_output_contains` evaluator |
-| `rule.on_fail.action` | Step `onFail.action` |
-
----
 
 ## 4. Input Parameters — What Feeds Into SOP Evaluation
 
@@ -537,22 +532,6 @@ All tool calls are **real MCP calls** against the org's configured connectors. T
 ![Simulation Flow: from session creation through conversation loop to auto-evaluation](./sop_1.png)
 *The simulation flow as a flowchart: create session → connect MCP → seed user-simulator → conversation loop (user-sim message ↔ agent + tools, with stop condition check) → session completes → auto-evaluate → results available.*
 
-### 6.6 `eval/` Package vs SOP Simulation
-
-The `eval/` package and SOP simulation share core infrastructure but serve different audiences:
-
-| Dimension | `eval/` Package | SOP Simulation |
-|---|---|---|
-| **Audience** | Engineering team, CI/CD pipelines | Operations managers, QA team |
-| **Interface** | CLI (`eval run`), YAML config files | Dashboard UI, point-and-click |
-| **Scope** | A/B experiments across model configs, multi-domain batch runs | Single SOP under test, focused iteration |
-| **Persona format** | `PersonaConfig` YAML files in `eval/config/user-personas/` | `persona_definitions` table (same shape, stored in DB) |
-| **Orchestrator** | `eval/src/orchestrator.ts` | Reuses same orchestrator core |
-| **Tool mode** | Mock executor available for cost-free runs | Real MCP by default (production-identical) |
-| **Output** | JSON reports, experiment comparison tables | `sop_eval_runs` rows, dashboard visualizations |
-| **Trigger** | Manual CLI invocation, CI pipeline | Dashboard button, API endpoint, scheduled |
-
-The persona shape (`PersonaDefinition`) is identical to `eval/`'s `PersonaConfig`. Personas authored in YAML for `eval/` can be imported as `persona_templates`. The orchestrator conversation loop is the same code path — SOP simulation calls it with real MCP instead of mock executors.
 
 ### 6.7 Simulation Data Example — Complete Walkthrough
 
