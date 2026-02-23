@@ -6,6 +6,14 @@ import { config } from "../../config.js";
 import { logger } from "../../lib/logger.js";
 import { type Step, logAgentTurns, postStepMessages } from "../../lib/modelguide.client.js";
 
+export interface UsageData {
+  llm_model: string;
+  llm_input_tokens: number;
+  llm_output_tokens: number;
+  llm_total_tokens: number;
+  cost_usd: number;
+}
+
 export const wismoRequestContextSchema = z.object({
   sessionId: z.string(),
   senderEmail: z.string().email(),
@@ -52,7 +60,7 @@ export async function runWismoAgent(params: {
   sessionId: string;
   senderEmail: string;
   emailBody: string;
-}): Promise<{ output: AgentOutput; steps: Step[] }> {
+}): Promise<{ output: AgentOutput; steps: Step[]; usage: UsageData }> {
   const { sessionId, senderEmail, emailBody } = params;
 
   const mcpClient = new MCPClient({
@@ -130,7 +138,37 @@ export async function runWismoAgent(params: {
     logger.debug({ output }, "Agent output derived from steps");
 
     logAgentTurns(steps, stepLatenciesMs);
-    return { output, steps };
+
+    // Extract token usage and compute cost
+    // Mastra (AI SDK v5) uses inputTokens/outputTokens/totalTokens naming
+    const agentInputTokens = result.totalUsage?.inputTokens ?? 0;
+    const agentOutputTokens = result.totalUsage?.outputTokens ?? 0;
+    // Processor model usage is not separately tracked by Mastra — estimate as ~10% of agent tokens
+    // (structured output extraction is a small call). When Mastra exposes per-model usage, update this.
+    const processorInputTokens = Math.round(agentOutputTokens * 0.1);
+    const processorOutputTokens = Math.round(agentOutputTokens * 0.05);
+
+    const totalInputTokens = agentInputTokens + processorInputTokens;
+    const totalOutputTokens = agentOutputTokens + processorOutputTokens;
+
+    const agentCost =
+      (agentInputTokens / 1_000_000) * config.AGENT_MODEL_INPUT_COST +
+      (agentOutputTokens / 1_000_000) * config.AGENT_MODEL_OUTPUT_COST;
+    const processorCost =
+      (processorInputTokens / 1_000_000) * config.PROCESSOR_MODEL_INPUT_COST +
+      (processorOutputTokens / 1_000_000) * config.PROCESSOR_MODEL_OUTPUT_COST;
+
+    const usage: UsageData = {
+      llm_model: config.AGENT_MODEL,
+      llm_input_tokens: totalInputTokens,
+      llm_output_tokens: totalOutputTokens,
+      llm_total_tokens: totalInputTokens + totalOutputTokens,
+      cost_usd: Number((agentCost + processorCost).toFixed(6)),
+    };
+
+    logger.info({ usage }, "Token usage and cost computed");
+
+    return { output, steps, usage };
   } finally {
     await mcpClient.disconnect();
   }

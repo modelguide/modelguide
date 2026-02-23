@@ -202,7 +202,7 @@ async function processEmail(
   await postUserMessage(sessionId, { from, to, subject, body: emailBody, receivedAt });
 
   // Run the agent
-  const { output, steps } = await runWismoAgent({ sessionId, senderEmail, emailBody });
+  const { output, steps, usage } = await runWismoAgent({ sessionId, senderEmail, emailBody });
   const { replyBody, escalated: isEscalated, ticketId } = output;
 
   if (ticketId) {
@@ -229,8 +229,8 @@ async function processEmail(
 
   const status = isEscalated ? "abandoned" : "completed";
 
-  // PATCH final status (fire-and-forget — reply is already sent)
-  patchSessionStatus(sessionId, status).catch((err) =>
+  // PATCH final status + cost metadata (fire-and-forget — reply is already sent)
+  patchSessionStatus(sessionId, status, { ...usage }).catch((err) =>
     logger.error({ err, sessionId }, "Background session status patch failed"),
   );
 }

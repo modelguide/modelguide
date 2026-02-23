@@ -18,6 +18,13 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
+  AGENT_MODEL: z.string().default("anthropic/claude-sonnet-4-6-20250514"),
+  PROCESSOR_MODEL: z.string().default("anthropic/claude-haiku-4-5-20251001"),
+  AGENT_MODEL_INPUT_COST: z.coerce.number().default(3),
+  AGENT_MODEL_OUTPUT_COST: z.coerce.number().default(15),
+  PROCESSOR_MODEL_INPUT_COST: z.coerce.number().default(1),
+  PROCESSOR_MODEL_OUTPUT_COST: z.coerce.number().default(5),
+  AGENT_INSTRUCTIONS: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
