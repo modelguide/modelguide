@@ -19,7 +19,7 @@ export function TranscriptMessage({ message }: TranscriptMessageProps) {
         toolName={message.toolName || 'unknown'}
         input={message.toolInput || {}}
         output={message.toolOutput || {}}
-        status={message.toolStatus ?? message.status ?? 'success'}
+        status={message.toolStatus ?? 'success'}
         latencyMs={message.latencyMs || 0}
       />
     )
