@@ -369,8 +369,11 @@ app.post("/:agentId/conversation-init", async (c) => {
     return c.json({ error: "Failed to create session" }, 500);
   }
 
+  const maskedCallerId = caller_id
+    ? caller_id.slice(-4).padStart(caller_id.length, "*")
+    : undefined;
   console.log(
-    `[webhook/conversation-init] Created session=${sessionId} agent=${agentId}${caller_id ? ` caller=${caller_id}` : ""}${call_sid ? ` call_sid=${call_sid}` : ""}`,
+    `[webhook/conversation-init] Created session=${sessionId} agent=${agentId}${maskedCallerId ? ` caller=${maskedCallerId}` : ""}${call_sid ? ` call_sid=${call_sid}` : ""}`,
   );
 
   return c.json({
