@@ -74,7 +74,7 @@ function NewAgentPage() {
               label="Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Pizza Palace Assistant"
+              placeholder="e.g., GlowBox Voice Concierge"
               required
             />
 

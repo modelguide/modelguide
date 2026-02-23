@@ -463,7 +463,7 @@ describe("RLS isolation", () => {
       method: "POST",
       headers: orgAAdminHeaders,
       body: JSON.stringify({
-        name: "Pizza Only",
+        name: "Store API Key",
         value: "orgA_secret",
         secretType: "api_key",
         ownerType: "connector",

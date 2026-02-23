@@ -263,9 +263,9 @@ Instead of chat bubbles, use log format:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ [10:00:15] USER     I'd like to order a large pepperoni     │
+│ [10:00:15] USER     I'm looking for a gentle daily cleanser  │
 │ [10:00:17] AGENT    I've added that to your cart.           │
-│ [10:00:17] TOOL     pizzapalace_add_to_cart → success 150ms │
+│ [10:00:17] TOOL     glowbox_store_add_to_cart → success 150ms │
 │ [10:00:18] AGENT    Would you like anything else?           │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -273,8 +273,8 @@ Instead of chat bubbles, use log format:
 ### Tool Call Block
 
 ```
-┌─ pizzapalace_add_to_cart ──────────────────────┐
-│  ► item: "large pepperoni"                     │
+┌─ glowbox_store_add_to_cart ────────────────────┐
+│  ► product_id: "prod_cerave_hydrating_cleanser"│
 │  ► quantity: 1                                 │
 ├────────────────────────────────────────────────┤
 │  ◄ cart_id: "cart_123"                         │

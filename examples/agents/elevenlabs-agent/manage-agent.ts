@@ -2,7 +2,7 @@
  * import
  * Ad-hoc script to manage the ElevenLabs agent configuration.
  *
- * Simulates what a ModelGuide client (e.g. Pizza Palace) would do:
+ * Simulates what a ModelGuide client (e.g. GlowBox Beauty) would do:
  * - Fetch agent config
  * - Update prompt, tools, and dynamic variables
  *
@@ -30,21 +30,21 @@ const MG_API_KEY = process.env.MG_API_KEY ?? "";
 // Agent prompt
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are a friendly Pizza Palace voice assistant. You help customers place orders, check order status, and modify existing orders.
+const SYSTEM_PROMPT = `You are a friendly GlowBox Beauty voice concierge. You help customers find skincare and beauty products, place orders, check order status, and handle returns.
 
 ## Rules
 - Be concise and natural — this is a voice conversation.
 - Always confirm before placing or modifying an order.
-- If you can't find an item, suggest alternatives.
+- If you can't find a product, suggest alternatives from the catalog.
 - If something goes wrong with a tool call, apologize and try once more.
 
 ## Available tools
-You have access to tools prefixed with "pizzapalace_". Use them to:
-- Add items to cart
-- View cart contents  
+You have access to tools prefixed with "glowbox_store_". Use them to:
+- Search and browse products
+- Add products to cart
+- View cart contents
 - Create and confirm orders
-- Check order status
-- Update delivery addresses`;
+- Check order status`;
 
 // ============================================================================
 // Tool definitions — webhook tools pointing at ModelGuide
@@ -80,31 +80,29 @@ function webhookTool(
 
 const TOOLS: ElevenLabs.PromptAgentApiModelInputToolsItem[] = [
   webhookTool(
-    "pizzapalace_add_to_cart",
+    "glowbox_store_add_to_cart",
     "Add an item to the customer's shopping cart",
     {
-      item: {
+      product_id: {
         type: "string",
-        description: "Item name (e.g. 'large pepperoni pizza')",
+        description: "Product ID or handle (e.g. 'prod_cerave_hydrating_cleanser')",
       },
       quantity: { type: "number", description: "Number of items" },
-      size: {
+      variant_id: {
         type: "string",
-        description: "Size variant",
-        enum: ["small", "medium", "large"],
+        description: "Variant ID for size/type selection",
       },
-      toppings: { type: "string", description: "Comma-separated toppings" },
     },
-    ["item", "quantity"],
+    ["product_id", "quantity"],
   ),
   webhookTool(
-    "pizzapalace_get_cart",
+    "glowbox_store_get_cart",
     "View the current cart contents and total",
     {},
     [],
   ),
   webhookTool(
-    "pizzapalace_confirm_order",
+    "glowbox_store_confirm_order",
     "Confirm and place the order. Always ask the customer to confirm first.",
     {
       delivery_address: {
@@ -115,7 +113,7 @@ const TOOLS: ElevenLabs.PromptAgentApiModelInputToolsItem[] = [
     ["delivery_address"],
   ),
   webhookTool(
-    "pizzapalace_get_order",
+    "glowbox_store_get_order",
     "Get details of an existing order by order ID",
     {
       order_id: { type: "string", description: "The order ID" },
@@ -147,7 +145,7 @@ async function updateAgent() {
   console.log(`  Tools: ${TOOLS.map((t) => ("name" in t ? t.name : "?")).join(", ")}`);
 
   const agent = await client.conversationalAi.agents.update(AGENT_ID, {
-    name: "Pizza Palace Agent",
+    name: "GlowBox Voice Concierge",
     conversationConfig: {
       agent: {
         // prompt: {
@@ -155,7 +153,7 @@ async function updateAgent() {
         //   tools: TOOLS,
         // },
         firstMessage:
-          "Hi, welcome to Pizza Palace! What can I get for you today?",
+          "Hi, welcome to GlowBox Beauty! How can I help you today?",
         language: "en",
         dynamicVariables: {
           dynamicVariablePlaceholders: {

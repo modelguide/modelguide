@@ -109,8 +109,8 @@ curl -X POST http://localhost:3000/api/agents \
   -H "Authorization: Bearer <your-jwt>" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Pizza Palace Assistant",
-    "description": "Voice ordering assistant",
+    "name": "GlowBox Voice Concierge",
+    "description": "Voice concierge for product recs, orders, and returns",
     "agent_type": "voice"
   }'
 # Response includes api_key — save it!
@@ -129,7 +129,7 @@ From the agent detail page, assign connectors and select which tools the agent c
 5. Set the **Requires Confirmation** flag on destructive tools (e.g., `confirm_order`, `cancel_order`)
 6. Click **Save**
 
-Tool names are namespaced by the connector instance slug. If your Medusa connector instance is slugged `pizzapalace`, tools appear as `pizzapalace_add_to_cart`, `pizzapalace_confirm_order`, etc.
+Tool names are namespaced by the connector instance slug. If your Medusa connector instance is slugged `glowbox_store`, tools appear as `glowbox_store_add_to_cart`, `glowbox_store_confirm_order`, etc.
 
 **Via REST API:**
 

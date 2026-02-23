@@ -246,7 +246,7 @@ describe("GET /api/sessions/:id", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "user",
-        content: "Hello, I want to order a pizza",
+        content: "Hello, I'm looking for a skincare product",
       }),
     });
   });
@@ -274,7 +274,7 @@ describe("GET /api/sessions/:id", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "assistant",
-        content: "What size pizza would you like?",
+        content: "What size would you like?",
       }),
     });
 
@@ -410,7 +410,7 @@ describe("POST /api/sessions/:id/messages", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         role: "user",
-        content: "I want a large pepperoni pizza",
+        content: "I'd like to order the CeraVe Hydrating Cleanser",
       }),
     });
 
@@ -420,7 +420,7 @@ describe("POST /api/sessions/:id/messages", () => {
     expect(body1.data).toBeArray();
     expect(body1.data.length).toBe(1);
     expect(body1.data[0].role).toBe("user");
-    expect(body1.data[0].content).toBe("I want a large pepperoni pizza");
+    expect(body1.data[0].content).toBe("I'd like to order the CeraVe Hydrating Cleanser");
 
     // Second message
     const res2 = await request(`/api/sessions/${messageSessionId}/messages`, {
@@ -489,13 +489,13 @@ describe("POST /api/sessions/:id/messages", () => {
         headers: orgAAgentHeaders,
         body: JSON.stringify({
           role: "assistant",
-          content: "Let me look up the menu for you.",
+          content: "Let me look that up for you.",
           toolCalls: [
             {
               toolCallId: "call_123",
               toolName: "glowbox_store_get_menu",
-              toolInput: { category: "pizza" },
-              toolOutput: { items: ["pepperoni", "margherita"] },
+              toolInput: { category: "skincare" },
+              toolOutput: { items: ["CeraVe Hydrating Cleanser", "La Roche-Posay SPF 50"] },
             },
           ],
         }),
@@ -510,7 +510,7 @@ describe("POST /api/sessions/:id/messages", () => {
 
     const assistantMsg = body.data[0];
     expect(assistantMsg.role).toBe("assistant");
-    expect(assistantMsg.content).toBe("Let me look up the menu for you.");
+    expect(assistantMsg.content).toBe("Let me look that up for you.");
 
     const toolMsg = body.data[1];
     expect(toolMsg.role).toBe("tool");

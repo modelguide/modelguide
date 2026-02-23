@@ -55,8 +55,8 @@ This returns only tools assigned to your agent. Tools are namespaced by connecto
 | `core_create_session` | Built-in platform tool |
 | `core_end_session` | Built-in platform tool |
 | `core_rate_session` | Built-in platform tool |
-| `pizzapalace_add_to_cart` | Medusa connector (instance: pizzapalace) |
-| `pizzapalace_confirm_order` | Medusa connector (instance: pizzapalace) |
+| `glowbox_store_add_to_cart` | Medusa connector (instance: glowbox_store) |
+| `glowbox_store_confirm_order` | Medusa connector (instance: glowbox_store) |
 
 The `core_*` tools are always available. Connector tools depend on what an admin has assigned to your agent.
 
@@ -89,12 +89,11 @@ Pass the `session_id` with each tool call:
 
 ```typescript
 const result = await client.callTool({
-  name: "pizzapalace_add_to_cart",
+  name: "glowbox_store_add_to_cart",
   arguments: {
     session_id: "the-session-id",
-    item: "pizza",
-    size: "large",
-    toppings: ["pepperoni"],
+    product_id: "prod_cerave_hydrating_cleanser",
+    variant_id: "variant_200ml",
     quantity: 1,
   },
 });
@@ -124,22 +123,22 @@ await client.callTool({
     messages: [
       {
         role: "assistant",
-        content: "Hi, welcome to Pizza Palace! How can I help?",
+        content: "Hi, welcome to GlowBox Beauty! How can I help you today?",
         timestamp: "2024-01-15T10:00:00Z",
       },
       {
         role: "user",
-        content: "I'd like a large pepperoni pizza",
+        content: "I'm looking for a gentle daily cleanser",
         timestamp: "2024-01-15T10:00:15Z",
       },
       {
         role: "assistant",
-        content: "I've added that to your cart.",
+        content: "I've added the CeraVe Hydrating Cleanser to your cart.",
         timestamp: "2024-01-15T10:00:17Z",
         tool_calls: [
           {
-            tool_name: "pizzapalace_add_to_cart",
-            input: { item: "pizza", size: "large", toppings: ["pepperoni"], quantity: 1 },
+            tool_name: "glowbox_store_add_to_cart",
+            input: { product_id: "prod_cerave_hydrating_cleanser", variant_id: "variant_200ml", quantity: 1 },
             output: { cart_id: "cart_123", subtotal: 18.99 },
             status: "success",
           },
@@ -161,7 +160,7 @@ Some tools are flagged with `requires_confirmation` — these represent destruct
   "confirmation_id": "conf_xxxxx",
   "confirmation_message": "This action requires user confirmation",
   "action_summary": {
-    "tool": "pizzapalace_confirm_order",
+    "tool": "glowbox_store_confirm_order",
     "description": "Confirm order for $34.74",
     "parameters": { "draft_order_id": "draft_789", "total": 34.74 }
   },
@@ -176,7 +175,7 @@ Your agent should:
 
 ```typescript
 await client.callTool({
-  name: "pizzapalace_confirm_order",
+  name: "glowbox_store_confirm_order",
   arguments: {
     session_id: "the-session-id",
     draft_order_id: "draft_789",
@@ -274,12 +273,11 @@ async function main() {
 
   // Call a tool
   const result = await client.callTool({
-    name: "pizzapalace_add_to_cart",
+    name: "glowbox_store_add_to_cart",
     arguments: {
       session_id,
-      item: "pizza",
-      size: "large",
-      toppings: ["pepperoni"],
+      product_id: "prod_cerave_hydrating_cleanser",
+      variant_id: "variant_200ml",
       quantity: 1,
     },
   });
@@ -293,7 +291,7 @@ async function main() {
       messages: [
         {
           role: "user",
-          content: "Add a large pepperoni pizza",
+          content: "Add the CeraVe Hydrating Cleanser to my cart",
           timestamp: new Date().toISOString(),
         },
       ],
