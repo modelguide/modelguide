@@ -65,6 +65,8 @@ const sessionResponseSchema = z.object({
   agent: agentSummarySchema,
   messageCount: z.number(),
   durationSeconds: z.number().nullable(),
+  totalTokens: z.number().nullable(),
+  costUsd: z.number().nullable(),
   feedbackSummary: feedbackSummarySchema,
 });
 
@@ -144,6 +146,9 @@ const updateSessionSchema = z.object({
   status: z
     .enum(["completed", "abandoned"])
     .openapi({ description: "New session status (terminal)" }),
+  metadata: z.record(z.unknown()).optional().openapi({
+    description: "Session metadata to merge (e.g. cost/token data)",
+  }),
 });
 
 const createMessageSchema = z.object({
@@ -158,6 +163,12 @@ const createMessageSchema = z.object({
   occurredAt: z.string().datetime().optional().openapi({
     description:
       "When the message occurred (ISO 8601). Defaults to now if omitted.",
+  }),
+  modelUsed: z.string().optional().openapi({
+    description: "LLM model used for this message",
+  }),
+  tokensUsed: z.number().int().optional().openapi({
+    description: "Total tokens consumed by this message",
   }),
   toolCalls: z
     .array(
@@ -225,6 +236,8 @@ function formatSession(
     agent: { id: string; name: string };
     messageCount: number;
     durationSeconds: number | null;
+    totalTokens: number | null;
+    costUsd: number | null;
     feedbackSummary: {
       hasFeedback: boolean;
       customerRating: number | null;
@@ -247,6 +260,8 @@ function formatSession(
     agent: session.agent,
     messageCount: session.messageCount,
     durationSeconds: session.durationSeconds,
+    totalTokens: session.totalTokens,
+    costUsd: session.costUsd,
     feedbackSummary: session.feedbackSummary,
   };
 }
@@ -445,6 +460,8 @@ const createSessionRoute = createRoute({
             agent: true,
             messageCount: true,
             durationSeconds: true,
+            totalTokens: true,
+            costUsd: true,
             feedbackSummary: true,
           }),
         },
@@ -492,6 +509,8 @@ const updateSessionRoute = createRoute({
             agent: true,
             messageCount: true,
             durationSeconds: true,
+            totalTokens: true,
+            costUsd: true,
             feedbackSummary: true,
           }),
         },
@@ -555,10 +574,12 @@ router.openapi(addMessageRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const agent = getCurrentAgent(c);
   const { id } = c.req.valid("param");
-  const { occurredAt, ...rest } = c.req.valid("json");
+  const { occurredAt, modelUsed, tokensUsed, ...rest } = c.req.valid("json");
   const messages = await addMessage(orgId, id, agent.id, {
     ...rest,
     occurredAt: occurredAt ? new Date(occurredAt) : undefined,
+    modelUsed,
+    tokensUsed,
   });
 
   return c.json({ data: messages.map(formatMessage) }, 201);
