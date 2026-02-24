@@ -362,7 +362,8 @@ describe("core_add_messages", () => {
 
     const userMsg = body.messages.find(
       (m: { role: string; content: string }) =>
-        m.role === "user" && m.content === "Hello, I'm looking for a skincare product",
+        m.role === "user" &&
+        m.content === "Hello, I'm looking for a skincare product",
     );
     expect(userMsg).toBeDefined();
   });

@@ -420,7 +420,9 @@ describe("POST /api/sessions/:id/messages", () => {
     expect(body1.data).toBeArray();
     expect(body1.data.length).toBe(1);
     expect(body1.data[0].role).toBe("user");
-    expect(body1.data[0].content).toBe("I'd like to order the CeraVe Hydrating Cleanser");
+    expect(body1.data[0].content).toBe(
+      "I'd like to order the CeraVe Hydrating Cleanser",
+    );
 
     // Second message
     const res2 = await request(`/api/sessions/${messageSessionId}/messages`, {
@@ -495,7 +497,9 @@ describe("POST /api/sessions/:id/messages", () => {
               toolCallId: "call_123",
               toolName: "glowbox_store_get_menu",
               toolInput: { category: "skincare" },
-              toolOutput: { items: ["CeraVe Hydrating Cleanser", "La Roche-Posay SPF 50"] },
+              toolOutput: {
+                items: ["CeraVe Hydrating Cleanser", "La Roche-Posay SPF 50"],
+              },
             },
           ],
         }),
