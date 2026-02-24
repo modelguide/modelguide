@@ -30,25 +30,25 @@ isProject: false
 ```mermaid
 sequenceDiagram
     participant Customer
-    participant PizzaPalaceBackend as Pizza Palace Backend
+    participant GlowBoxBackend as GlowBox Backend
     participant ModelGuide as ModelGuide API
     participant ElevenLabs
     participant Medusa as Medusa Connector
 
-    Customer->>PizzaPalaceBackend: Click "Start Voice Call"
-    Note over PizzaPalaceBackend: Create JWT locally using API key
-    PizzaPalaceBackend->>ModelGuide: GET /api/sessions (bearer token + userId)
-    ModelGuide-->>PizzaPalaceBackend: { session_id: "sess_abc" }
-    PizzaPalaceBackend->>ElevenLabs: Start conversation with dynamic_variables
+    Customer->>GlowBoxBackend: Click "Start Voice Call"
+    Note over GlowBoxBackend: Create JWT locally using API key
+    GlowBoxBackend->>ModelGuide: GET /api/sessions (bearer token + userId)
+    ModelGuide-->>GlowBoxBackend: { session_id: "sess_abc" }
+    GlowBoxBackend->>ElevenLabs: Start conversation with dynamic_variables
     Note over ElevenLabs: dynamic_variables: session_id, bearer_token, user_id
     ElevenLabs->>Customer: "Hi! How can I help you today?"
-    Customer->>ElevenLabs: "I want to order a large pepperoni pizza"
+    Customer->>ElevenLabs: "I'm looking for a gentle daily cleanser"
     ElevenLabs->>ModelGuide: POST /webhooks/tool (with dynamic_variables)
     Note over ModelGuide: Validate JWT, lookup session, verify user
-    ModelGuide->>Medusa: Add item to cart
+    ModelGuide->>Medusa: Add product to cart
     Medusa-->>ModelGuide: Cart updated
     ModelGuide-->>ElevenLabs: { success: true, cart_id: "..." }
-    ElevenLabs->>Customer: "Added! Your total is $18.99"
+    ElevenLabs->>Customer: "Added! The CeraVe Hydrating Cleanser is $18.99"
     Customer->>ElevenLabs: "That's all, thanks"
     ElevenLabs->>ModelGuide: POST /webhooks/end-of-call
     Note over ModelGuide: Store transcript, update session status
@@ -61,7 +61,7 @@ sequenceDiagram
 ### Step 1: Client Creates JWT Locally (No API Call)
 
 ```typescript
-// Pizza Palace backend - using standard JWT library
+// GlowBox backend - using standard JWT library
 import jwt from 'jsonwebtoken';
 
 const apiKey = process.env.MODELGUIDE_API_KEY; // 'mgk_xxx...'
@@ -69,7 +69,7 @@ const apiKey = process.env.MODELGUIDE_API_KEY; // 'mgk_xxx...'
 // Create JWT signed with API key (or secret derived from it)
 const bearerToken = jwt.sign(
   { 
-    iss: 'pizza-palace',  // issuer claim
+    iss: 'glowbox',  // issuer claim
     iat: Date.now() / 1000 
   },
   apiKey,  // sign with API key
@@ -80,7 +80,7 @@ const bearerToken = jwt.sign(
 ### Step 2: Client Gets/Creates Session via ModelGuide API
 
 ```typescript
-const userId = currentUser.id;  // Pizza Palace's customer ID
+const userId = currentUser.id;  // GlowBox's customer ID
 
 const response = await fetch('https://api.modelguide.com/api/sessions', {
   method: 'GET',  // or POST to create
@@ -97,7 +97,7 @@ const { session_id } = await response.json();
 
 ```typescript
 await elevenlabs.conversations.create({
-  agent_id: "pizza_palace_agent",
+  agent_id: "glowbox_voice_concierge",
   dynamic_variables: {
     mg_session_id: session_id,
     mg_bearer_token: bearerToken,
@@ -325,10 +325,9 @@ You have access to the following tools. Use them to help customers:
 ## medusa_add_to_cart
 Add an item to the customer's shopping cart.
 Parameters:
-- item (required): Item name or description
+- product_id (required): Product ID or handle
 - quantity (required): Number of items
-- size (optional): Size variant (small, medium, large)
-- toppings (optional): Array of toppings
+- variant_id (optional): Variant ID for size/type selection
 
 ## medusa_get_cart
 View the current cart contents and total.
@@ -336,12 +335,13 @@ View the current cart contents and total.
 ## medusa_confirm_order
 Confirm and place the order. IMPORTANT: Always ask for customer confirmation before calling this.
 Parameters:
-- delivery_address (required): Full delivery address
+- shipping_address (required): Full shipping address
 
 ## medusa_cancel_order
 Cancel an existing order.
 Parameters:
 - order_id (required): The order ID to cancel
+- reason (optional): Cancellation reason
 ```
 
 ## Files to Create/Modify

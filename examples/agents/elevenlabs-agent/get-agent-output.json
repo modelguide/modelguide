@@ -1,6 +1,6 @@
 {
   "agentId": "agent_3501kgq8y9nre61vhwb60nyc0fnt",
-  "name": "Pizza Palace Agent",
+  "name": "GlowBox Voice Concierge",
   "conversationConfig": {
     "asr": {
       "quality": "high",
@@ -58,7 +58,7 @@
       "background_voice_detection": false
     },
     "agent": {
-      "firstMessage": "Hi, welcome to Pizza Palace! What can I get for you today?",
+      "firstMessage": "Hi, welcome to GlowBox Beauty! How can I help you today?",
       "language": "en",
       "hinglishMode": false,
       "dynamicVariables": {
@@ -66,7 +66,7 @@
       },
       "disableFirstMessageInterruptions": false,
       "prompt": {
-        "prompt": "You are a friendly Pizza Palace voice assistant. You help customers place orders, check order status, and modify existing orders.\n\n## Rules\n- Be concise and natural — this is a voice conversation.\n- Always confirm before placing or modifying an order.\n- If you can't find an item, suggest alternatives.\n- If something goes wrong with a tool call, apologize and try once more.\n\n## Available tools\nYou have access to tools prefixed with \"pizzapalace_\". Use them to:\n- Add items to cart\n- View cart contents  \n- Create and confirm orders\n- Check order status\n- Update delivery addresses",
+        "prompt": "You are a friendly GlowBox Beauty voice concierge. You help customers find skincare and beauty products, place orders, check order status, and handle returns.\n\n## Rules\n- Be concise and natural — this is a voice conversation.\n- Always confirm before placing or modifying an order.\n- If you can't find a product, suggest alternatives from the catalog.\n- If something goes wrong with a tool call, apologize and try once more.\n\n## Available tools\nYou have access to tools prefixed with \"glowbox_store_\". Use them to:\n- Search and browse products\n- Add products to cart\n- View cart contents\n- Create and confirm orders\n- Check order status",
         "llm": "glm-45-air-fp8",
         "reasoningEffort": "low",
         "temperature": 0,
@@ -98,7 +98,7 @@
         "tools": [
           {
             "type": "webhook",
-            "name": "pizzapalace_get_cart",
+            "name": "glowbox_store_get_cart",
             "description": "View the current cart contents and total",
             "responseTimeoutSecs": 30,
             "disableInterruptions": false,
@@ -125,8 +125,8 @@
           },
           {
             "type": "webhook",
-            "name": "pizzapalace_add_to_cart",
-            "description": "Add an item to the customer's shopping cart",
+            "name": "glowbox_store_add_to_cart",
+            "description": "Add a product to the customer's shopping cart",
             "responseTimeoutSecs": 30,
             "disableInterruptions": false,
             "forcePreToolSpeech": false,
@@ -144,14 +144,14 @@
               "requestBodySchema": {
                 "type": "object",
                 "required": [
-                  "item",
+                  "product_id",
                   "quantity"
                 ],
                 "description": "",
                 "properties": {
-                  "item": {
+                  "product_id": {
                     "type": "string",
-                    "description": "Item name (e.g. 'large pepperoni pizza')",
+                    "description": "Product ID or handle (e.g. 'prod_cerave_hydrating_cleanser')",
                     "isSystemProvided": false,
                     "dynamicVariable": "",
                     "constantValue": ""
@@ -163,21 +163,9 @@
                     "dynamicVariable": "",
                     "constantValue": ""
                   },
-                  "size": {
+                  "variant_id": {
                     "type": "string",
-                    "description": "Size variant",
-                    "enum": [
-                      "small",
-                      "medium",
-                      "large"
-                    ],
-                    "isSystemProvided": false,
-                    "dynamicVariable": "",
-                    "constantValue": ""
-                  },
-                  "toppings": {
-                    "type": "string",
-                    "description": "Comma-separated toppings",
+                    "description": "Variant ID for size/type selection",
                     "isSystemProvided": false,
                     "dynamicVariable": "",
                     "constantValue": ""
@@ -189,7 +177,7 @@
           },
           {
             "type": "webhook",
-            "name": "pizzapalace_confirm_order",
+            "name": "glowbox_store_confirm_order",
             "description": "Confirm and place the order. Always ask the customer to confirm first.",
             "responseTimeoutSecs": 30,
             "disableInterruptions": false,
@@ -226,8 +214,8 @@
           },
           {
             "type": "webhook",
-            "name": "pizzapalace_get_order",
-            "description": "Get details of an existing order by order ID",
+            "name": "glowbox_store_get_order",
+            "description": "Get details of an existing order by ID",
             "responseTimeoutSecs": 30,
             "disableInterruptions": false,
             "forcePreToolSpeech": false,

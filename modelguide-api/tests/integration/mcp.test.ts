@@ -333,7 +333,7 @@ describe("core_add_messages", () => {
         messages: [
           {
             role: "user",
-            content: "Hello, I want to order a pizza",
+            content: "Hello, I'm looking for a skincare product",
             occurred_at: new Date().toISOString(),
           },
           {
@@ -362,7 +362,8 @@ describe("core_add_messages", () => {
 
     const userMsg = body.messages.find(
       (m: { role: string; content: string }) =>
-        m.role === "user" && m.content === "Hello, I want to order a pizza",
+        m.role === "user" &&
+        m.content === "Hello, I'm looking for a skincare product",
     );
     expect(userMsg).toBeDefined();
   });

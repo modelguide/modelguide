@@ -13,7 +13,7 @@ export interface ToolCallBlockProps {
 export function ToolCallBlock({ toolName, input, output, status, latencyMs }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false)
 
-  // Format tool name for display (e.g., "pizzapalace_add_to_cart" -> "Add to Cart")
+  // Format tool name for display (e.g., "glowbox_store_add_to_cart" -> "Add to Cart")
   const displayName =
     toolName
       .split('_')

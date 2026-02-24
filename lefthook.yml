@@ -4,19 +4,25 @@
 pre-commit:
   parallel: true
   commands:
+    api-lint:
+      root: modelguide-api/
+      glob: "*.{ts,tsx}"
+      run: bun run lint:check
+
     ui-lint:
       root: modelguide-ui/
+      glob: "*.{ts,tsx}"
       run: npm run lint
 
 pre-push:
   parallel: true
   commands:
-    ui-typecheck:
-      root: modelguide-ui/
-      glob: "*.{ts,tsx}"
-      run: npm run typecheck
-
     api-typecheck:
       root: modelguide-api/
       glob: "*.{ts,tsx}"
       run: bun tsc --noEmit
+
+    ui-typecheck:
+      root: modelguide-ui/
+      glob: "*.{ts,tsx}"
+      run: npm run typecheck

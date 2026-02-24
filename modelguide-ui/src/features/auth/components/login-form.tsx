@@ -171,16 +171,18 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
 }
 
 const DEV_ACCOUNTS = [
-  { email: 'delivered+admin-pizza-palace@resend.dev', role: 'admin' },
-  { email: 'delivered+support-pizza-palace@resend.dev', role: 'support' },
+  { email: 'delivered+admin-glowbox@resend.dev', role: 'admin' },
+  { email: 'delivered+support-glowbox@resend.dev', role: 'support' },
+  { email: 'delivered+viewer-glowbox@resend.dev', role: 'viewer' },
 ] as const
 
 function DevAccounts({ onSelect }: { onSelect: (email: string) => void }) {
   return (
     <div className="mt-3 rounded-xl border border-fg-subtle/20 bg-bg-elevated p-4">
-      <p className="mb-3 font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+      <p className="mb-0.5 font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
         Dev Accounts (seed data)
       </p>
+      <p className="mb-3 text-[11px] text-fg-muted">no login required</p>
       <div className="space-y-1.5">
         {DEV_ACCOUNTS.map(({ email, role }) => (
           <button
