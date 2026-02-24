@@ -157,6 +157,7 @@ The primary input. All `session_messages` rows for the session, ordered by `occu
 | `toolOutput` | JSONB | `tool_output_contains` |
 | `toolCallId` | varchar | Correlating tool request → response |
 | `createdAt` / `occurredAt` | timestamp | Ordering, turn computation |
+TBD - add `tool_call_status`
 
 ### 4.2 Session Metadata
 
@@ -202,6 +203,9 @@ For each connector referenced in `connectorBindings`:
 | `no_tool_called` | | X | | | | |
 | `confirmation_requested` | X | X | | | X | |
 | `llm_judge` | X | X | X | X | X | X |
+
+TBD llm_judge is a custom metric?
+I think we might have a common metric, e.g. "was following the brand/company policies?"
 
 ### 4.6 Trace Sources
 
@@ -520,6 +524,7 @@ A **simulation scenario** is the complete unit of work for generating a trace. I
 Step-by-step execution of one simulation scenario:
 
 1. **Create session** — `sessions.insert({ agent_id, channel: "simulation", metadata: { source: "simulation", persona_id, task_intent, scenario_id } })`
+TBD: I'm wondering about using the channel as simulation, I think we can still simulate voice or text, so I wouldn't use this enum for simulation, maybe a separte field will be needed like a mode/traffic - live/simulation/seed/test-run
 2. **Connect MCP** — Establish MCP connection to the agent's endpoint. Real connectors, real tools, real data.
 3. **Seed user-simulator** — Build system prompt from persona.system_prompt + persona.response_style + task intent + hidden_context key-value pairs. User-simulator generates the opening message.
 4. **Conversation loop** — User-simulator message → Agent LLM processes (may call tools) → Tool calls execute via MCP (real) → Agent responds → Check stop conditions (max_turns? resolved? escalated?) → If not stopped, user-simulator responds → Loop.
@@ -879,6 +884,9 @@ Based on the review, the manager can adjust:
 
 Then re-run simulation. The cycle takes minutes, not days.
 
+TBD: add observability step that runs on the pilot
+TBD:  we need to think how to guide user in a nice way to fix, maybe some recommendations right away to tune it
+
 #### Step 6: Go Live
 
 Once the SOP consistently passes across multiple personas:
@@ -907,3 +915,15 @@ This loop works equally well for:
 ---
 
 > **Implementation details** — For database schema, API surface, seed data examples, and the full implementation plan, see the [complete SOP technical specification](../../.claude/local/sop-system-spec.md) sections §8–§13.
+
+TBD ADD
+
+pass-k reliability testing - run test several times
+sandboxing - figure out way to sandbox the evals
+llm judge calibration - need to add some basic llm as judge calibration
+error taxonomy - need to add some eror taxonomy
+prodcution - simultaion loop - how to injest the production failures as tests for sandbox
+voice agent metrics - add metrics for latency etc...
+
+improve scoring model - use binary features
+plan the rollput of eval suite 
