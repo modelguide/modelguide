@@ -1,6 +1,6 @@
 # SOP Simulation System and Audience Simulation
 
-> **Scope:** This document covers the SOP concept, evaluation engine, audience simulation, and manager onboarding flow.
+> **Scope:** This document covers the SOP concept, evaluation engine, audience simulation, manager onboarding flow, domain expert feedback loop, and advanced evaluation capabilities (pass-k testing, judge calibration, sandboxing, error taxonomy, production-to-simulation loop, voice metrics, binary scoring).
 
 ---
 
@@ -17,7 +17,7 @@ ModelGuide provides the Manager with three adjustable levers:
 | **Persona** | How the simulated customer behaves — tone, patience, cooperativeness | Yes — polite, impatient, adversarial built-in |
 | **Agent** | The AI agent's system prompt, model, and connected tools | Configured per org |
 
-The Manager adjusts these levers and runs a simulation. The system drives a realistic conversation between the Persona and the Agent through real MCP tools, then auto-evaluates the resulting session against the SOP. The full cycle takes under two minutes:
+The Manager adjusts these levers and runs a simulation. The system drives a realistic conversation between the Persona and the Agent through real MCP tools, then auto-evaluates the resulting session against the SOP. The full cycle takes under one hour:
 
 ```
 Write/Adjust SOP (30 min) → Run Simulation (5 min) → See Compliance Result (instant)
@@ -29,11 +29,12 @@ This tight loop works for initial SOP authoring, agent prompt tuning, regression
 
 An **SOP (Standard Operating Procedure)** is a declarative description of the "golden path" for a specific customer interaction scenario. It captures what an AI agent SHOULD do — which tools to call, in what order, with what preconditions — and provides a machine-readable way to verify whether a completed session followed that path.
 
-SOPs serve three purposes:
+SOPs serve four purposes:
 
-1. **Post-session evaluation** — Match applicable SOPs against a completed session transcript, verify each step, produce a compliance score.
-2. **Operational visibility** — Dashboard metrics on pass rates, failing steps, and coverage give admins actionable insight into agent quality.
-3. **Fast project onboarding** — SOP combined with Audience Simulation lets a Manager onboard a new project and verify the AI Agent will behave according to SOP before any real customer interaction.
+1. **Agent behavioral contract** — The SOP is the single source of truth for agent behavior. Agent infrastructure (ElevenLabs, Mastra, Pipecat, etc.) consumes the SOP to drive runtime behavior — as prompts, guardrails, and knowledge (see §2.4).
+2. **Post-session evaluation** — Match applicable SOPs against a completed session transcript, verify each step, produce a compliance score.
+3. **Operational visibility** — Dashboard metrics on pass rates, failing steps, and coverage give admins actionable insight into agent quality.
+4. **Fast project onboarding** — SOP combined with Audience Simulation lets a Manager onboard a new project and verify the AI Agent will behave according to SOP before any real customer interaction.
 
 ---
 
@@ -47,9 +48,9 @@ Mirrors the existing `connectors_catalog → connectors` two-tier model:
 
 | Layer | Scope | Purpose |
 |---|---|---|
-| **SOP Template** | Global (no RLS) | Reusable blueprint, tied to a connector catalog type. E.g. "Ticket Escalation" for any Zendesk connector — works for GlowBox, ClearHealth, and SteelPoint. Authored by platform maintainers. |
-| **SOP Definition** | Org-scoped (RLS) | Instantiated from a template (or authored from scratch). Bound to specific connectors via `connectorBindings`. Optionally scoped to a single agent. Orgs can customize steps, weights, thresholds. |
-| **SOP Eval Run** | Org-scoped (RLS) | Result of evaluating one SOP against one completed session. Stores per-step pass/fail, overall score, and trigger source. |
+| **SOP Template** | Global | Reusable blueprint, tied to a connector catalog type. E.g. "Ticket Escalation" for any Zendesk connector — works for GlowBox, ClearHealth, and SteelPoint. Authored by platform maintainers. |
+| **SOP Definition** | Org-scoped | Instantiated from a template (or authored from scratch). Bound to specific connectors via `connectorBindings`. Optionally scoped to a single agent. Orgs can customize steps, weights, thresholds. |
+| **SOP Eval Run** | Org-scoped | Result of evaluating one SOP against one completed session. Stores per-step pass/fail, overall score, and trigger source. |
 
 ### 2.2 Anatomy of a Step
 
@@ -66,6 +67,19 @@ A step has:
 ### 2.3 Step Ordering Semantics
 
 Steps are evaluated in declaration order, but they do NOT represent a strict sequential timeline. A step can check something that happened at the beginning of the conversation (e.g., identity verification) or something that spans the entire session (e.g., "agent never revealed other customers' data"). The ordering matters for readability and for short-circuit behavior (a failed `required` step with `onFail.action = "reject"` stops evaluation).
+
+### 2.4 SOP as Agent Source of Truth
+
+SOPs are not only used for post-session evaluation. They are also the **source of truth for agents themselves**. The SOP defines **what** the agent should do; the agent infrastructure determines **how** the SOP is consumed.
+
+| Agent Platform | How SOP is Consumed | Example |
+|---|---|---|
+| **ElevenLabs** (voice) | SOP injected into system prompt as behavioral instructions | Voice agent uses SOP steps as conversational guardrails |
+| **Mastra** (orchestrator) | SOP parsed into workflow nodes and tool-call sequences | Agent framework enforces step ordering programmatically |
+| **Pipecat** (pipeline) | SOP extracted into pipeline stage configuration | Each SOP step maps to a pipeline processing stage |
+| **Custom / direct LLM** | SOP text included in system prompt verbatim or as structured rules | LLM follows SOP steps as part of its instruction context |
+
+This means changes to an SOP have **dual impact** — they change both how the agent behaves (runtime) and how the agent is evaluated (post-session). The simulation loop (§7) tests both simultaneously: the same SOP that instructs the agent is the same SOP that evaluates the resulting session.
 
 ![System Architecture, SOP Definition Anatomy, Evaluation Flow, and 7 Evaluator Types](./sop_4.png)
 *Left: System architecture showing global catalog → org-scoped definitions → runtime evaluation. Center: SOP definition anatomy (trigger, steps[], scoring, onFail, metadata). Right: 6-step evaluation flow. Bottom: The 7 evaluator types.*
@@ -139,6 +153,25 @@ Resolution examples across all three verticals:
 | SteelPoint Supply | medusa | `steelpoint_catalog` | `steelpoint_catalog_list_products` |
 | SteelPoint Supply | zendesk | `steelpoint_support` | `steelpoint_support_update_ticket` |
 
+#### SOP Portability and Template Scope
+
+SOPs are portable only at the **global template level**. An SOP template (e.g., "Order Lookup" in `sop_templates`) is connector-catalog-scoped, not connector-instance-scoped. This is what makes templates reusable across orgs.
+
+When a template is **instantiated** into an org-scoped SOP definition, it is bound to specific connectors via `connectorBindings`. At that point, the definition contains org-specific tool references. There is **no cross-org SOP definition sharing** at this stage.
+
+```
+Global: sop_templates (portable, catalog-scoped, bare slugs)
+         │
+         ├─ instantiate for Org A → sop_definitions (connectorBindings → Org A connectors)
+         ├─ instantiate for Org B → sop_definitions (connectorBindings → Org B connectors)
+         └─ instantiate for Org C → sop_definitions (connectorBindings → Org C connectors)
+
+Cross-org sharing happens at template level only.
+Definition-level sharing: not supported (future RBAC consideration).
+```
+
+**Future consideration:** Templates may gain RBAC and cross-org sharing (e.g., a franchise sharing SOP templates across child orgs). However, when an SOP is created from a template, it is always converted into org-specific connector tools — the template provides the structure, the org provides the bindings.
+
 
 ## 4. Input Parameters — What Feeds Into SOP Evaluation
 
@@ -156,8 +189,8 @@ The primary input. All `session_messages` rows for the session, ordered by `occu
 | `toolInput` | JSONB | `tool_input_contains` |
 | `toolOutput` | JSONB | `tool_output_contains` |
 | `toolCallId` | varchar | Correlating tool request → response |
+| `toolCallStatus` | varchar | `tool_called`, `tool_sequence`, `tool_input_contains`, `tool_output_contains` — distinguishes successful vs failed tool invocations |
 | `createdAt` / `occurredAt` | timestamp | Ordering, turn computation |
-TBD - add `tool_call_status`
 
 ### 4.2 Session Metadata
 
@@ -165,7 +198,8 @@ From the `sessions` table:
 
 | Field | Type | Used By |
 |---|---|---|
-| `channelType` | `"voice" \| "chat"` | Trigger `{ type: "channel" }` |
+| `channelType` | `"voice" \| "chat"` | Communication medium. Trigger `{ type: "channel" }`. Orthogonal to `mode`. |
+| `mode` | `"live" \| "simulation" \| "seed" \| "test-run"` | Traffic origin — filters dashboard views, gates evaluation pipelines. Default: `"live"`. |
 | `agentId` | UUID | SOP definition scoping (agent-specific vs org-wide) |
 | `status` | `"completed" \| "abandoned"` | Gating — only terminal sessions get evaluated |
 | `userIdentifier` | varchar | Context for `llm_judge` |
@@ -194,20 +228,32 @@ For each connector referenced in `connectorBindings`:
 
 ### 4.5 Summary: Evaluator → Input Data Matrix
 
-| Evaluator Type | Session Messages | Tool Calls | Tool I/O | Channel | Transcript Text | LLM Call |
-|---|---|---|---|---|---|---|
-| `tool_called` | | X | | | | |
-| `tool_sequence` | | X | | | | |
-| `tool_input_contains` | | X | X (input) | | | |
-| `tool_output_contains` | | X | X (output) | | | |
-| `no_tool_called` | | X | | | | |
-| `confirmation_requested` | X | X | | | X | |
-| `llm_judge` | X | X | X | X | X | X |
+| Evaluator Type | Session Messages | Tool Calls | Tool Call Status | Tool I/O | Channel | Transcript Text | LLM Call |
+|---|---|---|---|---|---|---|---|
+| `tool_called` | | X | X | | | | |
+| `tool_sequence` | | X | X | | | | |
+| `tool_input_contains` | | X | X | X (input) | | | |
+| `tool_output_contains` | | X | X | X (output) | | | |
+| `no_tool_called` | | X | | | | | |
+| `confirmation_requested` | X | X | | | | X | |
+| `llm_judge` | X | X | X | X | X | X | X |
 
-TBD llm_judge is a custom metric?
-I think we might have a common metric, e.g. "was following the brand/company policies?"
+### 4.6 LLM Judge: Common vs Custom Criteria
 
-### 4.6 Trace Sources
+The `llm_judge` evaluator supports two categories of criteria:
+
+| Category | Scope | Authored By | Example |
+|---|---|---|---|
+| **Common (built-in)** | Platform-wide, shipped as pre-configured evaluator step templates | Platform maintainers | "Was the agent following brand/company policies?", "Was the agent professional and courteous?", "Did the agent avoid sharing other customers' data?" |
+| **Custom (per-SOP)** | Org-specific, defined within individual SOP steps | Org managers/admins | "Agent verifies customer identity before accessing account", "Agent explains refund timeline in plain language" |
+
+**Built-in criteria** ship as pre-configured evaluator step templates. An org can include them in any SOP definition by referencing the template step. They are maintained centrally and updated across all orgs.
+
+**Custom criteria** are freeform `criterion` strings written by the org manager for domain-specific checks. They follow the best practices described in section 5.2 (`llm_judge`).
+
+Both categories use the same `llm_judge` evaluator type at runtime — the distinction is authorship and scope, not execution mechanics.
+
+### 4.7 Trace Sources
 
 SOP evaluation is source-agnostic — evaluators process `session_messages` rows regardless of how the session was generated. Three sources produce these traces:
 
@@ -217,9 +263,9 @@ SOP evaluation is source-agnostic — evaluators process `session_messages` rows
 | **Has real tool calls?** | Yes — agent calls tools via MCP, real connector responses | Synthetic — template-generated payloads (realistic but deterministic) | Yes — real tool calls against live connectors |
 | **Realism** | High (LLM dynamics, varied phrasing) | Medium (realistic data, fixed flow) | Gold standard |
 | **When to use** | SOP authoring, pre-launch validation, regression testing | Demos, fresh org seed data, evaluator unit testing | Ongoing monitoring, compliance reporting |
-| **Metadata tag** | `sessions.metadata.source = "simulation"` | `sessions.metadata.source = "seed"` | `sessions.metadata.source = "production"` (or absent) |
+| **Mode field** | `mode = "simulation"` | `mode = "seed"` | `mode = "live"` (default) |
 
-All three sources write to the same `session_messages` table. The SOP evaluator pipeline does not inspect `metadata.source` — the trace is the trace. The source tag exists for filtering in the dashboard (e.g., "show only production compliance scores") and for cost attribution.
+All three sources write to the same `session_messages` table. The SOP evaluator pipeline does not inspect `mode` — the trace is the trace. The `mode` field exists for filtering in the dashboard (e.g., "show only production compliance scores") and for cost attribution.
 
 For new organizations, the typical progression is: **seed-generated** (instant, at org creation) → **simulated** (manager-driven, during SOP authoring) → **production** (real traffic, after go-live).
 
@@ -452,7 +498,7 @@ The SOP evaluation engine is source-agnostic. All traces are `session_messages` 
 | **When to use** | SOP authoring & iteration, pre-launch validation, persona stress testing | Demos, seed data for fresh orgs, unit testing evaluators against known-good patterns | Ongoing monitoring, compliance reporting, regression detection |
 | **Volume** | On-demand, typically 5–20 per SOP iteration cycle | ~300 per org at seed time | Unbounded, depends on real traffic |
 
-All three sources produce the same `session_messages` rows. Simulated sessions are distinguished by `sessions.metadata.source = "simulation"`, and seed-generated by `sessions.metadata.source = "seed"`.
+All three sources produce the same `session_messages` rows. Simulated sessions are distinguished by `sessions.mode = "simulation"`, and seed-generated by `sessions.mode = "seed"`. The `metadata.source` field is retained for backward compatibility.
 
 ### 6.3 User Persona Model
 
@@ -462,10 +508,10 @@ A **user persona** defines how the simulated customer behaves — their tone, pa
 
 Personas follow the same global-template → org-definition pattern as connectors and SOPs:
 
-| Layer | Table | RLS | Purpose |
-|---|---|---|---|
-| **Persona Templates** | `persona_templates` | No (global) | Shipped behavioral archetypes. Read-only for orgs. |
-| **Persona Definitions** | `persona_definitions` | Yes (org-scoped) | Org-specific variants. Can fork a template or be created from scratch. |
+| Layer | Table  | Purpose |
+|---|---|---|
+| **Persona Templates** | `persona_templates` | Shipped behavioral archetypes. Read-only for orgs. |
+| **Persona Definitions** | `persona_definitions` |  Org-specific variants. Can fork a template or be created from scratch. |
 
 A persona definition MAY reference a template (via `template_id`) but is not required to. Orgs can create fully custom personas without starting from a template.
 
@@ -523,8 +569,9 @@ A **simulation scenario** is the complete unit of work for generating a trace. I
 
 Step-by-step execution of one simulation scenario:
 
-1. **Create session** — `sessions.insert({ agent_id, channel: "simulation", metadata: { source: "simulation", persona_id, task_intent, scenario_id } })`
-TBD: I'm wondering about using the channel as simulation, I think we can still simulate voice or text, so I wouldn't use this enum for simulation, maybe a separte field will be needed like a mode/traffic - live/simulation/seed/test-run
+1. **Create session** — `sessions.insert({ agent_id, channelType: "voice", mode: "simulation", metadata: { source: "simulation", persona_id, task_intent, scenario_id } })`
+
+> **Channel vs Mode:** `channelType` (`"voice" | "chat"`) describes the communication medium and remains unchanged. A new `mode` field (`"live" | "simulation" | "seed" | "test-run"`) describes the traffic origin. These are orthogonal: you can simulate a voice session (`channelType: "voice", mode: "simulation"`) or a chat session (`channelType: "chat", mode: "simulation"`). The `metadata.source` field is retained for backward compatibility but `mode` becomes the canonical discriminator.
 2. **Connect MCP** — Establish MCP connection to the agent's endpoint. Real connectors, real tools, real data.
 3. **Seed user-simulator** — Build system prompt from persona.system_prompt + persona.response_style + task intent + hidden_context key-value pairs. User-simulator generates the opening message.
 4. **Conversation loop** — User-simulator message → Agent LLM processes (may call tools) → Tool calls execute via MCP (real) → Agent responds → Check stop conditions (max_turns? resolved? escalated?) → If not stopped, user-simulator responds → Loop.
@@ -829,7 +876,7 @@ The simulation system is designed around a specific user journey: a new manager 
 
 ### 7.1 The Journey
 
-**Setup → Define → Simulate → Review → Iterate → Go Live**
+**Setup → Define → Simulate → Review → Iterate → Go Live → Monitor (Pilot)**
 
 #### Step 1: Setup (existing platform steps)
 
@@ -884,9 +931,6 @@ Based on the review, the manager can adjust:
 
 Then re-run simulation. The cycle takes minutes, not days.
 
-TBD: add observability step that runs on the pilot
-TBD:  we need to think how to guide user in a nice way to fix, maybe some recommendations right away to tune it
-
 #### Step 6: Go Live
 
 Once the SOP consistently passes across multiple personas:
@@ -894,6 +938,19 @@ Once the SOP consistently passes across multiple personas:
 - No configuration change needed — the evaluators are source-agnostic
 - Dashboard shifts from showing simulation results to production compliance metrics
 - Simulation remains available for regression testing after agent or SOP changes
+
+#### Step 7: Monitor (Pilot)
+
+After going live, the SOP evaluation system transitions to **continuous monitoring** on a pilot deployment:
+
+- **Pilot subset:** Route a configurable percentage of live traffic (e.g., 10–20%) through the SOP evaluation pipeline. This validates agent behavior on real conversations without evaluating 100% of traffic during early rollout.
+- **Continuous SOP evaluation:** The same SOP definitions that passed simulation now evaluate production sessions automatically. No configuration change — evaluators are source-agnostic.
+- **Alerting on regression:** If pass rates drop below the SOP's `passingScore` threshold on pilot traffic, the dashboard flags the regression. The manager can:
+  - Review failing sessions directly
+  - Identify which SOP steps are failing and why (judge reasoning)
+  - Re-enter the simulation loop (Step 5) to reproduce and fix the issue
+- **AI-assisted recommendations (future):** Based on common failure patterns, the system suggests specific prompt adjustments or SOP step modifications. E.g., "Step `verify-identity` is failing 30% of the time — common pattern: agent skips verification when user provides order ID upfront. Suggested prompt addition: 'Always verify identity even if customer provides order details.'"
+- **Graduation to full traffic:** Once pilot pass rates stabilize above threshold for a configured period, the manager promotes from pilot to full production evaluation.
 
 ![Manager Onboarding: journey, tight feedback loop, and use cases](./sop_3.png)
 *Top: The onboarding journey from Setup through Go Live. Middle: The tight feedback loop — write SOP step (30 sec) → run simulation (60 sec) → see result (instant) — total ~2 minutes from hypothesis to proof. Bottom: Four use cases (SOP authoring, agent tuning, regression testing, persona stress testing).*
@@ -916,14 +973,208 @@ This loop works equally well for:
 
 > **Implementation details** — For database schema, API surface, seed data examples, and the full implementation plan, see the [complete SOP technical specification](../../.claude/local/sop-system-spec.md) sections §8–§13.
 
-TBD ADD
+---
 
-pass-k reliability testing - run test several times
-sandboxing - figure out way to sandbox the evals
-llm judge calibration - need to add some basic llm as judge calibration
-error taxonomy - need to add some eror taxonomy
-prodcution - simultaion loop - how to injest the production failures as tests for sandbox
-voice agent metrics - add metrics for latency etc...
+## 8. Domain Expert Feedback Loop
 
-improve scoring model - use binary features
-plan the rollput of eval suite 
+### 8.1 The Problem
+
+Non-technical domain experts (managers, team leads, product owners) are the people who best understand whether an agent is behaving correctly — but they lack direct tools to report issues and drive fixes. Today, their feedback goes through tickets, Slack messages, or verbal reports, creating a slow, lossy loop.
+
+### 8.2 Collaborative Review Workflow
+
+ModelGuide introduces a Google Docs-style commenting workflow on session transcripts:
+
+**Step 1: Review** — Domain expert opens a session in the dashboard, reads the transcript and SOP evaluation results.
+
+**Step 2: Comment** — Expert spots an issue and leaves an inline comment anchored to a specific message or SOP step:
+
+> "It's not answering correctly because it didn't check the order. In the SOP I said it needs to check the database before responding."
+
+**Step 3: Route** — The comment creates a feedback entry linked to the session. The dev team sees it in the dashboard feed (filtered by `feedbackSource: "support"`).
+
+**Step 4: Fix** — Dev team adjusts the agent prompt, tool configuration, or SOP definition. Replies to the comment thread:
+
+> "Updated the system prompt to enforce order lookup before responding. Check the new simulation run."
+
+**Step 5: Verify** — Domain expert reviews the new simulation result, confirms the fix:
+
+> "OK, now it works."
+
+**Step 6: Close** — Comment thread is resolved. The fix is tracked as a feedback-driven iteration.
+
+### 8.3 Integration with Existing Feedback System
+
+This workflow maps directly onto the existing `session_feedback` schema:
+
+| Feedback Field | Domain Expert Usage |
+|---|---|
+| `sessionId` | The session under review |
+| `messageId` | Optional — anchors comment to a specific message in the transcript |
+| `rating` | 1 (negative / issue) or 2 (positive / confirmed fix) |
+| `comment` | Free-text comment from the domain expert |
+| `feedbackSource` | `"support"` (domain expert) — distinguishes from `"customer"` (end user CSAT) and `"system"` (automated) |
+| `feedbackTags` | Categorization tags, e.g., `["sop-issue", "prompt-fix", "tool-config"]` |
+| `feedbackRef` | Reference to the related SOP definition ID or step ID for traceability |
+
+### 8.4 Domain Expert Capabilities
+
+From the session review view, domain experts can:
+
+1. **Review session transcript** — Full conversation with tool calls, tool responses, and SOP evaluation overlay (pass/fail per step with judge reasoning).
+2. **Navigate to linked SOPs** — Each evaluated session shows which SOPs triggered and their results. Clicking an SOP step navigates to the SOP definition editor.
+3. **Edit SOP inline** — If the expert has edit permissions, they can modify the SOP step criterion, weight, or evaluator configuration directly from the session context.
+4. **Re-run simulation** — After editing, trigger a new simulation from the same scenario to verify the fix. The session review view shows before/after comparison.
+5. **Comment threads** — Multiple experts and developers can participate in a threaded discussion on a session, creating an audit trail of the fix cycle.
+
+### 8.5 RBAC Considerations
+
+| Role | Can Review | Can Comment | Can Edit SOP | Can Re-run Simulation |
+|---|---|---|---|---|
+| Viewer | Yes | No | No | No |
+| Support | Yes | Yes | No | No |
+| Admin | Yes | Yes | Yes | Yes |
+| Domain Expert (new role, future) | Yes | Yes | Yes (own SOPs) | Yes |
+
+## 9. Advanced Evaluation Capabilities
+
+> These capabilities extend the core evaluation engine described in sections 4–5. They address reliability, calibration, sandboxing, error analysis, production feedback loops, and channel-specific metrics.
+
+### 9.1 Pass-k Reliability Testing
+
+LLMs are non-deterministic — the same agent with the same input can produce different tool-call sequences across runs. **Pass-k testing** measures consistency by running the same simulation scenario multiple times:
+
+- **Configuration:** `{ runs: k, passThreshold: k' }` where the scenario passes if it succeeds in at least `k'` out of `k` runs.
+- **Example:** `{ runs: 5, passThreshold: 4 }` — the scenario must pass 4 out of 5 times. A single flaky failure is tolerated; two failures indicate an unreliable agent behavior.
+- **Metrics produced:**
+  - `passRate`: fraction of runs that passed (e.g., 4/5 = 0.80)
+  - `consistency`: standard deviation of per-run scores
+  - `worstRun`: the run with the lowest score (for debugging)
+- **Use cases:** Pre-deployment reliability gates, model upgrade regression testing, identifying flaky SOP steps that depend on phrasing variations.
+
+### 9.2 LLM Judge Calibration
+
+The `llm_judge` evaluator's accuracy depends on how well its verdicts align with human judgment. **Calibration** measures and improves this alignment:
+
+**Calibration Workflow:**
+1. **Sample selection** — System selects a representative set of session-step pairs that the LLM judge has already evaluated.
+2. **Human review** — Domain expert reviews each verdict and marks `agree` or `disagree`, optionally providing a corrected verdict and reasoning.
+3. **Calibration score** — Agreement rate between judge and human: `calibration = agreements / total_reviewed`. Target: >85%.
+4. **Disagreement analysis** — Disagreements are categorized (judge too strict, judge too lenient, criterion ambiguous, edge case) to inform criterion refinement.
+5. **Iteration** — Refine criterion wording, add rubric detail, or adjust the judge model until calibration score meets threshold.
+
+**Dashboard integration:** Each `llm_judge` step shows its calibration score (if calibrated). Uncalibrated steps display a "not yet calibrated" badge prompting expert review.
+
+### 9.3 Simulation Sandboxing
+
+Simulation runs execute real tool calls against real connectors. Without isolation, simulated sessions can create orders, modify tickets, or trigger external side effects. **Sandboxing** provides data isolation:
+
+- **Connector-level sandbox config:** Each connector instance can define a `sandboxConfig` with:
+  - `mode: "passthrough" | "sandbox"` — whether tool calls hit production or a sandbox environment
+  - `sandboxEndpoint` — alternative API endpoint for the sandbox (e.g., Medusa staging URL)
+  - `sandboxApiKey` — separate credentials for the sandbox environment (references a `secrets` entry)
+  - `cleanupPolicy: "after_run" | "after_24h" | "manual"` — when to purge sandbox data
+- **Session-level tagging:** Sandbox sessions carry `mode: "simulation"` and `metadata.sandbox: true` to prevent accidental inclusion in production metrics.
+- **Connector behavior in sandbox mode:** The MCP tool calls are routed to the sandbox endpoint. Responses are real (from the sandbox connector) but isolated from production data.
+
+### 9.4 Error Taxonomy
+
+Structured failure categorization enables trend analysis and targeted improvements. Each failed SOP step is tagged with an error category:
+
+| Error Category | Description | Example |
+|---|---|---|
+| `tool_error` | Tool call failed or returned an error response | `get_order` returned 500, agent did not retry |
+| `policy_violation` | Agent violated an explicit policy rule | Agent offered a discount exceeding authorized limit |
+| `hallucination` | Agent stated information not present in tool outputs or context | Agent fabricated a tracking number |
+| `wrong_tool` | Agent called an incorrect tool for the situation | Used `create_ticket` when `update_ticket` was needed |
+| `missing_step` | Agent skipped a required step in the SOP | Did not verify identity before order lookup |
+| `tone_violation` | Agent's communication tone violated guidelines | Responded dismissively to a frustrated customer |
+| `sequence_error` | Agent performed correct actions in wrong order | Modified order before confirming with customer |
+| `data_leak` | Agent revealed information belonging to another customer or session | Shared previous customer's email address |
+
+**Tagging mechanism:** The `llm_judge` evaluator's reasoning output is parsed to extract an error category. Deterministic evaluators (`tool_called`, `tool_sequence`, etc.) map directly to categories (`missing_step`, `sequence_error`, `wrong_tool`).
+
+**Dashboard integration:** Error taxonomy powers a failure distribution chart (e.g., "40% policy_violation, 25% missing_step, 20% hallucination, 15% other") to prioritize improvement efforts.
+
+### 9.5 Production to Simulation Loop
+
+Production failures should feed back into the simulation sandbox as **regression test cases**, creating a closed loop:
+
+```
+Production issue detected
+       │
+       ▼
+Export failing session as simulation scenario
+       │
+       ▼
+Reproduce in sandbox (simulation mode)
+       │
+       ▼
+Fix agent prompt / SOP / tool config
+       │
+       ▼
+Verify fix passes in simulation
+       │
+       ▼
+Deploy fix to production
+       │
+       ▼
+Monitor pilot traffic (Step 7)
+```
+
+**Export mechanism:**
+- From a failing production session, the manager clicks "Create Regression Test."
+- System extracts: the user's messages (as task intent + hidden context), the SOP that failed, the agent configuration.
+- Creates a new simulation scenario pre-populated with this data.
+- The scenario is tagged `origin: "production-regression"` for tracking.
+
+**Regression suite:** Over time, exported scenarios accumulate into an org's regression test suite. Before deploying agent changes, the manager runs the full regression suite to catch regressions.
+
+### 9.6 Voice Agent Metrics
+
+Voice sessions have channel-specific quality dimensions beyond text-based SOP compliance:
+
+| Metric | Description | Source |
+|---|---|---|
+| `timeToFirstResponse` | Latency from user speech end to agent speech start (ms) | Voice platform telemetry |
+| `totalDuration` | Total session duration from first to last message (seconds) | `sessions.startedAt` / `endedAt` |
+| `turnCount` | Number of conversational turns | Count of role alternations in `session_messages` |
+| `avgTurnLatency` | Average time between user message and agent response | Computed from `occurredAt` timestamps |
+| `audioDuration` | Total audio playback time | Sum of `session_messages.audioDurationMs` |
+| `silenceRatio` | Ratio of silence to total duration | `(totalDuration - audioDuration) / totalDuration` |
+| `interruptionCount` | Number of times user interrupted agent mid-response | Voice platform telemetry |
+
+**Integration with SOP evaluation:** Voice metrics can be used as additional SOP step evaluators (future). E.g., a step `{ type: "voice_latency", maxMs: 2000 }` that fails if any turn exceeds 2 seconds response time.
+
+### 9.7 Binary Pass/Fail Scoring for LLM Judge
+
+Instead of a single aggregate score, the LLM judge evaluates **independent binary categories**. Each category produces a clear yes/no verdict:
+
+| Binary Category | Question | Verdict |
+|---|---|---|
+| `policy_followed` | Did the agent follow all stated policies? | yes / no |
+| `identity_verified` | Did the agent verify customer identity before accessing data? | yes / no |
+| `correct_tool_used` | Did the agent use the appropriate tool for the request? | yes / no |
+| `information_accurate` | Was all information provided by the agent factually correct? | yes / no |
+| `tone_appropriate` | Was the agent's tone appropriate for the context? | yes / no |
+| `escalation_correct` | Did the agent escalate (or not) appropriately? | yes / no |
+
+**Advantages over aggregate scoring:**
+- **Debuggability:** A failing session shows exactly which aspect failed (e.g., `identity_verified: no`) rather than just "score: 0.6."
+- **Targeted improvement:** Each binary category maps to a specific fix (prompt change, tool config, SOP adjustment).
+- **Calibration per category:** Calibration (section 9.2) can be performed per binary category, identifying which aspects the judge is reliable on and which need refinement.
+
+**Implementation:** The `llm_judge` evaluator's `criterion` field accepts either a single criterion string (current behavior) or a `binaryCategories` array:
+
+```typescript
+{
+  type: "llm_judge";
+  binaryCategories: [
+    { id: "policy_followed", criterion: "Agent followed all stated company policies" },
+    { id: "identity_verified", criterion: "Agent verified customer identity before accessing account data" },
+    // ...
+  ];
+}
+```
+
+Each category is evaluated independently. The step passes only if all required categories pass. Individual category results are stored in `step_results` for dashboard display. 
