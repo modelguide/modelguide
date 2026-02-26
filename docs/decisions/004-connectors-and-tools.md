@@ -49,8 +49,8 @@ The sync (`syncCatalogAndTools()`) executes after `loadAllManifests()` and befor
 
 ### Key invariants
 
-- **Insert-only** — Never updates existing rows. Org-specific customizations (`isActive`, `timeoutSeconds`, `requiresConfirmation` overrides) are preserved.
-- **Idempotent** — Safe to run on every startup. `ON CONFLICT DO NOTHING` prevents duplicates.
+- **Full lifecycle** — Inserts new tools, updates stale schema/description, soft-deletes removed tools. Org-specific customizations (`isActive`, `timeoutSeconds`, `requiresConfirmation` overrides) are never modified by sync.
+- **Idempotent** — Safe to run on every startup. `ON CONFLICT DO NOTHING` prevents duplicates; sorted-keys JSON comparison prevents false-positive updates.
 - **Cross-org** — Uses `forApp()` (RLS bypass) since the sync operates across all organizations.
 
 ### Alternatives considered
@@ -61,9 +61,30 @@ The sync (`syncCatalogAndTools()`) executes after `loadAllManifests()` and befor
 
 Startup sync is the simplest approach: it runs exactly when new code is deployed, requires no manual intervention, and the INSERT-only pattern makes it safe.
 
+### Soft delete and tool removal
+
+When a tool is removed from a connector manifest, the sync sets `deleted_at` on the corresponding `connector_tools` rows rather than hard-deleting them. This preserves audit history (the row remains queryable with explicit `WHERE deleted_at IS NOT NULL`) while hiding removed tools from all live queries.
+
+**Schema:** `connector_tools.deleted_at` (nullable `timestamptz`). A partial unique index `(connector_id, slug) WHERE deleted_at IS NULL` ensures only live tools enforce the slug uniqueness constraint. Soft-deleted rows don't conflict, so re-adding a tool that was previously removed inserts a fresh row with a new UUID.
+
+**Orphaned agent assignments:** Since soft delete doesn't trigger `ON DELETE CASCADE`, the sync explicitly hard-deletes `agent_connector_tools` rows pointing to newly soft-deleted tools within the same transaction. These assignments are meaningless once the handler no longer exists.
+
+**Schema drift detection:** Manifest changes to `inputSchema` or `description` are detected by comparing a deterministic sorted-keys JSON serialization (`stableStringify`) against the stored JSONB. This prevents false-positive updates when Postgres JSONB reorders object keys on storage/retrieval. Only `toolSchema` and `description` are updated — `isActive`, `timeoutSeconds`, and other org-specific overrides are preserved.
+
+### Scalability
+
+The sync runs inside a single `forApp()` transaction. Inserts and soft-deletes use batch operations, but **schema-drift updates are applied one row at a time** (each stale tool gets its own `UPDATE … WHERE id = ?`). This is acceptable at current scale — a handful of connectors × ~10 tools each means at most ~100 updates on a deployment where every schema changes simultaneously (unlikely in practice).
+
+If the platform grows to hundreds of organizations with many connectors, the per-row update loop and the single-transaction scope may cause noticeable lock duration at startup. At that point, consider:
+
+- **Batched updates** — rewrite the update loop into a single `UPDATE FROM (VALUES …)` statement.
+- **Per-connector chunking** — split the transaction per connector to reduce lock contention.
+- **Deferred sync** — move sync to a post-startup background job so the server can begin serving requests immediately.
+
 ## Consequences
 
 - New connector tools are automatically available to existing connectors and agents after deployment.
-- Startup time increases slightly (one cross-org query + conditional batch inserts). Expected to be < 100ms for typical deployments.
+- Stale tool schemas and descriptions are corrected on every deployment without manual intervention.
+- Removed tools are soft-deleted, preserving audit history while preventing agents from seeing tools with no handler.
+- Startup time increases slightly (one cross-org query + conditional batch operations). Expected to be < 100ms for typical deployments.
 - The `sync.ts` CLI is simplified to call the shared `syncCatalogAndTools()` function.
-- Tool removal is intentionally **not** handled — deactivating tools requires explicit admin action to avoid breaking running agents.
