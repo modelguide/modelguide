@@ -242,13 +242,19 @@ const tools: ConnectorToolDefinition[] = [
     catalog: {
       name: "Look Up Order History",
       description:
-        "Retrieve a customer's order history with products, totals, and delivery addresses (requires admin API token). Returns newest orders first. Use limit/offset to paginate.",
+        "Retrieve a customer's order history with products, totals, and delivery addresses (requires admin API token). Returns newest orders first. Use limit/offset to paginate. Provide either customerId or email.",
       inputSchema: {
         type: "object",
         properties: {
           customerId: {
             type: "string",
-            description: "Medusa customer ID (e.g. cus_01J...)",
+            description:
+              "Medusa customer ID (e.g. cus_01J...). Provide this or email.",
+          },
+          email: {
+            type: "string",
+            description:
+              "Customer email address. Used to look up the customer ID if customerId is not provided.",
           },
           limit: {
             type: "integer",
@@ -262,7 +268,7 @@ const tools: ConnectorToolDefinition[] = [
             minimum: 0,
           },
         },
-        required: ["customerId"],
+        required: [],
       },
       defaultRequiresConfirmation: false,
       defaultTimeoutSeconds: 30,

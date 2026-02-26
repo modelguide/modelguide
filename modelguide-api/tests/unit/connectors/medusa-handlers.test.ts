@@ -993,6 +993,87 @@ describe("lookUpOrderHistory (Admin API)", () => {
   });
 
   // ----------------------------------------------------------------
+  // Email lookup — resolves customer ID from email
+  // ----------------------------------------------------------------
+  test("resolves customer by email when customerId is not provided", async () => {
+    mockFetchSequence([
+      { status: 200, body: { customers: [{ id: "cus_resolved" }] } },
+      {
+        status: 200,
+        body: {
+          orders: [
+            { id: "order_via_email", display_id: 2001, status: "completed" },
+          ],
+          count: 1,
+        },
+      },
+    ]);
+
+    const result = await lookUpOrderHistory(
+      makeAdminCtx({ email: "alice@example.com" }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data.orders[0].id).toBe("order_via_email");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // First call: customer lookup
+    const [customerUrl] = fetchMock.mock.calls[0];
+    expect(customerUrl).toContain("/admin/customers");
+    expect(customerUrl).toContain("email=alice%40example.com");
+
+    // Second call: orders with resolved customer ID
+    const [ordersUrl] = fetchMock.mock.calls[1];
+    expect(ordersUrl).toContain("customer_id=cus_resolved");
+  });
+
+  // ----------------------------------------------------------------
+  // Email lookup — no customer found
+  // ----------------------------------------------------------------
+  test("returns error when email does not match any customer", async () => {
+    mockFetchSequence([{ status: 200, body: { customers: [] } }]);
+
+    const result = await lookUpOrderHistory(
+      makeAdminCtx({ email: "nobody@example.com" }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("No customer found with this email");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ----------------------------------------------------------------
+  // customerId takes precedence over email
+  // ----------------------------------------------------------------
+  test("uses customerId directly when both customerId and email are provided", async () => {
+    mockFetchSuccess({
+      orders: [{ id: "order_direct", display_id: 3001 }],
+      count: 1,
+    });
+
+    const result = await lookUpOrderHistory(
+      makeAdminCtx({ customerId: "cus_direct", email: "ignored@example.com" }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // No customer lookup
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("customer_id=cus_direct");
+    expect(url).not.toContain("/admin/customers");
+  });
+
+  // ----------------------------------------------------------------
+  // Neither customerId nor email provided
+  // ----------------------------------------------------------------
+  test("returns error when neither customerId nor email is provided", async () => {
+    const result = await lookUpOrderHistory(makeAdminCtx({}));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Either customerId or email is required");
+  });
+
+  // ----------------------------------------------------------------
   // API error — 401 Unauthorized
   // ----------------------------------------------------------------
   test("returns error on API 401", async () => {

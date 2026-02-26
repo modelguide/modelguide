@@ -282,10 +282,30 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
 
 export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
   const input = ctx.input as {
-    customerId: string;
+    customerId?: string;
+    email?: string;
     limit?: number;
     offset?: number;
   };
+
+  // Resolve customer ID — either provided directly or looked up by email
+  let customerId = input.customerId;
+  if (!customerId) {
+    if (!input.email) {
+      return {
+        success: false,
+        error: "Either customerId or email is required",
+      };
+    }
+    const { customers } = await fetcher<{
+      customers: { id: string }[];
+    }>("/admin/customers", { params: { email: input.email } });
+
+    if (!customers?.length) {
+      return { success: false, error: "No customer found with this email" };
+    }
+    customerId = customers[0].id;
+  }
 
   const limit = Math.min(input.limit ?? 5, 50);
   const offset = input.offset ?? 0;
@@ -295,7 +315,7 @@ export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
     count: number;
   }>("/admin/orders", {
     params: {
-      customer_id: input.customerId,
+      customer_id: customerId,
       limit,
       offset,
       order: "-created_at",
