@@ -30,42 +30,49 @@ async function syncCatalog(): Promise<void> {
   const manifests = getAllManifests();
   const slugs = manifests.map((m) => m.slug);
 
-  for (const manifest of manifests) {
-    const row: NewConnectorCatalog = {
-      name: manifest.name,
-      slug: manifest.slug,
-      description: manifest.description,
-      connectorType: manifest.connectorType,
-      configSchema: manifest.configSchema,
-      tools: manifest.tools.map((t) => t.catalog),
-      authMethods: manifest.authMethods,
-      iconUrl: manifest.iconUrl,
-      isActive: true,
-    };
+  await Promise.all(
+    manifests.map((manifest) => {
+      const row: NewConnectorCatalog = {
+        name: manifest.name,
+        slug: manifest.slug,
+        description: manifest.description,
+        connectorType: manifest.connectorType,
+        configSchema: manifest.configSchema,
+        tools: manifest.tools.map((t) => t.catalog),
+        authMethods: manifest.authMethods,
+        iconUrl: manifest.iconUrl,
+        isActive: true,
+      };
 
-    await db
-      .insert(connectorsCatalog)
-      .values(row)
-      .onConflictDoUpdate({
-        target: connectorsCatalog.slug,
-        set: {
-          name: row.name,
-          description: row.description,
-          connectorType: row.connectorType,
-          configSchema: row.configSchema,
-          tools: row.tools,
-          authMethods: row.authMethods,
-          iconUrl: row.iconUrl,
-          isActive: true,
-        },
-      });
-  }
+      return db
+        .insert(connectorsCatalog)
+        .values(row)
+        .onConflictDoUpdate({
+          target: connectorsCatalog.slug,
+          set: {
+            name: row.name,
+            description: row.description,
+            connectorType: row.connectorType,
+            configSchema: row.configSchema,
+            tools: row.tools,
+            authMethods: row.authMethods,
+            iconUrl: row.iconUrl,
+            isActive: true,
+          },
+        });
+    }),
+  );
 
   if (slugs.length > 0) {
     await db
       .update(connectorsCatalog)
       .set({ isActive: false })
-      .where(notInArray(connectorsCatalog.slug, slugs));
+      .where(
+        and(
+          notInArray(connectorsCatalog.slug, slugs),
+          eq(connectorsCatalog.isActive, true),
+        ),
+      );
   }
 }
 

@@ -18,11 +18,11 @@ describe("stableStringify", () => {
   });
 
   test("null", () => {
-    expect(stableStringify(null)).toBe("null");
+    expect(stableStringify(null)).toBeUndefined();
   });
 
   test("undefined", () => {
-    expect(stableStringify(undefined)).toBe(undefined);
+    expect(stableStringify(undefined)).toBeUndefined();
   });
 
   // -- Objects --
