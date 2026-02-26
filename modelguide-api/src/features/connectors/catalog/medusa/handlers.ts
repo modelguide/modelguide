@@ -109,30 +109,70 @@ export const setDeliveryAddress = withMedusa(async (fetcher, ctx) => {
   return { success: true, data };
 });
 
-// Auto-initiates a payment session before completing the cart.
-// Medusa v2 requires a payment session on the cart's payment collection, but
-// in agent-driven flows there is no checkout UI for the customer to pick a
-// payment method. We resolve the first available provider for the cart's region
-// and create the session automatically. See ADR-003 for rationale and future
-// extension options (explicit provider selection, payment links).
+// Auto-selects a shipping method and initiates a payment session before
+// completing the cart. Medusa v2 requires both a shipping method and a payment
+// session on the cart's payment collection, but in agent-driven flows there is
+// no checkout UI for the customer to pick these. We resolve the cheapest
+// shipping option and the first available payment provider automatically.
+// See ADR-003 for rationale and future extension options.
 export const completeCart = withMedusa(async (fetcher, ctx) => {
   const { cartId } = ctx.input as { cartId: string };
 
-  // Step 1: Fetch cart to get payment_collection id and region
-  const cartData = await fetcher<{
+  // Step 1: Fetch cart to check current state
+  let cartData = await fetcher<{
     cart: {
+      shipping_methods?: { id: string }[];
       payment_collection?: { id: string };
       region_id?: string;
       region?: { id: string };
     };
   }>(`/store/carts/${cartId}`);
 
-  const paymentCollectionId = cartData.cart?.payment_collection?.id;
+  // Step 2: Auto-select shipping method if none is set
+  if (!cartData.cart?.shipping_methods?.length) {
+    const { shipping_options } = await fetcher<{
+      shipping_options: { id: string; amount: number; name: string }[];
+    }>("/store/shipping-options", { params: { cart_id: cartId } });
+
+    if (!shipping_options?.length) {
+      return {
+        success: false,
+        error:
+          "No shipping options available for this cart. Check that the store has fulfillment configured for the delivery address region.",
+      };
+    }
+
+    // Pick the cheapest option
+    const cheapest = shipping_options.reduce((min, opt) =>
+      opt.amount < min.amount ? opt : min,
+    );
+
+    await fetcher<Record<string, unknown>>(
+      `/store/carts/${cartId}/shipping-methods`,
+      { method: "POST", body: { option_id: cheapest.id } },
+    );
+
+    // Re-fetch cart — adding a shipping method may create the payment collection
+    cartData = await fetcher<typeof cartData>(`/store/carts/${cartId}`);
+  }
+
+  // Step 3: Ensure payment collection exists (Medusa v2 requires explicit creation)
+  let paymentCollectionId = cartData.cart?.payment_collection?.id;
+  if (!paymentCollectionId) {
+    const { payment_collection } = await fetcher<{
+      payment_collection: { id: string };
+    }>("/store/payment-collections", {
+      method: "POST",
+      body: { cart_id: cartId },
+    });
+    paymentCollectionId = payment_collection?.id;
+  }
+
   if (!paymentCollectionId) {
     return {
       success: false,
       error:
-        "Cart has no payment collection. Add items and a shipping address first.",
+        "Could not create payment collection. Add items and a shipping address first.",
     };
   }
 
@@ -145,7 +185,7 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
     };
   }
 
-  // Step 2: Look up available payment providers for the cart's region
+  // Step 4: Look up available payment providers for the cart's region
   const { payment_providers } = await fetcher<{
     payment_providers: { id: string }[];
   }>("/store/payment-providers", { params: { region_id: regionId } });
@@ -158,13 +198,13 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
     };
   }
 
-  // Step 3: Initialize payment session with the first available provider
+  // Step 5: Initialize payment session with the first available provider
   await fetcher<Record<string, unknown>>(
     `/store/payment-collections/${paymentCollectionId}/payment-sessions`,
     { method: "POST", body: { provider_id: providerId } },
   );
 
-  // Step 4: Complete the cart
+  // Step 6: Complete the cart
   const data = await fetcher<Record<string, unknown>>(
     `/store/carts/${cartId}/complete`,
     { method: "POST" },

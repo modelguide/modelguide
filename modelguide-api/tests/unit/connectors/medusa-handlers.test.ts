@@ -257,21 +257,24 @@ describe("Medusa handlers", () => {
   });
 
   // ----------------------------------------------------------------
-  // Complete Cart (4-step: fetch cart → list providers → payment session → complete)
+  // Complete Cart (auto-shipping + auto-payment + complete)
   // ----------------------------------------------------------------
   describe("completeCart", () => {
-    test("happy path: fetches cart, resolves provider, creates session, completes", async () => {
+    test("happy path: shipping + payment collection already exist", async () => {
       mockFetchSequence([
+        // 1: GET cart — shipping and payment collection present
         {
           status: 200,
           body: {
             cart: {
               id: "cart_abc",
               region_id: "reg_us",
+              shipping_methods: [{ id: "sm_1" }],
               payment_collection: { id: "paycol_1" },
             },
           },
         },
+        // 2: GET payment providers
         {
           status: 200,
           body: {
@@ -281,14 +284,10 @@ describe("Medusa handlers", () => {
             ],
           },
         },
-        {
-          status: 200,
-          body: { payment_session: { id: "payses_1" } },
-        },
-        {
-          status: 200,
-          body: { type: "order", order: { id: "order_1" } },
-        },
+        // 3: POST payment session
+        { status: 200, body: { payment_session: { id: "payses_1" } } },
+        // 4: POST complete
+        { status: 200, body: { type: "order", order: { id: "order_1" } } },
       ]);
 
       const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
@@ -323,18 +322,164 @@ describe("Medusa handlers", () => {
       expect(completeOpts.method).toBe("POST");
     });
 
-    test("returns error when cart has no payment collection", async () => {
+    test("auto-creates payment collection when missing", async () => {
+      mockFetchSequence([
+        // 1: GET cart — shipping set, no payment collection
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              region_id: "reg_us",
+              shipping_methods: [{ id: "sm_1" }],
+            },
+          },
+        },
+        // 2: POST create payment collection
+        {
+          status: 200,
+          body: { payment_collection: { id: "paycol_new" } },
+        },
+        // 3: GET payment providers
+        {
+          status: 200,
+          body: { payment_providers: [{ id: "pp_system_default" }] },
+        },
+        // 4: POST payment session
+        { status: 200, body: { payment_session: { id: "payses_1" } } },
+        // 5: POST complete
+        { status: 200, body: { type: "order", order: { id: "order_1" } } },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+
+      // Verify payment collection creation
+      const [paycolUrl, paycolOpts] = fetchMock.mock.calls[1];
+      expect(paycolUrl).toBe(
+        "https://api.test-store.com/store/payment-collections",
+      );
+      expect(paycolOpts.method).toBe("POST");
+      const paycolBody = JSON.parse(paycolOpts.body);
+      expect(paycolBody.cart_id).toBe("cart_abc");
+
+      // Verify payment session uses the newly created collection
+      const [sessionUrl] = fetchMock.mock.calls[3];
+      expect(sessionUrl).toBe(
+        "https://api.test-store.com/store/payment-collections/paycol_new/payment-sessions",
+      );
+    });
+
+    test("auto-selects cheapest shipping and creates payment collection", async () => {
+      mockFetchSequence([
+        // 1: GET cart — no shipping, no payment collection
+        {
+          status: 200,
+          body: {
+            cart: { id: "cart_abc", region_id: "reg_us", shipping_methods: [] },
+          },
+        },
+        // 2: GET shipping options
+        {
+          status: 200,
+          body: {
+            shipping_options: [
+              { id: "so_express", amount: 20, name: "Express" },
+              { id: "so_standard", amount: 10, name: "Standard" },
+            ],
+          },
+        },
+        // 3: POST add shipping method
+        { status: 200, body: { cart: { id: "cart_abc" } } },
+        // 4: GET cart (re-fetch — still no payment collection)
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              region_id: "reg_us",
+              shipping_methods: [{ id: "sm_1" }],
+            },
+          },
+        },
+        // 5: POST create payment collection
+        {
+          status: 200,
+          body: { payment_collection: { id: "paycol_1" } },
+        },
+        // 6: GET payment providers
+        {
+          status: 200,
+          body: { payment_providers: [{ id: "pp_system_default" }] },
+        },
+        // 7: POST payment session
+        { status: 200, body: { payment_session: { id: "payses_1" } } },
+        // 8: POST complete
+        { status: 200, body: { type: "order", order: { id: "order_1" } } },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(8);
+
+      // Verify it picked the cheapest option (so_standard at 10)
+      const [shippingUrl, shippingOpts] = fetchMock.mock.calls[2];
+      expect(shippingUrl).toBe(
+        "https://api.test-store.com/store/carts/cart_abc/shipping-methods",
+      );
+      expect(shippingOpts.method).toBe("POST");
+      const shippingBody = JSON.parse(shippingOpts.body);
+      expect(shippingBody.option_id).toBe("so_standard");
+
+      // Verify payment collection creation
+      const [paycolUrl, paycolOpts] = fetchMock.mock.calls[4];
+      expect(paycolUrl).toBe(
+        "https://api.test-store.com/store/payment-collections",
+      );
+      expect(paycolOpts.method).toBe("POST");
+    });
+
+    test("returns error when no shipping options available", async () => {
       mockFetchSequence([
         {
           status: 200,
-          body: { cart: { id: "cart_abc", region_id: "reg_us" } },
+          body: {
+            cart: { id: "cart_abc", region_id: "reg_us", shipping_methods: [] },
+          },
+        },
+        { status: 200, body: { shipping_options: [] } },
+      ]);
+
+      const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("No shipping options");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test("returns error when payment collection creation fails", async () => {
+      mockFetchSequence([
+        {
+          status: 200,
+          body: {
+            cart: {
+              id: "cart_abc",
+              region_id: "reg_us",
+              shipping_methods: [{ id: "sm_1" }],
+            },
+          },
+        },
+        // POST payment-collections returns error
+        {
+          status: 400,
+          body: '{"message":"Cannot create payment collection"}',
         },
       ]);
 
       const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
       expect(result.success).toBe(false);
-      expect(result.error).toContain("no payment collection");
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.error).toContain("400");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     test("returns error when cart has no region", async () => {
@@ -344,6 +489,7 @@ describe("Medusa handlers", () => {
           body: {
             cart: {
               id: "cart_abc",
+              shipping_methods: [{ id: "sm_1" }],
               payment_collection: { id: "paycol_1" },
             },
           },
@@ -364,14 +510,12 @@ describe("Medusa handlers", () => {
             cart: {
               id: "cart_abc",
               region_id: "reg_us",
+              shipping_methods: [{ id: "sm_1" }],
               payment_collection: { id: "paycol_1" },
             },
           },
         },
-        {
-          status: 200,
-          body: { payment_providers: [] },
-        },
+        { status: 200, body: { payment_providers: [] } },
       ]);
 
       const result = await completeCart(makeCtx({ cartId: "cart_abc" }));
@@ -388,6 +532,7 @@ describe("Medusa handlers", () => {
             cart: {
               id: "cart_abc",
               region_id: "reg_us",
+              shipping_methods: [{ id: "sm_1" }],
               payment_collection: { id: "paycol_1" },
             },
           },
