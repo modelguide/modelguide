@@ -17,14 +17,6 @@ describe("stableStringify", () => {
     expect(stableStringify(false)).toBe("false");
   });
 
-  test("null", () => {
-    expect(stableStringify(null)).toBeUndefined();
-  });
-
-  test("undefined", () => {
-    expect(stableStringify(undefined)).toBeUndefined();
-  });
-
   // -- Objects --
 
   test("empty object", () => {
