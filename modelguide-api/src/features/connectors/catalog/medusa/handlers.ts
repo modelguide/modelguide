@@ -157,7 +157,17 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
     cartData = await fetcher<typeof cartData>(`/store/carts/${cartId}`);
   }
 
-  // Step 3: Ensure payment collection exists (Medusa v2 requires explicit creation)
+  // Step 3: Verify region exists (needed for payment provider lookup)
+  const regionId = cartData.cart?.region_id ?? cartData.cart?.region?.id;
+  if (!regionId) {
+    return {
+      success: false,
+      error:
+        "Cart has no region. Cannot determine available payment providers.",
+    };
+  }
+
+  // Step 4: Ensure payment collection exists (Medusa v2 requires explicit creation)
   let paymentCollectionId = cartData.cart?.payment_collection?.id;
   if (!paymentCollectionId) {
     const { payment_collection } = await fetcher<{
@@ -176,16 +186,7 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
     };
   }
 
-  const regionId = cartData.cart?.region_id ?? cartData.cart?.region?.id;
-  if (!regionId) {
-    return {
-      success: false,
-      error:
-        "Cart has no region. Cannot determine available payment providers.",
-    };
-  }
-
-  // Step 4: Look up available payment providers for the cart's region
+  // Step 5: Look up available payment providers for the cart's region
   const { payment_providers } = await fetcher<{
     payment_providers: { id: string }[];
   }>("/store/payment-providers", { params: { region_id: regionId } });
@@ -198,13 +199,13 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
     };
   }
 
-  // Step 5: Initialize payment session with the first available provider
+  // Step 6: Initialize payment session with the first available provider
   await fetcher<Record<string, unknown>>(
     `/store/payment-collections/${paymentCollectionId}/payment-sessions`,
     { method: "POST", body: { provider_id: providerId } },
   );
 
-  // Step 6: Complete the cart
+  // Step 7: Complete the cart
   const data = await fetcher<Record<string, unknown>>(
     `/store/carts/${cartId}/complete`,
     { method: "POST" },
