@@ -141,10 +141,14 @@ describe("Medusa handlers", () => {
   // Create Cart
   // ----------------------------------------------------------------
   describe("createCart", () => {
-    test("calls POST /store/carts", async () => {
+    test("calls POST /store/carts with all optional fields", async () => {
       mockFetchSuccess({ cart: { id: "cart_abc" } });
       const result = await createCart(
-        makeCtx({ regionId: "reg_us", currencyCode: "usd" }),
+        makeCtx({
+          regionId: "reg_us",
+          currencyCode: "usd",
+          email: "customer@example.com",
+        }),
       );
       expect(result.success).toBe(true);
 
@@ -154,6 +158,7 @@ describe("Medusa handlers", () => {
       const body = JSON.parse(opts.body);
       expect(body.region_id).toBe("reg_us");
       expect(body.currency_code).toBe("usd");
+      expect(body.email).toBe("customer@example.com");
     });
 
     test("sends empty body when no params", async () => {
@@ -163,6 +168,17 @@ describe("Medusa handlers", () => {
       const [, opts] = fetchMock.mock.calls[0];
       const body = JSON.parse(opts.body);
       expect(body).toEqual({});
+    });
+
+    test("omits email from body when not provided", async () => {
+      mockFetchSuccess({ cart: { id: "cart_abc" } });
+      await createCart(makeCtx({ regionId: "reg_us", currencyCode: "usd" }));
+
+      const [, opts] = fetchMock.mock.calls[0];
+      const body = JSON.parse(opts.body);
+      expect(body.region_id).toBe("reg_us");
+      expect(body.currency_code).toBe("usd");
+      expect(body).not.toHaveProperty("email");
     });
   });
 
