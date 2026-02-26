@@ -1,0 +1,49 @@
+{
+  "personaId": "polite-buyer",
+  "expectedToolCalls": [
+    "glowbox_store_search_products",
+    "glowbox_store_add_to_cart"
+  ],
+  "expectedTurnRange": [3, 8],
+  "expectedTraits": {
+    "polite": true,
+    "usesGreetings": true,
+    "escalates": false
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hi there! I'm looking for a moisturizer. Could you help me find one?"
+    },
+    {
+      "role": "assistant",
+      "content": "Of course! I'd be happy to help you find a moisturizer. Let me search our catalog for you."
+    },
+    {
+      "role": "tool",
+      "toolName": "glowbox_store_search_products",
+      "content": "{\"products\": [{\"id\": \"prod_001\", \"name\": \"Hydra Glow Moisturizer\", \"price\": 29.99}]}"
+    },
+    {
+      "role": "assistant",
+      "content": "I found our Hydra Glow Moisturizer for $29.99. Would you like to add it to your cart?"
+    },
+    {
+      "role": "user",
+      "content": "Yes please, that sounds perfect!"
+    },
+    {
+      "role": "tool",
+      "toolName": "glowbox_store_add_to_cart",
+      "content": "{\"success\": true, \"cartTotal\": 29.99}"
+    },
+    {
+      "role": "assistant",
+      "content": "I've added the Hydra Glow Moisturizer to your cart. Your total is $29.99. Is there anything else I can help you with?"
+    },
+    {
+      "role": "user",
+      "content": "No, that's all I needed. Thank you so much for your help! Goodbye!"
+    }
+  ]
+}

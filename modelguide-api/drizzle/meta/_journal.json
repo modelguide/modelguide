@@ -148,6 +148,13 @@
       "when": 1772139678066,
       "tag": "0020_add-connector-tools-soft-delete",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1772106193265,
+      "tag": "0021_add-session-mode",
+      "breakpoints": true
     }
   ]
 }
