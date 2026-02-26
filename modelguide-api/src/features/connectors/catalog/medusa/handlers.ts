@@ -38,10 +38,12 @@ export const createCart = withMedusa(async (fetcher, ctx) => {
   const input = ctx.input as {
     regionId?: string;
     currencyCode?: string;
+    email?: string;
   };
   const body: Record<string, unknown> = {};
   if (input.regionId) body.region_id = input.regionId;
   if (input.currencyCode) body.currency_code = input.currencyCode;
+  if (input.email) body.email = input.email;
 
   const data = await fetcher<Record<string, unknown>>("/store/carts", {
     method: "POST",

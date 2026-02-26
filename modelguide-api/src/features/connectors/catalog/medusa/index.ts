@@ -86,6 +86,10 @@ const tools: ConnectorToolDefinition[] = [
             type: "string",
             description: "Currency code (e.g., usd, eur)",
           },
+          email: {
+            type: "string",
+            description: "Customer email address for the cart",
+          },
         },
         required: [],
       },
