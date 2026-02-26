@@ -1,9 +1,11 @@
 import { env } from "@/env";
 import { closeDatabase } from "@db/index";
 import { loadAllManifests } from "@features/connectors/catalog/registry";
+import { syncCatalogAndTools } from "@features/connectors/catalog/sync-tools";
 import app from "./app";
 
 await loadAllManifests();
+await syncCatalogAndTools();
 
 const server = Bun.serve({
   hostname: "0.0.0.0",
