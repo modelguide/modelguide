@@ -61,15 +61,19 @@ const args = process.argv.slice(2);
 let callerId = "+15551234567";
 let calledNumber = "+15559876543";
 let callSid = `CA_test_${Date.now()}`;
+let conversationId = `conv_${Date.now()}`;
 
 for (const arg of args) {
   if (arg.startsWith("--caller=")) callerId = arg.slice("--caller=".length);
   if (arg.startsWith("--called=")) calledNumber = arg.slice("--called=".length);
   if (arg.startsWith("--call-sid=")) callSid = arg.slice("--call-sid=".length);
+  if (arg.startsWith("--conversation-id="))
+    conversationId = arg.slice("--conversation-id=".length);
 }
 
 // Build payload (simulates what ElevenLabs sends)
 const payload = {
+  conversation_id: conversationId,
   caller_id: callerId,
   called_number: calledNumber,
   call_sid: callSid,
@@ -101,7 +105,7 @@ try {
   if (json.dynamic_variables?.mg_session_id) {
     console.log(`\nSession ID: ${json.dynamic_variables.mg_session_id}`);
     console.log(
-      `\nTip: Run again with --call-sid=${callSid} to test idempotency`,
+      `\nTip: Run again with --conversation-id=${conversationId} to test idempotency`,
     );
   }
 } catch {

@@ -11,7 +11,7 @@ import { env } from "@/env";
 import { forApp, forOrg } from "@db/rls";
 import { agents, sessionLinks, sessionMessages, sessions } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { getAgentSecretByType } from "@features/secrets";
@@ -277,22 +277,14 @@ app.post("/:agentId/conversation-init", async (c) => {
   }
 
   const authAgent = await verifyApiKey(apiKeyHeader);
-  if (!authAgent) {
+  if (!authAgent || authAgent.id !== agentId) {
     console.warn(
-      `[webhook/conversation-init] Invalid API key for agent=${agentId}`,
+      `[webhook/conversation-init] Auth failed for agent=${agentId}`,
     );
     return c.json({ error: "Invalid API key" }, 401);
   }
 
-  // 2. Verify the API key belongs to the requested agent
-  if (authAgent.id !== agentId) {
-    console.warn(
-      `[webhook/conversation-init] API key agent mismatch: key=${authAgent.id} url=${agentId}`,
-    );
-    return c.json({ error: "API key does not match agent" }, 403);
-  }
-
-  // 3. Parse request body
+  // 2. Parse request body
   let rawBody: unknown;
   try {
     rawBody = await c.req.json();
@@ -311,39 +303,28 @@ app.post("/:agentId/conversation-init", async (c) => {
     );
   }
 
-  const { caller_id, called_number, call_sid } = parsed.data;
+  const { conversation_id, caller_id, called_number, call_sid } = parsed.data;
 
-  // 4. Idempotency: if call_sid is present, check for existing active session
-  if (call_sid) {
-    const [existing] = await forOrg(authAgent.organizationId, (tx) =>
-      tx
-        .select({ id: sessions.id })
-        .from(sessions)
-        .where(
-          and(
-            eq(sessions.agentId, agentId),
-            eq(sessions.status, "active"),
-            sql`${sessions.metadata}->>'call_sid' = ${call_sid}`,
-          ),
-        )
-        .limit(1),
-    );
-
-    if (existing) {
-      console.log(
-        `[webhook/conversation-init] Idempotent hit: call_sid=${call_sid} session=${existing.id}`,
-      );
-      return c.json({
-        type: "conversation_initiation_client_data" as const,
-        dynamic_variables: { mg_session_id: existing.id },
-      });
-    }
-  }
-
-  // 5. Create new session
+  // 3. Idempotency check + session creation in a single transaction to prevent
+  //    duplicate sessions when ElevenLabs retries with the same conversation_id.
   let sessionId: string;
   try {
     sessionId = await forOrg(authAgent.organizationId, async (tx) => {
+      if (conversation_id) {
+        const [existing] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(
+            and(
+              eq(sessions.agentId, agentId),
+              eq(sessions.externalId, conversation_id),
+            ),
+          )
+          .limit(1);
+
+        if (existing) return existing.id;
+      }
+
       const [session] = await tx
         .insert(sessions)
         .values({
@@ -351,9 +332,9 @@ app.post("/:agentId/conversation-init", async (c) => {
           agentId,
           channelType: "voice",
           status: "active",
+          externalId: conversation_id ?? null,
           userIdentifier: caller_id ?? null,
           metadata: {
-            ...(caller_id ? { caller_id } : {}),
             ...(called_number ? { called_number } : {}),
             ...(call_sid ? { call_sid } : {}),
           },
@@ -373,7 +354,7 @@ app.post("/:agentId/conversation-init", async (c) => {
     ? caller_id.slice(-4).padStart(caller_id.length, "*")
     : undefined;
   console.log(
-    `[webhook/conversation-init] Created session=${sessionId} agent=${agentId}${maskedCallerId ? ` caller=${maskedCallerId}` : ""}${call_sid ? ` call_sid=${call_sid}` : ""}`,
+    `[webhook/conversation-init] session=${sessionId} agent=${agentId}${conversation_id ? ` conversation=${conversation_id}` : ""}${maskedCallerId ? ` caller=${maskedCallerId}` : ""}`,
   );
 
   return c.json({

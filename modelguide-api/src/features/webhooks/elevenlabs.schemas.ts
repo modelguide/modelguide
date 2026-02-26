@@ -26,6 +26,7 @@ export type DynamicVariables = z.infer<typeof dynamicVariablesSchema>;
 
 export const conversationInitRequestSchema = z
   .object({
+    conversation_id: z.string().optional(),
     caller_id: z.string().optional(),
     agent_id: z.string().optional(),
     called_number: z.string().optional(),
@@ -35,15 +36,6 @@ export const conversationInitRequestSchema = z
 
 export type ConversationInitRequest = z.infer<
   typeof conversationInitRequestSchema
->;
-
-export const conversationInitResponseSchema = z.object({
-  type: z.literal("conversation_initiation_client_data"),
-  dynamic_variables: z.record(z.union([z.string(), z.number(), z.boolean()])),
-});
-
-export type ConversationInitResponse = z.infer<
-  typeof conversationInitResponseSchema
 >;
 
 // ============================================================================
