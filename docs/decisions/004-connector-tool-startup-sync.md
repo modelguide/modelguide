@@ -4,25 +4,33 @@
 
 ## Context
 
+### Connectors and tools
+
+Connectors are the integration layer between AI agents and external services (e-commerce, helpdesk, calendars). Each connector is defined in code as a TypeScript module exporting a `ConnectorManifest` — a declarative description of the service it integrates with, including metadata, configuration schema, and an array of tools.
+
+Each tool has two parts: a `catalog` object (name, description, JSON Schema input, defaults for timeout and confirmation) that gets stored in the database, and a `handler` function that executes at runtime. Tools are namespaced per connector instance — the same Medusa connector used by two orgs produces tool names like `glowbox_store_add_to_cart` and `clearhealth_pharmacy_add_to_cart`.
+
+Adding a connector is a single file. Run `make sync-connectors` and the manifest is available for orgs to configure through the dashboard.
+
 ### Data model
 
-ModelGuide's connector system has three database layers:
+The connector system spans three database layers:
 
-1. **`connectors_catalog`** — Global registry of connector types. Each row represents a connector definition (Medusa, Zendesk) with its `configSchema` and a `tools` JSONB array of `CatalogTool` objects (name, description, inputSchema, defaults). No RLS — shared across all orgs. Keyed by `slug`.
+1. **`connectors_catalog`** — Global registry of connector types (e.g., Medusa, Zendesk). Each row stores a manifest's metadata and a `tools` JSONB array of `CatalogTool` objects. No RLS — shared across all orgs. Keyed by unique `slug`.
 
-2. **`connector_tools`** — Org-scoped instances of individual tools, created when an organization adds a connector. Each row references a `connectorId` and carries tool metadata (`name`, `slug`, `toolSchema`, `timeoutSeconds`, `isActive`). RLS-protected with a unique constraint on `(connectorId, slug)`. Slug is derived from the catalog tool name: `name.toLowerCase().replace(/\s+/g, "_")`.
+2. **`connector_tools`** — Org-scoped tool instances, created when an organization adds a connector. Each row references a `connectorId` and carries tool metadata (`name`, `slug`, `toolSchema`, `timeoutSeconds`, `isActive`). RLS-protected, unique on `(connectorId, slug)`. Slug derived from tool name: `name.toLowerCase().replace(/\s+/g, "_")`.
 
-3. **`agent_connector_tools`** — Junction table linking agents to specific `connector_tools`. Stores per-agent overrides: `isEnabled` and `requiresConfirmation` (overriding the catalog's `defaultRequiresConfirmation`). No RLS — security is inherited by always joining through RLS-protected parents. Unique on `(agentId, connectorToolId)`.
+3. **`agent_connector_tools`** — Junction table linking agents to individual tools. Stores per-agent overrides (`isEnabled`, `requiresConfirmation`). Security inherited from RLS-protected parents. Unique on `(agentId, connectorToolId)`.
 
-### The flow today
+### Lifecycle
 
-- **Manifest → catalog:** The `sync.ts` CLI upserts connector manifests (from code) into `connectors_catalog`.
-- **Catalog → tools:** When an org creates a connector via `createConnector()`, all `CatalogTool` entries are bulk-inserted as `connector_tools` rows.
-- **Tools → agents:** Agent-to-tool assignments are created explicitly (via the dashboard or seed script).
+- **Code → catalog:** Manifests are loaded into an in-memory registry at startup (`loadAllManifests()`). The `sync.ts` CLI upserts them into `connectors_catalog`.
+- **Catalog → connector tools:** When an admin creates a connector instance via the dashboard, `createConnector()` bulk-inserts one `connector_tools` row per `CatalogTool` from the catalog.
+- **Tools → agents:** Agent-to-tool assignments are managed through the dashboard or seed scripts, creating `agent_connector_tools` rows.
 
 ### The gap
 
-When a new tool is added to a connector manifest (e.g., `look_up_order_history` added to Medusa), running `sync.ts` updates the catalog's `tools` JSONB. However, **existing `connector_tools` rows and `agent_connector_tools` assignments are never backfilled**. New tools only appear when a connector is freshly created. Deploying a new tool to production would require re-seeding — not viable with real customer data.
+When a new tool is added to a manifest (e.g., `look_up_order_history` added to the Medusa connector), running `sync.ts` updates the catalog's `tools` JSONB. However, existing `connector_tools` rows and `agent_connector_tools` assignments are never backfilled. New tools only appear when a connector is freshly created. Deploying a new tool to production would require re-seeding — not viable with real customer data.
 
 ## Decision
 
@@ -32,7 +40,7 @@ Run an idempotent sync at API startup that propagates new tools from manifests t
 
 The sync (`syncCatalogAndTools()`) executes after `loadAllManifests()` and before `Bun.serve()`:
 
-1. **Catalog sync** — Upsert manifests into `connectors_catalog` (same as the `sync.ts` CLI, now shared).
+1. **Catalog sync** — Upsert manifests into `connectors_catalog` (same logic as the `sync.ts` CLI, now shared).
 2. **Tool sync** — Using `forApp()` to bypass RLS for cross-org operation:
    - Load all active connectors joined with their catalog slug.
    - Diff manifest tools against existing `connector_tools` per connector.
