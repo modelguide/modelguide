@@ -21,6 +21,24 @@ export const dynamicVariablesSchema = z
 export type DynamicVariables = z.infer<typeof dynamicVariablesSchema>;
 
 // ============================================================================
+// Conversation Initiation Webhook (call start)
+// ============================================================================
+
+export const conversationInitRequestSchema = z
+  .object({
+    conversation_id: z.string().optional(),
+    caller_id: z.string().optional(),
+    agent_id: z.string().optional(),
+    called_number: z.string().optional(),
+    call_sid: z.string().optional(),
+  })
+  .passthrough();
+
+export type ConversationInitRequest = z.infer<
+  typeof conversationInitRequestSchema
+>;
+
+// ============================================================================
 // Tool Call Webhook
 // ============================================================================
 

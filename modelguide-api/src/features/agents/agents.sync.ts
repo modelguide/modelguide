@@ -265,9 +265,21 @@ export async function syncAgentToElevenLabs(
     throw err;
   }
 
-  // Step 4: Assign new MCP server + webhook to ElevenLabs agent
+  // Step 4: Assign new MCP server + webhook + conversation-init to ElevenLabs agent
   try {
     const mergedMcpIds = [...foreignMcpIds, mcpServerId!];
+
+    // Build conversation-init webhook config (only when secretId exists)
+    const conversationInitConfig = secretId
+      ? {
+          conversationInitiationClientDataWebhook: {
+            url: `${baseUrl}/webhooks/elevenlabs/${agentId}/conversation-init`,
+            requestHeaders: {
+              "x-mg-api-key": { secretId },
+            },
+          },
+        }
+      : {};
 
     await client.conversationalAi.agents.update(elevenLabsAgentId, {
       conversationConfig: {
@@ -279,7 +291,11 @@ export async function syncAgentToElevenLabs(
         // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
       } as any,
       platformSettings: {
+        overrides: {
+          enableConversationInitiationClientDataFromWebhook: !!secretId,
+        },
         workspaceOverrides: {
+          ...conversationInitConfig,
           webhooks: {
             postCallWebhookId: webhookId,
             events: ["transcript"],
@@ -295,6 +311,21 @@ export async function syncAgentToElevenLabs(
       message: err instanceof Error ? err.message : "Unknown error",
     });
     throw err;
+  }
+
+  // Report conversation-init webhook status
+  if (secretId) {
+    steps.push({
+      step: "Conversation-init webhook",
+      status: "success",
+      message: `URL: ${baseUrl}/webhooks/elevenlabs/${agentId}/conversation-init`,
+    });
+  } else {
+    steps.push({
+      step: "Conversation-init webhook",
+      status: "skipped",
+      message: "No API key secret — regenerate to enable",
+    });
   }
 
   // Step 5: Save webhook secret to encrypted secrets table + save metadata

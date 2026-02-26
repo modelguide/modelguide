@@ -12,6 +12,7 @@ export {
   getCurrentUser,
   getCurrentAgent,
   getOrganizationId,
+  verifyApiKey,
 } from "./auth";
 
 // CSRF middleware

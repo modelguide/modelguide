@@ -33,7 +33,7 @@ function isApiKey(token: string): boolean {
 /**
  * Verify an API key and return the agent context
  */
-async function verifyApiKey(key: string): Promise<AuthAgent | null> {
+export async function verifyApiKey(key: string): Promise<AuthAgent | null> {
   if (!isValidApiKeyFormat(key)) {
     return null;
   }
