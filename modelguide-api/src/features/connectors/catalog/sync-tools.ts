@@ -81,6 +81,8 @@ async function syncTools(): Promise<{ tools: number; agentLinks: number }> {
     );
   }
 
+  // Single transaction for atomicity. If connector/org count grows significantly,
+  // consider chunking per connector to reduce lock duration during startup.
   return forApp(async (tx) => {
     // 1. Load all active connectors with their catalog slug
     const allConnectors = await tx
@@ -177,7 +179,6 @@ async function syncTools(): Promise<{ tools: number; agentLinks: number }> {
       tx,
       insertedTools,
       manifestToolMap,
-      allConnectors,
     );
 
     return { tools: insertedTools.length, agentLinks };
@@ -196,17 +197,7 @@ async function findAndLinkAgents(
     slug: string;
   }>,
   manifestToolMap: Map<string, CatalogTool[]>,
-  allConnectors: Array<{
-    id: string;
-    catalogSlug: string;
-  }>,
 ): Promise<number> {
-  // Build connectorId → catalogSlug lookup
-  const connectorCatalogSlug = new Map<string, string>();
-  for (const c of allConnectors) {
-    connectorCatalogSlug.set(c.id, c.catalogSlug);
-  }
-
   // Build tool slug → defaultRequiresConfirmation lookup
   const confirmationDefaults = new Map<string, boolean>();
   for (const [, tools] of manifestToolMap) {
