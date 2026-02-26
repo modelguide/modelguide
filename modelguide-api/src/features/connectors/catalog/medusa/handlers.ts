@@ -152,7 +152,7 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
       { method: "POST", body: { option_id: cheapest.id } },
     );
 
-    // Re-fetch cart — adding a shipping method may create the payment collection
+    // Re-fetch cart after adding shipping method
     cartData = await fetcher<typeof cartData>(`/store/carts/${cartId}`);
   }
 
@@ -171,8 +171,7 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
   if (!paymentCollectionId) {
     return {
       success: false,
-      error:
-        "Could not create payment collection. Add items and a shipping address first.",
+      error: "Could not initialize payment collection for this cart.",
     };
   }
 

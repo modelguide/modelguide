@@ -22,7 +22,7 @@ The `completeCart` handler auto-selects shipping and initiates a payment session
 
 1. Fetch the cart to check its current state
 2. If no shipping method is set, query `GET /store/shipping-options?cart_id=` and select the **cheapest available option**
-3. Re-fetch the cart (adding a shipping method triggers payment collection creation)
+3. If no payment collection exists, create one via `POST /store/payment-collections` (Medusa v2 requires explicit creation — it is not auto-created by adding shipping)
 4. Query `GET /store/payment-providers?region_id=` to discover available providers
 5. Select the **first available provider** and create a payment session
 6. Complete the cart
