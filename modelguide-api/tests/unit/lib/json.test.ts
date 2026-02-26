@@ -108,4 +108,45 @@ describe("stableStringify", () => {
     };
     expect(stableStringify(schema)).toBe(stableStringify(reordered));
   });
+
+  // -- Inequality: values that must NOT compare equal --
+
+  test("different values for same key", () => {
+    expect(stableStringify({ a: 5 })).not.toBe(stableStringify({ b: 5 }));
+  });
+
+  test("same keys, different values", () => {
+    expect(stableStringify({ a: 1 })).not.toBe(stableStringify({ a: 2 }));
+  });
+
+  test("extra key makes objects unequal", () => {
+    expect(stableStringify({ a: 1 })).not.toBe(stableStringify({ a: 1, b: 2 }));
+  });
+
+  test("null vs 0 vs false vs empty string", () => {
+    const results = [
+      stableStringify({ v: null }),
+      stableStringify({ v: 0 }),
+      stableStringify({ v: false }),
+      stableStringify({ v: "" }),
+    ];
+    const unique = new Set(results);
+    expect(unique.size).toBe(results.length);
+  });
+
+  test("array order matters", () => {
+    expect(stableStringify({ a: [1, 2] })).not.toBe(
+      stableStringify({ a: [2, 1] }),
+    );
+  });
+
+  test("nested value difference detected", () => {
+    const a = { x: { y: { z: 1 } } };
+    const b = { x: { y: { z: 2 } } };
+    expect(stableStringify(a)).not.toBe(stableStringify(b));
+  });
+
+  test("string '1' vs number 1", () => {
+    expect(stableStringify({ a: "1" })).not.toBe(stableStringify({ a: 1 }));
+  });
 });

@@ -249,22 +249,23 @@ async function syncTools(): Promise<SyncResult> {
     }
 
     // 5. Apply updates (preserve isActive, timeoutSeconds)
-    // TODO: batch into a single SQL statement (e.g. VALUES list + UPDATE FROM)
-    // if connector/org count grows enough for per-row updates to be slow.
-    for (const op of updateOps) {
-      const setValues: {
-        description?: string;
-        toolSchema?: Record<string, unknown>;
-      } = {};
-      if (op.description !== undefined) setValues.description = op.description;
-      if (op.toolSchema !== undefined) setValues.toolSchema = op.toolSchema;
+    await Promise.all(
+      updateOps.map((op) => {
+        const setValues: {
+          description?: string;
+          toolSchema?: Record<string, unknown>;
+        } = {};
+        if (op.description !== undefined)
+          setValues.description = op.description;
+        if (op.toolSchema !== undefined) setValues.toolSchema = op.toolSchema;
 
-      await tx
-        .update(connectorTools)
-        .set(setValues)
-        .where(eq(connectorTools.id, op.id));
-      updatedCount++;
-    }
+        return tx
+          .update(connectorTools)
+          .set(setValues)
+          .where(eq(connectorTools.id, op.id));
+      }),
+    );
+    updatedCount = updateOps.length;
 
     // 6. Soft-delete removed tools + clean up orphaned agent assignments
     if (toolIdsToDelete.length > 0) {
