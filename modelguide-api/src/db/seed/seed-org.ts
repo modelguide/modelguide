@@ -5,6 +5,7 @@
  */
 
 import { encryptSecret, generateApiKey } from "@lib/crypto";
+import { toolSlug } from "@lib/slugify";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "../schema";
 import {
@@ -206,20 +207,23 @@ export async function seedOrg(
   const allToolIds: string[] = [];
   if (medusaConnector) {
     const tools = await db.query.connectorTools.findMany({
-      where: (t, { eq }) => eq(t.connectorId, medusaConnector.id),
+      where: (t, { eq, and, isNull }) =>
+        and(eq(t.connectorId, medusaConnector.id), isNull(t.deletedAt)),
     });
     allToolIds.push(...tools.map((t) => t.id));
   }
   if (zendeskConnector) {
     const tools = await db.query.connectorTools.findMany({
-      where: (t, { eq }) => eq(t.connectorId, zendeskConnector.id),
+      where: (t, { eq, and, isNull }) =>
+        and(eq(t.connectorId, zendeskConnector.id), isNull(t.deletedAt)),
     });
     allToolIds.push(...tools.map((t) => t.id));
   }
 
   // Look up all tools to check requiresConfirmation from catalog
   const allTools = await db.query.connectorTools.findMany({
-    where: (t, { eq }) => eq(t.organizationId, organizationId),
+    where: (t, { eq, and, isNull }) =>
+      and(eq(t.organizationId, organizationId), isNull(t.deletedAt)),
   });
   const toolMap = new Map(allTools.map((t) => [t.id, t]));
 
@@ -229,7 +233,7 @@ export async function seedOrg(
     if (Array.isArray(catalog.tools)) {
       for (const tool of catalog.tools as CatalogTool[]) {
         if (tool.defaultRequiresConfirmation) {
-          confirmationTools.add(tool.name.toLowerCase().replace(/\s+/g, "_"));
+          confirmationTools.add(toolSlug(tool.name));
         }
       }
     }
@@ -332,7 +336,7 @@ async function createConnectorWithTools(
       organizationId,
       connectorId: connector.id,
       name: tool.name,
-      slug: tool.name.toLowerCase().replace(/\s+/g, "_"),
+      slug: toolSlug(tool.name),
       description: tool.description,
       toolSchema: tool.inputSchema,
       timeoutSeconds: tool.defaultTimeoutSeconds || 30,
