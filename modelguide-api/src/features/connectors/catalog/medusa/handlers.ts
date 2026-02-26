@@ -134,7 +134,8 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
       shipping_options: { id: string; amount: number; name: string }[];
     }>("/store/shipping-options", { params: { cart_id: cartId } });
 
-    if (!shipping_options?.length) {
+    const options = shipping_options ?? [];
+    if (!options.length) {
       return {
         success: false,
         error:
@@ -143,7 +144,7 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
     }
 
     // Pick the cheapest option
-    const cheapest = shipping_options.reduce((min, opt) =>
+    const cheapest = options.reduce((min, opt) =>
       opt.amount < min.amount ? opt : min,
     );
 
