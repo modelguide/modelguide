@@ -131,7 +131,6 @@ export async function runSimulation(params: {
 
       // Handle tool calls
       if (agentResponse.toolCalls.length > 0) {
-        // Store assistant message with tool calls placeholder
         agentHistory.push({
           role: "assistant",
           content: agentResponse.content || null,
@@ -144,6 +143,10 @@ export async function runSimulation(params: {
             },
           })),
         });
+
+        // Execute all tools and collect results
+        const executedToolCalls: Parameters<typeof addMessage>[3]["toolCalls"] =
+          [];
 
         for (const toolCall of agentResponse.toolCalls) {
           const tool = toolLookup.get(toolCall.name);
@@ -169,20 +172,12 @@ export async function runSimulation(params: {
             };
           }
 
-          // Store tool call in session messages
-          await addMessage(orgId, session.id, agentId, {
-            role: "tool",
-            content: JSON.stringify(toolResult),
-            occurredAt: new Date(),
-            toolCalls: [
-              {
-                toolCallId: toolCall.id,
-                toolName: toolCall.name,
-                toolInput: toolCall.arguments,
-                toolOutput: toolResult,
-                toolStatus: "error" in toolResult ? "error" : "success",
-              },
-            ],
+          executedToolCalls!.push({
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            toolInput: toolCall.arguments,
+            toolOutput: toolResult,
+            toolStatus: "error" in toolResult ? "error" : "success",
           });
 
           agentHistory.push({
@@ -191,6 +186,14 @@ export async function runSimulation(params: {
             content: JSON.stringify(toolResult),
           });
         }
+
+        // Store assistant + tool rows using the same path as real sessions
+        await addMessage(orgId, session.id, agentId, {
+          role: "assistant",
+          content: agentResponse.content || undefined,
+          toolCalls: executedToolCalls,
+          occurredAt: new Date(),
+        });
 
         // Get agent's follow-up response after tool results
         const followUp = await generateAgentResponse(
@@ -206,10 +209,7 @@ export async function runSimulation(params: {
         });
 
         agentHistory.push({ role: "assistant", content: followUp.content });
-        personaHistory.push({
-          role: "assistant",
-          content: followUp.content,
-        });
+        personaHistory.push({ role: "assistant", content: followUp.content });
       } else {
         // No tool calls — store the agent's text response directly
         await addMessage(orgId, session.id, agentId, {
