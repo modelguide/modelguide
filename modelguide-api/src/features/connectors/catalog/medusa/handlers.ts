@@ -280,6 +280,46 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
   }
 });
 
+export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
+  const input = ctx.input as {
+    customerId: string;
+    limit?: number;
+    offset?: number;
+  };
+
+  const limit = Math.min(input.limit ?? 5, 50);
+  const offset = input.offset ?? 0;
+
+  const { orders, count } = await fetcher<{
+    orders: MedusaOrderDetail[];
+    count: number;
+  }>("/admin/orders", {
+    params: {
+      customer_id: input.customerId,
+      limit,
+      offset,
+      order: "-created_at",
+      fields:
+        "id,display_id,status,currency_code,email,created_at,updated_at,*items,*shipping_address,*summary",
+    },
+  });
+
+  if (!orders?.length) {
+    const message =
+      offset > 0
+        ? `No more orders — showing ${offset} of ${count} total`
+        : "No orders found for this customer";
+    return { success: false, error: message };
+  }
+
+  const baseUrl = ctx.config.baseUrl?.replace(/\/$/, "");
+  return {
+    success: true,
+    data: { orders, count, limit, offset },
+    ...(baseUrl && { url: `${baseUrl}/app/orders` }),
+  };
+});
+
 // ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------

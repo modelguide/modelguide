@@ -15,6 +15,7 @@ import {
   healthCheck,
   listProducts,
   lookUpOrder,
+  lookUpOrderHistory,
   setDeliveryAddress,
 } from "./handlers";
 
@@ -236,6 +237,37 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: lookUpOrder,
+  },
+  {
+    catalog: {
+      name: "Look Up Order History",
+      description:
+        "Retrieve a customer's order history with products, totals, and delivery addresses (requires admin API token). Returns newest orders first. Use limit/offset to paginate.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          customerId: {
+            type: "string",
+            description: "Medusa customer ID (e.g. cus_01J...)",
+          },
+          limit: {
+            type: "integer",
+            description: "Max orders to return (default 5, max 50)",
+            minimum: 1,
+            maximum: 50,
+          },
+          offset: {
+            type: "integer",
+            description: "Number of orders to skip for pagination (default 0)",
+            minimum: 0,
+          },
+        },
+        required: ["customerId"],
+      },
+      defaultRequiresConfirmation: false,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: lookUpOrderHistory,
   },
 ];
 
