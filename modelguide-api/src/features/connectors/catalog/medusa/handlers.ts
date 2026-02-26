@@ -3,7 +3,7 @@
  * Each handler creates a fetcher from ctx.config and calls the appropriate endpoint.
  */
 
-import { withConnector } from "../lib/http-client";
+import { type ConnectorFetcher, withConnector } from "../lib/http-client";
 import { runHealthCheck } from "../lib/run-health-check";
 import type { HealthCheckResult } from "../types";
 import { createMedusaAdminFetcher, createMedusaFetcher } from "./client";
@@ -177,13 +177,11 @@ export const getOrder = withMedusa(async (fetcher, ctx) => {
   const data = await fetcher<Record<string, unknown>>(
     `/store/orders/${orderId}`,
   );
-  const baseUrl = ctx.config.baseUrl?.replace(/\/$/, "");
+  const url = dashboardUrl(ctx.config, `/app/orders/${orderId}`);
   return {
     success: true,
     data,
-    ...(baseUrl && {
-      url: `${baseUrl}/app/orders/${orderId}`,
-    }),
+    ...(url && { url }),
   };
 });
 
@@ -192,6 +190,28 @@ export const getOrder = withMedusa(async (fetcher, ctx) => {
 // ---------------------------------------------------------------------------
 
 const withMedusaAdmin = withConnector(createMedusaAdminFetcher);
+
+/** Resolve a Medusa customer ID from an email address via the Admin API. */
+async function resolveCustomerByEmail(
+  fetcher: ConnectorFetcher,
+  email: string,
+): Promise<{ customerId: string } | { error: string }> {
+  const { customers } = await fetcher<{ customers: { id: string }[] }>(
+    "/admin/customers",
+    { params: { email } },
+  );
+  if (!customers?.length) return { error: "No customer found with this email" };
+  return { customerId: customers[0].id };
+}
+
+/** Build a Medusa dashboard URL if baseUrl is configured. */
+function dashboardUrl(
+  config: Record<string, string>,
+  path: string,
+): string | undefined {
+  const base = config.baseUrl?.replace(/\/$/, "");
+  return base ? `${base}${path}` : undefined;
+}
 
 /** Medusa Admin API response types for order detail. */
 interface MedusaOrderItem {
@@ -223,16 +243,13 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
   };
 
   // Step 1: Find customer by email
-  const { customers } = await fetcher<{
-    customers: { id: string }[];
-  }>("/admin/customers", { params: { email } });
-
-  if (!customers?.length) {
-    return { success: false, error: "No customer found with this email" };
+  const resolved = await resolveCustomerByEmail(fetcher, email);
+  if ("error" in resolved) {
+    return { success: false, error: resolved.error };
   }
 
   // Step 2: Paginate through orders looking for display_id match
-  const customerId = customers[0].id;
+  const customerId = resolved.customerId;
   const PAGE_SIZE = 50;
   const MAX_PAGES = 20;
   let offset = 0;
@@ -261,13 +278,11 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
 
     const match = orders?.find((o) => o.display_id === displayId);
     if (match) {
-      const baseUrl = ctx.config.baseUrl?.replace(/\/$/, "");
+      const url = dashboardUrl(ctx.config, `/app/orders/${match.id}`);
       return {
         success: true,
         data: match,
-        ...(baseUrl && {
-          url: `${baseUrl}/app/orders/${match.id}`,
-        }),
+        ...(url && { url }),
       };
     }
 
@@ -280,6 +295,63 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
       };
     }
   }
+});
+
+export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
+  const input = ctx.input as {
+    customerId?: string;
+    email?: string;
+    limit?: number;
+    offset?: number;
+  };
+
+  // Resolve customer ID — either provided directly or looked up by email
+  let customerId = input.customerId;
+  if (!customerId) {
+    if (!input.email) {
+      return {
+        success: false,
+        error: "Either customerId or email is required",
+      };
+    }
+    const resolved = await resolveCustomerByEmail(fetcher, input.email);
+    if ("error" in resolved) {
+      return { success: false, error: resolved.error };
+    }
+    customerId = resolved.customerId;
+  }
+
+  const limit = Math.min(input.limit ?? 5, 50);
+  const offset = input.offset ?? 0;
+
+  const { orders, count } = await fetcher<{
+    orders: MedusaOrderDetail[];
+    count: number;
+  }>("/admin/orders", {
+    params: {
+      customer_id: customerId,
+      limit,
+      offset,
+      order: "-created_at",
+      fields:
+        "id,display_id,status,currency_code,email,created_at,updated_at,*items,*shipping_address,*summary",
+    },
+  });
+
+  if (!orders?.length) {
+    const message =
+      offset > 0
+        ? `No more orders — showing ${offset} of ${count} total`
+        : "No orders found for this customer";
+    return { success: false, error: message };
+  }
+
+  const url = dashboardUrl(ctx.config, "/app/orders");
+  return {
+    success: true,
+    data: { orders, count, limit, offset },
+    ...(url && { url }),
+  };
 });
 
 // ---------------------------------------------------------------------------
