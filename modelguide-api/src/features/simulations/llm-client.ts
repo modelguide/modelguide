@@ -65,7 +65,7 @@ export async function generatePersonaMessage(
 
   const response = await openai.chat.completions.create({
     model: env.SIMULATION_LLM_MODEL,
-    max_completion_tokens: 1024,
+    max_completion_tokens: 16000,
     messages: [{ role: "system", content: personaSystemPrompt }, ...messages],
   });
 
@@ -88,7 +88,7 @@ export async function generateAgentResponse(
 
   const response = await openai.chat.completions.create({
     model: env.SIMULATION_LLM_MODEL,
-    max_completion_tokens: 2048,
+    max_completion_tokens: 16000,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
     ...(tools.length > 0 && { tools }),
   });

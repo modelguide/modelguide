@@ -107,8 +107,18 @@ export async function runSimulation(params: {
   try {
     for (let turn = 0; turn < maxTurns; turn++) {
       // --- Persona turn ---
+      // Invert roles for the persona LLM: persona's own messages become
+      // "assistant" (what the model generates), agent messages become "user"
+      // (the prompt). This lets the model naturally continue as the customer.
+      const personaLlmHistory: ChatCompletionMessageParam[] =
+        personaHistory.map(
+          (m): ChatCompletionMessageParam => ({
+            role: m.role === "user" ? "assistant" : "user",
+            content: typeof m.content === "string" ? m.content : "",
+          }),
+        );
       const personaResponse = await generatePersonaMessage(
-        personaHistory,
+        personaLlmHistory,
         persona.systemPrompt,
       );
 
@@ -195,11 +205,13 @@ export async function runSimulation(params: {
           occurredAt: new Date(),
         });
 
-        // Get agent's follow-up response after tool results
+        // Get agent's follow-up response after tool results.
+        // Pass no tools so the agent is forced to produce a text reply
+        // rather than chaining into another tool call (which would yield null content).
         const followUp = await generateAgentResponse(
           agentHistory,
           agentSystemPrompt,
-          openAiTools,
+          [],
         );
 
         await addMessage(orgId, session.id, agentId, {
