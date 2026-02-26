@@ -1,4 +1,4 @@
-# ADR-004: Connector Tool Startup Sync
+# ADR-004: Connectors and Tools
 
 **Status:** Accepted
 
