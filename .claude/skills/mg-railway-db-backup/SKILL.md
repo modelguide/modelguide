@@ -1,5 +1,5 @@
 ---
-name: railway:db-backup
+name: mg-railway-db-backup
 description: Backup a PostgreSQL database from a Railway environment. Use when the user asks to "backup db", "dump database", "save db from railway", "backup railway database", or "export db".
 ---
 
@@ -19,27 +19,28 @@ Ask the user if not provided:
    - workspacePath: <project-root>
    - environmentName: <environment>
 
-2. **Get Postgres connection details** using Railway MCP `list-variables` tool:
-   - workspacePath: <project-root>
-   - service: Postgres
-   - environment: <environment>
-   - kv: true
-
-   Extract `DATABASE_PUBLIC_URL` from the output.
-
-3. **Ensure output directory exists:**
+2. **Ensure output directory exists:**
    ```bash
    mkdir -p <project-root>/.claude/local
    ```
 
-4. **Run pg_dump:**
+3. **Run pg_dump — credentials piped from Railway CLI** (never write credential values in commands):
    ```bash
-   pg_dump "<DATABASE_PUBLIC_URL>" \
+   VARS=$(railway variables -s Postgres -e <environment> --kv 2>/dev/null) && \
+   export PGPASSWORD=$(echo "$VARS" | grep '^PGPASSWORD=' | cut -d= -f2-) && \
+   PGUSER=$(echo "$VARS" | grep '^PGUSER=' | cut -d= -f2-) && \
+   PGDATABASE=$(echo "$VARS" | grep '^PGDATABASE=' | cut -d= -f2-) && \
+   DB_URL=$(echo "$VARS" | grep '^DATABASE_PUBLIC_URL=' | cut -d= -f2-) && \
+   PGHOST=$(echo "$DB_URL" | sed 's|postgresql://[^@]*@||;s|:.*||') && \
+   PGPORT=$(echo "$DB_URL" | sed 's|.*:||;s|/.*||') && \
+   pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
      --no-owner --no-acl -F c \
-     -f <project-root>/.claude/local/<project>-<environment>-backup-$(date +%Y%m%d-%H%M%S).dump
+     | gzip > <project-root>/.claude/local/<project>-<environment>-backup-$(date +%Y%m%d-%H%M%S).dump.gz
    ```
 
-5. **Verify** the backup file exists and report path + size to the user.
+   This reads credentials from `railway variables` into shell vars at runtime — no secrets ever appear in the command text.
+
+4. **Verify** the backup file exists and report path + size to the user.
 
 ## Notes
 

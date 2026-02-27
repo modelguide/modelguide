@@ -1,5 +1,5 @@
 ---
-name: local:db-restore
+name: mg-local-db-restore
 description: Trigger phrases - "reset local db", "recreate local postgres", "restore dump to local", "reset local database", "load backup locally"
 ---
 
@@ -11,14 +11,14 @@ Reset the local Docker Postgres and restore it from a `.dump` backup file.
 
 Ask the user if not provided:
 
-- **backup file** — path to a `.dump` file. If not specified, list files matching `.claude/local/*.dump` and ask the user to pick one.
+- **backup file** — path to a `.dump.gz` file. If not specified, list files matching `.claude/local/*.dump.gz` and ask the user to pick one.
 
 ## Procedure
 
 ### 1. List available backups (if no file specified)
 
 ```bash
-ls -lh .claude/local/*.dump
+ls -lh .claude/local/*.dump.gz
 ```
 
 Ask the user which backup to use.
@@ -62,10 +62,11 @@ Read `docker-compose.yml` at the project root and extract:
 
 ### 7. Restore the dump
 
+Never pass credentials in command-line arguments. Use `PGPASSWORD` as an inline env var:
+
 ```bash
-pg_restore --clean --if-exists --no-owner --no-acl \
-  -d "postgresql://<user>:<password>@localhost:<port>/<db>" \
-  <backup-file>
+gunzip -c <backup-file> | PGPASSWORD=<password> pg_restore --clean --if-exists --no-owner --no-acl \
+  -h localhost -p <port> -U <user> -d <db>
 ```
 
 ### 8. Verify restoration
@@ -73,7 +74,7 @@ pg_restore --clean --if-exists --no-owner --no-acl \
 Query `pg_tables` via psql to confirm tables exist:
 
 ```bash
-psql "postgresql://<user>:<password>@localhost:<port>/<db>" \
+PGPASSWORD=<password> psql -h localhost -p <port> -U <user> -d <db> \
   -c "SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;"
 ```
 

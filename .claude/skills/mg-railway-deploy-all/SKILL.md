@@ -1,5 +1,5 @@
 ---
-name: railway:deploy-all
+name: mg-railway-deploy-all
 description: Deploy all ModelGuide services (API, UI, LB) to a Railway environment. Use when the user asks to "deploy all", "deploy to railway", "deploy services", "deploy everything", or "deploy all to environment".
 ---
 
