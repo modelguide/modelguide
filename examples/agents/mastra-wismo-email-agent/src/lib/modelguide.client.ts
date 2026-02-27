@@ -112,9 +112,37 @@ export function buildEmailUserMessage(email: EmailContext): MessageData {
   };
 }
 
+const REPLY_START = "---REPLY_START---";
+const REPLY_END = "---REPLY_END---";
+
+/**
+ * Split step text containing reply delimiters into separate reasoning and reply messages.
+ * If delimiters are present, returns [reasoning, cleanReply] (either may be empty/omitted).
+ * If no delimiters, returns the original text as a single entry.
+ */
+function splitReasoningAndReply(text: string): string[] {
+  const startIdx = text.indexOf(REPLY_START);
+  const endIdx = text.indexOf(REPLY_END);
+
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    return [text];
+  }
+
+  const parts: string[] = [];
+
+  const reasoning = text.slice(0, startIdx).trim();
+  if (reasoning) parts.push(reasoning);
+
+  const reply = text.slice(startIdx + REPLY_START.length, endIdx).trim();
+  if (reply) parts.push(reply);
+
+  return parts;
+}
+
 /**
  * Extract MessageData[] from a single agent step.
- * Returns 0, 1, or 2 messages (text and/or tool calls — split for transparency).
+ * Returns 0+ messages: reasoning text, reply text (split from delimiters),
+ * and/or tool calls — each as a separate message for transparency.
  */
 export function extractStepMessages(
   step: Step,
@@ -144,13 +172,21 @@ export function extractStepMessages(
   }
 
   if (step.text) {
-    msgs.push({ role: "assistant", content: step.text, occurredAt });
+    const parts = splitReasoningAndReply(step.text);
+    let offsetMs = 0;
+    for (const part of parts) {
+      const partOccurredAt = occurredAt && offsetMs
+        ? new Date(new Date(occurredAt).getTime() + offsetMs).toISOString()
+        : occurredAt;
+      msgs.push({ role: "assistant", content: part, occurredAt: partOccurredAt });
+      offsetMs += 1;
+    }
   }
   if (toolCalls.length > 0) {
-    // Offset tool calls by 1ms so they always sort after the reasoning text
-    // when both share the same occurredAt — avoids relying on insertion order.
+    // Offset tool calls so they always sort after text messages
+    // when sharing the same occurredAt — avoids relying on insertion order.
     const toolOccurredAt = occurredAt
-      ? new Date(new Date(occurredAt).getTime() + 1).toISOString()
+      ? new Date(new Date(occurredAt).getTime() + msgs.length).toISOString()
       : undefined;
     msgs.push({ role: "assistant", toolCalls, occurredAt: toolOccurredAt });
   }

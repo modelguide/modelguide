@@ -34,3 +34,4 @@ coverage/
 
 # MSW
 public/mockServiceWorker.js
+.tsbuildinfo
