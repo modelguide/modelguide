@@ -466,6 +466,52 @@ describe("Tool sync", () => {
     }
   });
 
+  test("T10: insert and schema update on same connector in single sync", async () => {
+    // Delete one tool and corrupt another's schema on the same connector
+    await hardDeleteTool(s.orgAMedusaConnectorId, "list_products");
+    await forApp(async (tx) => {
+      const [tool] = await tx
+        .select({ id: connectorTools.id })
+        .from(connectorTools)
+        .where(
+          and(
+            eq(connectorTools.connectorId, s.orgAMedusaConnectorId),
+            eq(connectorTools.slug, "get_product"),
+            isNull(connectorTools.deletedAt),
+          ),
+        );
+      await tx
+        .update(connectorTools)
+        .set({ toolSchema: { stale: true } })
+        .where(eq(connectorTools.id, tool.id));
+    });
+
+    await syncCatalogAndTools();
+
+    // Deleted tool was restored
+    const restored = await findLiveTool(
+      s.orgAMedusaConnectorId,
+      "list_products",
+    );
+    expect(restored).toBeDefined();
+
+    // Stale schema was corrected
+    const [updated] = await forApp((tx) =>
+      tx
+        .select({ toolSchema: connectorTools.toolSchema })
+        .from(connectorTools)
+        .where(
+          and(
+            eq(connectorTools.connectorId, s.orgAMedusaConnectorId),
+            eq(connectorTools.slug, "get_product"),
+            isNull(connectorTools.deletedAt),
+          ),
+        ),
+    );
+    expect(updated.toolSchema).not.toEqual({ stale: true });
+    expect((updated.toolSchema as Record<string, unknown>).type).toBe("object");
+  });
+
   test("T9: newly inserted tool has correct full metadata", async () => {
     await hardDeleteTool(s.orgAMedusaConnectorId, "complete_cart");
 
@@ -616,6 +662,89 @@ describe("Agent auto-assignment", () => {
     for (const { agentId } of agentsWithMedusa) {
       const assignments = await findAssignment(agentId, restoredTool.id);
       expect(assignments.length).toBe(1);
+    }
+  });
+
+  test("A7: new tool on second connector instance does not leak to agent using only the first", async () => {
+    // Create a second Medusa connector instance in the same org
+    const [secondMedusa] = await forApp((tx) =>
+      tx
+        .insert(connectors)
+        .values({
+          organizationId: s.orgA.id,
+          connectorCatalogId: s.medusaCatalogId,
+          name: "GlowBox Wholesale",
+          slug: "glowbox_wholesale",
+          isActive: true,
+        })
+        .returning({ id: connectors.id }),
+    );
+
+    // Sync so the second connector gets its tools populated
+    await syncCatalogAndTools();
+
+    // Create a fresh agent assigned to the SECOND connector only
+    const [freshAgent] = await forApp((tx) =>
+      tx
+        .insert(agents)
+        .values({
+          organizationId: s.orgA.id,
+          name: "Sync Test Agent (Wholesale Only)",
+          slug: "sync_test_wholesale_only",
+          modality: "text",
+          isActive: true,
+        })
+        .returning({ id: agents.id }),
+    );
+
+    const secondMedusaTool = await findLiveTool(
+      secondMedusa.id,
+      "list_products",
+    );
+    await forApp((tx) =>
+      tx.insert(agentConnectorTools).values({
+        agentId: freshAgent.id,
+        connectorToolId: secondMedusaTool.id,
+        isEnabled: true,
+        requiresConfirmation: false,
+      }),
+    );
+
+    try {
+      // Delete a tool from the FIRST Medusa connector and re-sync
+      await hardDeleteTool(s.orgAMedusaConnectorId, "create_cart");
+      await syncCatalogAndTools();
+
+      const restoredTool = await findLiveTool(
+        s.orgAMedusaConnectorId,
+        "create_cart",
+      );
+
+      // Fresh agent (second connector only) must NOT get the first connector's tool
+      const crossAssignments = await findAssignment(
+        freshAgent.id,
+        restoredTool.id,
+      );
+      expect(crossAssignments.length).toBe(0);
+
+      // Original agent (first connector) DOES get it
+      const correctAssignments = await findAssignment(
+        s.orgAAgentId,
+        restoredTool.id,
+      );
+      expect(correctAssignments.length).toBe(1);
+    } finally {
+      // Cleanup: remove agent, its assignments, second connector's tools and the connector
+      await forApp(async (tx) => {
+        await tx
+          .delete(agentConnectorTools)
+          .where(eq(agentConnectorTools.agentId, freshAgent.id));
+        await tx.delete(agents).where(eq(agents.id, freshAgent.id));
+        await tx
+          .delete(connectorTools)
+          .where(eq(connectorTools.connectorId, secondMedusa.id));
+        await tx.delete(connectors).where(eq(connectors.id, secondMedusa.id));
+      });
     }
   });
 

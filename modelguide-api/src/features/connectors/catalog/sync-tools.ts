@@ -102,10 +102,7 @@ async function syncTools(): Promise<SyncResult> {
     );
   }
 
-  // Single transaction for atomicity. If connector/org count grows significantly,
-  // consider chunking per connector to reduce lock duration during startup.
   return forApp(async (tx) => {
-    // 1. Load all active connectors with their catalog slug
     const allConnectors = await tx
       .select({
         id: connectors.id,
@@ -119,77 +116,61 @@ async function syncTools(): Promise<SyncResult> {
       )
       .where(eq(connectors.isActive, true));
 
-    if (allConnectors.length === 0)
-      return { inserted: 0, updated: 0, softDeleted: 0, agentLinks: 0 };
+    let inserted = 0;
+    let updated = 0;
+    let softDeleted = 0;
+    let agentLinks = 0;
 
-    // 2. Load all existing live (non-deleted) connector_tools
-    const connectorIds = allConnectors.map((c) => c.id);
-    const existingTools = await tx
-      .select({
-        id: connectorTools.id,
-        connectorId: connectorTools.connectorId,
-        slug: connectorTools.slug,
-        description: connectorTools.description,
-        toolSchema: connectorTools.toolSchema,
-      })
-      .from(connectorTools)
-      .where(
-        and(
-          inArray(connectorTools.connectorId, connectorIds),
-          isNull(connectorTools.deletedAt),
-        ),
-      );
+    const connectorsWithTools = allConnectors.filter((c) =>
+      manifestToolMap.has(c.catalogSlug),
+    );
 
-    // Group existing tools by connectorId → slug → row
-    const existingByConnector = new Map<
-      string,
-      Map<string, (typeof existingTools)[number]>
-    >();
-    for (const row of existingTools) {
-      let map = existingByConnector.get(row.connectorId);
-      if (!map) {
-        map = new Map();
-        existingByConnector.set(row.connectorId, map);
-      }
-      map.set(row.slug, row);
-    }
+    for (const connector of connectorsWithTools) {
+      const catalogTools = manifestToolMap.get(connector.catalogSlug)!;
 
-    // 3. Diff: collect inserts, updates, and soft-deletes
-    const missingToolRows: Array<{
-      organizationId: string;
-      connectorId: string;
-      name: string;
-      slug: string;
-      description: string | null;
-      toolSchema: Record<string, unknown>;
-      timeoutSeconds: number;
-      isActive: true;
-    }> = [];
+      // Load existing live tools for this connector
+      const existing = await tx
+        .select({
+          id: connectorTools.id,
+          slug: connectorTools.slug,
+          description: connectorTools.description,
+          toolSchema: connectorTools.toolSchema,
+        })
+        .from(connectorTools)
+        .where(
+          and(
+            eq(connectorTools.connectorId, connector.id),
+            isNull(connectorTools.deletedAt),
+          ),
+        );
 
-    const updateOps: Array<{
-      id: string;
-      description?: string;
-      toolSchema?: Record<string, unknown>;
-    }> = [];
-
-    // Track tool IDs to soft-delete per connector
-    const toolIdsToDelete: string[] = [];
-
-    for (const connector of allConnectors) {
-      const catalogTools = manifestToolMap.get(connector.catalogSlug);
-      if (!catalogTools) continue;
-
-      const existing = existingByConnector.get(connector.id) ?? new Map();
+      const bySlug = new Map(existing.map((r) => [r.slug, r]));
       const manifestSlugs = new Set<string>();
+
+      const inserts: Array<{
+        organizationId: string;
+        connectorId: string;
+        name: string;
+        slug: string;
+        description: string | null;
+        toolSchema: Record<string, unknown>;
+        timeoutSeconds: number;
+        isActive: true;
+      }> = [];
+
+      const updates: Array<{
+        id: string;
+        description?: string;
+        toolSchema?: Record<string, unknown>;
+      }> = [];
 
       for (const tool of catalogTools) {
         const slug = toolSlug(tool.name);
         manifestSlugs.add(slug);
 
-        const dbRow = existing.get(slug);
+        const dbRow = bySlug.get(slug);
         if (!dbRow) {
-          // New tool → INSERT
-          missingToolRows.push({
+          inserts.push({
             organizationId: connector.organizationId,
             connectorId: connector.id,
             name: tool.name,
@@ -200,7 +181,6 @@ async function syncTools(): Promise<SyncResult> {
             isActive: true,
           });
         } else {
-          // Existing tool — check for schema/description drift
           const schemaChanged =
             stableStringify(dbRow.toolSchema) !==
             stableStringify(tool.inputSchema);
@@ -208,95 +188,80 @@ async function syncTools(): Promise<SyncResult> {
             (dbRow.description ?? "") !== (tool.description ?? "");
 
           if (schemaChanged || descChanged) {
-            const update: (typeof updateOps)[number] = { id: dbRow.id };
+            const update: (typeof updates)[number] = { id: dbRow.id };
             if (schemaChanged) update.toolSchema = tool.inputSchema;
             if (descChanged) update.description = tool.description;
-            updateOps.push(update);
+            updates.push(update);
           }
         }
       }
 
-      // Tools in DB but not in manifest → soft-delete
-      for (const [slug, dbRow] of existing) {
-        if (!manifestSlugs.has(slug)) {
-          toolIdsToDelete.push(dbRow.id);
+      // Slugs in DB but not in manifest → soft-delete
+      const toDelete = existing
+        .filter((r) => !manifestSlugs.has(r.slug))
+        .map((r) => r.id);
+
+      // Apply inserts
+      if (inserts.length > 0) {
+        const rows = await tx
+          .insert(connectorTools)
+          .values(inserts)
+          .onConflictDoNothing()
+          .returning({
+            id: connectorTools.id,
+            slug: connectorTools.slug,
+          });
+        inserted += rows.length;
+
+        // Auto-assign each new tool to agents already using this connector
+        for (const row of rows) {
+          const catalogTool = catalogTools.find(
+            (t) => toolSlug(t.name) === row.slug,
+          );
+          agentLinks += await autoAssignTool(
+            tx,
+            connector.id,
+            row.id,
+            catalogTool?.defaultRequiresConfirmation ?? false,
+          );
         }
       }
-    }
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let softDeletedCount = 0;
+      // Apply updates (preserve isActive, timeoutSeconds)
+      await Promise.all(
+        updates.map((op) => {
+          const setValues: {
+            description?: string;
+            toolSchema?: Record<string, unknown>;
+          } = {};
+          if (op.description !== undefined)
+            setValues.description = op.description;
+          if (op.toolSchema !== undefined) setValues.toolSchema = op.toolSchema;
 
-    // 4. Batch insert new tools
-    let insertedTools: Array<{
-      id: string;
-      connectorId: string;
-      slug: string;
-    }> = [];
+          return tx
+            .update(connectorTools)
+            .set(setValues)
+            .where(eq(connectorTools.id, op.id));
+        }),
+      );
+      updated += updates.length;
 
-    if (missingToolRows.length > 0) {
-      insertedTools = await tx
-        .insert(connectorTools)
-        .values(missingToolRows)
-        .onConflictDoNothing()
-        .returning({
-          id: connectorTools.id,
-          connectorId: connectorTools.connectorId,
-          slug: connectorTools.slug,
-        });
-      insertedCount = insertedTools.length;
-    }
-
-    // 5. Apply updates (preserve isActive, timeoutSeconds)
-    await Promise.all(
-      updateOps.map((op) => {
-        const setValues: {
-          description?: string;
-          toolSchema?: Record<string, unknown>;
-        } = {};
-        if (op.description !== undefined)
-          setValues.description = op.description;
-        if (op.toolSchema !== undefined) setValues.toolSchema = op.toolSchema;
-
-        return tx
+      // Soft-delete removed tools + clean up orphaned agent assignments
+      if (toDelete.length > 0) {
+        const deleted = await tx
           .update(connectorTools)
-          .set(setValues)
-          .where(eq(connectorTools.id, op.id));
-      }),
-    );
-    updatedCount = updateOps.length;
+          .set({ deletedAt: new Date() })
+          .where(inArray(connectorTools.id, toDelete))
+          .returning({ id: connectorTools.id });
+        softDeleted += deleted.length;
 
-    // 6. Soft-delete removed tools + clean up orphaned agent assignments
-    if (toolIdsToDelete.length > 0) {
-      const deleted = await tx
-        .update(connectorTools)
-        .set({ deletedAt: new Date() })
-        .where(inArray(connectorTools.id, toolIdsToDelete))
-        .returning({ id: connectorTools.id });
-      softDeletedCount = deleted.length;
-
-      // Hard-delete orphaned agent_connector_tools (ON DELETE CASCADE
-      // does not fire for soft deletes)
-      if (softDeletedCount > 0) {
         await tx
           .delete(agentConnectorTools)
-          .where(inArray(agentConnectorTools.connectorToolId, toolIdsToDelete));
+          .where(inArray(agentConnectorTools.connectorToolId, toDelete));
       }
     }
 
-    // 7. Auto-assign newly inserted tools to agents using the connector
-    let agentLinks = 0;
-    if (insertedTools.length > 0) {
-      agentLinks = await findAndLinkAgents(tx, insertedTools, manifestToolMap);
-    }
-
-    return {
-      inserted: insertedCount,
-      updated: updatedCount,
-      softDeleted: softDeletedCount,
-      agentLinks,
-    };
+    return { inserted, updated, softDeleted, agentLinks };
   });
 }
 
@@ -304,53 +269,15 @@ async function syncTools(): Promise<SyncResult> {
 // Agent auto-assignment
 // ============================================================================
 
-/**
- * For each newly inserted connector_tool, find agents that already use
- * other tools from the same connector and auto-assign the new tool.
- */
-async function findAndLinkAgents(
+/** Auto-assign a newly inserted tool to agents already using this connector. */
+async function autoAssignTool(
   tx: Transaction,
-  insertedTools: Array<{
-    id: string;
-    connectorId: string;
-    slug: string;
-  }>,
-  manifestToolMap: Map<string, CatalogTool[]>,
+  connectorId: string,
+  newToolId: string,
+  requiresConfirmation: boolean,
 ): Promise<number> {
-  // Build tool slug → defaultRequiresConfirmation lookup
-  const confirmationDefaults = new Map<string, boolean>();
-  for (const [, tools] of manifestToolMap) {
-    for (const tool of tools) {
-      confirmationDefaults.set(
-        toolSlug(tool.name),
-        tool.defaultRequiresConfirmation,
-      );
-    }
-  }
-
-  // Group inserted tools by connectorId
-  const toolsByConnector = new Map<
-    string,
-    Array<{ id: string; slug: string }>
-  >();
-  for (const tool of insertedTools) {
-    let arr = toolsByConnector.get(tool.connectorId);
-    if (!arr) {
-      arr = [];
-      toolsByConnector.set(tool.connectorId, arr);
-    }
-    arr.push(tool);
-  }
-
-  const affectedConnectorIds = [...toolsByConnector.keys()];
-
-  // Find existing agent assignments for tools belonging to affected connectors
-  // Exclude soft-deleted tools so we only match live assignments
-  const existingAssignments = await tx
-    .select({
-      agentId: agentConnectorTools.agentId,
-      connectorId: connectorTools.connectorId,
-    })
+  const agentRows = await tx
+    .selectDistinct({ agentId: agentConnectorTools.agentId })
     .from(agentConnectorTools)
     .innerJoin(
       connectorTools,
@@ -359,48 +286,20 @@ async function findAndLinkAgents(
         isNull(connectorTools.deletedAt),
       ),
     )
-    .where(inArray(connectorTools.connectorId, affectedConnectorIds));
+    .where(eq(connectorTools.connectorId, connectorId));
 
-  // Build connectorId → Set<agentId>
-  const agentsByConnector = new Map<string, Set<string>>();
-  for (const row of existingAssignments) {
-    let set = agentsByConnector.get(row.connectorId);
-    if (!set) {
-      set = new Set();
-      agentsByConnector.set(row.connectorId, set);
-    }
-    set.add(row.agentId);
-  }
-
-  // Build agent_connector_tools insert values
-  const linkValues: Array<{
-    agentId: string;
-    connectorToolId: string;
-    isEnabled: boolean;
-    requiresConfirmation: boolean;
-  }> = [];
-
-  for (const [connectorId, newTools] of toolsByConnector) {
-    const agentIds = agentsByConnector.get(connectorId);
-    if (!agentIds || agentIds.size === 0) continue;
-
-    for (const agentId of agentIds) {
-      for (const tool of newTools) {
-        linkValues.push({
-          agentId,
-          connectorToolId: tool.id,
-          isEnabled: true,
-          requiresConfirmation: confirmationDefaults.get(tool.slug) ?? false,
-        });
-      }
-    }
-  }
-
-  if (linkValues.length === 0) return 0;
+  if (agentRows.length === 0) return 0;
 
   const inserted = await tx
     .insert(agentConnectorTools)
-    .values(linkValues)
+    .values(
+      agentRows.map((r) => ({
+        agentId: r.agentId,
+        connectorToolId: newToolId,
+        isEnabled: true,
+        requiresConfirmation,
+      })),
+    )
     .onConflictDoNothing()
     .returning({ id: agentConnectorTools.id });
 

@@ -73,12 +73,11 @@ When a tool is removed from a connector manifest, the sync sets `deleted_at` on 
 
 ### Scalability
 
-The sync runs inside a single `forApp()` transaction. Inserts, soft-deletes, and catalog upserts use batch or parallel operations. Schema-drift updates are dispatched concurrently via `Promise.all` (each stale tool gets its own `UPDATE … WHERE id = ?` fired in parallel within the transaction). This is acceptable at current scale — a handful of connectors × ~10 tools each means at most ~100 concurrent updates on a deployment where every schema changes simultaneously (unlikely in practice).
+The sync processes connectors individually within a single `forApp()` transaction, querying existing tools per connector and applying inserts, updates, and soft-deletes in small batches. Schema-drift updates are dispatched concurrently via `Promise.all` within each connector's iteration. At current scale (~5–10 connectors, ~18 tools total), this adds negligible overhead compared to a bulk approach.
 
-If the platform grows to hundreds of organizations with many connectors, the single-transaction scope may cause noticeable lock duration at startup. At that point, consider:
+If the platform grows to hundreds of connectors, the per-connector queries remain efficient but the single-transaction scope may cause noticeable lock duration. At that point, consider:
 
-- **Batched updates** — consolidate concurrent per-row updates into a single `UPDATE FROM (VALUES …)` statement.
-- **Per-connector chunking** — split the transaction per connector to reduce lock contention.
+- **Parallel execution** — process connectors concurrently with `Promise.all` instead of sequentially.
 - **Deferred sync** — move sync to a post-startup background job so the server can begin serving requests immediately.
 
 ## Consequences
