@@ -9,7 +9,7 @@ import {
   resolveConnectorConfig,
 } from "@features/connectors/connectors.service";
 import { Errors } from "@lib/errors";
-import { inArray } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 import type { ResolvedTool } from "./mcp.types";
 
 /**
@@ -52,7 +52,12 @@ export async function getAgentTools(
     tx
       .select()
       .from(connectorTools)
-      .where(inArray(connectorTools.connectorId, connectorIds)),
+      .where(
+        and(
+          inArray(connectorTools.connectorId, connectorIds),
+          isNull(connectorTools.deletedAt),
+        ),
+      ),
   );
 
   const toolIndex = new Map<string, (typeof toolRows)[number]>();

@@ -21,7 +21,7 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
@@ -419,7 +419,10 @@ export async function listAgentConnectors(orgId: string, agentId: string) {
       .from(agentConnectorTools)
       .innerJoin(
         connectorTools,
-        eq(agentConnectorTools.connectorToolId, connectorTools.id),
+        and(
+          eq(agentConnectorTools.connectorToolId, connectorTools.id),
+          isNull(connectorTools.deletedAt),
+        ),
       )
       .innerJoin(connectors, eq(connectorTools.connectorId, connectors.id))
       .innerJoin(
@@ -501,6 +504,7 @@ export async function assignConnectorToAgent(
         and(
           eq(connectorTools.connectorId, data.connectorId),
           inArray(connectorTools.slug, toolSlugs),
+          isNull(connectorTools.deletedAt),
         ),
       );
 
@@ -556,7 +560,12 @@ export async function updateAgentConnectorTools(
     const cTools = await tx
       .select()
       .from(connectorTools)
-      .where(eq(connectorTools.connectorId, connectorId));
+      .where(
+        and(
+          eq(connectorTools.connectorId, connectorId),
+          isNull(connectorTools.deletedAt),
+        ),
+      );
 
     const slugToId = new Map(cTools.map((t) => [t.slug, t.id]));
     let updatedCount = 0;
@@ -607,7 +616,12 @@ export async function removeConnectorFromAgent(
     const cTools = await tx
       .select({ id: connectorTools.id })
       .from(connectorTools)
-      .where(eq(connectorTools.connectorId, connectorId));
+      .where(
+        and(
+          eq(connectorTools.connectorId, connectorId),
+          isNull(connectorTools.deletedAt),
+        ),
+      );
 
     if (cTools.length === 0) {
       throw Errors.connectorNotFound(connectorId);

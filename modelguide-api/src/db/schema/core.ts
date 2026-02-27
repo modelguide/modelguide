@@ -2,7 +2,7 @@
  * Core database table definitions
  */
 
-import { relations } from "drizzle-orm";
+import { isNull, relations } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -282,15 +282,15 @@ export const connectorTools = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
       () => new Date(),
     ),
   },
   (table) => [
-    uniqueIndex("connector_tools_connector_slug_unique").on(
-      table.connectorId,
-      table.slug,
-    ),
+    uniqueIndex("connector_tools_connector_slug_unique")
+      .on(table.connectorId, table.slug)
+      .where(isNull(table.deletedAt)),
     index("connector_tools_org_idx").on(table.organizationId),
     index("connector_tools_connector_idx").on(table.connectorId),
   ],

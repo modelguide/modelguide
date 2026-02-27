@@ -17,7 +17,8 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, asc, count, eq } from "drizzle-orm";
+import { toolSlug } from "@lib/slugify";
+import { and, asc, count, eq, isNull } from "drizzle-orm";
 import { getConnectorManifest } from "./catalog/registry";
 import type { HealthCheckResult } from "./catalog/types";
 
@@ -154,7 +155,7 @@ export async function createConnector(
           organizationId: orgId,
           connectorId: connector.id,
           name: tool.name,
-          slug: tool.name.toLowerCase().replace(/\s+/g, "_"),
+          slug: toolSlug(tool.name),
           description: tool.description,
           toolSchema: tool.inputSchema,
           timeoutSeconds: tool.defaultTimeoutSeconds,
@@ -218,7 +219,12 @@ export async function listConnectorTools(orgId: string, connectorId: string) {
     tx
       .select()
       .from(connectorTools)
-      .where(eq(connectorTools.connectorId, connectorId))
+      .where(
+        and(
+          eq(connectorTools.connectorId, connectorId),
+          isNull(connectorTools.deletedAt),
+        ),
+      )
       .orderBy(asc(connectorTools.name)),
   );
 }
@@ -232,7 +238,9 @@ export async function updateConnectorTool(
     tx
       .update(connectorTools)
       .set(data)
-      .where(eq(connectorTools.id, toolId))
+      .where(
+        and(eq(connectorTools.id, toolId), isNull(connectorTools.deletedAt)),
+      )
       .returning(),
   );
 
