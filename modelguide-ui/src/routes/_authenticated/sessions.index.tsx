@@ -4,6 +4,7 @@ import { MessageSquare } from 'lucide-react'
 import { useState } from 'react'
 import { PageHeader } from '~/components/ui/page-header'
 import { Pagination } from '~/components/ui/pagination'
+import { Toggle } from '~/components/ui/toggle'
 import {
   type SessionFilters,
   SessionsFilters,
@@ -13,6 +14,8 @@ import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
 import type { SessionListItem } from '~/schemas/sessions'
 
+const AUTO_REFRESH_KEY = 'modelguide-sessions-autorefresh'
+
 export const Route = createFileRoute('/_authenticated/sessions/')({
   component: SessionsPage,
 })
@@ -20,7 +23,16 @@ export const Route = createFileRoute('/_authenticated/sessions/')({
 function SessionsPage() {
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<SessionFilters>({})
+  const [autoRefresh, setAutoRefresh] = useState(
+    () => localStorage.getItem(AUTO_REFRESH_KEY) === 'true',
+  )
   const pageSize = 20
+
+  const toggleAutoRefresh = () => {
+    const next = !autoRefresh
+    localStorage.setItem(AUTO_REFRESH_KEY, String(next))
+    setAutoRefresh(next)
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['sessions', page, filters],
@@ -37,6 +49,7 @@ function SessionsPage() {
         .get('sessions', { searchParams: params })
         .json<PaginatedResponse<SessionListItem>>()
     },
+    refetchInterval: autoRefresh ? 15_000 : false,
   })
 
   const handleFiltersChange = (newFilters: SessionFilters) => {
@@ -56,6 +69,7 @@ function SessionsPage() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <SessionsFilters filters={filters} onFiltersChange={handleFiltersChange} />
+        <Toggle checked={autoRefresh} onChange={toggleAutoRefresh} label="Auto-refresh" />
       </div>
 
       <SessionsTable
