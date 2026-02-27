@@ -25,6 +25,23 @@ const resendWebhookPayloadSchema = z.object({
 
 export const webhookRouter = new Hono();
 
+// Deduplicate webhook deliveries — Svix retries if we don't respond within its
+// timeout, but agent execution takes 10-30s. Track processed email_ids so retries
+// are rejected immediately. Entries expire after 1 hour to prevent unbounded growth.
+const DEDUP_TTL_MS = 60 * 60 * 1000;
+const processedEmails = new Map<string, number>();
+
+function dedup(emailId: string): boolean {
+  const now = Date.now();
+  // Lazy cleanup on every call — cheap at low volume
+  for (const [id, ts] of processedEmails) {
+    if (now - ts > DEDUP_TTL_MS) processedEmails.delete(id);
+  }
+  if (processedEmails.has(emailId)) return false;
+  processedEmails.set(emailId, now);
+  return true;
+}
+
 webhookRouter.post("/", async (c) => {
   let rawBody: string;
   try {
@@ -64,6 +81,12 @@ webhookRouter.post("/", async (c) => {
 
   const { email_id, to: webhookTo } = parseResult.data.data;
 
+  // Reject duplicate webhook deliveries (Svix retries on timeout)
+  if (!dedup(email_id)) {
+    logger.info({ email_id }, "Duplicate webhook delivery — skipping");
+    return c.json({ skipped: true, reason: "duplicate" });
+  }
+
   // Early inbox filter — use the to field from the webhook payload so we can skip
   // before making any downstream API calls (Resend fetch, ModelGuide, MCP).
   const inboxEmail = config.INBOX_EMAIL.toLowerCase();
@@ -77,6 +100,20 @@ webhookRouter.post("/", async (c) => {
     return c.json({ skipped: true });
   }
 
+  // Acknowledge the webhook immediately so Svix doesn't retry while the agent runs.
+  // All heavy processing (email fetch, agent execution, reply send) happens async.
+  processEmail(email_id, webhookTo, parseResult.data.data).catch((err) =>
+    logger.error({ err, email_id }, "Background email processing failed"),
+  );
+
+  return c.json({ accepted: true, email_id });
+});
+
+async function processEmail(
+  email_id: string,
+  _webhookTo: string[],
+  webhookData: { from: string; to: string[]; subject: string; created_at: string },
+) {
   logger.info({ email_id }, "Fetching full email content");
 
   // Webhook payload does not include body — must fetch separately via Resend REST API
@@ -87,7 +124,7 @@ webhookRouter.post("/", async (c) => {
   if (!emailRes.ok) {
     const errText = await emailRes.text();
     logger.error({ status: emailRes.status, body: errText, email_id }, "Failed to fetch email content");
-    return c.json({ error: "Failed to fetch email content" }, 500);
+    return;
   }
 
   const fullEmail = await emailRes.json() as {
@@ -104,10 +141,10 @@ webhookRouter.post("/", async (c) => {
   logger.debug({ fullEmail }, "Full email content fetched");
 
   // All email metadata comes from the fetched payload, not the webhook
-  const from = fullEmail.from ?? parseResult.data.data.from;
-  const to = fullEmail.to ?? parseResult.data.data.to;
-  const subject = fullEmail.subject ?? parseResult.data.data.subject;
-  const receivedAt = fullEmail.created_at ?? parseResult.data.data.created_at;
+  const from = fullEmail.from ?? webhookData.from;
+  const to = fullEmail.to ?? webhookData.to;
+  const subject = fullEmail.subject ?? webhookData.subject;
+  const receivedAt = fullEmail.created_at ?? webhookData.created_at;
 
   const { email: senderEmail } = extractEmailAddress(from);
 
@@ -158,7 +195,7 @@ webhookRouter.post("/", async (c) => {
     sessionId = await createSession({ senderEmail, externalId: email_id });
   } catch (err) {
     logger.error({ err }, "Failed to pre-create ModelGuide session");
-    return c.json({ error: "Failed to initialize session" }, 500);
+    return;
   }
 
   // Store the inbound email immediately — persisted even if the agent crashes
@@ -196,6 +233,4 @@ webhookRouter.post("/", async (c) => {
   patchSessionStatus(sessionId, status).catch((err) =>
     logger.error({ err, sessionId }, "Background session status patch failed"),
   );
-
-  return c.json({ success: true, session_id: sessionId, resend_id: resendId, escalated: isEscalated, ticket_id: ticketId });
-});
+}

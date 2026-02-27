@@ -20,6 +20,30 @@ export const agentOutputSchema = z.object({
 
 export type AgentOutput = z.infer<typeof agentOutputSchema>;
 
+const FALLBACK_REPLY = "We received your message and will follow up shortly.";
+
+const REPLY_START = "---REPLY_START---";
+const REPLY_END = "---REPLY_END---";
+
+/**
+ * Extract the email reply from the agent's text using delimiters.
+ * Falls back to the full text (stripped of delimiters) if markers are missing.
+ */
+function extractReply(text: string | undefined): string {
+  if (!text) return FALLBACK_REPLY;
+
+  const startIdx = text.indexOf(REPLY_START);
+  const endIdx = text.indexOf(REPLY_END);
+
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    return text.slice(startIdx + REPLY_START.length, endIdx).trim();
+  }
+
+  // Delimiter missing — agent didn't follow format. Use full text as fallback.
+  logger.warn("Agent output missing REPLY delimiters — using full text");
+  return text.trim();
+}
+
 /**
  * Run the WISMO agent for a single email.
  * Manages the MCP client lifecycle, step collection, and output parsing.
@@ -60,15 +84,6 @@ export async function runWismoAgent(params: {
       toolsets,
       requestContext,
       maxSteps: 5,
-      structuredOutput: {
-        schema: agentOutputSchema,
-        // Use a separate model for structuring so the main agent retains full tool access.
-        // Anthropic ignores tools when response_format:json is active ("direct" mode),
-        // so we delegate JSON extraction to a second cheap call ("processor" mode).
-        model: "anthropic/claude-haiku-4-5-20251001",
-        errorStrategy: "fallback",
-        fallbackValue: { replyBody: "We received your message and will follow up shortly.", escalated: false },
-      },
       onStepFinish: (step) => {
         const now = Date.now();
         const latencyMs = now - stepStartMs;
@@ -89,8 +104,30 @@ export async function runWismoAgent(params: {
     const steps = result.steps as Step[];
     logger.debug({ stepsCount: steps.length, stepLatenciesMs }, "Agent steps collected");
 
-    const output = result.object as AgentOutput;
-    logger.debug({ output }, "Agent structured output received");
+    // Derive structured output deterministically from steps — no LLM parsing needed.
+    // replyBody = extracted from ---REPLY_START---/---REPLY_END--- delimiters in last step
+    // escalated/ticketId = extracted from Zendesk tool call results, if any
+    const lastTextStep = [...steps].reverse().find((s) => s.text && !s.toolCalls?.length);
+    const replyBody = extractReply(lastTextStep?.text);
+
+    let escalated = false;
+    let ticketId: number | undefined;
+
+    for (const step of steps) {
+      for (const tr of step.toolResults ?? []) {
+        if (tr.payload.toolName.includes("create_ticket")) {
+          escalated = true;
+          const res = tr.payload.result as Record<string, unknown> | undefined;
+          const id = res?.ticketId ?? res?.ticket_id ?? res?.id;
+          if (typeof id === "number") ticketId = id;
+          else if (typeof id === "string" && /^\d+$/.test(id)) ticketId = Number(id);
+        }
+      }
+    }
+
+    const output: AgentOutput = { replyBody, escalated, ticketId };
+
+    logger.debug({ output }, "Agent output derived from steps");
 
     logAgentTurns(steps, stepLatenciesMs);
     return { output, steps };
@@ -160,6 +197,21 @@ Always address the customer's specific question using the data returned by the t
 ## Tool errors
 
 Do not expose technical details. Tell the customer there is a temporary issue and the support team will follow up within 24 hours.
+
+## Output format
+
+Your final message must contain the email reply text between \`---REPLY_START---\` and \`---REPLY_END---\` delimiters. You may include reasoning or analysis before the \`---REPLY_START---\` delimiter — this will be stored internally but never sent to the customer. Example:
+
+---REPLY_START---
+Dear Customer,
+
+Your order #1042 has been shipped and is on its way.
+
+Kind regards,
+GlowBox Customer Care
+---REPLY_END---
+
+The text between the delimiters will be sent directly to the customer as-is. No markdown, no labels, no JSON — just plain email text.
 
 ## Tone
 
