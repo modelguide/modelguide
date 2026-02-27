@@ -29,11 +29,9 @@ function SessionsPage() {
   const pageSize = 20
 
   const toggleAutoRefresh = () => {
-    setAutoRefresh((prev) => {
-      const next = !prev
-      localStorage.setItem(AUTO_REFRESH_KEY, String(next))
-      return next
-    })
+    const next = !autoRefresh
+    localStorage.setItem(AUTO_REFRESH_KEY, String(next))
+    setAutoRefresh(next)
   }
 
   const { data, isLoading } = useQuery({
