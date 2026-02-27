@@ -87,6 +87,11 @@ interface SyncResult {
   agentLinks: number;
 }
 
+/** Build slug → CatalogTool lookup for a set of catalog tools. */
+function catalogBySlug(tools: CatalogTool[]): Map<string, CatalogTool> {
+  return new Map(tools.map((t) => [toolSlug(t.name), t]));
+}
+
 /** Sync tools to existing connector instances: insert, update, soft-delete. */
 async function syncTools(): Promise<SyncResult> {
   const manifests = getAllManifests();
@@ -126,7 +131,9 @@ async function syncTools(): Promise<SyncResult> {
     );
 
     for (const connector of connectorsWithTools) {
-      const catalogTools = manifestToolMap.get(connector.catalogSlug)!;
+      const toolMap = catalogBySlug(
+        manifestToolMap.get(connector.catalogSlug)!,
+      );
 
       // Load existing live tools for this connector
       const existing = await tx
@@ -144,8 +151,7 @@ async function syncTools(): Promise<SyncResult> {
           ),
         );
 
-      const bySlug = new Map(existing.map((r) => [r.slug, r]));
-      const manifestSlugs = new Set<string>();
+      const dbBySlug = new Map(existing.map((r) => [r.slug, r]));
 
       const inserts: Array<{
         organizationId: string;
@@ -164,11 +170,8 @@ async function syncTools(): Promise<SyncResult> {
         toolSchema?: Record<string, unknown>;
       }> = [];
 
-      for (const tool of catalogTools) {
-        const slug = toolSlug(tool.name);
-        manifestSlugs.add(slug);
-
-        const dbRow = bySlug.get(slug);
+      for (const [slug, tool] of toolMap) {
+        const dbRow = dbBySlug.get(slug);
         if (!dbRow) {
           inserts.push({
             organizationId: connector.organizationId,
@@ -198,7 +201,7 @@ async function syncTools(): Promise<SyncResult> {
 
       // Slugs in DB but not in manifest → soft-delete
       const toDelete = existing
-        .filter((r) => !manifestSlugs.has(r.slug))
+        .filter((r) => !toolMap.has(r.slug))
         .map((r) => r.id);
 
       // Apply inserts
@@ -215,14 +218,11 @@ async function syncTools(): Promise<SyncResult> {
 
         // Auto-assign each new tool to agents already using this connector
         for (const row of rows) {
-          const catalogTool = catalogTools.find(
-            (t) => toolSlug(t.name) === row.slug,
-          );
           agentLinks += await autoAssignTool(
             tx,
             connector.id,
             row.id,
-            catalogTool?.defaultRequiresConfirmation ?? false,
+            toolMap.get(row.slug)?.defaultRequiresConfirmation ?? false,
           );
         }
       }

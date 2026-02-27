@@ -466,6 +466,34 @@ describe("Tool sync", () => {
     }
   });
 
+  test("T9: newly inserted tool has correct full metadata", async () => {
+    await hardDeleteTool(s.orgAMedusaConnectorId, "complete_cart");
+
+    await syncCatalogAndTools();
+
+    const [tool] = await forApp((tx) =>
+      tx
+        .select()
+        .from(connectorTools)
+        .where(
+          and(
+            eq(connectorTools.connectorId, s.orgAMedusaConnectorId),
+            eq(connectorTools.slug, "complete_cart"),
+            isNull(connectorTools.deletedAt),
+          ),
+        ),
+    );
+
+    expect(tool.name).toBe("Complete Cart");
+    expect(tool.slug).toBe("complete_cart");
+    expect(tool.description).toContain("Finalize the order");
+    expect(tool.timeoutSeconds).toBe(60);
+    expect(tool.isActive).toBe(true);
+    expect(tool.deletedAt).toBeNull();
+    expect(tool.organizationId).toBe(s.orgA.id);
+    expect((tool.toolSchema as Record<string, unknown>).type).toBe("object");
+  });
+
   test("T10: insert and schema update on same connector in single sync", async () => {
     // Delete one tool and corrupt another's schema on the same connector
     await hardDeleteTool(s.orgAMedusaConnectorId, "list_products");
@@ -510,34 +538,6 @@ describe("Tool sync", () => {
     );
     expect(updated.toolSchema).not.toEqual({ stale: true });
     expect((updated.toolSchema as Record<string, unknown>).type).toBe("object");
-  });
-
-  test("T9: newly inserted tool has correct full metadata", async () => {
-    await hardDeleteTool(s.orgAMedusaConnectorId, "complete_cart");
-
-    await syncCatalogAndTools();
-
-    const [tool] = await forApp((tx) =>
-      tx
-        .select()
-        .from(connectorTools)
-        .where(
-          and(
-            eq(connectorTools.connectorId, s.orgAMedusaConnectorId),
-            eq(connectorTools.slug, "complete_cart"),
-            isNull(connectorTools.deletedAt),
-          ),
-        ),
-    );
-
-    expect(tool.name).toBe("Complete Cart");
-    expect(tool.slug).toBe("complete_cart");
-    expect(tool.description).toContain("Finalize the order");
-    expect(tool.timeoutSeconds).toBe(60);
-    expect(tool.isActive).toBe(true);
-    expect(tool.deletedAt).toBeNull();
-    expect(tool.organizationId).toBe(s.orgA.id);
-    expect((tool.toolSchema as Record<string, unknown>).type).toBe("object");
   });
 });
 
