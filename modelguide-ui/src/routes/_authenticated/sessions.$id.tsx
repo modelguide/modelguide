@@ -25,6 +25,7 @@ function SessionDetailPage() {
   } = useQuery({
     queryKey: ['sessions', id],
     queryFn: () => api.get(`sessions/${id}`).json<SessionDetailType>(),
+    refetchInterval: (query) => (query.state.data?.status === 'active' ? 10_000 : false),
   })
 
   const supportFeedback = [...(session?.feedback ?? [])]

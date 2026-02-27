@@ -190,7 +190,7 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Transcript messages={session.messages || []} />
+          <Transcript messages={session.messages || []} isActive={session.status === 'active'} />
         </CardContent>
       </Card>
 
