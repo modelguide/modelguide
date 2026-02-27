@@ -255,11 +255,17 @@ function dashboardUrl(
 }
 
 /** Medusa Admin API response types for order detail. */
+interface MedusaOrderItemVariant {
+  id: string;
+  title: string;
+}
+
 interface MedusaOrderItem {
   id: string;
   title: string;
   quantity: number;
   unit_price: number;
+  variant?: MedusaOrderItemVariant;
 }
 
 interface MedusaOrderDetail {
@@ -268,8 +274,8 @@ interface MedusaOrderDetail {
   status: string;
   total: number;
   currency_code: string;
+  email: string;
   summary: Record<string, unknown>;
-  version: number;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -313,7 +319,7 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
         offset,
         order: "-created_at",
         fields:
-          "id,display_id,status,total,currency_code,summary,version,metadata,created_at,updated_at,*items",
+          "id,display_id,status,total,currency_code,email,summary,metadata,created_at,updated_at,*items,*items.variant,*shipping_address",
       },
     });
 
@@ -375,7 +381,7 @@ export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
       offset,
       order: "-created_at",
       fields:
-        "id,display_id,status,currency_code,email,created_at,updated_at,*items,*shipping_address,*summary",
+        "id,display_id,status,total,currency_code,email,metadata,created_at,updated_at,*items,*items.variant,*shipping_address,*summary",
     },
   });
 
