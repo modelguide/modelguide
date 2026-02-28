@@ -21,6 +21,7 @@ export const listProducts = withMedusa(async (fetcher, ctx) => {
       limit: input.limit ?? 20,
       offset: input.offset ?? 0,
       q: input.query,
+      fields: "+variants.inventory_quantity",
     },
   });
   return { success: true, data };
@@ -30,6 +31,11 @@ export const getProduct = withMedusa(async (fetcher, ctx) => {
   const { productId } = ctx.input as { productId: string };
   const data = await fetcher<Record<string, unknown>>(
     `/store/products/${productId}`,
+    {
+      params: {
+        fields: "+variants.inventory_quantity",
+      },
+    },
   );
   return { success: true, data };
 });
@@ -319,7 +325,7 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
         offset,
         order: "-created_at",
         fields:
-          "id,display_id,status,total,currency_code,email,summary,metadata,created_at,updated_at,*items,*items.variant,*shipping_address",
+          "id,display_id,status,total,currency_code,email,summary,metadata,created_at,updated_at,*items,*items.variant,shipping_address.first_name,shipping_address.last_name,shipping_address.address_1,shipping_address.address_2,shipping_address.city,shipping_address.postal_code,shipping_address.country_code,shipping_address.phone",
       },
     });
 
@@ -381,7 +387,7 @@ export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
       offset,
       order: "-created_at",
       fields:
-        "id,display_id,status,total,currency_code,email,metadata,created_at,updated_at,*items,*items.variant,*shipping_address,*summary",
+        "id,display_id,status,total,currency_code,email,metadata,created_at,updated_at,*items,*items.variant,shipping_address.first_name,shipping_address.last_name,shipping_address.address_1,shipping_address.address_2,shipping_address.city,shipping_address.postal_code,shipping_address.country_code,shipping_address.phone,*summary",
     },
   });
 
