@@ -24,7 +24,7 @@ const tools: ConnectorToolDefinition[] = [
     catalog: {
       name: "List Products",
       description:
-        "Search the store catalog for products by name, brand, or category",
+        "Search the store catalog for products by name, brand, or category. Returns variant-level stock availability.",
       inputSchema: {
         type: "object",
         properties: {
@@ -56,7 +56,7 @@ const tools: ConnectorToolDefinition[] = [
     catalog: {
       name: "Get Product",
       description:
-        "Get product details (price, description, variants). Use a product ID returned by search.",
+        "Get product details (price, description, variants, inventory quantity). Use a product ID returned by search.",
       inputSchema: {
         type: "object",
         properties: {

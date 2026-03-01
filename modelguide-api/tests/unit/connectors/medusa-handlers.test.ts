@@ -100,6 +100,7 @@ describe("Medusa handlers", () => {
       expect(url).toContain("/store/products");
       expect(url).toContain("limit=20");
       expect(url).toContain("offset=0");
+      expect(url).toContain("fields=%2Bvariants.inventory_quantity");
       expect(opts.method).toBe("GET");
     });
 
@@ -111,6 +112,7 @@ describe("Medusa handlers", () => {
       expect(url).toContain("q=shirt");
       expect(url).toContain("limit=5");
       expect(url).toContain("offset=10");
+      expect(url).toContain("fields=%2Bvariants.inventory_quantity");
     });
 
     test("includes publishable key header", async () => {
@@ -133,7 +135,8 @@ describe("Medusa handlers", () => {
       expect(result.success).toBe(true);
 
       const [url, opts] = fetchMock.mock.calls[0];
-      expect(url).toBe("https://api.test-store.com/store/products/prod_123");
+      expect(url).toContain("/store/products/prod_123");
+      expect(url).toContain("fields=%2Bvariants.inventory_quantity");
       expect(opts.method).toBe("GET");
     });
   });
@@ -1026,7 +1029,8 @@ describe("lookUpOrderHistory (Admin API)", () => {
     expect(url).toContain("offset=0");
     expect(url).toContain("order=-created_at");
     expect(url).toContain("*items");
-    expect(url).toContain("*shipping_address");
+    expect(url).toContain("*items.variant");
+    expect(url).toContain("shipping_address.first_name");
     expect(url).toContain("*summary");
 
     // Verify admin auth header
