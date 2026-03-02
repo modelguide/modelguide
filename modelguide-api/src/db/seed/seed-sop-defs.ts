@@ -42,6 +42,21 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     return;
   }
 
+  // Look up the get_order connector tool
+  const getOrderTool = await db.query.connectorTools.findFirst({
+    where: (ct, { eq, and, isNull }) =>
+      and(
+        eq(ct.connectorId, medusaConnector.id),
+        eq(ct.slug, "get_order"),
+        isNull(ct.deletedAt),
+      ),
+  });
+
+  if (!getOrderTool) {
+    console.error("  get_order tool not found, skipping SOP defs");
+    return;
+  }
+
   // Look up the order-lookup template
   const orderLookupTemplate = await db.query.sopTemplates.findFirst({
     where: (t, { eq }) => eq(t.slug, "order-lookup"),
@@ -74,8 +89,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
         "Look up the customer's order using the provided identifier.",
       required: true,
       tool: {
-        toolSlug: "get_order",
-        connectorId: medusaConnector.id,
+        connectorToolId: getOrderTool.id,
       },
     },
     {
@@ -130,8 +144,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
         order: s.order,
         instruction: s.instruction,
         required: s.required,
-        connectorId: s.tool?.connectorId ?? null,
-        toolSlug: s.tool?.toolSlug ?? null,
+        connectorToolId: s.tool?.connectorToolId ?? null,
         notes: s.notes ?? null,
       })),
     );
@@ -168,8 +181,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       instruction: "Look up the original order to verify the purchase.",
       required: true,
       tool: {
-        toolSlug: "get_order",
-        connectorId: medusaConnector.id,
+        connectorToolId: getOrderTool.id,
       },
     },
   ];
@@ -207,8 +219,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
         order: s.order,
         instruction: s.instruction,
         required: s.required,
-        connectorId: s.tool?.connectorId ?? null,
-        toolSlug: s.tool?.toolSlug ?? null,
+        connectorToolId: s.tool?.connectorToolId ?? null,
         notes: s.notes ?? null,
       })),
     );

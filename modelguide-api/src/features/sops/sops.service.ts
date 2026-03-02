@@ -70,8 +70,7 @@ async function insertSteps(
       order: s.order,
       instruction: s.instruction,
       required: s.required,
-      connectorId: s.tool?.connectorId ?? null,
-      toolSlug: s.tool?.toolSlug ?? null,
+      connectorToolId: s.tool?.connectorToolId ?? null,
       notes: s.notes ?? null,
     })),
   );
@@ -85,13 +84,14 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
       order: sopSteps.order,
       instruction: sopSteps.instruction,
       required: sopSteps.required,
-      connectorId: sopSteps.connectorId,
-      toolSlug: sopSteps.toolSlug,
+      connectorToolId: sopSteps.connectorToolId,
       notes: sopSteps.notes,
+      toolSlug: connectorTools.slug,
       connectorSlug: connectors.slug,
     })
     .from(sopSteps)
-    .leftJoin(connectors, eq(sopSteps.connectorId, connectors.id))
+    .leftJoin(connectorTools, eq(sopSteps.connectorToolId, connectorTools.id))
+    .leftJoin(connectors, eq(connectorTools.connectorId, connectors.id))
     .where(eq(sopSteps.sopId, sopId))
     .orderBy(asc(sopSteps.order));
 
@@ -102,13 +102,13 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
       instruction: r.instruction,
       required: r.required,
     };
-    if (r.toolSlug) {
+    if (r.connectorToolId) {
       step.tool = {
-        toolSlug: r.toolSlug,
-        connectorId: r.connectorId ?? undefined,
-        resolvedName: r.connectorSlug
-          ? `${r.connectorSlug}_${r.toolSlug}`
-          : undefined,
+        connectorToolId: r.connectorToolId,
+        resolvedName:
+          r.connectorSlug && r.toolSlug
+            ? `${r.connectorSlug}_${r.toolSlug}`
+            : undefined,
       };
     }
     if (r.notes) step.notes = r.notes;
@@ -121,64 +121,87 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
 // ============================================================================
 
 /**
- * Validate that step tool references point to valid org connectors and tools.
+ * Validate that step tool references point to valid org connector tools.
  *
  * Accepts a transaction so callers can run this inside their forOrg block,
  * avoiding TOCTOU races between validation and insert.
  */
 async function validateSteps(tx: Transaction, steps: SopStep[]): Promise<void> {
-  const stepsWithTools = steps.filter((s) => s.tool?.connectorId);
+  const stepsWithTools = steps.filter((s) => s.tool?.connectorToolId);
   if (stepsWithTools.length === 0) return;
 
-  // Collect unique connector IDs
-  const connectorIds = [
-    ...new Set(stepsWithTools.map((s) => s.tool!.connectorId!)),
+  const toolIds = [
+    ...new Set(stepsWithTools.map((s) => s.tool!.connectorToolId!)),
   ];
 
-  // Look up connectors within org scope (tx already has org context)
-  const orgConnectors = await tx
-    .select({ id: connectors.id })
-    .from(connectors)
-    .where(inArray(connectors.id, connectorIds));
-
-  const connectorIdSet = new Set(orgConnectors.map((c) => c.id));
-
-  // Verify all referenced connectors exist in this org
-  for (const cid of connectorIds) {
-    if (!connectorIdSet.has(cid)) {
-      throw Errors.sopInvalidConnectorRef(
-        `Connector not found in this organization: ${cid}`,
-      );
-    }
-  }
-
-  // Look up connector tools to validate toolSlug references
+  // Look up connector tools within org scope (tx already has org context via RLS)
   const orgTools = await tx
-    .select({
-      connectorId: connectorTools.connectorId,
-      slug: connectorTools.slug,
-    })
+    .select({ id: connectorTools.id })
     .from(connectorTools)
     .where(
       and(
-        inArray(connectorTools.connectorId, connectorIds),
+        inArray(connectorTools.id, toolIds),
         isNull(connectorTools.deletedAt),
       ),
     );
 
-  const toolSet = new Set(orgTools.map((t) => `${t.connectorId}:${t.slug}`));
+  const foundIds = new Set(orgTools.map((t) => t.id));
 
-  // Validate each step's tool reference
-  for (const step of steps) {
-    if (!step.tool?.connectorId) continue;
-
-    const key = `${step.tool.connectorId}:${step.tool.toolSlug}`;
-    if (!toolSet.has(key)) {
+  for (const tid of toolIds) {
+    if (!foundIds.has(tid)) {
       throw Errors.sopInvalidConnectorRef(
-        `Tool "${step.tool.toolSlug}" not found on connector ${step.tool.connectorId}`,
+        `Connector tool not found in this organization: ${tid}`,
       );
     }
   }
+}
+
+/** Resolve template tool references (catalogSlug + toolSlug) to connectorToolId. */
+async function resolveTemplateTools(
+  tx: Transaction,
+  steps: SopStep[],
+  connectorMapping: Record<string, string>,
+): Promise<SopStep[]> {
+  return Promise.all(
+    steps.map(async (step) => {
+      if (!step.tool?.catalogSlug) return step;
+
+      const connectorId = connectorMapping[step.tool.catalogSlug];
+      if (!connectorId) {
+        throw Errors.sopInvalidConnectorRef(
+          `No connector mapping provided for catalog slug "${step.tool.catalogSlug}"`,
+        );
+      }
+
+      if (!step.tool.toolSlug) {
+        throw Errors.sopInvalidConnectorRef(
+          `Template tool reference missing toolSlug for catalog "${step.tool.catalogSlug}"`,
+        );
+      }
+
+      const [ct] = await tx
+        .select({ id: connectorTools.id })
+        .from(connectorTools)
+        .where(
+          and(
+            eq(connectorTools.connectorId, connectorId),
+            eq(connectorTools.slug, step.tool.toolSlug),
+            isNull(connectorTools.deletedAt),
+          ),
+        );
+
+      if (!ct) {
+        throw Errors.sopInvalidConnectorRef(
+          `Tool "${step.tool.toolSlug}" not found on connector ${connectorId}`,
+        );
+      }
+
+      return {
+        ...step,
+        tool: { connectorToolId: ct.id },
+      };
+    }),
+  );
 }
 
 // ============================================================================
@@ -469,31 +492,13 @@ export async function forkFromTemplate(
   const name = data.name || template.name;
   const slug = data.slug || slugify(name);
 
-  // Rewrite step tool references: catalogSlug → connectorId
-  let steps = (templateDef.steps ?? []).map((step) => {
-    if (!step.tool?.catalogSlug) return step;
-
-    const connectorId = data.connectorMapping[step.tool.catalogSlug];
-    if (!connectorId) {
-      throw Errors.sopInvalidConnectorRef(
-        `No connector mapping provided for catalog slug "${step.tool.catalogSlug}"`,
-      );
-    }
-
-    return {
-      ...step,
-      tool: {
-        ...step.tool,
-        connectorId,
-        catalogSlug: undefined,
-      },
-    };
-  });
-
-  steps = normalizeStepOrder(steps);
+  let steps = normalizeStepOrder(templateDef.steps ?? []);
   validateUniqueStepIds(steps);
 
   return forOrg(orgId, async (tx) => {
+    // Resolve template catalogSlug + toolSlug → connectorToolId
+    steps = await resolveTemplateTools(tx, steps, data.connectorMapping);
+
     // Validate step tool references inside the transaction
     await validateSteps(tx, steps);
 
@@ -835,72 +840,52 @@ export async function getVersion(
 /** Compute step warnings using a provided transaction (avoids extra forOrg calls). */
 async function computeStepWarningsInTx(tx: Transaction, steps: SopStep[]) {
   const warnings: { stepId: string; message: string }[] = [];
-  const stepsWithTools = steps.filter((s) => s.tool?.connectorId);
+  const stepsWithTools = steps.filter((s) => s.tool?.connectorToolId);
   if (stepsWithTools.length === 0) return warnings;
 
-  const connectorIds = [
-    ...new Set(stepsWithTools.map((s) => s.tool!.connectorId!)),
+  const toolIds = [
+    ...new Set(stepsWithTools.map((s) => s.tool!.connectorToolId!)),
   ];
 
-  // Look up connector + tool status in a single transaction
-  const [orgConnectors, orgTools] = await Promise.all([
-    tx
-      .select({
-        id: connectors.id,
-        slug: connectors.slug,
-        isActive: connectors.isActive,
-      })
-      .from(connectors)
-      .where(inArray(connectors.id, connectorIds)),
-    tx
-      .select({
-        connectorId: connectorTools.connectorId,
-        slug: connectorTools.slug,
-        isActive: connectorTools.isActive,
-      })
-      .from(connectorTools)
-      .where(
-        and(
-          inArray(connectorTools.connectorId, connectorIds),
-          isNull(connectorTools.deletedAt),
-        ),
-      ),
-  ]);
+  // Look up connector tools + their parent connectors in one query
+  const toolRows = await tx
+    .select({
+      toolId: connectorTools.id,
+      toolSlug: connectorTools.slug,
+      toolIsActive: connectorTools.isActive,
+      toolDeletedAt: connectorTools.deletedAt,
+      connectorSlug: connectors.slug,
+      connectorIsActive: connectors.isActive,
+    })
+    .from(connectorTools)
+    .innerJoin(connectors, eq(connectorTools.connectorId, connectors.id))
+    .where(inArray(connectorTools.id, toolIds));
 
-  const connectorMap = new Map(orgConnectors.map((c) => [c.id, c]));
-  const toolMap = new Map(
-    orgTools.map((t) => [`${t.connectorId}:${t.slug}`, t]),
-  );
+  const toolMap = new Map(toolRows.map((t) => [t.toolId, t]));
 
   for (const step of stepsWithTools) {
-    const cid = step.tool!.connectorId!;
-    const connector = connectorMap.get(cid);
+    const tid = step.tool!.connectorToolId!;
+    const tool = toolMap.get(tid);
 
-    if (!connector) {
+    if (!tool || tool.toolDeletedAt) {
       warnings.push({
         stepId: step.id,
-        message: `Connector ${cid} no longer exists`,
+        message: `Connector tool ${tid} no longer exists`,
       });
       continue;
     }
 
-    if (!connector.isActive) {
+    if (!tool.connectorIsActive) {
       warnings.push({
         stepId: step.id,
-        message: `Connector "${connector.slug}" is currently inactive`,
+        message: `Connector "${tool.connectorSlug}" is currently inactive`,
       });
     }
 
-    const tool = toolMap.get(`${cid}:${step.tool!.toolSlug}`);
-    if (!tool) {
+    if (!tool.toolIsActive) {
       warnings.push({
         stepId: step.id,
-        message: `Tool "${step.tool!.toolSlug}" no longer exists on connector "${connector.slug}"`,
-      });
-    } else if (!tool.isActive) {
-      warnings.push({
-        stepId: step.id,
-        message: `Tool "${step.tool!.toolSlug}" is currently inactive on connector "${connector.slug}"`,
+        message: `Tool "${tool.toolSlug}" is currently inactive on connector "${tool.connectorSlug}"`,
       });
     }
   }

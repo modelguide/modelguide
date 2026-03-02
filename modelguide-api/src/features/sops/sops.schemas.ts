@@ -51,18 +51,19 @@ export const sopTriggerSchema = z.discriminatedUnion("type", [
 // ============================================================================
 
 const sopStepToolSchema = z.object({
-  toolSlug: z.string().min(1, "Tool slug is required"),
-  connectorId: z.string().uuid().optional(),
+  connectorToolId: z.string().uuid().optional(),
   catalogSlug: z.string().optional(),
+  toolSlug: z.string().optional(),
   resolvedName: z.string().optional(),
+  // Legacy: allow connectorId in read schema for old JSONB snapshots (sop_versions)
+  connectorId: z.string().uuid().optional(),
 });
 
 // SOP create/update requests are org-scoped definitions, so tool references must
-// use concrete connector IDs (template-style catalogSlug is not allowed here).
+// use a concrete connectorToolId (template-style catalogSlug is not allowed here).
 const sopStepToolWriteSchema = z
   .object({
-    toolSlug: z.string().min(1, "Tool slug is required"),
-    connectorId: z.string().uuid("Connector ID must be a valid UUID"),
+    connectorToolId: z.string().uuid("Connector tool ID must be a valid UUID"),
   })
   .strict();
 

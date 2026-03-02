@@ -44,9 +44,9 @@ export type SopTrigger =
 // ============================================================================
 
 export interface SopStepTool {
-  toolSlug: string;
-  connectorId?: string;
+  connectorToolId?: string;
   catalogSlug?: string;
+  toolSlug?: string;
   resolvedName?: string;
 }
 

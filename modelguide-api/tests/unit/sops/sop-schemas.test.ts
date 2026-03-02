@@ -217,15 +217,14 @@ describe("sopStepSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  test("parses a step with tool reference", () => {
+  test("parses a step with connectorToolId tool reference", () => {
     const result = sopStepSchema.safeParse({
       id: "lookup",
       order: 2,
       instruction: "Look up the order",
       required: true,
       tool: {
-        toolSlug: "get_order",
-        connectorId: "550e8400-e29b-41d4-a716-446655440000",
+        connectorToolId: "550e8400-e29b-41d4-a716-446655440000",
         resolvedName: "glowbox_store_get_order",
       },
     });
@@ -239,6 +238,20 @@ describe("sopStepSchema", () => {
       instruction: "Look up order",
       required: true,
       tool: { toolSlug: "get_order", catalogSlug: "medusa" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("allows legacy connectorId in read schema (for JSONB snapshots)", () => {
+    const result = sopStepSchema.safeParse({
+      id: "lookup",
+      order: 1,
+      instruction: "Look up order",
+      required: true,
+      tool: {
+        toolSlug: "get_order",
+        connectorId: "550e8400-e29b-41d4-a716-446655440000",
+      },
     });
     expect(result.success).toBe(true);
   });
@@ -273,24 +286,13 @@ describe("sopStepSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  test("rejects tool with empty toolSlug", () => {
+  test("rejects tool with invalid connectorToolId (not UUID)", () => {
     const result = sopStepSchema.safeParse({
       id: "step",
       order: 1,
       instruction: "Do something",
       required: true,
-      tool: { toolSlug: "" },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  test("rejects tool with invalid connectorId (not UUID)", () => {
-    const result = sopStepSchema.safeParse({
-      id: "step",
-      order: 1,
-      instruction: "Do something",
-      required: true,
-      tool: { toolSlug: "get_order", connectorId: "not-a-uuid" },
+      tool: { connectorToolId: "not-a-uuid" },
     });
     expect(result.success).toBe(false);
   });
@@ -367,7 +369,31 @@ describe("createSopSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  test("requires connectorId for SOP tool references", () => {
+  test("accepts connectorToolId in write schema", () => {
+    const result = createSopSchema.safeParse({
+      name: "Tool Step SOP",
+      definition: {
+        schemaVersion: 1,
+        trigger: { type: "manual", config: {} },
+        steps: [
+          {
+            id: "s1",
+            order: 1,
+            instruction: "Lookup order",
+            required: true,
+            tool: {
+              connectorToolId: "550e8400-e29b-41d4-a716-446655440000",
+            },
+          },
+        ],
+        metadata: {},
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("requires connectorToolId for SOP tool references", () => {
+    // Write schema is strict: only connectorToolId allowed, no toolSlug alone
     const result = createSopSchema.safeParse({
       name: "Tool Step SOP",
       definition: {
@@ -400,7 +426,10 @@ describe("createSopSchema", () => {
             order: 1,
             instruction: "Lookup order",
             required: true,
-            tool: { toolSlug: "get_order", catalogSlug: "medusa" },
+            tool: {
+              connectorToolId: "550e8400-e29b-41d4-a716-446655440000",
+              catalogSlug: "medusa",
+            },
           },
         ],
         metadata: {},
@@ -496,7 +525,10 @@ describe("updateSopSchema", () => {
             order: 1,
             instruction: "Updated step",
             required: true,
-            tool: { toolSlug: "get_order", catalogSlug: "medusa" },
+            tool: {
+              connectorToolId: "550e8400-e29b-41d4-a716-446655440000",
+              catalogSlug: "medusa",
+            },
           },
         ],
         metadata: {},

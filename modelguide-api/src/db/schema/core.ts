@@ -259,7 +259,6 @@ export const connectorsRelations = relations(connectors, ({ one, many }) => ({
     references: [connectorsCatalog.id],
   }),
   tools: many(connectorTools),
-  sopSteps: many(sopSteps),
 }));
 
 // ============================================================================
@@ -316,6 +315,7 @@ export const connectorToolsRelations = relations(
       references: [connectors.id],
     }),
     agentConnectorTools: many(agentConnectorTools),
+    sopSteps: many(sopSteps),
   }),
 );
 
@@ -792,10 +792,10 @@ export const sopSteps = pgTable(
     order: integer("order").notNull(),
     instruction: text("instruction").notNull(),
     required: boolean("required").notNull().default(true),
-    connectorId: uuid("connector_id").references(() => connectors.id, {
-      onDelete: "set null",
-    }),
-    toolSlug: varchar("tool_slug", { length: 100 }),
+    connectorToolId: uuid("connector_tool_id").references(
+      () => connectorTools.id,
+      { onDelete: "set null" },
+    ),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -804,7 +804,7 @@ export const sopSteps = pgTable(
   (table) => [
     uniqueIndex("sop_steps_sop_step_id_unique").on(table.sopId, table.stepId),
     index("sop_steps_sop_idx").on(table.sopId),
-    index("sop_steps_connector_idx").on(table.connectorId),
+    index("sop_steps_connector_tool_idx").on(table.connectorToolId),
   ],
 );
 
@@ -813,9 +813,9 @@ export const sopStepsRelations = relations(sopSteps, ({ one }) => ({
     fields: [sopSteps.sopId],
     references: [sops.id],
   }),
-  connector: one(connectors, {
-    fields: [sopSteps.connectorId],
-    references: [connectors.id],
+  connectorTool: one(connectorTools, {
+    fields: [sopSteps.connectorToolId],
+    references: [connectorTools.id],
   }),
 }));
 

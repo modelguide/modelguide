@@ -23,7 +23,7 @@ Each step is an instruction with an optional tool reference. Steps define what t
 
 ### Step-level connector binding
 
-Each step's tool reference carries `connectorId` + `toolSlug`. The full MCP tool name (`resolvedName`) is computed at read time by joining `sop_steps` → `connectors` on `connectorId`, avoiding stale names if a connector is renamed. Templates use `catalogSlug` for portability. A single SOP can have steps referencing different connectors (e.g., Medusa for order lookup, Zendesk for ticket creation).
+Each step's tool reference is a single `connectorToolId` FK to `connector_tools.id`. The full MCP tool name (`resolvedName`) is computed at read time by joining `sop_steps → connector_tools → connectors`, giving proper relational integrity. Templates use `catalogSlug + toolSlug` for portability; these are resolved to `connectorToolId` on fork. A single SOP can have steps referencing different connector tools (e.g., Medusa for order lookup, Zendesk for ticket creation).
 
 ### Multi-agent assignment
 

@@ -14,6 +14,8 @@ let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
 let orgASupportHeaders: Record<string, string>;
 let orgBAdminHeaders: Record<string, string>;
+/** connector_tools.id for get_order on orgA's Medusa connector */
+let orgAGetOrderToolId: string;
 
 /** IDs of SOPs created during tests (for cleanup) */
 const createdSopIds: string[] = [];
@@ -28,6 +30,20 @@ beforeAll(async () => {
   orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
   orgASupportHeaders = await authHeadersFor(s.orgASupport);
   orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
+
+  // Look up connector_tools.id for get_order on orgA's Medusa connector
+  const [tool] = await forApp(async (tx) =>
+    tx
+      .select({ id: connectorTools.id })
+      .from(connectorTools)
+      .where(
+        and(
+          eq(connectorTools.connectorId, s.orgAMedusaConnectorId),
+          eq(connectorTools.slug, "get_order"),
+        ),
+      ),
+  );
+  orgAGetOrderToolId = tool.id;
 
   // Seed a test SOP template
   await forApp(async (tx) => {
@@ -679,8 +695,7 @@ describe("PATCH /api/sops/:id with tool references", () => {
           instruction: "Look up order",
           required: true,
           tool: {
-            toolSlug: "get_order",
-            connectorId: s.orgAMedusaConnectorId,
+            connectorToolId: orgAGetOrderToolId,
           },
         },
       ],
@@ -694,10 +709,11 @@ describe("PATCH /api/sops/:id with tool references", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const toolStep = body.definition.steps[0];
+    expect(toolStep.tool.connectorToolId).toBe(orgAGetOrderToolId);
     expect(toolStep.tool.resolvedName).toBe("glowbox_store_get_order");
   });
 
-  test("rejects update with invalid connector reference (400)", async () => {
+  test("rejects update with invalid connector tool reference (400)", async () => {
     const sopId = createdSopIds[0];
     const newDef = {
       schemaVersion: 1,
@@ -709,8 +725,7 @@ describe("PATCH /api/sops/:id with tool references", () => {
           instruction: "This should fail",
           required: true,
           tool: {
-            toolSlug: "get_order",
-            connectorId: "00000000-0000-0000-0000-000000000000",
+            connectorToolId: "00000000-0000-0000-0000-000000000000",
           },
         },
       ],
@@ -749,8 +764,7 @@ describe("SOP step warnings", () => {
               instruction: "Look up order",
               required: true,
               tool: {
-                toolSlug: "get_order",
-                connectorId: s.orgAMedusaConnectorId,
+                connectorToolId: orgAGetOrderToolId,
               },
             },
           ],
