@@ -21,6 +21,7 @@ export const listProducts = withMedusa(async (fetcher, ctx) => {
       limit: input.limit ?? 20,
       offset: input.offset ?? 0,
       q: input.query,
+      fields: "+variants.inventory_quantity",
     },
   });
   return { success: true, data };
@@ -30,6 +31,11 @@ export const getProduct = withMedusa(async (fetcher, ctx) => {
   const { productId } = ctx.input as { productId: string };
   const data = await fetcher<Record<string, unknown>>(
     `/store/products/${productId}`,
+    {
+      params: {
+        fields: "+variants.inventory_quantity",
+      },
+    },
   );
   return { success: true, data };
 });
@@ -255,11 +261,17 @@ function dashboardUrl(
 }
 
 /** Medusa Admin API response types for order detail. */
+interface MedusaOrderItemVariant {
+  id: string;
+  title: string;
+}
+
 interface MedusaOrderItem {
   id: string;
   title: string;
   quantity: number;
   unit_price: number;
+  variant?: MedusaOrderItemVariant;
 }
 
 interface MedusaOrderDetail {
@@ -268,8 +280,8 @@ interface MedusaOrderDetail {
   status: string;
   total: number;
   currency_code: string;
+  email: string;
   summary: Record<string, unknown>;
-  version: number;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -313,7 +325,7 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
         offset,
         order: "-created_at",
         fields:
-          "id,display_id,status,total,currency_code,summary,version,metadata,created_at,updated_at,*items",
+          "id,display_id,status,total,currency_code,email,summary,metadata,created_at,updated_at,*items,*items.variant,shipping_address.first_name,shipping_address.last_name,shipping_address.address_1,shipping_address.address_2,shipping_address.city,shipping_address.postal_code,shipping_address.country_code,shipping_address.phone",
       },
     });
 
@@ -375,7 +387,7 @@ export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
       offset,
       order: "-created_at",
       fields:
-        "id,display_id,status,currency_code,email,created_at,updated_at,*items,*shipping_address,*summary",
+        "id,display_id,status,total,currency_code,email,metadata,created_at,updated_at,*items,*items.variant,shipping_address.first_name,shipping_address.last_name,shipping_address.address_1,shipping_address.address_2,shipping_address.city,shipping_address.postal_code,shipping_address.country_code,shipping_address.phone,*summary",
     },
   });
 
