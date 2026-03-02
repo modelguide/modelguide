@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
-import { connectorTools, sopTemplates, sops } from "@db/schema";
+import { connectorTools, connectors, sopTemplates, sops } from "@db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
 
@@ -14,6 +14,7 @@ let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
 let orgASupportHeaders: Record<string, string>;
 let orgBAdminHeaders: Record<string, string>;
+let viewerHeaders: Record<string, string>;
 /** connector_tools.id for get_order on orgA's Medusa connector */
 let orgAGetOrderToolId: string;
 
@@ -30,6 +31,7 @@ beforeAll(async () => {
   orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
   orgASupportHeaders = await authHeadersFor(s.orgASupport);
   orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
+  viewerHeaders = await authHeadersFor(s.demoViewer);
 
   // Look up connector_tools.id for get_order on orgA's Medusa connector
   const [tool] = await forApp(async (tx) =>
@@ -759,5 +761,334 @@ describe("SOP step warnings", () => {
           ),
         );
     });
+  });
+
+  test("shows warning when connector is deactivated", async () => {
+    // Deactivate the parent connector (tool stays active)
+    await forApp(async (tx) => {
+      await tx
+        .update(connectors)
+        .set({ isActive: false })
+        .where(eq(connectors.id, s.orgAMedusaConnectorId));
+    });
+
+    const res = await request(`/api/sops/${warningTestSopId}`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.stepWarnings.length).toBeGreaterThan(0);
+    expect(body.stepWarnings[0].stepId).toBe("tool-step");
+    expect(body.stepWarnings[0].message).toContain("inactive");
+
+    // Reactivate connector
+    await forApp(async (tx) => {
+      await tx
+        .update(connectors)
+        .set({ isActive: true })
+        .where(eq(connectors.id, s.orgAMedusaConnectorId));
+    });
+  });
+
+  test("shows warning when tool is soft-deleted", async () => {
+    // Soft-delete the get_order tool
+    await forApp(async (tx) => {
+      await tx
+        .update(connectorTools)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(connectorTools.connectorId, s.orgAMedusaConnectorId),
+            eq(connectorTools.slug, "get_order"),
+          ),
+        );
+    });
+
+    const res = await request(`/api/sops/${warningTestSopId}`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.stepWarnings.length).toBeGreaterThan(0);
+    expect(body.stepWarnings[0].stepId).toBe("tool-step");
+    expect(body.stepWarnings[0].message).toContain("no longer exists");
+
+    // Restore the tool
+    await forApp(async (tx) => {
+      await tx
+        .update(connectorTools)
+        .set({ deletedAt: null })
+        .where(
+          and(
+            eq(connectorTools.connectorId, s.orgAMedusaConnectorId),
+            eq(connectorTools.slug, "get_order"),
+          ),
+        );
+    });
+  });
+});
+
+// ============================================================================
+// GET /api/sops/templates/:templateId
+// ============================================================================
+
+describe("GET /api/sops/templates/:templateId", () => {
+  test("returns template detail (200)", async () => {
+    if (createdTemplateIds.length === 0) return;
+    const res = await request(`/api/sops/templates/${createdTemplateIds[0]}`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.id).toBe(createdTemplateIds[0]);
+    expect(body.name).toBe("Test Order Lookup Template");
+    expect(body.slug).toBe("test-order-lookup-tpl");
+    expect(body.definition).toBeDefined();
+    expect(body.definition.steps).toHaveLength(2);
+  });
+
+  test("returns 404 for non-existent template", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const res = await request(`/api/sops/templates/${fakeId}`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    if (createdTemplateIds.length === 0) return;
+    const res = await request(`/api/sops/templates/${createdTemplateIds[0]}`);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ============================================================================
+// Duplicate step IDs (validateUniqueStepIds)
+// ============================================================================
+
+describe("Duplicate step ID validation", () => {
+  test("rejects create with duplicate step IDs (400)", async () => {
+    const res = await request("/api/sops", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Duplicate Step IDs",
+        slug: "duplicate-step-ids",
+        definition: {
+          schemaVersion: 1,
+          trigger: { type: "manual", config: {} },
+          steps: [
+            { id: "step-a", order: 1, instruction: "First", required: true },
+            { id: "step-a", order: 2, instruction: "Dupe", required: true },
+          ],
+          metadata: {},
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects update with duplicate step IDs (400)", async () => {
+    const sopId = createdSopIds[0];
+    const res = await request(`/api/sops/${sopId}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        definition: {
+          schemaVersion: 1,
+          trigger: { type: "manual", config: {} },
+          steps: [
+            { id: "dup", order: 1, instruction: "First", required: true },
+            { id: "dup", order: 2, instruction: "Dupe", required: false },
+          ],
+          metadata: {},
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ============================================================================
+// 404 on non-existent SOP for activate, archive, agents
+// ============================================================================
+
+describe("404 for non-existent SOP", () => {
+  const fakeId = "00000000-0000-0000-0000-000000000000";
+
+  test("activate returns 404", async () => {
+    const res = await request(`/api/sops/${fakeId}/activate`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test("archive returns 404", async () => {
+    const res = await request(`/api/sops/${fakeId}/archive`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test("get agents returns 404", async () => {
+    const res = await request(`/api/sops/${fakeId}/agents`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test("set agents returns 404", async () => {
+    const res = await request(`/api/sops/${fakeId}/agents`, {
+      method: "PUT",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ agentIds: [] }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test("delete returns 404", async () => {
+    const res = await request(`/api/sops/${fakeId}`, {
+      method: "DELETE",
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ============================================================================
+// Viewer role permissions
+// ============================================================================
+
+describe("Viewer role access", () => {
+  test("viewer can list SOPs (200)", async () => {
+    const res = await request("/api/sops", { headers: viewerHeaders });
+    expect(res.status).toBe(200);
+  });
+
+  test("viewer can get SOP detail (200)", async () => {
+    const sopId = createdSopIds[0];
+    const res = await request(`/api/sops/${sopId}`, {
+      headers: viewerHeaders,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("viewer cannot create SOP (403)", async () => {
+    const res = await request("/api/sops", {
+      method: "POST",
+      headers: viewerHeaders,
+      body: JSON.stringify({
+        name: "Viewer Attempt",
+        definition: validDefinition,
+      }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("viewer cannot update SOP (403)", async () => {
+    const sopId = createdSopIds[0];
+    const res = await request(`/api/sops/${sopId}`, {
+      method: "PATCH",
+      headers: viewerHeaders,
+      body: JSON.stringify({ name: "Viewer Update" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("viewer cannot delete SOP (403)", async () => {
+    const sopId = createdSopIds[0];
+    const res = await request(`/api/sops/${sopId}`, {
+      method: "DELETE",
+      headers: viewerHeaders,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("viewer cannot activate SOP (403)", async () => {
+    const sopId = createdSopIds[0];
+    const res = await request(`/api/sops/${sopId}/activate`, {
+      method: "POST",
+      headers: viewerHeaders,
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ============================================================================
+// Fork with overrides and agent assignment
+// ============================================================================
+
+describe("Fork with overrides and agents", () => {
+  test("fork with trigger override applies override (201)", async () => {
+    if (createdTemplateIds.length === 0) return;
+
+    const res = await request(
+      `/api/sops/from-template/${createdTemplateIds[0]}`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({
+          name: "Forked With Override",
+          slug: "forked-with-override",
+          connectorMapping: { medusa: s.orgAMedusaConnectorId },
+          overrides: {
+            trigger: {
+              type: "intent_detected",
+              config: { patterns: ["where is my order"] },
+            },
+          },
+        }),
+      },
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.definition.trigger.type).toBe("intent_detected");
+    expect(body.definition.trigger.config.patterns).toContain(
+      "where is my order",
+    );
+    createdSopIds.push(body.id);
+  });
+
+  test("fork with agent assignment (201)", async () => {
+    if (createdTemplateIds.length === 0) return;
+
+    const res = await request(
+      `/api/sops/from-template/${createdTemplateIds[0]}`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({
+          name: "Forked With Agent",
+          slug: "forked-with-agent",
+          connectorMapping: { medusa: s.orgAMedusaConnectorId },
+          agentIds: [s.orgAAgentId],
+        }),
+      },
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.assignedAgents).toHaveLength(1);
+    expect(body.assignedAgents[0].id).toBe(s.orgAAgentId);
+    createdSopIds.push(body.id);
+  });
+
+  test("fork rejects duplicate slug (409)", async () => {
+    if (createdTemplateIds.length === 0) return;
+
+    const res = await request(
+      `/api/sops/from-template/${createdTemplateIds[0]}`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({
+          name: "Duplicate Fork",
+          slug: "forked-with-agent", // already used above
+          connectorMapping: { medusa: s.orgAMedusaConnectorId },
+        }),
+      },
+    );
+    expect(res.status).toBe(409);
   });
 });
