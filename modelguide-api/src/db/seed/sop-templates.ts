@@ -8,7 +8,6 @@ interface SopTemplateSeed {
   name: string;
   slug: string;
   description: string;
-  category: string;
   catalogSlugs: string[];
   version: string;
   isActive: boolean;
@@ -21,7 +20,6 @@ export const sopTemplatesSeed: SopTemplateSeed[] = [
     slug: "order-lookup",
     description:
       "Standard procedure for looking up a customer's order status. Verify identity, retrieve order, and communicate status.",
-    category: "Order Management",
     catalogSlugs: ["medusa"],
     version: "1.0",
     isActive: true,
@@ -85,7 +83,6 @@ export const sopTemplatesSeed: SopTemplateSeed[] = [
     slug: "return-item",
     description:
       "Standard procedure for processing a customer return request. Verify purchase, check eligibility, and initiate return.",
-    category: "Returns",
     catalogSlugs: ["medusa"],
     version: "1.0",
     isActive: true,
@@ -165,7 +162,6 @@ export const sopTemplatesSeed: SopTemplateSeed[] = [
     slug: "damaged-item",
     description:
       "Procedure for handling customer reports of damaged items received. Document damage, offer resolution.",
-    category: "Returns",
     catalogSlugs: ["medusa"],
     version: "1.0",
     isActive: true,

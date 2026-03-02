@@ -254,6 +254,7 @@ export const connectorsRelations = relations(connectors, ({ one, many }) => ({
     references: [connectorsCatalog.id],
   }),
   tools: many(connectorTools),
+  sopSteps: many(sopSteps),
 }));
 
 // ============================================================================
@@ -691,7 +692,6 @@ export const sopTemplates = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
-    category: varchar("category", { length: 100 }),
     catalogSlugs: text("catalog_slugs").array().default([]),
     definition: jsonb("definition")
       .$type<Record<string, unknown>>()
@@ -707,7 +707,6 @@ export const sopTemplates = pgTable(
   },
   (table) => [
     uniqueIndex("sop_templates_slug_unique").on(table.slug),
-    index("sop_templates_category_idx").on(table.category),
     index("sop_templates_is_active_idx").on(table.isActive),
   ],
 );
@@ -731,7 +730,6 @@ export const sops = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
-    category: varchar("category", { length: 100 }),
     definition: jsonb("definition")
       .$type<Record<string, unknown>>()
       .default({}),
@@ -767,8 +765,52 @@ export const sopsRelations = relations(sops, ({ one, many }) => ({
     fields: [sops.createdBy],
     references: [users.id],
   }),
+  steps: many(sopSteps),
   versions: many(sopVersions),
   agentSops: many(agentSops),
+}));
+
+// ============================================================================
+// SOP Steps (Relational steps — no RLS, queried through RLS-protected sops)
+// ============================================================================
+
+export const sopSteps = pgTable(
+  "sop_steps",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sopId: uuid("sop_id")
+      .notNull()
+      .references(() => sops.id, { onDelete: "cascade" }),
+    stepId: varchar("step_id", { length: 100 }).notNull(),
+    order: integer("order").notNull(),
+    instruction: text("instruction").notNull(),
+    required: boolean("required").notNull().default(true),
+    connectorId: uuid("connector_id").references(() => connectors.id, {
+      onDelete: "set null",
+    }),
+    toolSlug: varchar("tool_slug", { length: 100 }),
+    resolvedName: varchar("resolved_name", { length: 255 }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("sop_steps_sop_step_id_unique").on(table.sopId, table.stepId),
+    index("sop_steps_sop_idx").on(table.sopId),
+    index("sop_steps_connector_idx").on(table.connectorId),
+  ],
+);
+
+export const sopStepsRelations = relations(sopSteps, ({ one }) => ({
+  sop: one(sops, {
+    fields: [sopSteps.sopId],
+    references: [sops.id],
+  }),
+  connector: one(connectors, {
+    fields: [sopSteps.connectorId],
+    references: [connectors.id],
+  }),
 }));
 
 // ============================================================================

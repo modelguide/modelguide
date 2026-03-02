@@ -37,7 +37,6 @@ beforeAll(async () => {
         name: "Test Order Lookup Template",
         slug: "test-order-lookup-tpl",
         description: "Test template",
-        category: "Order Management",
         catalogSlugs: ["medusa"],
         definition: {
           schemaVersion: 1,
@@ -128,7 +127,6 @@ describe("POST /api/sops", () => {
       body: JSON.stringify({
         name: "Test SOP Integration",
         slug: "test-sop-integration",
-        category: "Testing",
         definition: validDefinition,
       }),
     });

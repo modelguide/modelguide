@@ -315,7 +315,6 @@ describe("createSopSchema", () => {
   test("parses valid create request", () => {
     const result = createSopSchema.safeParse({
       name: "Order Lookup",
-      category: "Order Management",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },

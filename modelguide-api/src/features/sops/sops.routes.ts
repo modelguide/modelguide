@@ -77,7 +77,6 @@ function formatTemplate(t: ServiceTemplate) {
     name: t.name,
     slug: t.slug,
     description: t.description,
-    category: t.category,
     catalogSlugs: t.catalogSlugs ?? [],
     definition: t.definition as unknown as SopSchema,
     version: t.version,
@@ -93,7 +92,6 @@ function formatSopSummary(s: ServiceSopSummary) {
     id: s.id,
     name: s.name,
     slug: s.slug,
-    category: s.category,
     status: s.status as SopStatus,
     version: s.version,
     assignedAgents: s.assignedAgents,
@@ -112,7 +110,6 @@ function formatSopDetail(s: ServiceSopDetail) {
     name: s.name,
     slug: s.slug,
     description: s.description,
-    category: s.category,
     status: s.status as SopStatus,
     version: s.version,
     assignedAgents: s.assignedAgents,
@@ -378,7 +375,6 @@ router.openapi(createSopRoute, async (c) => {
       name: string;
       slug?: string;
       description?: string;
-      category?: string;
       definition: SopSchema;
       agentIds?: string[];
     },
@@ -462,8 +458,7 @@ const updateSopRoute = createRoute({
   path: "/{id}",
   tags: ["SOPs"],
   summary: "Update SOP",
-  description:
-    "Updates SOP name, description, category, definition, or version.",
+  description: "Updates SOP name, description, definition, or version.",
   security: [{ bearerAuth: [] }],
   request: {
     params: idParams,

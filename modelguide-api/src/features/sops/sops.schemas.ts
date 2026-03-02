@@ -109,7 +109,6 @@ export const createSopSchema = z.object({
     )
     .optional(),
   description: z.string().max(2000).optional(),
-  category: z.string().max(100).optional(),
   definition: sopDefinitionSchema,
   agentIds: z.array(z.string().uuid()).optional(),
 });
@@ -129,7 +128,6 @@ export const updateSopSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     description: z.string().max(2000).optional(),
-    category: z.string().max(100).optional(),
     definition: sopDefinitionSchema.optional(),
     version: z.string().max(50).optional(),
   })
@@ -137,7 +135,6 @@ export const updateSopSchema = z
     (data) =>
       data.name !== undefined ||
       data.description !== undefined ||
-      data.category !== undefined ||
       data.definition !== undefined ||
       data.version !== undefined,
     { message: "At least one field must be provided" },
@@ -157,7 +154,6 @@ export const createVersionSchema = z.object({
 
 export const sopListQuerySchema = z.object({
   status: z.enum(["draft", "active", "archived"]).optional(),
-  category: z.string().optional(),
   agentId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -177,7 +173,6 @@ export const sopSummaryResponseSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   slug: z.string(),
-  category: z.string().nullable(),
   status: z.enum(["draft", "active", "archived"]),
   version: z.string(),
   assignedAgents: z.array(assignedAgentSchema),
@@ -198,7 +193,6 @@ export const sopDetailResponseSchema = z.object({
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
-  category: z.string().nullable(),
   status: z.enum(["draft", "active", "archived"]),
   version: z.string(),
   assignedAgents: z.array(assignedAgentSchema),
@@ -222,7 +216,6 @@ export const sopTemplateResponseSchema = z.object({
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
-  category: z.string().nullable(),
   catalogSlugs: z.array(z.string()),
   definition: sopDefinitionSchema,
   version: z.string(),

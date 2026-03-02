@@ -18,6 +18,7 @@ import type {
   sessionLinks,
   sessionMessages,
   sessions,
+  sopSteps,
   sopTemplates,
   sopVersions,
   sops,
@@ -76,6 +77,9 @@ export type NewSopTemplate = InferInsertModel<typeof sopTemplates>;
 
 export type Sop = InferSelectModel<typeof sops>;
 export type NewSop = InferInsertModel<typeof sops>;
+
+export type SopStepRow = InferSelectModel<typeof sopSteps>;
+export type NewSopStepRow = InferInsertModel<typeof sopSteps>;
 
 export type SopVersion = InferSelectModel<typeof sopVersions>;
 export type NewSopVersion = InferInsertModel<typeof sopVersions>;

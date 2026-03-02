@@ -9,6 +9,7 @@ import {
   agents,
   connectorTools,
   connectors,
+  sopSteps,
   sopTemplates,
   sopVersions,
   sops,
@@ -49,6 +50,76 @@ function validateUniqueStepIds(steps: SopStep[]): void {
 /** Normalize step order to be 1-based from array position. */
 function normalizeStepOrder(steps: SopStep[]): SopStep[] {
   return steps.map((step, index) => ({ ...step, order: index + 1 }));
+}
+
+// ============================================================================
+// Step persistence helpers (sop_steps table)
+// ============================================================================
+
+/** Insert SopStep[] into sop_steps table. */
+async function insertSteps(
+  tx: Transaction,
+  sopId: string,
+  steps: SopStep[],
+): Promise<void> {
+  if (steps.length === 0) return;
+  await tx.insert(sopSteps).values(
+    steps.map((s) => ({
+      sopId,
+      stepId: s.id,
+      order: s.order,
+      instruction: s.instruction,
+      required: s.required,
+      connectorId: s.tool?.connectorId ?? null,
+      toolSlug: s.tool?.toolSlug ?? null,
+      resolvedName: s.tool?.resolvedName ?? null,
+      notes: s.notes ?? null,
+    })),
+  );
+}
+
+/** Load sop_steps rows and convert back to SopStep[]. */
+async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
+  const rows = await tx
+    .select()
+    .from(sopSteps)
+    .where(eq(sopSteps.sopId, sopId))
+    .orderBy(asc(sopSteps.order));
+
+  return rows.map((r) => {
+    const step: SopStep = {
+      id: r.stepId,
+      order: r.order,
+      instruction: r.instruction,
+      required: r.required,
+    };
+    if (r.toolSlug) {
+      step.tool = {
+        toolSlug: r.toolSlug,
+        connectorId: r.connectorId ?? undefined,
+        resolvedName: r.resolvedName ?? undefined,
+      };
+    }
+    if (r.notes) step.notes = r.notes;
+    return step;
+  });
+}
+
+/** Strip steps from a definition, leaving only trigger + metadata. */
+function stripStepsFromDefinition(def: SopSchema): Record<string, unknown> {
+  const { steps, ...rest } = def;
+  return rest as unknown as Record<string, unknown>;
+}
+
+/** Reconstruct a full SopSchema from a partial definition (no steps) + loaded steps. */
+function reconstructDefinition(
+  partialDef: Record<string, unknown>,
+  steps: SopStep[],
+): SopSchema {
+  return {
+    ...(partialDef as Omit<SopSchema, "steps">),
+    steps,
+  } as SopSchema;
 }
 
 // ============================================================================
@@ -178,18 +249,16 @@ export async function listSops(
   orgId: string,
   params: {
     status?: "draft" | "active" | "archived";
-    category?: string;
     agentId?: string;
   } & PaginationParams,
 ) {
-  const { page, pageSize, status, category, agentId } = params;
+  const { page, pageSize, status, agentId } = params;
   const offset = getOffset(page, pageSize);
 
   return forOrg(orgId, async (tx) => {
     // Build conditions
     const conditions = [];
     if (status) conditions.push(eq(sops.status, status));
-    if (category) conditions.push(eq(sops.category, category));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -267,15 +336,25 @@ export async function listSops(
         : [];
     const templateNameMap = new Map(templateRows.map((t) => [t.id, t.name]));
 
+    // Batch-load step counts from sop_steps table
+    const stepCountRows =
+      allSopIds.length > 0
+        ? await tx
+            .select({ sopId: sopSteps.sopId, total: count() })
+            .from(sopSteps)
+            .where(inArray(sopSteps.sopId, allSopIds))
+            .groupBy(sopSteps.sopId)
+        : [];
+    const stepCountMap = new Map(stepCountRows.map((r) => [r.sopId, r.total]));
+
     const enriched = items.map((sop) => {
-      const def = sop.definition as unknown as SopSchema;
       return {
         ...sop,
         assignedAgents: assignmentsBySop.get(sop.id) ?? [],
         templateName: sop.templateId
           ? (templateNameMap.get(sop.templateId) ?? null)
           : null,
-        stepCount: def?.steps?.length ?? 0,
+        stepCount: stepCountMap.get(sop.id) ?? 0,
       };
     });
 
@@ -293,6 +372,13 @@ export async function getSopById(orgId: string, sopId: string) {
     if (!sop) {
       throw Errors.sopNotFound(sopId);
     }
+
+    // Load steps from sop_steps table and reconstruct full definition
+    const steps = await loadSteps(tx, sopId);
+    const definition = reconstructDefinition(
+      sop.definition as Record<string, unknown>,
+      steps,
+    );
 
     // Agent assignments (agentSops has no RLS; agents is RLS-protected so tx filters by org)
     const assignedAgents = await tx
@@ -320,10 +406,9 @@ export async function getSopById(orgId: string, sopId: string) {
     }
 
     // Compute step warnings for inactive tools/connectors (inside same tx)
-    const def = sop.definition as unknown as SopSchema;
-    const stepWarnings = await computeStepWarningsInTx(tx, def?.steps ?? []);
+    const stepWarnings = await computeStepWarningsInTx(tx, steps);
 
-    return { ...sop, assignedAgents, template, stepWarnings };
+    return { ...sop, definition, assignedAgents, template, stepWarnings };
   });
 }
 
@@ -333,7 +418,6 @@ export async function createSop(
     name: string;
     slug?: string;
     description?: string;
-    category?: string;
     definition: SopSchema;
     agentIds?: string[];
   },
@@ -362,6 +446,7 @@ export async function createSop(
       throw Errors.sopSlugExists(slug);
     }
 
+    // Store trigger + metadata only (steps go to sop_steps table)
     const [sop] = await tx
       .insert(sops)
       .values({
@@ -369,12 +454,14 @@ export async function createSop(
         name: data.name,
         slug,
         description: data.description,
-        category: data.category,
-        definition: definition as unknown as Record<string, unknown>,
+        definition: stripStepsFromDefinition(definition),
         status: "draft",
         createdBy,
       })
       .returning();
+
+    // Insert steps into relational table
+    await insertSteps(tx, sop.id, resolvedSteps);
 
     // Assign agents if provided
     if (data.agentIds?.length) {
@@ -447,6 +534,7 @@ export async function forkFromTemplate(
       throw Errors.sopSlugExists(slug);
     }
 
+    // Store trigger + metadata only (steps go to sop_steps table)
     const [sop] = await tx
       .insert(sops)
       .values({
@@ -455,12 +543,14 @@ export async function forkFromTemplate(
         name,
         slug,
         description: template.description,
-        category: template.category,
-        definition: definition as unknown as Record<string, unknown>,
+        definition: stripStepsFromDefinition(definition),
         status: "draft",
         createdBy,
       })
       .returning();
+
+    // Insert steps into relational table
+    await insertSteps(tx, sop.id, resolvedSteps);
 
     if (data.agentIds?.length) {
       await setAssignedAgentsInternal(tx, sop.id, data.agentIds);
@@ -476,7 +566,6 @@ export async function updateSop(
   data: {
     name?: string;
     description?: string;
-    category?: string;
     definition?: SopSchema;
     version?: string;
   },
@@ -485,7 +574,6 @@ export async function updateSop(
 
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
-  if (data.category !== undefined) updateData.category = data.category;
   if (data.version !== undefined) updateData.version = data.version;
 
   return forOrg(orgId, async (tx) => {
@@ -497,7 +585,12 @@ export async function updateSop(
         ...data.definition,
         steps: resolvedSteps,
       };
-      updateData.definition = definition as unknown as Record<string, unknown>;
+      // Store trigger + metadata only
+      updateData.definition = stripStepsFromDefinition(definition);
+
+      // Replace steps: delete old, insert new
+      await tx.delete(sopSteps).where(eq(sopSteps.sopId, sopId));
+      await insertSteps(tx, sopId, resolvedSteps);
     }
 
     const [updated] = await tx
@@ -527,7 +620,7 @@ export async function deleteSop(orgId: string, sopId: string): Promise<void> {
 export async function activateSop(orgId: string, sopId: string) {
   return forOrg(orgId, async (tx) => {
     const [sop] = await tx
-      .select({ id: sops.id, definition: sops.definition })
+      .select({ id: sops.id })
       .from(sops)
       .where(eq(sops.id, sopId));
 
@@ -535,8 +628,13 @@ export async function activateSop(orgId: string, sopId: string) {
       throw Errors.sopNotFound(sopId);
     }
 
-    const def = sop.definition as unknown as SopSchema;
-    if (!def?.steps?.length) {
+    // Count steps from relational table
+    const [{ total }] = await tx
+      .select({ total: count() })
+      .from(sopSteps)
+      .where(eq(sopSteps.sopId, sopId));
+
+    if (total === 0) {
       throw Errors.validationError(
         "Cannot activate SOP with no steps. Add at least one step first.",
       );
@@ -686,27 +784,33 @@ export async function createVersion(
   data: { changeSummary?: string },
   createdBy?: string,
 ) {
-  // Get current SOP (verifies org access)
-  const [sop] = await forOrg(orgId, (tx) =>
-    tx.select().from(sops).where(eq(sops.id, sopId)),
-  );
+  // Get current SOP + steps (verifies org access), reconstruct full definition for snapshot
+  return forOrg(orgId, async (tx) => {
+    const [sop] = await tx.select().from(sops).where(eq(sops.id, sopId));
 
-  if (!sop) {
-    throw Errors.sopNotFound(sopId);
-  }
+    if (!sop) {
+      throw Errors.sopNotFound(sopId);
+    }
 
-  const [version] = await db
-    .insert(sopVersions)
-    .values({
-      sopId,
-      version: sop.version,
-      definition: sop.definition,
-      changeSummary: data.changeSummary,
-      createdBy,
-    })
-    .returning();
+    const steps = await loadSteps(tx, sopId);
+    const fullDefinition = reconstructDefinition(
+      sop.definition as Record<string, unknown>,
+      steps,
+    );
 
-  return version;
+    const [version] = await db
+      .insert(sopVersions)
+      .values({
+        sopId,
+        version: sop.version,
+        definition: fullDefinition as unknown as Record<string, unknown>,
+        changeSummary: data.changeSummary,
+        createdBy,
+      })
+      .returning();
+
+    return version;
+  });
 }
 
 export async function getVersion(
