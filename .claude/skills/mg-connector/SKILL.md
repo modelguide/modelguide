@@ -1,5 +1,5 @@
 ---
-name: modelguide:connector
+name: mg-connector
 description: Use when the user asks to add a connector, create a connector, implement a connector for a service, add a tool to a connector, update a connector tool, or asks about connector architecture. Trigger phrases include "add connector", "create connector", "new connector", "implement connector", "add tool to connector", "update connector tool", "connector architecture".
 ---
 
