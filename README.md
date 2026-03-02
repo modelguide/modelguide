@@ -170,11 +170,13 @@ The dashboard gives support teams what they need: session list with filters (sta
 
 ✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
 
+✅ **SOPs (Standard Operating Procedures)** — Define agent behavioral contracts: ordered steps with tool references, triggers, and metadata. Fork from reusable templates or create from scratch. Draft/active/archived lifecycle. Assign SOPs to agents. Inactive-tool warnings at read time. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md).
+
 ✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
 
 ## Seed Data
 
-`make db-seed` populates three organizations that demonstrate ModelGuide across different industries. Each org gets both **Medusa** (e-commerce) and **Zendesk** (helpdesk) connectors, two agents, ~300 generated sessions with tool calls, and handwritten showcase conversations.
+`make db-seed` populates three organizations that demonstrate ModelGuide across different industries. Each org gets both **Medusa** (e-commerce) and **Zendesk** (helpdesk) connectors, two agents, ~300 generated sessions with tool calls, and handwritten showcase conversations. The seed also creates SOP templates (global catalog) and demo SOP definitions with agent assignments for the default org.
 
 | Organization | Slug | Industry | Use Case |
 |---|---|---|---|
@@ -221,6 +223,7 @@ modelguide/
 │       │   │       ├── registry.ts
 │       │   │       └── sync.ts
 │       │   ├── mcp/             # MCP handler, core tools, schema conversion
+│       │   ├── sops/             # SOP templates, definitions, agent assignment
 │       │   ├── sessions/        # Session lifecycle, messages, feedback
 │       │   ├── secrets/         # Encrypted credential storage
 │       │   └── users/           # Auth, RBAC, user management

@@ -44,6 +44,7 @@ src/
     ├── connectors/       # Connector catalog, instances, tool assignment
     │   └── catalog/      # Code-defined connector manifests (Medusa, etc.)
     ├── secrets/          # AES-256-GCM encrypted credential storage
+    ├── sops/             # SOP templates, definitions, agent assignments
     ├── sessions/         # Session lifecycle, messages
     ├── feedback/         # Customer CSAT, support evaluations
     ├── analytics/        # Summary metrics, trends
