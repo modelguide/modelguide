@@ -57,6 +57,15 @@ const sopStepToolSchema = z.object({
   resolvedName: z.string().optional(),
 });
 
+// SOP create/update requests are org-scoped definitions, so tool references must
+// use concrete connector IDs (template-style catalogSlug is not allowed here).
+const sopStepToolWriteSchema = z
+  .object({
+    toolSlug: z.string().min(1, "Tool slug is required"),
+    connectorId: z.string().uuid("Connector ID must be a valid UUID"),
+  })
+  .strict();
+
 export const sopStepSchema = z.object({
   id: z.string().min(1).max(100, "Step ID must be 100 characters or less"),
   order: z.number().int().min(1),
@@ -66,6 +75,18 @@ export const sopStepSchema = z.object({
     .max(2000, "Instruction must be 2000 characters or less"),
   required: z.boolean(),
   tool: sopStepToolSchema.optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+const sopStepWriteSchema = z.object({
+  id: z.string().min(1).max(100, "Step ID must be 100 characters or less"),
+  order: z.number().int().min(1),
+  instruction: z
+    .string()
+    .min(1, "Instruction is required")
+    .max(2000, "Instruction must be 2000 characters or less"),
+  required: z.boolean(),
+  tool: sopStepToolWriteSchema.optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -91,6 +112,13 @@ export const sopDefinitionSchema = z.object({
   metadata: sopMetadataSchema,
 });
 
+const sopDefinitionWriteSchema = z.object({
+  schemaVersion: z.literal(1),
+  trigger: sopTriggerSchema,
+  steps: z.array(sopStepWriteSchema).max(100, "Maximum 100 steps per SOP"),
+  metadata: sopMetadataSchema,
+});
+
 // ============================================================================
 // Request schemas
 // ============================================================================
@@ -109,7 +137,7 @@ export const createSopSchema = z.object({
     )
     .optional(),
   description: z.string().max(2000).optional(),
-  definition: sopDefinitionSchema,
+  definition: sopDefinitionWriteSchema,
   agentIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -128,7 +156,7 @@ export const updateSopSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     description: z.string().max(2000).optional(),
-    definition: sopDefinitionSchema.optional(),
+    definition: sopDefinitionWriteSchema.optional(),
     version: z.string().max(50).optional(),
   })
   .refine(

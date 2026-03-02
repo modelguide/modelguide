@@ -197,6 +197,24 @@ describe("POST /api/sops", () => {
     expect(body.assignedAgents[0].id).toBe(s.orgAAgentId);
     createdSopIds.push(body.id);
   });
+
+  test("deduplicates duplicate agentIds (201)", async () => {
+    const res = await request("/api/sops", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "SOP With Duplicate Agents",
+        slug: "sop-with-duplicate-agents",
+        definition: validDefinition,
+        agentIds: [s.orgAAgentId, s.orgAAgentId],
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.assignedAgents).toHaveLength(1);
+    expect(body.assignedAgents[0].id).toBe(s.orgAAgentId);
+    createdSopIds.push(body.id);
+  });
 });
 
 // ============================================================================
@@ -327,6 +345,30 @@ describe("PATCH /api/sops/:id", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.definition.steps).toHaveLength(2);
+  });
+
+  test("returns 404 for non-existent SOP when definition is provided", async () => {
+    const fakeId = "00000000-0000-0000-0000-000000000000";
+    const res = await request(`/api/sops/${fakeId}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        definition: {
+          schemaVersion: 1,
+          trigger: { type: "manual", config: {} },
+          steps: [
+            {
+              id: "step-1",
+              order: 1,
+              instruction: "Will not be written",
+              required: true,
+            },
+          ],
+          metadata: {},
+        },
+      }),
+    });
+    expect(res.status).toBe(404);
   });
 });
 

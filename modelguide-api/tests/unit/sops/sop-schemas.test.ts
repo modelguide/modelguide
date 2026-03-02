@@ -366,6 +366,48 @@ describe("createSopSchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  test("requires connectorId for SOP tool references", () => {
+    const result = createSopSchema.safeParse({
+      name: "Tool Step SOP",
+      definition: {
+        schemaVersion: 1,
+        trigger: { type: "manual", config: {} },
+        steps: [
+          {
+            id: "s1",
+            order: 1,
+            instruction: "Lookup order",
+            required: true,
+            tool: { toolSlug: "get_order" },
+          },
+        ],
+        metadata: {},
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects template catalogSlug in SOP create definition", () => {
+    const result = createSopSchema.safeParse({
+      name: "Template Style Ref",
+      definition: {
+        schemaVersion: 1,
+        trigger: { type: "manual", config: {} },
+        steps: [
+          {
+            id: "s1",
+            order: 1,
+            instruction: "Lookup order",
+            required: true,
+            tool: { toolSlug: "get_order", catalogSlug: "medusa" },
+          },
+        ],
+        metadata: {},
+      },
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("forkFromTemplateSchema", () => {
@@ -441,5 +483,25 @@ describe("updateSopSchema", () => {
       },
     });
     expect(result.success).toBe(true);
+  });
+
+  test("rejects update definition with catalogSlug tool reference", () => {
+    const result = updateSopSchema.safeParse({
+      definition: {
+        schemaVersion: 1,
+        trigger: { type: "manual", config: {} },
+        steps: [
+          {
+            id: "s1",
+            order: 1,
+            instruction: "Updated step",
+            required: true,
+            tool: { toolSlug: "get_order", catalogSlug: "medusa" },
+          },
+        ],
+        metadata: {},
+      },
+    });
+    expect(result.success).toBe(false);
   });
 });

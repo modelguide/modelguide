@@ -553,6 +553,15 @@ export async function updateSop(
   if (data.version !== undefined) updateData.version = data.version;
 
   return forOrg(orgId, async (tx) => {
+    const [existing] = await tx
+      .select({ id: sops.id })
+      .from(sops)
+      .where(eq(sops.id, sopId));
+
+    if (!existing) {
+      throw Errors.sopNotFound(sopId);
+    }
+
     if (data.definition) {
       const steps = normalizeStepOrder(data.definition.steps);
       validateUniqueStepIds(steps);
@@ -663,16 +672,18 @@ async function setAssignedAgentsInternal(
   sopId: string,
   agentIds: string[],
 ) {
+  const uniqueAgentIds = [...new Set(agentIds)];
+
   // Verify all agents belong to this org (agents table is RLS-protected,
   // so querying inside forOrg only returns same-org agents)
-  if (agentIds.length > 0) {
+  if (uniqueAgentIds.length > 0) {
     const foundAgents = await tx
       .select({ id: agents.id })
       .from(agents)
-      .where(inArray(agents.id, agentIds));
+      .where(inArray(agents.id, uniqueAgentIds));
 
     const foundIds = new Set(foundAgents.map((a) => a.id));
-    for (const id of agentIds) {
+    for (const id of uniqueAgentIds) {
       if (!foundIds.has(id)) {
         throw Errors.agentNotFound(id);
       }
@@ -683,9 +694,9 @@ async function setAssignedAgentsInternal(
   await tx.delete(agentSops).where(eq(agentSops.sopId, sopId));
 
   // Insert new
-  if (agentIds.length > 0) {
+  if (uniqueAgentIds.length > 0) {
     await tx.insert(agentSops).values(
-      agentIds.map((agentId) => ({
+      uniqueAgentIds.map((agentId) => ({
         agentId,
         sopId,
       })),
