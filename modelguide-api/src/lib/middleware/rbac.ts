@@ -58,6 +58,12 @@ export const Permissions = {
   // Organization management
   "organization:read": ["admin", "support", "viewer"],
   "organization:update": ["admin"],
+
+  // SOP management
+  "sops:read": ["admin", "support", "viewer"],
+  "sops:create": ["admin"],
+  "sops:update": ["admin", "support"],
+  "sops:delete": ["admin"],
 } as const;
 
 export type Permission = keyof typeof Permissions;

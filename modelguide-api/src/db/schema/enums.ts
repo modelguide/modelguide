@@ -94,3 +94,12 @@ export const feedbackSourceEnum = pgEnum("feedback_source", [
   "support",
   "system",
 ]);
+
+/**
+ * SOP lifecycle status
+ */
+export const sopStatusEnum = pgEnum("sop_status", [
+  "draft",
+  "active",
+  "archived",
+]);

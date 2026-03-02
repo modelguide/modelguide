@@ -26,6 +26,7 @@ import {
   ownerTypeEnum,
   secretTypeEnum,
   sessionStatusEnum,
+  sopStatusEnum,
   toolStatusEnum,
   userRoleEnum,
 } from "./enums";
@@ -59,6 +60,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   apiKeys: many(apiKeys),
   secrets: many(secrets),
   sessions: many(sessions),
+  sops: many(sops),
 }));
 
 // ============================================================================
@@ -396,6 +398,7 @@ export const agentsRelations = relations(agents, ({ one, many }) => ({
   }),
   apiKeys: many(apiKeys),
   agentConnectorTools: many(agentConnectorTools),
+  agentSops: many(agentSops),
   sessions: many(sessions),
 }));
 
@@ -674,5 +677,172 @@ export const sessionLinksRelations = relations(sessionLinks, ({ one }) => ({
   session: one(sessions, {
     fields: [sessionLinks.sessionId],
     references: [sessions.id],
+  }),
+}));
+
+// ============================================================================
+// SOP Templates (Global Catalog — no RLS, like connectors_catalog)
+// ============================================================================
+
+export const sopTemplates = pgTable(
+  "sop_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    description: text("description"),
+    category: varchar("category", { length: 100 }),
+    catalogSlugs: text("catalog_slugs").array().default([]),
+    definition: jsonb("definition")
+      .$type<Record<string, unknown>>()
+      .default({}),
+    version: varchar("version", { length: 50 }).notNull().default("1.0"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+      () => new Date(),
+    ),
+  },
+  (table) => [
+    uniqueIndex("sop_templates_slug_unique").on(table.slug),
+    index("sop_templates_category_idx").on(table.category),
+    index("sop_templates_is_active_idx").on(table.isActive),
+  ],
+);
+
+export const sopTemplatesRelations = relations(sopTemplates, ({ many }) => ({
+  sops: many(sops),
+}));
+
+// ============================================================================
+// SOPs (Org-scoped definitions — RLS enabled)
+// ============================================================================
+
+export const sops = pgTable(
+  "sops",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    templateId: uuid("template_id").references(() => sopTemplates.id),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    description: text("description"),
+    category: varchar("category", { length: 100 }),
+    definition: jsonb("definition")
+      .$type<Record<string, unknown>>()
+      .default({}),
+    status: sopStatusEnum("status").notNull().default("draft"),
+    version: varchar("version", { length: 50 }).notNull().default("1.0"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+      () => new Date(),
+    ),
+  },
+  (table) => [
+    uniqueIndex("sops_org_slug_unique").on(table.organizationId, table.slug),
+    index("sops_org_idx").on(table.organizationId),
+    index("sops_org_status_idx").on(table.organizationId, table.status),
+  ],
+).enableRLS();
+
+export const sopsRelations = relations(sops, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [sops.organizationId],
+    references: [organizations.id],
+  }),
+  template: one(sopTemplates, {
+    fields: [sops.templateId],
+    references: [sopTemplates.id],
+  }),
+  creator: one(users, {
+    fields: [sops.createdBy],
+    references: [users.id],
+  }),
+  versions: many(sopVersions),
+  agentSops: many(agentSops),
+}));
+
+// ============================================================================
+// SOP Versions (Version history — no RLS, queried through RLS-protected sops)
+// ============================================================================
+
+export const sopVersions = pgTable(
+  "sop_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sopId: uuid("sop_id")
+      .notNull()
+      .references(() => sops.id, { onDelete: "cascade" }),
+    version: varchar("version", { length: 50 }).notNull(),
+    definition: jsonb("definition")
+      .$type<Record<string, unknown>>()
+      .default({}),
+    changeSummary: text("change_summary"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("sop_versions_sop_idx").on(table.sopId),
+    index("sop_versions_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const sopVersionsRelations = relations(sopVersions, ({ one }) => ({
+  sop: one(sops, {
+    fields: [sopVersions.sopId],
+    references: [sops.id],
+  }),
+  creator: one(users, {
+    fields: [sopVersions.createdBy],
+    references: [users.id],
+  }),
+}));
+
+// ============================================================================
+// Agent SOPs (Junction Table — no RLS, queried via RLS-protected parents)
+// ============================================================================
+
+export const agentSops = pgTable(
+  "agent_sops",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    sopId: uuid("sop_id")
+      .notNull()
+      .references(() => sops.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("agent_sops_unique").on(table.agentId, table.sopId),
+    index("agent_sops_agent_idx").on(table.agentId),
+    index("agent_sops_sop_idx").on(table.sopId),
+  ],
+);
+
+export const agentSopsRelations = relations(agentSops, ({ one }) => ({
+  agent: one(agents, {
+    fields: [agentSops.agentId],
+    references: [agents.id],
+  }),
+  sop: one(sops, {
+    fields: [agentSops.sopId],
+    references: [sops.id],
   }),
 }));

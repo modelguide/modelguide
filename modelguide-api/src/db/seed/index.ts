@@ -11,9 +11,11 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../schema";
-import { connectorsCatalog } from "../schema";
+import { connectorsCatalog, sopTemplates } from "../schema";
 import { connectorsCatalogSeed } from "./connectors-catalog";
 import { seedOrg } from "./seed-org";
+import { seedSopDefinitions } from "./seed-sop-defs";
+import { sopTemplatesSeed } from "./sop-templates";
 import clearhealthConfig from "./verticals/clearhealth";
 import glowboxConfig from "./verticals/glowbox";
 import steelpointConfig from "./verticals/steelpoint";
@@ -71,15 +73,32 @@ async function seedAll(db: SeedDb) {
     },
   };
 
-  // 2. Seed each vertical organization
+  // 2. Seed SOP templates (global)
+  console.log("\nSeeding SOP templates...");
+  const templateEntries = await db
+    .insert(sopTemplates)
+    .values(
+      sopTemplatesSeed.map((t) => ({
+        ...t,
+        definition: t.definition as unknown as Record<string, unknown>,
+      })),
+    )
+    .onConflictDoNothing()
+    .returning();
+  console.log(`  Created ${templateEntries.length} SOP templates`);
+
+  // 3. Seed each vertical organization
   for (const config of VERTICALS) {
     await seedOrg(db, config, catalogs);
   }
 
-  // 3. Verify data was actually persisted
+  // 4. Seed SOP definitions for demo org (glowbox)
+  await seedSopDefinitions(db);
+
+  // 5. Verify data was actually persisted
   const ok = await verifySeed(db);
 
-  // 4. Print summary
+  // 6. Print summary
   console.log("\n========================================");
   console.log(
     ok

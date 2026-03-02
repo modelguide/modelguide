@@ -4,6 +4,7 @@ export * from "./core";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import type {
   agentConnectorTools,
+  agentSops,
   agents,
   apiKeys,
   connectorTools,
@@ -17,6 +18,9 @@ import type {
   sessionLinks,
   sessionMessages,
   sessions,
+  sopTemplates,
+  sopVersions,
+  sops,
   users,
 } from "./core";
 
@@ -66,3 +70,15 @@ export type NewSessionFeedback = InferInsertModel<typeof sessionFeedback>;
 
 export type SessionLink = InferSelectModel<typeof sessionLinks>;
 export type NewSessionLink = InferInsertModel<typeof sessionLinks>;
+
+export type SopTemplate = InferSelectModel<typeof sopTemplates>;
+export type NewSopTemplate = InferInsertModel<typeof sopTemplates>;
+
+export type Sop = InferSelectModel<typeof sops>;
+export type NewSop = InferInsertModel<typeof sops>;
+
+export type SopVersion = InferSelectModel<typeof sopVersions>;
+export type NewSopVersion = InferInsertModel<typeof sopVersions>;
+
+export type AgentSop = InferSelectModel<typeof agentSops>;
+export type NewAgentSop = InferInsertModel<typeof agentSops>;
