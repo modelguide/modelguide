@@ -1,6 +1,12 @@
 /**
  * TypeScript interfaces for SOP JSONB shapes.
- * These define the structure stored in the `definition` column.
+ *
+ * Storage layout:
+ *  - sops:          trigger + metadata as separate JSONB columns; steps in sop_steps table.
+ *  - sop_templates: full SopSchema in a single `definition` JSONB (self-contained blueprint).
+ *  - sop_versions:  full SopSchema in a single `definition` JSONB (frozen audit snapshot).
+ *
+ * The API always returns an assembled SopSchema regardless of storage layout.
  */
 
 // ============================================================================

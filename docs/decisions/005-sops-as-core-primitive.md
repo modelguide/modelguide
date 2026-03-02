@@ -29,9 +29,46 @@ Each step's tool reference carries `connectorId` + `toolSlug` + `resolvedName` (
 
 Many-to-many via `agent_sops` junction table, following the `agent_connector_tools` pattern.
 
-### JSONB definition with schema versioning
+### Storage layout differs by table
 
-The `definition` column stores `SopSchema` JSONB with `schemaVersion: 1` for forward evolution, validated by Zod on write. Discriminated union triggers (channel, intent_detected, tool_present, manual).
+The three SOP-related tables store `SopSchema` data differently:
+
+| Table | Storage | Rationale |
+|---|---|---|
+| `sop_templates` | Single `definition` JSONB column (full `SopSchema`) | Self-contained catalog blueprints. No need to split. |
+| `sops` | `trigger` JSONB + `metadata` JSONB columns, steps in `sop_steps` table | Steps are relational for indexing, validation, and independent updates. Trigger and metadata are explicit columns — no misleading partial-object `definition`. `schemaVersion` is injected at read time (always `1`). |
+| `sop_versions` | Single `definition` JSONB column (full `SopSchema`) | Frozen immutable snapshots. Single blob is simpler for audit records. |
+
+The API contract is unchanged: clients always send/receive `{ schemaVersion, trigger, steps, metadata }`. The service assembles this from the appropriate storage on read and splits on write.
+
+```
+                        ┌─────────────────────────────┐
+                        │       API response           │
+                        │  { schemaVersion, trigger,   │
+                        │    steps, metadata }         │
+                        └──────────────┬──────────────┘
+                                       │ assembled by service
+                       ┌───────────────┼───────────────┐
+                       ▼               ▼               ▼
+              ┌────────────┐   ┌─────────────┐   ┌──────────┐
+              │    sops    │   │  sop_steps   │   │sop_versions│
+              │ (RLS)      │   │ (relational) │   │ (audit)    │
+              ├────────────┤   ├─────────────┤   ├──────────┤
+              │ trigger    │   │ step_id      │   │ definition │
+              │ metadata   │   │ instruction  │   │ (full blob)│
+              │            │   │ tool refs    │   │            │
+              └────────────┘   └─────────────┘   └──────────┘
+
+              ┌────────────────┐
+              │ sop_templates  │
+              │ (global)       │
+              ├────────────────┤       fork
+              │ definition     │ ─────────────► sops + sop_steps
+              │ (full blob)    │
+              └────────────────┘
+```
+
+`SopSchema` is validated by Zod on write. Discriminated union triggers (channel, intent_detected, tool_present, manual).
 
 ### Binary pass/fail scoring
 

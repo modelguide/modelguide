@@ -16,6 +16,11 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import type {
+  SopMetadata,
+  SopSchema,
+  SopTrigger,
+} from "@features/sops/sops.types";
 import {
   agentPlatformEnum,
   channelTypeEnum,
@@ -693,9 +698,10 @@ export const sopTemplates = pgTable(
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
     catalogSlugs: text("catalog_slugs").array().default([]),
+    /** Full SopSchema blueprint (trigger + steps + metadata). Self-contained catalog item. */
     definition: jsonb("definition")
-      .$type<Record<string, unknown>>()
-      .default({}),
+      .$type<SopSchema>()
+      .default({} as SopSchema),
     version: varchar("version", { length: 50 }).notNull().default("1.0"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -730,9 +736,10 @@ export const sops = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
-    definition: jsonb("definition")
-      .$type<Record<string, unknown>>()
-      .default({}),
+    /** SopTrigger — when this SOP activates. Steps stored in sop_steps table. */
+    trigger: jsonb("trigger").$type<SopTrigger>().notNull(),
+    /** SopMetadata — tags, reason codes, duration estimates. */
+    metadata: jsonb("metadata").$type<SopMetadata>().notNull().default({}),
     status: sopStatusEnum("status").notNull().default("draft"),
     version: varchar("version", { length: 50 }).notNull().default("1.0"),
     createdBy: uuid("created_by").references(() => users.id, {
@@ -825,9 +832,10 @@ export const sopVersions = pgTable(
       .notNull()
       .references(() => sops.id, { onDelete: "cascade" }),
     version: varchar("version", { length: 50 }).notNull(),
+    /** Frozen full SopSchema snapshot (trigger + steps + metadata). Immutable audit record. */
     definition: jsonb("definition")
-      .$type<Record<string, unknown>>()
-      .default({}),
+      .$type<SopSchema>()
+      .default({} as SopSchema),
     changeSummary: text("change_summary"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",

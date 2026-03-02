@@ -77,12 +77,7 @@ async function seedAll(db: SeedDb) {
   console.log("\nSeeding SOP templates...");
   const templateEntries = await db
     .insert(sopTemplates)
-    .values(
-      sopTemplatesSeed.map((t) => ({
-        ...t,
-        definition: t.definition as unknown as Record<string, unknown>,
-      })),
-    )
+    .values(sopTemplatesSeed)
     .onConflictDoNothing()
     .returning();
   console.log(`  Created ${templateEntries.length} SOP templates`);

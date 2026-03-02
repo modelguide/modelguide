@@ -95,22 +95,6 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     },
   ];
 
-  // Store trigger + metadata only (steps go to sop_steps table)
-  const orderLookupDef = {
-    schemaVersion: 1,
-    trigger: {
-      type: "intent_detected",
-      config: {
-        patterns: ["where is my order", "order status", "track order"],
-      },
-    },
-    metadata: {
-      reasonCode: "WISMO-001",
-      tags: ["order", "status", "tracking"],
-      estimatedDuration: "2-5 minutes",
-    },
-  };
-
   const [orderSop] = await db
     .insert(sops)
     .values({
@@ -120,7 +104,17 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       slug: "order-lookup",
       description:
         "Look up and communicate order status to customers. Forked from the Order Lookup template.",
-      definition: orderLookupDef as unknown as Record<string, unknown>,
+      trigger: {
+        type: "intent_detected",
+        config: {
+          patterns: ["where is my order", "order status", "track order"],
+        },
+      },
+      metadata: {
+        reasonCode: "WISMO-001",
+        tags: ["order", "status", "tracking"],
+        estimatedDuration: "2-5 minutes",
+      },
       status: "active",
       version: "1.0",
       createdBy: admin?.id,
@@ -183,19 +177,6 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     },
   ];
 
-  const returnDef = {
-    schemaVersion: 1,
-    trigger: {
-      type: "intent_detected",
-      config: { patterns: ["return", "refund", "send back"] },
-    },
-    metadata: {
-      reasonCode: "RET-001",
-      tags: ["return", "refund"],
-      estimatedDuration: "5-10 minutes",
-    },
-  };
-
   const [returnSop] = await db
     .insert(sops)
     .values({
@@ -204,7 +185,15 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       slug: "return-process",
       description:
         "Standard procedure for processing customer returns. Currently in draft.",
-      definition: returnDef as unknown as Record<string, unknown>,
+      trigger: {
+        type: "intent_detected",
+        config: { patterns: ["return", "refund", "send back"] },
+      },
+      metadata: {
+        reasonCode: "RET-001",
+        tags: ["return", "refund"],
+        estimatedDuration: "5-10 minutes",
+      },
       status: "draft",
       version: "1.0",
       createdBy: admin?.id,

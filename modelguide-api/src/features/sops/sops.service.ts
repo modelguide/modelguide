@@ -105,23 +105,6 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
   });
 }
 
-/** Strip steps from a definition, leaving only trigger + metadata. */
-function stripStepsFromDefinition(def: SopSchema): Record<string, unknown> {
-  const { steps, ...rest } = def;
-  return rest as unknown as Record<string, unknown>;
-}
-
-/** Reconstruct a full SopSchema from a partial definition (no steps) + loaded steps. */
-function reconstructDefinition(
-  partialDef: Record<string, unknown>,
-  steps: SopStep[],
-): SopSchema {
-  return {
-    ...(partialDef as Omit<SopSchema, "steps">),
-    steps,
-  } as SopSchema;
-}
-
 // ============================================================================
 // Step connector/tool validation and name resolution
 // ============================================================================
@@ -373,12 +356,14 @@ export async function getSopById(orgId: string, sopId: string) {
       throw Errors.sopNotFound(sopId);
     }
 
-    // Load steps from sop_steps table and reconstruct full definition
+    // Load steps from sop_steps table and assemble full definition
     const steps = await loadSteps(tx, sopId);
-    const definition = reconstructDefinition(
-      sop.definition as Record<string, unknown>,
+    const definition: SopSchema = {
+      schemaVersion: 1,
+      trigger: sop.trigger!,
       steps,
-    );
+      metadata: sop.metadata ?? {},
+    };
 
     // Agent assignments (agentSops has no RLS; agents is RLS-protected so tx filters by org)
     const assignedAgents = await tx
@@ -454,7 +439,8 @@ export async function createSop(
         name: data.name,
         slug,
         description: data.description,
-        definition: stripStepsFromDefinition(definition),
+        trigger: definition.trigger,
+        metadata: definition.metadata,
         status: "draft",
         createdBy,
       })
@@ -485,7 +471,7 @@ export async function forkFromTemplate(
   createdBy?: string,
 ) {
   const template = await getTemplateById(templateId);
-  const templateDef = template.definition as unknown as SopSchema;
+  const templateDef = template.definition!;
 
   const name = data.name || template.name;
   const slug = data.slug || slugify(name);
@@ -543,7 +529,8 @@ export async function forkFromTemplate(
         name,
         slug,
         description: template.description,
-        definition: stripStepsFromDefinition(definition),
+        trigger: definition.trigger,
+        metadata: definition.metadata,
         status: "draft",
         createdBy,
       })
@@ -581,12 +568,10 @@ export async function updateSop(
       const steps = normalizeStepOrder(data.definition.steps);
       validateUniqueStepIds(steps);
       const resolvedSteps = await validateAndResolveSteps(tx, steps);
-      const definition: SopSchema = {
-        ...data.definition,
-        steps: resolvedSteps,
-      };
+
       // Store trigger + metadata only
-      updateData.definition = stripStepsFromDefinition(definition);
+      updateData.trigger = data.definition.trigger;
+      updateData.metadata = data.definition.metadata;
 
       // Replace steps: delete old, insert new
       await tx.delete(sopSteps).where(eq(sopSteps.sopId, sopId));
@@ -793,17 +778,19 @@ export async function createVersion(
     }
 
     const steps = await loadSteps(tx, sopId);
-    const fullDefinition = reconstructDefinition(
-      sop.definition as Record<string, unknown>,
+    const fullDefinition: SopSchema = {
+      schemaVersion: 1,
+      trigger: sop.trigger!,
       steps,
-    );
+      metadata: sop.metadata ?? {},
+    };
 
     const [version] = await db
       .insert(sopVersions)
       .values({
         sopId,
         version: sop.version,
-        definition: fullDefinition as unknown as Record<string, unknown>,
+        definition: fullDefinition,
         changeSummary: data.changeSummary,
         createdBy,
       })

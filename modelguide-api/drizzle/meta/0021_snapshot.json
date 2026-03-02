@@ -1,5 +1,5 @@
 {
-  "id": "f83e104d-daef-40ab-a481-4ab7ab288810",
+  "id": "5db2e04c-03c0-4d5e-847f-0e0733d78dff",
   "prevId": "e0108154-2d6c-47cb-889e-bda4716b17e4",
   "version": "7",
   "dialect": "postgresql",
@@ -2445,11 +2445,17 @@
           "primaryKey": false,
           "notNull": false
         },
-        "definition": {
-          "name": "definition",
+        "trigger": {
+          "name": "trigger",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
           "default": "'{}'::jsonb"
         },
         "status": {
