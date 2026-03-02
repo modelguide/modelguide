@@ -15,7 +15,6 @@ CREATE TABLE "sop_steps" (
 	"required" boolean DEFAULT true NOT NULL,
 	"connector_id" uuid,
 	"tool_slug" varchar(100),
-	"resolved_name" varchar(255),
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );

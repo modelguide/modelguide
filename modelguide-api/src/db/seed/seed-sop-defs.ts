@@ -1,6 +1,6 @@
 /**
  * Seed SOP definitions for the demo org (GlowBox).
- * Creates org-scoped SOPs with resolved tool names pointing to existing connectors.
+ * Creates org-scoped SOPs with tool references pointing to existing connectors.
  */
 
 import type { SopStep } from "@features/sops/sops.types";
@@ -76,7 +76,6 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       tool: {
         toolSlug: "get_order",
         connectorId: medusaConnector.id,
-        resolvedName: `${medusaConnector.slug}_get_order`,
       },
     },
     {
@@ -133,7 +132,6 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
         required: s.required,
         connectorId: s.tool?.connectorId ?? null,
         toolSlug: s.tool?.toolSlug ?? null,
-        resolvedName: s.tool?.resolvedName ?? null,
         notes: s.notes ?? null,
       })),
     );
@@ -172,7 +170,6 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       tool: {
         toolSlug: "get_order",
         connectorId: medusaConnector.id,
-        resolvedName: `${medusaConnector.slug}_get_order`,
       },
     },
   ];
@@ -212,7 +209,6 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
         required: s.required,
         connectorId: s.tool?.connectorId ?? null,
         toolSlug: s.tool?.toolSlug ?? null,
-        resolvedName: s.tool?.resolvedName ?? null,
         notes: s.notes ?? null,
       })),
     );

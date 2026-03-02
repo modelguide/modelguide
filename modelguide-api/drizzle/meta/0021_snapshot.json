@@ -1,5 +1,5 @@
 {
-  "id": "5db2e04c-03c0-4d5e-847f-0e0733d78dff",
+  "id": "da3466fa-da68-49ab-b7af-4a7e03c38e1e",
   "prevId": "e0108154-2d6c-47cb-889e-bda4716b17e4",
   "version": "7",
   "dialect": "postgresql",
@@ -2068,12 +2068,6 @@
         "tool_slug": {
           "name": "tool_slug",
           "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "resolved_name": {
-          "name": "resolved_name",
-          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false
         },

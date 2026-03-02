@@ -72,17 +72,26 @@ async function insertSteps(
       required: s.required,
       connectorId: s.tool?.connectorId ?? null,
       toolSlug: s.tool?.toolSlug ?? null,
-      resolvedName: s.tool?.resolvedName ?? null,
       notes: s.notes ?? null,
     })),
   );
 }
 
-/** Load sop_steps rows and convert back to SopStep[]. */
+/** Load sop_steps rows and convert back to SopStep[]. Computes resolvedName at read time. */
 async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
   const rows = await tx
-    .select()
+    .select({
+      stepId: sopSteps.stepId,
+      order: sopSteps.order,
+      instruction: sopSteps.instruction,
+      required: sopSteps.required,
+      connectorId: sopSteps.connectorId,
+      toolSlug: sopSteps.toolSlug,
+      notes: sopSteps.notes,
+      connectorSlug: connectors.slug,
+    })
     .from(sopSteps)
+    .leftJoin(connectors, eq(sopSteps.connectorId, connectors.id))
     .where(eq(sopSteps.sopId, sopId))
     .orderBy(asc(sopSteps.order));
 
@@ -97,7 +106,9 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
       step.tool = {
         toolSlug: r.toolSlug,
         connectorId: r.connectorId ?? undefined,
-        resolvedName: r.resolvedName ?? undefined,
+        resolvedName: r.connectorSlug
+          ? `${r.connectorSlug}_${r.toolSlug}`
+          : undefined,
       };
     }
     if (r.notes) step.notes = r.notes;
@@ -106,22 +117,18 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
 }
 
 // ============================================================================
-// Step connector/tool validation and name resolution
+// Step connector/tool validation
 // ============================================================================
 
 /**
  * Validate that step tool references point to valid org connectors and tools.
- * Also computes and sets `resolvedName` on each step with a tool reference.
  *
  * Accepts a transaction so callers can run this inside their forOrg block,
  * avoiding TOCTOU races between validation and insert.
  */
-async function validateAndResolveSteps(
-  tx: Transaction,
-  steps: SopStep[],
-): Promise<SopStep[]> {
+async function validateSteps(tx: Transaction, steps: SopStep[]): Promise<void> {
   const stepsWithTools = steps.filter((s) => s.tool?.connectorId);
-  if (stepsWithTools.length === 0) return steps;
+  if (stepsWithTools.length === 0) return;
 
   // Collect unique connector IDs
   const connectorIds = [
@@ -130,15 +137,15 @@ async function validateAndResolveSteps(
 
   // Look up connectors within org scope (tx already has org context)
   const orgConnectors = await tx
-    .select({ id: connectors.id, slug: connectors.slug })
+    .select({ id: connectors.id })
     .from(connectors)
     .where(inArray(connectors.id, connectorIds));
 
-  const connectorMap = new Map(orgConnectors.map((c) => [c.id, c.slug]));
+  const connectorIdSet = new Set(orgConnectors.map((c) => c.id));
 
   // Verify all referenced connectors exist in this org
   for (const cid of connectorIds) {
-    if (!connectorMap.has(cid)) {
+    if (!connectorIdSet.has(cid)) {
       throw Errors.sopInvalidConnectorRef(
         `Connector not found in this organization: ${cid}`,
       );
@@ -161,9 +168,9 @@ async function validateAndResolveSteps(
 
   const toolSet = new Set(orgTools.map((t) => `${t.connectorId}:${t.slug}`));
 
-  // Validate and resolve each step
-  return steps.map((step) => {
-    if (!step.tool?.connectorId) return step;
+  // Validate each step's tool reference
+  for (const step of steps) {
+    if (!step.tool?.connectorId) continue;
 
     const key = `${step.tool.connectorId}:${step.tool.toolSlug}`;
     if (!toolSet.has(key)) {
@@ -171,16 +178,7 @@ async function validateAndResolveSteps(
         `Tool "${step.tool.toolSlug}" not found on connector ${step.tool.connectorId}`,
       );
     }
-
-    const connectorSlug = connectorMap.get(step.tool.connectorId)!;
-    return {
-      ...step,
-      tool: {
-        ...step.tool,
-        resolvedName: `${connectorSlug}_${step.tool.toolSlug}`,
-      },
-    };
-  });
+  }
 }
 
 // ============================================================================
@@ -413,13 +411,8 @@ export async function createSop(
   validateUniqueStepIds(steps);
 
   return forOrg(orgId, async (tx) => {
-    // Validate and resolve step tool references inside the transaction
-    const resolvedSteps = await validateAndResolveSteps(tx, steps);
-
-    const definition: SopSchema = {
-      ...data.definition,
-      steps: resolvedSteps,
-    };
+    // Validate step tool references inside the transaction
+    await validateSteps(tx, steps);
 
     // Check slug uniqueness
     const [existing] = await tx
@@ -439,15 +432,15 @@ export async function createSop(
         name: data.name,
         slug,
         description: data.description,
-        trigger: definition.trigger,
-        metadata: definition.metadata,
+        trigger: data.definition.trigger,
+        metadata: data.definition.metadata,
         status: "draft",
         createdBy,
       })
       .returning();
 
     // Insert steps into relational table
-    await insertSteps(tx, sop.id, resolvedSteps);
+    await insertSteps(tx, sop.id, steps);
 
     // Assign agents if provided
     if (data.agentIds?.length) {
@@ -501,15 +494,11 @@ export async function forkFromTemplate(
   validateUniqueStepIds(steps);
 
   return forOrg(orgId, async (tx) => {
-    // Validate and resolve inside the transaction
-    const resolvedSteps = await validateAndResolveSteps(tx, steps);
+    // Validate step tool references inside the transaction
+    await validateSteps(tx, steps);
 
-    const definition: SopSchema = {
-      schemaVersion: 1,
-      trigger: data.overrides?.trigger ?? templateDef.trigger,
-      steps: resolvedSteps,
-      metadata: data.overrides?.metadata ?? templateDef.metadata ?? {},
-    };
+    const trigger = data.overrides?.trigger ?? templateDef.trigger;
+    const metadata = data.overrides?.metadata ?? templateDef.metadata ?? {};
 
     const [existing] = await tx
       .select({ id: sops.id })
@@ -529,15 +518,15 @@ export async function forkFromTemplate(
         name,
         slug,
         description: template.description,
-        trigger: definition.trigger,
-        metadata: definition.metadata,
+        trigger,
+        metadata,
         status: "draft",
         createdBy,
       })
       .returning();
 
     // Insert steps into relational table
-    await insertSteps(tx, sop.id, resolvedSteps);
+    await insertSteps(tx, sop.id, steps);
 
     if (data.agentIds?.length) {
       await setAssignedAgentsInternal(tx, sop.id, data.agentIds);
@@ -567,7 +556,7 @@ export async function updateSop(
     if (data.definition) {
       const steps = normalizeStepOrder(data.definition.steps);
       validateUniqueStepIds(steps);
-      const resolvedSteps = await validateAndResolveSteps(tx, steps);
+      await validateSteps(tx, steps);
 
       // Store trigger + metadata only
       updateData.trigger = data.definition.trigger;
@@ -575,7 +564,7 @@ export async function updateSop(
 
       // Replace steps: delete old, insert new
       await tx.delete(sopSteps).where(eq(sopSteps.sopId, sopId));
-      await insertSteps(tx, sopId, resolvedSteps);
+      await insertSteps(tx, sopId, steps);
     }
 
     const [updated] = await tx

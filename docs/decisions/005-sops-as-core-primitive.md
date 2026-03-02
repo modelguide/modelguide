@@ -23,7 +23,7 @@ Each step is an instruction with an optional tool reference. Steps define what t
 
 ### Step-level connector binding
 
-Each step's tool reference carries `connectorId` + `toolSlug` + `resolvedName` (full MCP name computed on write). Templates use `catalogSlug` for portability. A single SOP can have steps referencing different connectors (e.g., Medusa for order lookup, Zendesk for ticket creation).
+Each step's tool reference carries `connectorId` + `toolSlug`. The full MCP tool name (`resolvedName`) is computed at read time by joining `sop_steps` → `connectors` on `connectorId`, avoiding stale names if a connector is renamed. Templates use `catalogSlug` for portability. A single SOP can have steps referencing different connectors (e.g., Medusa for order lookup, Zendesk for ticket creation).
 
 ### Multi-agent assignment
 
@@ -90,5 +90,4 @@ When a step references a tool or connector that has become inactive, the API enr
 
 - SOPs become the behavioral contract between orgs and agents, complementing the existing connector/tool infrastructure.
 - Step-level tool references create a loose coupling to connectors — if a connector is deleted/deactivated, SOPs warn but don't break.
-- The `resolvedName` denormalization trades storage for read performance and MCP portability.
 - Template-to-definition fork pattern enables cross-org reuse while respecting tenant isolation via RLS.

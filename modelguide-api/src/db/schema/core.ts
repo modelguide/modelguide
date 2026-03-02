@@ -796,7 +796,6 @@ export const sopSteps = pgTable(
       onDelete: "set null",
     }),
     toolSlug: varchar("tool_slug", { length: 100 }),
-    resolvedName: varchar("resolved_name", { length: 255 }),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
