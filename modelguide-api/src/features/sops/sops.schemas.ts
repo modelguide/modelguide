@@ -50,6 +50,8 @@ export const sopTriggerSchema = z.discriminatedUnion("type", [
 // Step schema
 // ============================================================================
 
+// Read-side tool schema — shared between org SOP responses (connectorToolId + resolvedName)
+// and template JSONB (catalogSlug + toolSlug for portability). All fields optional.
 const sopStepToolSchema = z.object({
   connectorToolId: z.string().uuid().optional(),
   catalogSlug: z.string().optional(),
@@ -79,7 +81,7 @@ export const sopStepSchema = z.object({
 
 const sopStepWriteSchema = z.object({
   id: z.string().min(1).max(100, "Step ID must be 100 characters or less"),
-  order: z.number().int().min(1),
+  order: z.number().int().min(1).optional(),
   instruction: z
     .string()
     .min(1, "Instruction is required")
@@ -190,6 +192,10 @@ const assignedAgentSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   modality: z.string(),
+});
+
+export const assignedAgentsResponseSchema = z.object({
+  data: z.array(assignedAgentSchema),
 });
 
 export const sopSummaryResponseSchema = z.object({

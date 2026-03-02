@@ -1,5 +1,5 @@
 {
-  "id": "b00c4cf9-bc5f-428a-a383-4572ba001e1c",
+  "id": "80cfc98e-fd6a-4bad-a8f7-d45a036ef356",
   "prevId": "e0108154-2d6c-47cb-889e-bda4716b17e4",
   "version": "7",
   "dialect": "postgresql",
@@ -2448,7 +2448,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "sops_created_by_users_id_fk": {

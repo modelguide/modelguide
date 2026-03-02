@@ -1,5 +1,5 @@
 /**
- * SOPs service — business logic for SOP templates, definitions, versions, and agent assignments.
+ * SOPs service — business logic for SOP templates, definitions, and agent assignments.
  */
 
 import { db } from "@db/client";

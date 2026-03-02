@@ -53,7 +53,7 @@ ALTER TABLE "agent_sops" ADD CONSTRAINT "agent_sops_sop_id_sops_id_fk" FOREIGN K
 ALTER TABLE "sop_steps" ADD CONSTRAINT "sop_steps_sop_id_sops_id_fk" FOREIGN KEY ("sop_id") REFERENCES "public"."sops"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sop_steps" ADD CONSTRAINT "sop_steps_connector_tool_id_connector_tools_id_fk" FOREIGN KEY ("connector_tool_id") REFERENCES "public"."connector_tools"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sops" ADD CONSTRAINT "sops_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sops" ADD CONSTRAINT "sops_sop_template_id_sop_templates_id_fk" FOREIGN KEY ("sop_template_id") REFERENCES "public"."sop_templates"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sops" ADD CONSTRAINT "sops_sop_template_id_sop_templates_id_fk" FOREIGN KEY ("sop_template_id") REFERENCES "public"."sop_templates"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sops" ADD CONSTRAINT "sops_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "agent_sops_unique" ON "agent_sops" USING btree ("agent_id","sop_id");--> statement-breakpoint
 CREATE INDEX "agent_sops_agent_idx" ON "agent_sops" USING btree ("agent_id");--> statement-breakpoint

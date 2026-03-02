@@ -732,7 +732,9 @@ export const sops = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    sopTemplateId: uuid("sop_template_id").references(() => sopTemplates.id),
+    sopTemplateId: uuid("sop_template_id").references(() => sopTemplates.id, {
+      onDelete: "set null",
+    }),
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),

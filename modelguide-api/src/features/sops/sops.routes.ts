@@ -15,6 +15,7 @@ import { errorResponse } from "@lib/schemas";
 import type { SopSchema } from "./sops.types";
 
 import {
+  assignedAgentsResponseSchema,
   createSopSchema,
   forkFromTemplateSchema,
   setAgentsSchema,
@@ -59,17 +60,6 @@ const templateIdParams = z.object({
 // ============================================================================
 
 type SopStatus = "draft" | "active" | "archived";
-
-/** Shared response schema for agent assignment endpoints. */
-const assignedAgentsResponseSchema = z.object({
-  data: z.array(
-    z.object({
-      id: z.string().uuid(),
-      name: z.string(),
-      modality: z.string(),
-    }),
-  ),
-});
 
 type ServiceTemplate = Awaited<ReturnType<typeof getTemplateById>>;
 function formatTemplate(t: ServiceTemplate) {
