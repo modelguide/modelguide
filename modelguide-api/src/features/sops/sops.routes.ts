@@ -16,14 +16,12 @@ import type { SopSchema } from "./sops.types";
 
 import {
   createSopSchema,
-  createVersionSchema,
   forkFromTemplateSchema,
   setAgentsSchema,
   sopDetailResponseSchema,
   sopListQuerySchema,
   sopSummaryResponseSchema,
   sopTemplateResponseSchema,
-  sopVersionResponseSchema,
   updateSopSchema,
 } from "./sops.schemas";
 
@@ -31,16 +29,13 @@ import {
   activateSop,
   archiveSop,
   createSop,
-  createVersion,
   deleteSop,
   forkFromTemplate,
   getAssignedAgents,
   getSopById,
   getTemplateById,
-  getVersion,
   listSops,
   listTemplates,
-  listVersions,
   setAssignedAgents,
   updateSop,
 } from "./sops.service";
@@ -59,16 +54,22 @@ const templateIdParams = z.object({
   templateId: z.string().uuid().openapi({ description: "SOP Template ID" }),
 });
 
-const versionIdParams = z.object({
-  id: z.string().uuid().openapi({ description: "SOP ID" }),
-  versionId: z.string().uuid().openapi({ description: "Version ID" }),
-});
-
 // ============================================================================
 // Helpers — typed formatters using service return types
 // ============================================================================
 
 type SopStatus = "draft" | "active" | "archived";
+
+/** Shared response schema for agent assignment endpoints. */
+const assignedAgentsResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      modality: z.string(),
+    }),
+  ),
+});
 
 type ServiceTemplate = Awaited<ReturnType<typeof getTemplateById>>;
 function formatTemplate(t: ServiceTemplate) {
@@ -95,7 +96,7 @@ function formatSopSummary(s: ServiceSopSummary) {
     status: s.status as SopStatus,
     version: s.version,
     assignedAgents: s.assignedAgents,
-    templateId: s.templateId,
+    sopTemplateId: s.sopTemplateId,
     templateName: s.templateName ?? null,
     stepCount: s.stepCount,
     createdAt: s.createdAt.toISOString(),
@@ -113,26 +114,13 @@ function formatSopDetail(s: ServiceSopDetail) {
     status: s.status as SopStatus,
     version: s.version,
     assignedAgents: s.assignedAgents,
-    templateId: s.templateId,
+    sopTemplateId: s.sopTemplateId,
     template: s.template,
     definition: s.definition as unknown as SopSchema,
     stepWarnings: s.stepWarnings,
     createdBy: s.createdBy,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt?.toISOString() ?? null,
-  };
-}
-
-type ServiceVersion = Awaited<ReturnType<typeof getVersion>>;
-function formatVersion(v: ServiceVersion) {
-  return {
-    id: v.id,
-    sopId: v.sopId,
-    version: v.version,
-    definition: v.definition as unknown as SopSchema,
-    changeSummary: v.changeSummary,
-    createdBy: v.createdBy,
-    createdAt: v.createdAt.toISOString(),
   };
 }
 
@@ -217,26 +205,6 @@ router.put(
   "/:id/agents",
   requireUser(),
   requirePermission("sops:update"),
-  requireOrganization(),
-);
-
-// Versions
-router.get(
-  "/:id/versions",
-  requireUser(),
-  requirePermission("sops:read"),
-  requireOrganization(),
-);
-router.post(
-  "/:id/versions",
-  requireUser(),
-  requirePermission("sops:update"),
-  requireOrganization(),
-);
-router.get(
-  "/:id/versions/:versionId",
-  requireUser(),
-  requirePermission("sops:read"),
   requireOrganization(),
 );
 
@@ -589,17 +557,7 @@ const getAgentsRoute = createRoute({
     200: {
       description: "Assigned agents",
       content: {
-        "application/json": {
-          schema: z.object({
-            data: z.array(
-              z.object({
-                id: z.string().uuid(),
-                name: z.string(),
-                modality: z.string(),
-              }),
-            ),
-          }),
-        },
+        "application/json": { schema: assignedAgentsResponseSchema },
       },
     },
     401: errorResponse("Not authenticated"),
@@ -631,17 +589,7 @@ const setAgentsRoute = createRoute({
     200: {
       description: "Agent assignments updated",
       content: {
-        "application/json": {
-          schema: z.object({
-            data: z.array(
-              z.object({
-                id: z.string().uuid(),
-                name: z.string(),
-                modality: z.string(),
-              }),
-            ),
-          }),
-        },
+        "application/json": { schema: assignedAgentsResponseSchema },
       },
     },
     401: errorResponse("Not authenticated"),
@@ -656,103 +604,6 @@ router.openapi(setAgentsRoute, async (c) => {
   const { agentIds } = c.req.valid("json");
   const assignedAgents = await setAssignedAgents(orgId, id, agentIds);
   return c.json({ data: assignedAgents }, 200);
-});
-
-// ============================================================================
-// Version routes
-// ============================================================================
-
-const listVersionsRoute = createRoute({
-  method: "get",
-  path: "/{id}/versions",
-  tags: ["SOPs"],
-  summary: "List SOP versions",
-  description: "Returns version history for an SOP.",
-  security: [{ bearerAuth: [] }],
-  request: { params: idParams },
-  responses: {
-    200: {
-      description: "Version history",
-      content: {
-        "application/json": {
-          schema: z.object({
-            data: z.array(sopVersionResponseSchema),
-          }),
-        },
-      },
-    },
-    401: errorResponse("Not authenticated"),
-    404: errorResponse("SOP not found"),
-  },
-});
-
-router.openapi(listVersionsRoute, async (c) => {
-  const orgId = getOrganizationId(c);
-  const { id } = c.req.valid("param");
-  const versions = await listVersions(orgId, id);
-  return c.json({ data: versions.map(formatVersion) }, 200);
-});
-
-const createVersionRoute = createRoute({
-  method: "post",
-  path: "/{id}/versions",
-  tags: ["SOPs"],
-  summary: "Create version snapshot",
-  description: "Creates a snapshot of the current SOP definition.",
-  security: [{ bearerAuth: [] }],
-  request: {
-    params: idParams,
-    body: {
-      content: { "application/json": { schema: createVersionSchema } },
-    },
-  },
-  responses: {
-    201: {
-      description: "Version created",
-      content: {
-        "application/json": { schema: sopVersionResponseSchema },
-      },
-    },
-    401: errorResponse("Not authenticated"),
-    404: errorResponse("SOP not found"),
-  },
-});
-
-router.openapi(createVersionRoute, async (c) => {
-  const orgId = getOrganizationId(c);
-  const { id } = c.req.valid("param");
-  const body = c.req.valid("json");
-  const auth = c.get("auth");
-  const createdBy = auth.type === "user" ? auth.user.id : undefined;
-  const version = await createVersion(orgId, id, body, createdBy);
-  return c.json(formatVersion(version), 201);
-});
-
-const getVersionRoute = createRoute({
-  method: "get",
-  path: "/{id}/versions/{versionId}",
-  tags: ["SOPs"],
-  summary: "Get version detail",
-  description: "Returns a specific version snapshot.",
-  security: [{ bearerAuth: [] }],
-  request: { params: versionIdParams },
-  responses: {
-    200: {
-      description: "Version detail",
-      content: {
-        "application/json": { schema: sopVersionResponseSchema },
-      },
-    },
-    401: errorResponse("Not authenticated"),
-    404: errorResponse("SOP or version not found"),
-  },
-});
-
-router.openapi(getVersionRoute, async (c) => {
-  const orgId = getOrganizationId(c);
-  const { id, versionId } = c.req.valid("param");
-  const version = await getVersion(orgId, id, versionId);
-  return c.json(formatVersion(version), 200);
 });
 
 export default router;

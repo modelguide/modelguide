@@ -16,7 +16,4 @@ export {
   archiveSop,
   getAssignedAgents,
   setAssignedAgents,
-  listVersions,
-  createVersion,
-  getVersion,
 } from "./sops.service";

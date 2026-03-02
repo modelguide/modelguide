@@ -732,7 +732,7 @@ export const sops = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    templateId: uuid("template_id").references(() => sopTemplates.id),
+    sopTemplateId: uuid("sop_template_id").references(() => sopTemplates.id),
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
@@ -765,7 +765,7 @@ export const sopsRelations = relations(sops, ({ one, many }) => ({
     references: [organizations.id],
   }),
   template: one(sopTemplates, {
-    fields: [sops.templateId],
+    fields: [sops.sopTemplateId],
     references: [sopTemplates.id],
   }),
   creator: one(users, {
@@ -773,7 +773,6 @@ export const sopsRelations = relations(sops, ({ one, many }) => ({
     references: [users.id],
   }),
   steps: many(sopSteps),
-  versions: many(sopVersions),
   agentSops: many(agentSops),
 }));
 
@@ -816,47 +815,6 @@ export const sopStepsRelations = relations(sopSteps, ({ one }) => ({
   connectorTool: one(connectorTools, {
     fields: [sopSteps.connectorToolId],
     references: [connectorTools.id],
-  }),
-}));
-
-// ============================================================================
-// SOP Versions (Version history — no RLS, queried through RLS-protected sops)
-// ============================================================================
-
-export const sopVersions = pgTable(
-  "sop_versions",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    sopId: uuid("sop_id")
-      .notNull()
-      .references(() => sops.id, { onDelete: "cascade" }),
-    version: varchar("version", { length: 50 }).notNull(),
-    /** Frozen full SopSchema snapshot (trigger + steps + metadata). Immutable audit record. */
-    definition: jsonb("definition")
-      .$type<SopSchema>()
-      .default({} as SopSchema),
-    changeSummary: text("change_summary"),
-    createdBy: uuid("created_by").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("sop_versions_sop_idx").on(table.sopId),
-    index("sop_versions_created_at_idx").on(table.createdAt),
-  ],
-);
-
-export const sopVersionsRelations = relations(sopVersions, ({ one }) => ({
-  sop: one(sops, {
-    fields: [sopVersions.sopId],
-    references: [sops.id],
-  }),
-  creator: one(users, {
-    fields: [sopVersions.createdBy],
-    references: [users.id],
   }),
 }));
 

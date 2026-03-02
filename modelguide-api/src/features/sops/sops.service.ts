@@ -11,7 +11,6 @@ import {
   connectors,
   sopSteps,
   sopTemplates,
-  sopVersions,
   sops,
 } from "@db/schema";
 import type { NewSop } from "@db/schema";
@@ -50,6 +49,15 @@ function validateUniqueStepIds(steps: SopStep[]): void {
 /** Normalize step order to be 1-based from array position. */
 function normalizeStepOrder(steps: SopStep[]): SopStep[] {
   return steps.map((step, index) => ({ ...step, order: index + 1 }));
+}
+
+/** Verify SOP exists within the org-scoped transaction, throw 404 if not. */
+async function requireSopExists(tx: Transaction, sopId: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: sops.id })
+    .from(sops)
+    .where(eq(sops.id, sopId));
+  if (!row) throw Errors.sopNotFound(sopId);
 }
 
 // ============================================================================
@@ -329,7 +337,9 @@ export async function listSops(
 
     // Batch-load template names
     const templateIds = [
-      ...new Set(items.filter((s) => s.templateId).map((s) => s.templateId!)),
+      ...new Set(
+        items.filter((s) => s.sopTemplateId).map((s) => s.sopTemplateId!),
+      ),
     ];
     const templateRows =
       templateIds.length > 0
@@ -355,8 +365,8 @@ export async function listSops(
       return {
         ...sop,
         assignedAgents: assignmentsBySop.get(sop.id) ?? [],
-        templateName: sop.templateId
-          ? (templateNameMap.get(sop.templateId) ?? null)
+        templateName: sop.sopTemplateId
+          ? (templateNameMap.get(sop.sopTemplateId) ?? null)
           : null,
         stepCount: stepCountMap.get(sop.id) ?? 0,
       };
@@ -399,7 +409,7 @@ export async function getSopById(orgId: string, sopId: string) {
 
     // Template lookup (no RLS — global table)
     let template: { id: string; name: string; slug: string } | null = null;
-    if (sop.templateId) {
+    if (sop.sopTemplateId) {
       const [tpl] = await db
         .select({
           id: sopTemplates.id,
@@ -407,7 +417,7 @@ export async function getSopById(orgId: string, sopId: string) {
           slug: sopTemplates.slug,
         })
         .from(sopTemplates)
-        .where(eq(sopTemplates.id, sop.templateId));
+        .where(eq(sopTemplates.id, sop.sopTemplateId));
       template = tpl ?? null;
     }
 
@@ -519,7 +529,7 @@ export async function forkFromTemplate(
       .insert(sops)
       .values({
         organizationId: orgId,
-        templateId,
+        sopTemplateId: templateId,
         name,
         slug,
         description: template.description,
@@ -558,14 +568,7 @@ export async function updateSop(
   if (data.version !== undefined) updateData.version = data.version;
 
   return forOrg(orgId, async (tx) => {
-    const [existing] = await tx
-      .select({ id: sops.id })
-      .from(sops)
-      .where(eq(sops.id, sopId));
-
-    if (!existing) {
-      throw Errors.sopNotFound(sopId);
-    }
+    await requireSopExists(tx, sopId);
 
     if (data.definition) {
       const steps = normalizeStepOrder(data.definition.steps);
@@ -607,14 +610,7 @@ export async function deleteSop(orgId: string, sopId: string): Promise<void> {
 
 export async function activateSop(orgId: string, sopId: string) {
   return forOrg(orgId, async (tx) => {
-    const [sop] = await tx
-      .select({ id: sops.id })
-      .from(sops)
-      .where(eq(sops.id, sopId));
-
-    if (!sop) {
-      throw Errors.sopNotFound(sopId);
-    }
+    await requireSopExists(tx, sopId);
 
     // Count steps from relational table
     const [{ total }] = await tx
@@ -711,16 +707,7 @@ async function setAssignedAgentsInternal(
 
 export async function getAssignedAgents(orgId: string, sopId: string) {
   return forOrg(orgId, async (tx) => {
-    // Verify SOP belongs to org
-    const [sop] = await tx
-      .select({ id: sops.id })
-      .from(sops)
-      .where(eq(sops.id, sopId));
-
-    if (!sop) {
-      throw Errors.sopNotFound(sopId);
-    }
-
+    await requireSopExists(tx, sopId);
     return getAssignedAgentsInTx(tx, sopId);
   });
 }
@@ -731,106 +718,11 @@ export async function setAssignedAgents(
   agentIds: string[],
 ) {
   return forOrg(orgId, async (tx) => {
-    // Verify SOP exists
-    const [sop] = await tx
-      .select({ id: sops.id })
-      .from(sops)
-      .where(eq(sops.id, sopId));
-
-    if (!sop) {
-      throw Errors.sopNotFound(sopId);
-    }
-
+    await requireSopExists(tx, sopId);
     await setAssignedAgentsInternal(tx, sopId, agentIds);
 
     return getAssignedAgentsInTx(tx, sopId);
   });
-}
-
-// ============================================================================
-// Versions
-// ============================================================================
-
-export async function listVersions(orgId: string, sopId: string) {
-  // Verify SOP belongs to org
-  const [sop] = await forOrg(orgId, (tx) =>
-    tx.select({ id: sops.id }).from(sops).where(eq(sops.id, sopId)),
-  );
-
-  if (!sop) {
-    throw Errors.sopNotFound(sopId);
-  }
-
-  return db
-    .select()
-    .from(sopVersions)
-    .where(eq(sopVersions.sopId, sopId))
-    .orderBy(desc(sopVersions.createdAt));
-}
-
-export async function createVersion(
-  orgId: string,
-  sopId: string,
-  data: { changeSummary?: string },
-  createdBy?: string,
-) {
-  // Get current SOP + steps (verifies org access), reconstruct full definition for snapshot
-  return forOrg(orgId, async (tx) => {
-    const [sop] = await tx.select().from(sops).where(eq(sops.id, sopId));
-
-    if (!sop) {
-      throw Errors.sopNotFound(sopId);
-    }
-
-    const steps = await loadSteps(tx, sopId);
-    const fullDefinition: SopSchema = {
-      schemaVersion: 1,
-      trigger: sop.trigger!,
-      steps,
-      metadata: sop.metadata ?? {},
-    };
-
-    const [version] = await db
-      .insert(sopVersions)
-      .values({
-        sopId,
-        version: sop.version,
-        definition: fullDefinition,
-        changeSummary: data.changeSummary,
-        createdBy,
-      })
-      .returning();
-
-    return version;
-  });
-}
-
-export async function getVersion(
-  orgId: string,
-  sopId: string,
-  versionId: string,
-) {
-  // Security: always resolve parent sopId within forOrg first,
-  // then filter sop_versions by that sopId — never query by versionId alone.
-  // This prevents cross-tenant access.
-  const [sop] = await forOrg(orgId, (tx) =>
-    tx.select({ id: sops.id }).from(sops).where(eq(sops.id, sopId)),
-  );
-
-  if (!sop) {
-    throw Errors.sopNotFound(sopId);
-  }
-
-  const [version] = await db
-    .select()
-    .from(sopVersions)
-    .where(and(eq(sopVersions.id, versionId), eq(sopVersions.sopId, sopId)));
-
-  if (!version) {
-    throw Errors.notFound("SOP version", versionId);
-  }
-
-  return version;
 }
 
 // ============================================================================

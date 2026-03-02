@@ -31,13 +31,14 @@ Many-to-many via `agent_sops` junction table, following the `agent_connector_too
 
 ### Storage layout differs by table
 
-The three SOP-related tables store `SopSchema` data differently:
+The SOP-related tables store `SopSchema` data differently:
 
 | Table | Storage | Rationale |
 |---|---|---|
 | `sop_templates` | Single `definition` JSONB column (full `SopSchema`) | Self-contained catalog blueprints. No need to split. |
 | `sops` | `trigger` JSONB + `metadata` JSONB columns, steps in `sop_steps` table | Steps are relational for indexing, validation, and independent updates. Trigger and metadata are explicit columns — no misleading partial-object `definition`. `schemaVersion` is injected at read time (always `1`). |
-| `sop_versions` | Single `definition` JSONB column (full `SopSchema`) | Frozen immutable snapshots. Single blob is simpler for audit records. |
+
+Versioning / audit snapshots are deferred to the eval engine deliverable — the current schema stores a lightweight `version` label on the `sops` table without a separate versions table.
 
 The API contract is unchanged: clients always send/receive `{ schemaVersion, trigger, steps, metadata }`. The service assembles this from the appropriate storage on read and splits on write.
 
@@ -50,14 +51,14 @@ The API contract is unchanged: clients always send/receive `{ schemaVersion, tri
                                        │ assembled by service
                        ┌───────────────┼───────────────┐
                        ▼               ▼               ▼
-              ┌────────────┐   ┌─────────────┐   ┌──────────┐
-              │    sops    │   │  sop_steps   │   │sop_versions│
-              │ (RLS)      │   │ (relational) │   │ (audit)    │
-              ├────────────┤   ├─────────────┤   ├──────────┤
-              │ trigger    │   │ step_id      │   │ definition │
-              │ metadata   │   │ instruction  │   │ (full blob)│
-              │            │   │ tool refs    │   │            │
-              └────────────┘   └─────────────┘   └──────────┘
+              ┌────────────┐   ┌─────────────┐   (future: versions)
+              │    sops    │   │  sop_steps   │
+              │ (RLS)      │   │ (relational) │
+              ├────────────┤   ├─────────────┤
+              │ trigger    │   │ step_id      │
+              │ metadata   │   │ instruction  │
+              │            │   │ tool refs    │
+              └────────────┘   └─────────────┘
 
               ┌────────────────┐
               │ sop_templates  │
@@ -77,6 +78,83 @@ All required steps must pass for the SOP to pass. No weights or thresholds. This
 ### Inactive tool warnings at read time
 
 When a step references a tool or connector that has become inactive, the API enriches the response with warnings. The JSONB is not modified — warnings are computed by joining against `connector_tools.isActive` and `connectors.isActive`.
+
+### Practical Example: WISMO (Where Is My Order)
+
+A customer calls asking "where is my order?" — this is a WISMO inquiry. The complete SOP payload:
+
+```json
+{
+  "name": "Order Lookup",
+  "slug": "order-lookup",
+  "definition": {
+    "schemaVersion": 1,
+    "trigger": {
+      "type": "intent_detected",
+      "config": {
+        "patterns": ["where is my order", "order status", "track order"]
+      }
+    },
+    "steps": [
+      {
+        "id": "greet",
+        "order": 1,
+        "instruction": "Greet the customer and ask how you can help.",
+        "required": true
+      },
+      {
+        "id": "verify-identity",
+        "order": 2,
+        "instruction": "Ask for the customer's email address or order number to verify their identity.",
+        "required": true
+      },
+      {
+        "id": "lookup-order",
+        "order": 3,
+        "instruction": "Look up the customer's order using the provided identifier.",
+        "required": true,
+        "tool": { "connectorToolId": "<uuid of glowbox_store_get_order>" }
+      },
+      {
+        "id": "communicate-status",
+        "order": 4,
+        "instruction": "Communicate the order status clearly. Include expected delivery date if available.",
+        "required": true
+      },
+      {
+        "id": "offer-help",
+        "order": 5,
+        "instruction": "Ask if there's anything else you can help with before ending the interaction.",
+        "required": false
+      }
+    ],
+    "metadata": {
+      "reasonCode": "WISMO-001",
+      "tags": ["order", "status", "tracking"],
+      "estimatedDuration": "2-5 minutes",
+      "escalationTriggers": ["order lost", "delivery overdue > 7 days"]
+    }
+  }
+}
+```
+
+This maps to three tables:
+
+| Table | Data stored |
+|---|---|
+| `sops` | `name`, `slug`, `trigger` (JSONB), `metadata` (JSONB), `status`, `version`, `organization_id` |
+| `sop_steps` | One row per step — `step_id`, `order`, `instruction`, `required`, `connector_tool_id` FK |
+| `agent_sops` | Junction rows linking this SOP to assigned agents |
+
+### What is NOT a SOP?
+
+SOPs model **procedural workflows** — ordered steps an agent follows to handle a specific scenario. Other business context types are distinct:
+
+- **FAQs / Knowledge articles** — static information the agent retrieves, not a procedure to follow
+- **Company policies / Guardrails** — behavioral constraints (e.g., "never offer refunds above $500") that apply across all interactions
+- **Company profile** — brand voice, tone guidelines, product catalog context
+
+These are complementary to SOPs but belong to separate content types in the agent's context.
 
 ## Alternatives Considered
 

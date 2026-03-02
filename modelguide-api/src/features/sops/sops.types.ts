@@ -4,7 +4,6 @@
  * Storage layout:
  *  - sops:          trigger + metadata as separate JSONB columns; steps in sop_steps table.
  *  - sop_templates: full SopSchema in a single `definition` JSONB (self-contained blueprint).
- *  - sop_versions:  full SopSchema in a single `definition` JSONB (frozen audit snapshot).
  *
  * The API always returns an assembled SopSchema regardless of storage layout.
  */

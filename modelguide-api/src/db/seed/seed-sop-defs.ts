@@ -68,23 +68,21 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
   });
 
   // Create an "Order Lookup" SOP (forked from template)
-  const orderLookupSteps: SopStep[] = [
+  // Note: `order` is omitted — normalizeStepOrder() computes it from array position.
+  const orderLookupSteps: Omit<SopStep, "order">[] = [
     {
       id: "greet",
-      order: 1,
       instruction: "Greet the customer and ask how you can help.",
       required: true,
     },
     {
       id: "verify-identity",
-      order: 2,
       instruction:
         "Ask for the customer's email address or order number to verify their identity.",
       required: true,
     },
     {
       id: "lookup-order",
-      order: 3,
       instruction:
         "Look up the customer's order using the provided identifier.",
       required: true,
@@ -94,14 +92,12 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     },
     {
       id: "communicate-status",
-      order: 4,
       instruction:
         "Communicate the order status clearly. Include expected delivery date if available.",
       required: true,
     },
     {
       id: "offer-help",
-      order: 5,
       instruction:
         "Ask if there's anything else you can help with before ending the interaction.",
       required: false,
@@ -112,7 +108,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     .insert(sops)
     .values({
       organizationId: org.id,
-      templateId: orderLookupTemplate?.id,
+      sopTemplateId: orderLookupTemplate?.id,
       name: "Order Lookup",
       slug: "order-lookup",
       description:
@@ -136,12 +132,12 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     .returning();
 
   if (orderSop) {
-    // Insert steps into sop_steps table
+    // Insert steps into sop_steps table (order from array position)
     await db.insert(sopSteps).values(
-      orderLookupSteps.map((s) => ({
+      orderLookupSteps.map((s, i) => ({
         sopId: orderSop.id,
         stepId: s.id,
-        order: s.order,
+        order: i + 1,
         instruction: s.instruction,
         required: s.required,
         connectorToolId: s.tool?.connectorToolId ?? null,
@@ -161,23 +157,20 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
   }
 
   // Create a "Return Process" SOP (from scratch, draft)
-  const returnSteps: SopStep[] = [
+  const returnSteps: Omit<SopStep, "order">[] = [
     {
       id: "greet",
-      order: 1,
       instruction: "Greet the customer and acknowledge their return request.",
       required: true,
     },
     {
       id: "verify-identity",
-      order: 2,
       instruction:
         "Verify the customer's identity by asking for their email or order number.",
       required: true,
     },
     {
       id: "lookup-order",
-      order: 3,
       instruction: "Look up the original order to verify the purchase.",
       required: true,
       tool: {
@@ -211,12 +204,12 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     .returning();
 
   if (returnSop) {
-    // Insert steps into sop_steps table
+    // Insert steps into sop_steps table (order from array position)
     await db.insert(sopSteps).values(
-      returnSteps.map((s) => ({
+      returnSteps.map((s, i) => ({
         sopId: returnSop.id,
         stepId: s.id,
-        order: s.order,
+        order: i + 1,
         instruction: s.instruction,
         required: s.required,
         connectorToolId: s.tool?.connectorToolId ?? null,

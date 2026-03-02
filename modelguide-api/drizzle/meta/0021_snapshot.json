@@ -1,5 +1,5 @@
 {
-  "id": "da3466fa-da68-49ab-b7af-4a7e03c38e1e",
+  "id": "b00c4cf9-bc5f-428a-a383-4572ba001e1c",
   "prevId": "e0108154-2d6c-47cb-889e-bda4716b17e4",
   "version": "7",
   "dialect": "postgresql",
@@ -2059,15 +2059,9 @@
           "notNull": true,
           "default": true
         },
-        "connector_id": {
-          "name": "connector_id",
+        "connector_tool_id": {
+          "name": "connector_tool_id",
           "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tool_slug": {
-          "name": "tool_slug",
-          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
@@ -2122,11 +2116,11 @@
           "method": "btree",
           "with": {}
         },
-        "sop_steps_connector_idx": {
-          "name": "sop_steps_connector_idx",
+        "sop_steps_connector_tool_idx": {
+          "name": "sop_steps_connector_tool_idx",
           "columns": [
             {
-              "expression": "connector_id",
+              "expression": "connector_tool_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2152,12 +2146,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "sop_steps_connector_id_connectors_id_fk": {
-          "name": "sop_steps_connector_id_connectors_id_fk",
+        "sop_steps_connector_tool_id_connector_tools_id_fk": {
+          "name": "sop_steps_connector_tool_id_connector_tools_id_fk",
           "tableFrom": "sop_steps",
-          "tableTo": "connectors",
+          "tableTo": "connector_tools",
           "columnsFrom": [
-            "connector_id"
+            "connector_tool_id"
           ],
           "columnsTo": [
             "id"
@@ -2282,122 +2276,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.sop_versions": {
-      "name": "sop_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "sop_id": {
-          "name": "sop_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "version": {
-          "name": "version",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "definition": {
-          "name": "definition",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
-        },
-        "change_summary": {
-          "name": "change_summary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "sop_versions_sop_idx": {
-          "name": "sop_versions_sop_idx",
-          "columns": [
-            {
-              "expression": "sop_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "sop_versions_created_at_idx": {
-          "name": "sop_versions_created_at_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "sop_versions_sop_id_sops_id_fk": {
-          "name": "sop_versions_sop_id_sops_id_fk",
-          "tableFrom": "sop_versions",
-          "tableTo": "sops",
-          "columnsFrom": [
-            "sop_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "sop_versions_created_by_users_id_fk": {
-          "name": "sop_versions_created_by_users_id_fk",
-          "tableFrom": "sop_versions",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.sops": {
       "name": "sops",
       "schema": "",
@@ -2415,8 +2293,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "template_id": {
-          "name": "template_id",
+        "sop_template_id": {
+          "name": "sop_template_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -2560,12 +2438,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "sops_template_id_sop_templates_id_fk": {
-          "name": "sops_template_id_sop_templates_id_fk",
+        "sops_sop_template_id_sop_templates_id_fk": {
+          "name": "sops_sop_template_id_sop_templates_id_fk",
           "tableFrom": "sops",
           "tableTo": "sop_templates",
           "columnsFrom": [
-            "template_id"
+            "sop_template_id"
           ],
           "columnsTo": [
             "id"

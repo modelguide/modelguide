@@ -267,9 +267,9 @@ describe("GET /api/sops", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     for (const sop of body.data) {
-      expect(sop.assignedAgents.some((a: any) => a.id === s.orgAAgentId)).toBe(
-        true,
-      );
+      expect(
+        sop.assignedAgents.some((a: { id: string }) => a.id === s.orgAAgentId),
+      ).toBe(true);
     }
   });
 
@@ -505,62 +505,6 @@ describe("SOP agent assignments", () => {
 });
 
 // ============================================================================
-// Versions
-// ============================================================================
-
-describe("SOP versions", () => {
-  test("create version snapshot (201)", async () => {
-    const sopId = createdSopIds[0];
-    const res = await request(`/api/sops/${sopId}/versions`, {
-      method: "POST",
-      headers: orgAAdminHeaders,
-      body: JSON.stringify({ changeSummary: "Initial snapshot" }),
-    });
-    expect(res.status).toBe(201);
-    const body = await res.json();
-    expect(body.sopId).toBe(sopId);
-    expect(body.changeSummary).toBe("Initial snapshot");
-    expect(body.definition).toBeDefined();
-  });
-
-  test("list versions (200)", async () => {
-    const sopId = createdSopIds[0];
-    const res = await request(`/api/sops/${sopId}/versions`, {
-      headers: orgAAdminHeaders,
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.data).toBeArray();
-    expect(body.data.length).toBeGreaterThan(0);
-  });
-
-  test("get version by id (200)", async () => {
-    const sopId = createdSopIds[0];
-    // First get version list
-    const listRes = await request(`/api/sops/${sopId}/versions`, {
-      headers: orgAAdminHeaders,
-    });
-    const list = await listRes.json();
-    const versionId = list.data[0].id;
-
-    const res = await request(`/api/sops/${sopId}/versions/${versionId}`, {
-      headers: orgAAdminHeaders,
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.id).toBe(versionId);
-  });
-
-  test("orgB cannot access orgA SOP versions (404)", async () => {
-    const sopId = createdSopIds[0];
-    const res = await request(`/api/sops/${sopId}/versions`, {
-      headers: orgBAdminHeaders,
-    });
-    expect(res.status).toBe(404);
-  });
-});
-
-// ============================================================================
 // Fork from template
 // ============================================================================
 
@@ -585,12 +529,12 @@ describe("POST /api/sops/from-template/:templateId", () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.name).toBe("Forked Order Lookup");
-    expect(body.templateId).toBe(createdTemplateIds[0]);
+    expect(body.sopTemplateId).toBe(createdTemplateIds[0]);
     expect(body.definition.steps.length).toBeGreaterThan(0);
 
     // Check resolved tool name
     const toolStep = body.definition.steps.find(
-      (s: any) => s.tool?.resolvedName,
+      (s: { tool?: { resolvedName?: string } }) => s.tool?.resolvedName,
     );
     expect(toolStep).toBeDefined();
     expect(toolStep.tool.resolvedName).toContain("_get_order");

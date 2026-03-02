@@ -152,15 +152,8 @@
     {
       "idx": 21,
       "version": "7",
-      "when": 1772459014170,
+      "when": 1772485246257,
       "tag": "0021_add-sop-tables",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "7",
-      "when": 1772465171379,
-      "tag": "0022_sop-steps-connector-tool-fk",
       "breakpoints": true
     }
   ]

@@ -55,8 +55,6 @@ const sopStepToolSchema = z.object({
   catalogSlug: z.string().optional(),
   toolSlug: z.string().optional(),
   resolvedName: z.string().optional(),
-  // Legacy: allow connectorId in read schema for old JSONB snapshots (sop_versions)
-  connectorId: z.string().uuid().optional(),
 });
 
 // SOP create/update requests are org-scoped definitions, so tool references must
@@ -173,10 +171,6 @@ export const setAgentsSchema = z.object({
   agentIds: z.array(z.string().uuid()),
 });
 
-export const createVersionSchema = z.object({
-  changeSummary: z.string().max(2000).optional(),
-});
-
 // ============================================================================
 // Query schemas
 // ============================================================================
@@ -205,7 +199,7 @@ export const sopSummaryResponseSchema = z.object({
   status: z.enum(["draft", "active", "archived"]),
   version: z.string(),
   assignedAgents: z.array(assignedAgentSchema),
-  templateId: z.string().uuid().nullable(),
+  sopTemplateId: z.string().uuid().nullable(),
   templateName: z.string().nullable().optional(),
   stepCount: z.number(),
   createdAt: z.string(),
@@ -225,7 +219,7 @@ export const sopDetailResponseSchema = z.object({
   status: z.enum(["draft", "active", "archived"]),
   version: z.string(),
   assignedAgents: z.array(assignedAgentSchema),
-  templateId: z.string().uuid().nullable(),
+  sopTemplateId: z.string().uuid().nullable(),
   template: z
     .object({
       id: z.string().uuid(),
@@ -251,14 +245,4 @@ export const sopTemplateResponseSchema = z.object({
   isActive: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
-});
-
-export const sopVersionResponseSchema = z.object({
-  id: z.string().uuid(),
-  sopId: z.string().uuid(),
-  version: z.string(),
-  definition: sopDefinitionSchema,
-  changeSummary: z.string().nullable(),
-  createdBy: z.string().uuid().nullable(),
-  createdAt: z.string(),
 });

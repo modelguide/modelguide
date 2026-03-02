@@ -20,7 +20,6 @@ import type {
   sessions,
   sopSteps,
   sopTemplates,
-  sopVersions,
   sops,
   users,
 } from "./core";
@@ -80,9 +79,6 @@ export type NewSop = InferInsertModel<typeof sops>;
 
 export type SopStepRow = InferSelectModel<typeof sopSteps>;
 export type NewSopStepRow = InferInsertModel<typeof sopSteps>;
-
-export type SopVersion = InferSelectModel<typeof sopVersions>;
-export type NewSopVersion = InferInsertModel<typeof sopVersions>;
 
 export type AgentSop = InferSelectModel<typeof agentSops>;
 export type NewAgentSop = InferInsertModel<typeof agentSops>;
