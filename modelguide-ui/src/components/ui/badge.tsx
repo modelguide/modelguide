@@ -15,7 +15,7 @@ const badgeVariants = cva(
         error: 'bg-error-muted text-error',
         warning: 'bg-warning-muted text-warning',
         info: 'bg-info-muted text-info',
-        brand: 'bg-brand-950 text-brand-400',
+        brand: 'bg-brand-500/15 text-brand-500',
       },
     },
     defaultVariants: {
