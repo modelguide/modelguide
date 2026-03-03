@@ -6,6 +6,7 @@
 import type { AppBindings } from "@/types";
 import { validateActiveSession } from "@features/sessions";
 import { Errors } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import {
   McpServer,
   ResourceTemplate,
@@ -57,6 +58,11 @@ export async function mcpHandler(c: Context<AppBindings>): Promise<Response> {
     registerCoreTools(server, orgId, agentId);
   }
   registerConnectorTools(server, orgId, agentId, tools);
+
+  getLogger().info(
+    { agentId, connectorTools: tools.length, coreTools: coreToolCount },
+    "MCP server initialized",
+  );
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,

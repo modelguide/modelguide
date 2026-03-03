@@ -11,7 +11,8 @@ import {
   secrets,
 } from "@db/schema";
 import { decryptSecret } from "@lib/crypto";
-import { Errors } from "@lib/errors";
+import { Errors, logAndThrow } from "@lib/errors";
+import { getLogger, withTiming } from "@lib/logger";
 import {
   type PaginationParams,
   buildPaginationMeta,
@@ -164,6 +165,15 @@ export async function createConnector(
       );
     }
 
+    getLogger().info(
+      {
+        connectorId: connector.id,
+        slug: data.slug,
+        tools: catalogTools.length,
+      },
+      "connector created",
+    );
+
     return connector;
   });
 }
@@ -206,6 +216,8 @@ export async function deleteConnector(
   if (!deleted) {
     throw Errors.connectorNotFound(connectorId);
   }
+
+  getLogger().info({ connectorId }, "connector deleted");
 }
 
 // ============================================================================
@@ -299,7 +311,21 @@ export async function resolveConnectorConfig(
     if (fieldSchema.type === "secret" && typeof value === "string") {
       const secret = secretById.get(value);
       if (secret) {
-        resolved[key] = await decryptSecret(secret.encryptedValue);
+        try {
+          resolved[key] = await decryptSecret(secret.encryptedValue);
+        } catch (err) {
+          logAndThrow(
+            getLogger(),
+            err,
+            {
+              connectorId: connector.id,
+              secretId: secret.id,
+              secretName: secret.name,
+              configField: key,
+            },
+            "failed to decrypt connector secret",
+          );
+        }
       } else if (fieldSchema.required) {
         missingFields.push(key);
       }
@@ -346,5 +372,23 @@ export async function pingConnector(
     });
   }
 
-  return manifest.healthCheck(resolved);
+  const log = getLogger();
+  const ctx = { connectorId, catalogSlug: catalog.slug };
+
+  try {
+    return await withTiming(
+      log,
+      ctx,
+      "connector health check",
+      "connector health check failed",
+      () => manifest.healthCheck!(resolved),
+    );
+  } catch (err) {
+    logAndThrow(
+      log,
+      err,
+      { ...ctx, connectorSlug: connector.slug },
+      "connector health check failed",
+    );
+  }
 }

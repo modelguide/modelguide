@@ -5,7 +5,8 @@
 import { forOrg } from "@db/rls";
 import { agents, connectors, secrets } from "@db/schema";
 import { decryptSecret, encryptSecret } from "@lib/crypto";
-import { Errors } from "@lib/errors";
+import { Errors, logAndThrow } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import {
   type PaginationParams,
   buildPaginationMeta,
@@ -111,6 +112,16 @@ export async function createSecret(
       .returning(secretColumns);
   });
 
+  getLogger().info(
+    {
+      secretId: created.id,
+      secretType: data.secretType,
+      ownerType: data.ownerType,
+      ownerId: data.ownerId,
+    },
+    "secret created",
+  );
+
   return created;
 }
 
@@ -143,7 +154,17 @@ export async function getAgentSecretByType(
   );
 
   if (!secret) return null;
-  return decryptSecret(secret.encryptedValue);
+
+  try {
+    return await decryptSecret(secret.encryptedValue);
+  } catch (err) {
+    logAndThrow(
+      getLogger(),
+      err,
+      { agentId, secretType },
+      "failed to decrypt agent secret",
+    );
+  }
 }
 
 /**
@@ -216,4 +237,6 @@ export async function deleteSecret(
   if (!deleted) {
     throw Errors.notFound("Secret", secretId);
   }
+
+  getLogger().info({ secretId }, "secret deleted");
 }

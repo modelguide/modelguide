@@ -9,6 +9,7 @@ import { agents, apiKeys } from "@db/schema";
 import { hashApiKey, isValidApiKeyFormat } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import { verifyJWT } from "@lib/jwt";
+import { logger } from "@lib/logger";
 import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 
@@ -78,9 +79,7 @@ export async function verifyApiKey(key: string): Promise<AuthAgent | null> {
       .set({ lastUsedAt: new Date() })
       .where(eq(apiKeys.id, apiKey.id)),
   ).catch((err: Error) => {
-    if (process.env.NODE_ENV === "development") {
-      console.warn("Failed to update API key lastUsedAt:", err.message);
-    }
+    logger.warn({ err: err.message }, "failed to update API key lastUsedAt");
   });
 
   if (agent) {

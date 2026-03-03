@@ -48,6 +48,7 @@ railway variables \
   --set "ENCRYPTION_KEY=$(openssl rand -hex 32)" \
   --set "MAGIC_LINK_SECRET=$(openssl rand -hex 32)" \
   --set NODE_ENV=production \
+  --set LOG_LEVEL=info \
   --service api
 ```
 

@@ -12,6 +12,7 @@ import {
   sessions,
 } from "@db/schema";
 import { Errors } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import {
   type PaginationParams,
   buildPaginationMeta,
@@ -234,6 +235,11 @@ export async function createSession(
       })
       .returning();
 
+    getLogger().info(
+      { sessionId: session.id, agentId, channelType: data.channelType },
+      "session created",
+    );
+
     return session;
   });
 }
@@ -277,6 +283,13 @@ export async function updateSession(
       .set(updateData)
       .where(eq(sessions.id, sessionId))
       .returning();
+
+    if (data.status) {
+      getLogger().info(
+        { sessionId, oldStatus: existing.status, newStatus: data.status },
+        "session status changed",
+      );
+    }
 
     return updated;
   });

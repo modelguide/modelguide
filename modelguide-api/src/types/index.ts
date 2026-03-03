@@ -1,4 +1,5 @@
 import type { Env } from "@/env";
+import type { Logger } from "pino";
 
 /**
  * User roles for platform access
@@ -50,6 +51,10 @@ export interface AppBindings {
     auth: AuthContext;
     /** Current organization ID (from header or auth) */
     organizationId: string | null;
+    /** Unique request identifier (from X-Request-Id header or generated) */
+    requestId: string;
+    /** Request-scoped logger with requestId context */
+    logger: Logger;
   };
   Bindings: Env;
 }

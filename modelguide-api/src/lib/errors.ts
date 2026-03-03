@@ -416,3 +416,28 @@ export const Errors = {
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }
+
+/**
+ * Safely extract a message from an unknown thrown value.
+ */
+export function getErrorMessage(
+  err: unknown,
+  fallback = "Unknown error",
+): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
+/**
+ * Log an unexpected error and throw an internal AppError.
+ * Re-throws AppErrors as-is to preserve the original code/status.
+ */
+export function logAndThrow(
+  log: { error: (obj: Record<string, unknown>, msg: string) => void },
+  err: unknown,
+  context: Record<string, unknown>,
+  message: string,
+): never {
+  if (isAppError(err)) throw err;
+  log.error({ err, ...context }, message);
+  throw Errors.internal(getErrorMessage(err, message));
+}

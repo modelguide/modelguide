@@ -2,6 +2,7 @@ import { env } from "@/env";
 import { closeDatabase } from "@db/index";
 import { loadAllManifests } from "@features/connectors/catalog/registry";
 import { syncCatalogAndTools } from "@features/connectors/catalog/sync-tools";
+import { destination, logger } from "@lib/logger";
 import app from "./app";
 
 await loadAllManifests();
@@ -13,12 +14,16 @@ const server = Bun.serve({
   fetch: app.fetch,
 });
 
-console.log(`Server running at http://localhost:${server.port}`);
-console.log(`API docs available at http://localhost:${server.port}/docs`);
+logger.info({ port: server.port }, "server running");
+logger.info(
+  { url: `http://localhost:${server.port}/docs` },
+  "API docs available",
+);
 
 // Graceful shutdown
 const shutdown = async () => {
-  console.log("\nShutting down...");
+  logger.info("shutting down");
+  destination?.flushSync();
   await closeDatabase();
   server.stop();
   process.exit(0);
@@ -26,3 +31,16 @@ const shutdown = async () => {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+
+// Safety net for truly unhandled errors — log and exit
+process.on("unhandledRejection", (reason) => {
+  logger.fatal({ err: reason }, "unhandled promise rejection — shutting down");
+  destination?.flushSync();
+  process.exit(1);
+});
+
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "uncaught exception — shutting down");
+  destination?.flushSync();
+  process.exit(1);
+});

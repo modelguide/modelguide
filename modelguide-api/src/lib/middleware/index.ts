@@ -15,6 +15,9 @@ export {
   verifyApiKey,
 } from "./auth";
 
+// Request ID + logger middleware
+export { requestId } from "./request-id";
+
 // CSRF middleware
 export { csrfProtection } from "./csrf";
 

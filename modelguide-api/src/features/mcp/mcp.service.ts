@@ -9,6 +9,7 @@ import {
   resolveConnectorConfig,
 } from "@features/connectors/connectors.service";
 import { Errors } from "@lib/errors";
+import { getLogger, withTiming } from "@lib/logger";
 import { and, inArray, isNull } from "drizzle-orm";
 import type { ResolvedTool } from "./mcp.types";
 
@@ -137,10 +138,14 @@ export async function executeTool(
     throw Errors.toolNotFound(catalogToolName);
   }
 
-  return toolDef.handler({
-    config,
-    input,
-    organizationId: orgId,
-    connectorId,
-  });
+  const ctx = { tool: catalogToolName, connector: catalogSlug };
+
+  return withTiming(
+    getLogger(),
+    ctx,
+    "tool executed",
+    "tool execution failed",
+    () =>
+      toolDef.handler({ config, input, organizationId: orgId, connectorId }),
+  );
 }

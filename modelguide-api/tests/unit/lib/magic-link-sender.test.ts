@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  spyOn,
-  test,
-} from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Env } from "@/env";
 import { env } from "@/env";
 import {
@@ -19,32 +11,38 @@ import {
 // Mutable ref used to override env values in tests
 const mutableEnv = env as { -readonly [K in keyof Env]: Env[K] };
 
-function captureConsoleLogs(): { logs: string[]; restore: () => void } {
-  const logs: string[] = [];
-  const spy = spyOn(console, "log").mockImplementation((...args: unknown[]) =>
-    logs.push(args.join(" ")),
-  );
-  return { logs, restore: () => spy.mockRestore() };
+function captureStdout(): { output: string[]; restore: () => void } {
+  const output: string[] = [];
+  const original = process.stdout.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    output.push(typeof chunk === "string" ? chunk : chunk.toString());
+    return true;
+  }) as typeof process.stdout.write;
+  return {
+    output,
+    restore: () => {
+      process.stdout.write = original;
+    },
+  };
 }
 
 describe("ConsoleSender", () => {
-  test("logs magic link details to console", async () => {
-    const { logs, restore } = captureConsoleLogs();
+  test("writes magic link details to stdout", async () => {
+    const { output, restore } = captureStdout();
 
     const sender = new ConsoleSender();
     await sender.send("user@example.com", "https://example.com/auth?token=abc");
 
-    expect(logs.some((l) => l.includes("user@example.com"))).toBe(true);
-    expect(
-      logs.some((l) => l.includes("https://example.com/auth?token=abc")),
-    ).toBe(true);
-    expect(logs.some((l) => l.includes("MAGIC LINK LOGIN"))).toBe(true);
+    const all = output.join("");
+    expect(all).toContain("user@example.com");
+    expect(all).toContain("https://example.com/auth?token=abc");
+    expect(all).toContain("MAGIC LINK LOGIN");
 
     restore();
   });
 
   test("includes userName when provided", async () => {
-    const { logs, restore } = captureConsoleLogs();
+    const { output, restore } = captureStdout();
 
     const sender = new ConsoleSender();
     await sender.send(
@@ -53,18 +51,20 @@ describe("ConsoleSender", () => {
       "Alice",
     );
 
-    expect(logs.some((l) => l.includes("Alice"))).toBe(true);
+    const all = output.join("");
+    expect(all).toContain("Alice");
 
     restore();
   });
 
   test("omits userName line when not provided", async () => {
-    const { logs, restore } = captureConsoleLogs();
+    const { output, restore } = captureStdout();
 
     const sender = new ConsoleSender();
     await sender.send("user@example.com", "https://example.com/auth?token=abc");
 
-    expect(logs.some((l) => l.includes("User:"))).toBe(false);
+    const all = output.join("");
+    expect(all).not.toContain("User:");
 
     restore();
   });

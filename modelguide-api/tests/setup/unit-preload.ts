@@ -15,3 +15,4 @@ process.env.ENCRYPTION_KEY = "test-encryption-key-at-least-32-characters-long";
 process.env.APP_URL = "http://localhost:3000";
 process.env.MAGIC_LINK_SECRET =
   "test-magic-link-secret-that-is-at-least-32-characters-long";
+process.env.LOG_LEVEL = "silent";

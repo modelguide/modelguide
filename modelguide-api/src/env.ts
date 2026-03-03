@@ -6,6 +6,9 @@ const envSchema = z
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+      .default("info"),
     DATABASE_URL: z.string().url(),
     MCP_SERVER_NAME: z.string().default("ModelGuide MCP"),
     MCP_SERVER_VERSION: z.string().default("1.0.0"),
@@ -93,7 +96,9 @@ function validateEnv(): Env {
   const result = envSchema.safeParse(process.env);
 
   if (!result.success) {
+    // biome-ignore lint/suspicious/noConsole: runs before logger is available
     console.error("Invalid environment variables:");
+    // biome-ignore lint/suspicious/noConsole: runs before logger is available
     console.error(result.error.issues);
     process.exit(1);
   }

@@ -7,8 +7,9 @@ import type { AuthUser } from "@/types";
 import { db } from "@db/client";
 import { forApp } from "@db/rls";
 import { magicTokens, organizations, users } from "@db/schema";
-import { hashMagicToken } from "@lib/crypto";
+import { hashMagicToken, maskPII } from "@lib/crypto";
 import { Errors } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import {
   createMagicLink,
   isMagicTokenExpired,
@@ -41,7 +42,8 @@ type LoginResult =
  */
 export async function loginByEmail(email: string): Promise<LoginResult> {
   const normalizedEmail = email.toLowerCase();
-  console.info(`[auth] Login requested for: ${normalizedEmail}`);
+  const safeEmail = maskPII(normalizedEmail);
+  getLogger().info({ email: safeEmail }, "login requested");
 
   // Single JOIN query: user + org to check demoEnabled
   const row = await forApp((tx) =>
@@ -64,22 +66,25 @@ export async function loginByEmail(email: string): Promise<LoginResult> {
 
   // User not found or inactive — return magic_link_sent (anti-enumeration)
   if (!row) {
-    console.warn(
-      `[auth] No user found for ${normalizedEmail} — returning magic_link_sent (anti-enumeration)`,
+    getLogger().warn(
+      { email: safeEmail },
+      "no user found — anti-enumeration response",
     );
     return { type: LOGIN_RESULT.MAGIC_LINK_SENT };
   }
   if (!row.isActive) {
-    console.warn(
-      `[auth] User ${normalizedEmail} is inactive — returning magic_link_sent (anti-enumeration)`,
+    getLogger().warn(
+      { email: safeEmail },
+      "user inactive — anti-enumeration response",
     );
     return { type: LOGIN_RESULT.MAGIC_LINK_SENT };
   }
 
   // Demo path: viewer in a demo-enabled org → instant auth
   if (row.demoEnabled && row.role === "viewer") {
-    console.info(
-      `[auth] Demo login for ${normalizedEmail} (viewer in demo-enabled org)`,
+    getLogger().info(
+      { email: safeEmail },
+      "demo login (viewer in demo-enabled org)",
     );
 
     await forApp((tx) =>
@@ -114,11 +119,12 @@ export async function loginByEmail(email: string): Promise<LoginResult> {
 
   try {
     await sendMagicLink(row.email, link, row.name);
-    console.info(
-      `[auth] Magic link sent to ${row.email} via ${env.MAGIC_LINK_STRATEGY} strategy`,
+    getLogger().info(
+      { email: safeEmail, strategy: env.MAGIC_LINK_STRATEGY },
+      "magic link sent",
     );
   } catch (err) {
-    console.error("[auth] Failed to send magic link:", err);
+    getLogger().error({ err }, "failed to send magic link");
     // Swallow to preserve anti-enumeration
   }
 
@@ -233,6 +239,13 @@ export async function cleanupExpiredTokens(): Promise<{
     .returning({ id: magicTokens.id });
 
   const sessionsDeleted = await cleanupExpiredSessions();
+
+  if (result.length > 0 || sessionsDeleted > 0) {
+    getLogger().info(
+      { magicTokens: result.length, sessions: sessionsDeleted },
+      "expired tokens cleaned up",
+    );
+  }
 
   return { magicTokens: result.length, sessions: sessionsDeleted };
 }
