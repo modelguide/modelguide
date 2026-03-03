@@ -62,6 +62,21 @@ export function getLogger(): pino.Logger {
 }
 
 /**
+ * Create a child logger with additional bindings and store it back in the
+ * Hono request context. Subsequent `getLogger()` calls within the same
+ * request will return the enriched logger. No-op outside a request context.
+ */
+export function enrichLogger(bindings: Record<string, unknown>): void {
+  const ctx = tryGetContext();
+  if (!ctx) return;
+  const current = getLogger();
+  (ctx.set as (key: string, value: unknown) => void)(
+    "logger",
+    current.child(bindings),
+  );
+}
+
+/**
  * Run an async function with timing instrumentation.
  * Logs duration on both success and failure.
  */

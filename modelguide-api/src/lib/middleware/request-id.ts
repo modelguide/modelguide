@@ -6,7 +6,7 @@
  */
 
 import type { AppBindings } from "@/types";
-import { logger } from "@lib/logger";
+import { getLogger, logger } from "@lib/logger";
 import type { MiddlewareHandler } from "hono";
 
 export function requestId(): MiddlewareHandler<AppBindings> {
@@ -30,7 +30,8 @@ export function requestId(): MiddlewareHandler<AppBindings> {
       const duration = Math.round(performance.now() - start);
       const status = c.res.status;
 
-      reqLogger.info({ method, path, status, duration }, "request completed");
+      // Use getLogger() to pick up enrichments (agentId, sessionId) added during the request
+      getLogger().info({ method, path, status, duration }, "request completed");
     }
   };
 }

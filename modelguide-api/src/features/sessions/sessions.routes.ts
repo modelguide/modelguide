@@ -15,6 +15,7 @@ import {
 } from "@features/feedback";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
+import { enrichLogger } from "@lib/logger";
 import {
   getCurrentAgent,
   getOrganizationId,
@@ -413,6 +414,7 @@ const getSessionRoute = createRoute({
 router.openapi(getSessionRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
+  enrichLogger({ sessionId: id });
   const session = await getSessionById(orgId, id);
 
   return c.json(formatSessionDetail(session), 200);
@@ -508,6 +510,7 @@ router.openapi(updateSessionRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const agent = getCurrentAgent(c);
   const { id } = c.req.valid("param");
+  enrichLogger({ sessionId: id });
   const body = c.req.valid("json");
   const session = await updateSession(orgId, id, agent.id, body);
 
@@ -555,6 +558,7 @@ router.openapi(addMessageRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const agent = getCurrentAgent(c);
   const { id } = c.req.valid("param");
+  enrichLogger({ sessionId: id });
   const { occurredAt, ...rest } = c.req.valid("json");
   const messages = await addMessage(orgId, id, agent.id, {
     ...rest,

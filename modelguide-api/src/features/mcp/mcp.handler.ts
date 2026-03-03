@@ -6,7 +6,7 @@
 import type { AppBindings } from "@/types";
 import { validateActiveSession } from "@features/sessions";
 import { Errors } from "@lib/errors";
-import { getLogger } from "@lib/logger";
+import { enrichLogger, getLogger } from "@lib/logger";
 import {
   McpServer,
   ResourceTemplate,
@@ -60,7 +60,7 @@ export async function mcpHandler(c: Context<AppBindings>): Promise<Response> {
   registerConnectorTools(server, orgId, agentId, tools);
 
   getLogger().info(
-    { agentId, connectorTools: tools.length, coreTools: coreToolCount },
+    { connectorTools: tools.length, coreTools: coreToolCount },
     "MCP server initialized",
   );
 
@@ -170,6 +170,7 @@ function registerConnectorTools(
       try {
         const { session_id, ...toolInput } = args as Record<string, unknown>;
         const sessionId = session_id as string;
+        enrichLogger({ sessionId });
 
         await validateActiveSession(orgId, sessionId, agentId);
 

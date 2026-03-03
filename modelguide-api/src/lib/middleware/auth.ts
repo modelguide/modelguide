@@ -9,7 +9,7 @@ import { agents, apiKeys } from "@db/schema";
 import { hashApiKey, isValidApiKeyFormat } from "@lib/crypto";
 import { Errors } from "@lib/errors";
 import { verifyJWT } from "@lib/jwt";
-import { logger } from "@lib/logger";
+import { enrichLogger, logger } from "@lib/logger";
 import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 
@@ -127,6 +127,11 @@ export function authMiddleware(): MiddlewareHandler<AppBindings> {
 
     c.set("auth", authContext);
     c.set("organizationId", organizationId);
+
+    // Enrich request logger with agentId so all downstream logs carry it
+    if (authContext.type === "agent") {
+      enrichLogger({ agentId: authContext.agent.id });
+    }
 
     await next();
   };

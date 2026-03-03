@@ -6,7 +6,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { env } from "@/env";
 import type { AppBindings } from "@/types";
 import { ErrorCode, isAppError } from "@lib/errors";
-import { logger } from "@lib/logger";
+import { getLogger } from "@lib/logger";
 import { authMiddleware } from "@lib/middleware/auth";
 import { requestId } from "@lib/middleware/request-id";
 
@@ -64,13 +64,19 @@ export function createApp() {
   });
 
   app.onError((err, c) => {
+    const log = getLogger();
+
     if (isAppError(err)) {
       const status = err.status as ContentfulStatusCode;
+      if (status >= 500) {
+        log.error({ err, errorCode: err.code }, err.message);
+      } else {
+        log.warn({ errorCode: err.code }, err.message);
+      }
       return c.json(err.toJSON(), status);
     }
 
-    const reqLogger = c.get("logger") ?? logger;
-    reqLogger.error(
+    log.error(
       {
         err,
         method: c.req.method,

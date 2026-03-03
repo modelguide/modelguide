@@ -1,5 +1,5 @@
 import { env } from "@/env";
-import { logger } from "@lib/logger";
+import { getLogger } from "@lib/logger";
 import { Resend } from "resend";
 
 export interface MagicLinkSender {
@@ -40,7 +40,7 @@ export class ResendSender implements MagicLinkSender {
       throw new Error(`Failed to send magic link email: ${error.message}`);
     }
 
-    logger.info(
+    getLogger().info(
       { resendId: data?.id, email },
       "magic link email sent via Resend",
     );
