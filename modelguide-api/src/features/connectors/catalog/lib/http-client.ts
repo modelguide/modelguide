@@ -4,6 +4,7 @@
  * so each connector only defines its auth and URL logic.
  */
 
+import { getLogger } from "@lib/logger";
 import type { ToolExecutionContext, ToolExecutionResult } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -61,20 +62,45 @@ export function createBaseFetcher(
       }
     }
 
-    const response = await fetch(url, {
-      method,
-      headers: { ...headers },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const log = getLogger();
+    const callCtx = { connector: connectorName, method, path };
+    const start = performance.now();
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: { ...headers },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (err) {
+      const duration = Math.round(performance.now() - start);
+      log.error({ ...callCtx, duration, err }, "connector call error");
+      throw err;
+    }
+
+    const duration = Math.round(performance.now() - start);
 
     if (!response.ok) {
       const raw = await response.text();
       const text = raw.length > 512 ? `${raw.slice(0, 512)}…` : raw;
+      log.warn(
+        { ...callCtx, status: response.status, duration },
+        "connector call failed",
+      );
       throw new ConnectorApiError(connectorName, response.status, text);
     }
 
-    return response.json() as Promise<T>;
+    log.info(
+      { ...callCtx, status: response.status, duration },
+      "connector call completed",
+    );
+
+    const json = (await response.json()) as T;
+    log.debug({ ...callCtx, body, response: json }, "connector call payloads");
+
+    return json;
   };
 }
 

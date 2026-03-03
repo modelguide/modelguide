@@ -26,6 +26,7 @@ const pinoOpts: pino.LoggerOptions = {
   },
   redact: {
     paths: [
+      // Auth & secrets (top-level + deep)
       "authorization",
       "cookie",
       "encryptedValue",
@@ -34,6 +35,19 @@ const pinoOpts: pino.LoggerOptions = {
       "apiKey",
       "req.headers.authorization",
       "req.headers.cookie",
+      // Deep wildcards — catch PII inside connector payloads (body, response)
+      "**.password",
+      "**.token",
+      "**.apiKey",
+      "**.api_key",
+      "**.secret",
+      "**.authorization",
+      "**.cookie",
+      "**.encryptedValue",
+      "**.email",
+      "**.phone",
+      "**.first_name",
+      "**.last_name",
     ],
     censor: "[REDACTED]",
   },
