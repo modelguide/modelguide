@@ -189,6 +189,7 @@ function registerConnectorTools(
 
         return mcpResponse(result as unknown as Record<string, unknown>);
       } catch (err) {
+        getLogger().warn({ err, tool: tool.mcpName }, "tool call rejected");
         return mcpErrorResponse(err, "Tool execution failed", {
           tool_name: tool.mcpName,
         });

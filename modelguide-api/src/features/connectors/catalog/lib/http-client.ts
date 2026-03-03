@@ -133,6 +133,7 @@ export function withConnector(
         const fetcher = createFetcherFn(ctx.config);
         return await fn(fetcher, ctx);
       } catch (err) {
+        getLogger().warn({ err }, "connector handler error");
         return connectorErrorResult(err);
       }
     };

@@ -15,6 +15,14 @@ export function createRouter() {
     strict: false,
     defaultHook: (result, c) => {
       if (!result.success) {
+        getLogger().warn(
+          {
+            errors: result.error.flatten(),
+            method: c.req.method,
+            path: c.req.path,
+          },
+          "request validation failed",
+        );
         return c.json(
           {
             success: false,

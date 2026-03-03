@@ -82,7 +82,10 @@ export function registerCoreTools(
           messages_added: rows.length,
         });
       } catch (err) {
-        getLogger().error({ err }, "failed to add messages");
+        getLogger().warn(
+          { err, tool: "core_add_messages" },
+          "tool call rejected",
+        );
         return mcpErrorResponse(err, "Failed to add messages");
       }
     },
