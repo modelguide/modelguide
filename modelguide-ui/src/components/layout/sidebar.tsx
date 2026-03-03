@@ -1,5 +1,14 @@
 import { Link, useLocation } from '@tanstack/react-router'
-import { Activity, Bot, Key, LayoutDashboard, MessageSquare, Plug, Settings } from 'lucide-react'
+import {
+  Activity,
+  Bot,
+  ClipboardList,
+  Key,
+  LayoutDashboard,
+  MessageSquare,
+  Plug,
+  Settings,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Avatar } from '~/components/ui/avatar'
 import { cn } from '~/lib/cn'
@@ -24,6 +33,7 @@ const mainNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { label: 'Agents', href: '/agents', icon: <Bot className="h-4 w-4" /> },
   { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" /> },
+  { label: 'SOPs', href: '/sops', icon: <ClipboardList className="h-4 w-4" /> },
   { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" />, roles: ['admin'] },
 ]
 
