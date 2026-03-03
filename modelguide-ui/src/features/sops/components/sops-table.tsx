@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import { GitFork } from 'lucide-react'
 import { Badge } from '~/components/ui/badge'
 import { formatDate } from '~/lib/utils'
@@ -10,6 +10,8 @@ interface SopsTableProps {
 }
 
 export function SopsTable({ sops }: SopsTableProps) {
+  const navigate = useNavigate()
+
   return (
     <div className="overflow-x-auto rounded-xl border border-fg-subtle/15 bg-bg-elevated">
       <table className="w-full">
@@ -27,16 +29,22 @@ export function SopsTable({ sops }: SopsTableProps) {
           {sops.map((sop, index) => (
             <tr
               key={sop.id}
-              className="border-b border-fg-subtle/5 transition-colors hover:bg-bg-subtle/50 animate-fade-up"
+              className="cursor-pointer border-b border-fg-subtle/5 transition-colors hover:bg-bg-subtle/50 animate-fade-up"
               style={{ animationDelay: `${index * 30}ms` }}
+              onClick={() => navigate({ to: '/sops/$id', params: { id: sop.id } })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  navigate({ to: '/sops/$id', params: { id: sop.id } })
+                }
+              }}
+              tabIndex={0}
             >
               <td className="px-4 py-3">
-                <Link to="/sops/$id" params={{ id: sop.id }} className="group flex flex-col">
-                  <span className="text-sm font-medium text-fg-primary group-hover:text-brand-400 transition-colors">
-                    {sop.name}
-                  </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-fg-primary">{sop.name}</span>
                   <span className="font-mono text-xs text-fg-muted">{sop.slug}</span>
-                </Link>
+                </div>
               </td>
               <td className="px-4 py-3">
                 <Badge variant={statusVariantMap[sop.status]} dot>

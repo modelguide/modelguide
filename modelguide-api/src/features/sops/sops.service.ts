@@ -96,6 +96,7 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
       notes: sopSteps.notes,
       toolSlug: connectorTools.slug,
       connectorSlug: connectors.slug,
+      connectorId: connectors.id,
     })
     .from(sopSteps)
     .leftJoin(connectorTools, eq(sopSteps.connectorToolId, connectorTools.id))
@@ -113,6 +114,7 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
     if (r.connectorToolId) {
       step.tool = {
         connectorToolId: r.connectorToolId,
+        connectorId: r.connectorId ?? undefined,
         resolvedName:
           r.connectorSlug && r.toolSlug
             ? `${r.connectorSlug}_${r.toolSlug}`

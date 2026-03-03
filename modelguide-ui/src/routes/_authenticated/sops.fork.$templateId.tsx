@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, GitFork } from 'lucide-react'
 import { useState } from 'react'
@@ -87,6 +87,7 @@ function ForkForm({
   connectors: Connector[]
 }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [name, setName] = useState(template.name)
   const [slug, setSlug] = useState('')
@@ -96,7 +97,10 @@ function ForkForm({
   const forkMutation = useMutation({
     mutationFn: (data: ForkFromTemplate) =>
       api.post(`sops/from-template/${template.id}`, { json: data }).json<SopDetail>(),
-    onSuccess: (data) => navigate({ to: '/sops/$id', params: { id: data.id } }),
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ['sops'] })
+      navigate({ to: '/sops/$id', params: { id: data.id } })
+    },
   })
 
   const handleNameChange = (value: string) => {

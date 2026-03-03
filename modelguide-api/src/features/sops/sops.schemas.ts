@@ -54,6 +54,7 @@ export const sopTriggerSchema = z.discriminatedUnion("type", [
 // and template JSONB (catalogSlug + toolSlug for portability). All fields optional.
 const sopStepToolSchema = z.object({
   connectorToolId: z.string().uuid().optional(),
+  connectorId: z.string().uuid().optional(),
   catalogSlug: z.string().optional(),
   toolSlug: z.string().optional(),
   resolvedName: z.string().optional(),

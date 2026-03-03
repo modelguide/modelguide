@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, Users } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { Bot, ExternalLink, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -45,17 +46,23 @@ export function SopAgentsCard({ sopId, agents, canMutate }: SopAgentsCardProps) 
         ) : (
           <ul className="space-y-2">
             {agents.map((agent) => (
-              <li
-                key={agent.id}
-                className="flex items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-base p-2.5"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-subtle">
-                  <Bot className="h-4 w-4 text-fg-muted" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-fg-primary truncate">{agent.name}</p>
-                </div>
-                <Badge variant="default">{agent.modality}</Badge>
+              <li key={agent.id}>
+                <Link
+                  to="/agents/$id"
+                  params={{ id: agent.id }}
+                  className="flex items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-base p-2.5 transition-colors hover:bg-bg-subtle/50 group"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-subtle">
+                    <Bot className="h-4 w-4 text-fg-muted" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-fg-primary group-hover:text-brand-400 transition-colors truncate">
+                      {agent.name}
+                    </p>
+                  </div>
+                  <Badge variant="default">{agent.modality}</Badge>
+                  <ExternalLink className="h-3.5 w-3.5 text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                </Link>
               </li>
             ))}
           </ul>

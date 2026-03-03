@@ -48,6 +48,7 @@ export const sopStepSchema = z.object({
   tool: z
     .object({
       connectorToolId: z.string().uuid().optional(),
+      connectorId: z.string().uuid().optional(),
       catalogSlug: z.string().optional(),
       toolSlug: z.string().optional(),
       resolvedName: z.string().optional(),
@@ -207,6 +208,7 @@ export const sopUpdateSchema = z.object({
     })
     .optional(),
   version: z.string().optional(),
+  agentIds: z.array(z.string().uuid()).optional(),
 })
 
 export type SopUpdate = z.infer<typeof sopUpdateSchema>

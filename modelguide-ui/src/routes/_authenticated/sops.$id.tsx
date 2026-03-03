@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Archive, ArrowLeft, ClipboardList, GitFork, Play } from 'lucide-react'
+import { Archive, ArrowLeft, CirclePause, ClipboardList, GitFork, Pencil, Play } from 'lucide-react'
+import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -11,6 +12,7 @@ import { SopMetadataCard } from '~/features/sops/components/sop-metadata-card'
 import { SopStepsTimeline } from '~/features/sops/components/sop-steps-timeline'
 import { SopTriggerDetail } from '~/features/sops/components/sop-trigger-badge'
 import { api } from '~/lib/api'
+import { cn } from '~/lib/cn'
 import { useCanMutate, useIsAdmin } from '~/lib/permissions'
 import { formatDate } from '~/lib/utils'
 import type { SopDetail } from '~/schemas/sops'
@@ -46,6 +48,14 @@ function SopDetailPage() {
 
   const archiveMutation = useMutation({
     mutationFn: () => api.post(`sops/${id}/archive`).json<SopDetail>(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sops', id] })
+      queryClient.invalidateQueries({ queryKey: ['sops'] })
+    },
+  })
+
+  const deactivateMutation = useMutation({
+    mutationFn: () => api.post(`sops/${id}/deactivate`).json<SopDetail>(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sops', id] })
       queryClient.invalidateQueries({ queryKey: ['sops'] })
@@ -88,6 +98,12 @@ function SopDetailPage() {
             </Badge>
             {canMutate ? (
               <>
+                <Link to="/sops/$id/edit" params={{ id }}>
+                  <Button variant="secondary" size="sm">
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                </Link>
                 {sop.status === 'draft' || sop.status === 'archived' ? (
                   <Button
                     variant="secondary"
@@ -103,11 +119,11 @@ function SopDetailPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => archiveMutation.mutate()}
-                    loading={archiveMutation.isPending}
+                    onClick={() => deactivateMutation.mutate()}
+                    loading={deactivateMutation.isPending}
                   >
-                    <Archive className="h-3.5 w-3.5" />
-                    Archive
+                    <CirclePause className="h-3.5 w-3.5" />
+                    Deactivate
                   </Button>
                 ) : null}
               </>
@@ -116,10 +132,14 @@ function SopDetailPage() {
         ) : null}
       </div>
 
-      {activateMutation.isError || archiveMutation.isError ? (
+      {activateMutation.isError || archiveMutation.isError || deactivateMutation.isError ? (
         <div className="rounded-lg border border-error/30 bg-error-muted px-4 py-3">
           <p className="text-sm text-error">
-            {activateMutation.isError ? 'Failed to activate SOP' : 'Failed to archive SOP'}
+            {activateMutation.isError
+              ? 'Failed to activate SOP'
+              : deactivateMutation.isError
+                ? 'Failed to deactivate SOP'
+                : 'Failed to archive SOP'}
           </p>
         </div>
       ) : null}
@@ -133,15 +153,9 @@ function SopDetailPage() {
           <p className="text-sm text-error">Failed to load SOP</p>
         </div>
       ) : sop ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Details Card */}
-          <DetailsCard sop={sop} />
-
-          {/* Trigger Card */}
-          <TriggerCard sop={sop} />
-
-          {/* Steps Timeline — full width */}
-          <Card className="lg:col-span-2">
+        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+          {/* Left column — Steps (primary content) */}
+          <Card>
             <CardHeader>
               <CardTitle>Steps ({sop.definition.steps.length})</CardTitle>
             </CardHeader>
@@ -154,22 +168,99 @@ function SopDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Metadata Card */}
-          <SopMetadataCard metadata={sop.definition.metadata} />
+          {/* Right column — tabbed sidebar */}
+          <SidebarTabs
+            sop={sop}
+            canMutate={canMutate}
+            isAdmin={isAdmin}
+            navigate={navigate}
+            archiveMutation={archiveMutation}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
-          {/* Agents Card */}
-          <SopAgentsCard sopId={sop.id} agents={sop.assignedAgents} canMutate={canMutate} />
+type SidebarTab = 'details' | 'trigger' | 'metadata' | 'agents' | 'settings'
 
-          {/* Danger Zone — admin only, full width */}
-          {isAdmin ? (
-            <div className="lg:col-span-2">
-              <DangerZoneCard
-                sopId={sop.id}
-                sopName={sop.name}
-                onDeleted={() => navigate({ to: '/sops' })}
-              />
-            </div>
+const sidebarTabs: { key: SidebarTab; label: string }[] = [
+  { key: 'details', label: 'Details' },
+  { key: 'trigger', label: 'Trigger' },
+  { key: 'metadata', label: 'Metadata' },
+  { key: 'agents', label: 'Agents' },
+  { key: 'settings', label: 'Settings' },
+]
+
+function SidebarTabs({
+  sop,
+  canMutate,
+  isAdmin,
+  navigate,
+  archiveMutation,
+}: {
+  sop: SopDetail
+  canMutate: boolean
+  isAdmin: boolean
+  navigate: ReturnType<typeof useNavigate>
+  archiveMutation: { mutate: () => void; isPending: boolean }
+}) {
+  const [activeTab, setActiveTab] = useState<SidebarTab>('details')
+
+  const visibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter((t) => t.key !== 'settings')
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 rounded-xl bg-bg-subtle p-1">
+        {visibleTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              'flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors',
+              activeTab === tab.key
+                ? 'bg-bg-elevated text-fg-primary shadow-sm'
+                : 'text-fg-secondary hover:text-fg-primary',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'details' ? <DetailsCard sop={sop} /> : null}
+      {activeTab === 'trigger' ? <TriggerCard sop={sop} /> : null}
+      {activeTab === 'metadata' ? <SopMetadataCard metadata={sop.definition.metadata} /> : null}
+      {activeTab === 'agents' ? (
+        <SopAgentsCard sopId={sop.id} agents={sop.assignedAgents} canMutate={canMutate} />
+      ) : null}
+      {activeTab === 'settings' && isAdmin ? (
+        <div className="space-y-6">
+          {canMutate && sop.status !== 'archived' ? (
+            <Card>
+              <CardContent className="pt-6">
+                <h3 className="text-sm font-medium text-fg-primary mb-2">Archive</h3>
+                <p className="text-xs text-fg-muted mb-4">
+                  Archiving removes this SOP from active use. It can be re-activated later.
+                </p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => archiveMutation.mutate()}
+                  loading={archiveMutation.isPending}
+                >
+                  <Archive className="h-3.5 w-3.5" />
+                  Archive SOP
+                </Button>
+              </CardContent>
+            </Card>
           ) : null}
+          <DangerZoneCard
+            sopId={sop.id}
+            sopName={sop.name}
+            onDeleted={() => navigate({ to: '/sops' })}
+          />
         </div>
       ) : null}
     </div>
@@ -179,10 +270,7 @@ function SopDetailPage() {
 function DetailsCard({ sop }: { sop: SopDetail }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Details</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <dl className="space-y-4">
           <div>
             <dt className="text-xs font-medium text-fg-muted">Name</dt>
@@ -217,6 +305,14 @@ function DetailsCard({ sop }: { sop: SopDetail }) {
               {formatDate(sop.createdAt, { format: 'full' })}
             </dd>
           </div>
+          {sop.updatedAt ? (
+            <div>
+              <dt className="text-xs font-medium text-fg-muted">Updated</dt>
+              <dd className="mt-1 text-sm text-fg-secondary">
+                {formatDate(sop.updatedAt, { format: 'full' })}
+              </dd>
+            </div>
+          ) : null}
         </dl>
       </CardContent>
     </Card>
@@ -235,10 +331,7 @@ function TriggerCard({ sop }: { sop: SopDetail }) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Trigger</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <dl className="space-y-4">
           <div>
             <dt className="text-xs font-medium text-fg-muted">Type</dt>
@@ -246,12 +339,14 @@ function TriggerCard({ sop }: { sop: SopDetail }) {
               {triggerLabels[trigger.type] ?? trigger.type}
             </dd>
           </div>
-          <div>
-            <dt className="text-xs font-medium text-fg-muted">Configuration</dt>
-            <dd className="mt-2">
-              <SopTriggerDetail trigger={trigger} />
-            </dd>
-          </div>
+          {trigger.type !== 'manual' ? (
+            <div>
+              <dt className="text-xs font-medium text-fg-muted">Configuration</dt>
+              <dd className="mt-2">
+                <SopTriggerDetail trigger={trigger} />
+              </dd>
+            </div>
+          ) : null}
         </dl>
       </CardContent>
     </Card>

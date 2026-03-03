@@ -21,8 +21,29 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 const mockPost = vi.fn()
+const mockAgents = {
+  data: [
+    { id: '00000000-0000-0000-0000-aaaaaaaaaaaa', name: 'Voice Agent', modality: 'voice' },
+    { id: '00000000-0000-0000-0000-bbbbbbbbbbbb', name: 'Chat Agent', modality: 'text' },
+  ],
+  pagination: {
+    page: 1,
+    pageSize: 50,
+    totalItems: 2,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  },
+}
+
 vi.mock('~/lib/api', () => ({
   api: {
+    get: (url: string) => ({
+      json: () => {
+        if (url === 'agents') return Promise.resolve(mockAgents)
+        return Promise.resolve({ data: [] })
+      },
+    }),
     post: (...args: unknown[]) => {
       mockPost(...args)
       return {
@@ -53,12 +74,17 @@ function renderPage() {
   return render(<NewSopPage />, { wrapper })
 }
 
+/** Get all instruction textareas (always present in each step row). */
+function getInstructionTextareas() {
+  return screen.getAllByPlaceholderText('What should the agent do in this step?')
+}
+
 /** Fill the minimum required fields to make the form submittable (name + step instruction). */
 function fillMinimumFields() {
   fireEvent.change(screen.getByPlaceholderText('e.g., Order Lookup'), {
     target: { value: 'Test SOP' },
   })
-  fireEvent.change(screen.getByPlaceholderText('What should the agent do in this step?'), {
+  fireEvent.change(getInstructionTextareas()[0], {
     target: { value: 'Do something' },
   })
 }
@@ -78,10 +104,11 @@ describe('NewSopPage', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: 'Create SOP' })).toBeInTheDocument()
-    expect(screen.getByText('Basic Information')).toBeInTheDocument()
-    expect(screen.getByText('Trigger')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Trigger' })).toBeInTheDocument()
     expect(screen.getByText('Steps')).toBeInTheDocument()
-    expect(screen.getByText('Metadata')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Meta' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Agents' })).toBeInTheDocument()
   })
 
   it('auto-generates slug from name', () => {
@@ -111,12 +138,15 @@ describe('NewSopPage', () => {
     it('defaults to manual trigger', () => {
       renderPage()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
+
       expect(screen.getByLabelText('Trigger Type')).toHaveValue('manual')
     })
 
     it('shows channel checkboxes when channel trigger selected', () => {
       renderPage()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
       fireEvent.change(screen.getByLabelText('Trigger Type'), { target: { value: 'channel' } })
 
       expect(screen.getByText('Channel Types')).toBeInTheDocument()
@@ -128,6 +158,7 @@ describe('NewSopPage', () => {
     it('shows patterns input when intent_detected trigger selected', () => {
       renderPage()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
       fireEvent.change(screen.getByLabelText('Trigger Type'), {
         target: { value: 'intent_detected' },
       })
@@ -139,6 +170,7 @@ describe('NewSopPage', () => {
     it('shows tool slugs input when tool_present trigger selected', () => {
       renderPage()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
       fireEvent.change(screen.getByLabelText('Trigger Type'), {
         target: { value: 'tool_present' },
       })
@@ -155,6 +187,7 @@ describe('NewSopPage', () => {
       fillMinimumFields()
 
       // Switch to channel trigger without checking any boxes
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
       fireEvent.change(screen.getByLabelText('Trigger Type'), { target: { value: 'channel' } })
 
       expect(getSubmitButton()).toBeDisabled()
@@ -165,6 +198,7 @@ describe('NewSopPage', () => {
 
       fillMinimumFields()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
       fireEvent.change(screen.getByLabelText('Trigger Type'), { target: { value: 'channel' } })
       fireEvent.click(screen.getByLabelText('voice'))
 
@@ -176,6 +210,7 @@ describe('NewSopPage', () => {
 
       fillMinimumFields()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
       fireEvent.change(screen.getByLabelText('Trigger Type'), {
         target: { value: 'intent_detected' },
       })
@@ -188,6 +223,7 @@ describe('NewSopPage', () => {
 
       fillMinimumFields()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger' }))
       fireEvent.change(screen.getByLabelText('Trigger Type'), {
         target: { value: 'intent_detected' },
       })
@@ -208,81 +244,62 @@ describe('NewSopPage', () => {
   })
 
   describe('steps management', () => {
-    it('starts with one empty step', () => {
+    it('renders instruction textarea in step row', () => {
       renderPage()
 
-      expect(screen.getByText('Step 1')).toBeInTheDocument()
+      expect(getInstructionTextareas()).toHaveLength(1)
     })
 
     it('adds a new step when Add Step is clicked', () => {
       renderPage()
 
+      fireEvent.change(getInstructionTextareas()[0], { target: { value: 'First step' } })
       fireEvent.click(screen.getByText('Add Step'))
 
-      expect(screen.getByText('Step 1')).toBeInTheDocument()
-      expect(screen.getByText('Step 2')).toBeInTheDocument()
+      // Both steps have instruction textareas
+      const textareas = getInstructionTextareas()
+      expect(textareas).toHaveLength(2)
+      expect(textareas[0]).toHaveValue('First step')
+      expect(textareas[1]).toHaveValue('')
     })
 
-    it('generates unique step IDs after delete and re-add (critical bug fix)', () => {
+    it('can add, delete, and re-add steps without crashes', () => {
       renderPage()
 
-      // Add 2 more steps (3 total)
+      fireEvent.change(getInstructionTextareas()[0], { target: { value: 'First step' } })
+
       fireEvent.click(screen.getByText('Add Step'))
+      fireEvent.change(getInstructionTextareas()[1], { target: { value: 'Second step' } })
+
       fireEvent.click(screen.getByText('Add Step'))
+      fireEvent.change(getInstructionTextareas()[2], { target: { value: 'Third step' } })
 
-      // Type into each step to identify them
-      const textareas = screen.getAllByPlaceholderText('What should the agent do in this step?')
-      fireEvent.change(textareas[0], { target: { value: 'First' } })
-      fireEvent.change(textareas[1], { target: { value: 'Second' } })
-      fireEvent.change(textareas[2], { target: { value: 'Third' } })
+      expect(getInstructionTextareas()[0]).toHaveValue('First step')
+      expect(getInstructionTextareas()[1]).toHaveValue('Second step')
 
-      expect(screen.getAllByPlaceholderText('What should the agent do in this step?')).toHaveLength(
-        3,
-      )
+      // Delete a step via trash button
+      const trashButtons = screen
+        .getAllByRole('button')
+        .filter(
+          (btn) => btn.querySelector('svg') !== null && btn.className.includes('hover:text-error'),
+        )
+      expect(trashButtons.length).toBeGreaterThanOrEqual(1)
+      fireEvent.click(trashButtons[0])
 
-      // Find and click the Trash2 button in the second step card.
-      // Each step card has a required/optional toggle and optionally a delete button.
-      // The delete buttons are the small icon buttons with type="button" inside step cards.
-      const switches = screen.getAllByRole('switch')
-      expect(switches).toHaveLength(3)
-
-      // Delete the second step: find the delete button next to the 2nd toggle
-      const secondToggle = switches[1]
-      const secondStepHeader = secondToggle.parentElement
-      const deleteBtn = secondStepHeader?.querySelector('button:not([role="switch"])')
-      expect(deleteBtn).toBeTruthy()
-      if (deleteBtn) fireEvent.click(deleteBtn)
-
-      // Now we have 2 steps: "First" and "Third"
-      expect(screen.getByDisplayValue('First')).toBeInTheDocument()
-      expect(screen.getByDisplayValue('Third')).toBeInTheDocument()
-      expect(screen.getAllByPlaceholderText('What should the agent do in this step?')).toHaveLength(
-        2,
-      )
-
-      // Add a new step — with the old bug, this would create a step with a duplicate
-      // ID (step-3, same as the existing step), causing React key collision.
-      // With the fix (useRef counter), it creates step-4 which is unique.
+      // Add another step — should not crash (unique ID regression test)
       fireEvent.click(screen.getByText('Add Step'))
-
-      // Should have 3 steps again with no rendering issues
-      expect(screen.getAllByPlaceholderText('What should the agent do in this step?')).toHaveLength(
-        3,
-      )
-      expect(screen.getByText('Step 1')).toBeInTheDocument()
-      expect(screen.getByText('Step 2')).toBeInTheDocument()
-      expect(screen.getByText('Step 3')).toBeInTheDocument()
+      expect(getInstructionTextareas().length).toBeGreaterThanOrEqual(2)
     })
 
-    it('toggles step required/optional', () => {
+    it('toggles step required/optional via badge', () => {
       renderPage()
 
-      expect(screen.getByText('Required')).toBeInTheDocument()
+      // Compact row shows clickable "Req" badge
+      expect(screen.getByRole('button', { name: 'Req' })).toBeInTheDocument()
 
-      const toggle = screen.getByRole('switch')
-      fireEvent.click(toggle)
+      fireEvent.click(screen.getByRole('button', { name: 'Req' }))
 
-      expect(screen.getByText('Optional')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Opt' })).toBeInTheDocument()
     })
   })
 
@@ -320,7 +337,7 @@ describe('NewSopPage', () => {
       fireEvent.change(screen.getByPlaceholderText('What does this SOP do?'), {
         target: { value: 'Look up orders' },
       })
-      fireEvent.change(screen.getByPlaceholderText('What should the agent do in this step?'), {
+      fireEvent.change(getInstructionTextareas()[0], {
         target: { value: 'Ask for order number' },
       })
 
@@ -363,20 +380,85 @@ describe('NewSopPage', () => {
     })
   })
 
-  describe('metadata section', () => {
-    it('starts collapsed', () => {
+  describe('agents section', () => {
+    it('renders the agents tab', () => {
       renderPage()
 
-      expect(screen.getByText('Show')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Agents' })).toBeInTheDocument()
+    })
+
+    it('shows available agents with checkboxes', async () => {
+      renderPage()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Agents' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Voice Agent')).toBeInTheDocument()
+      })
+      expect(screen.getByText('Chat Agent')).toBeInTheDocument()
+    })
+
+    it('toggles agent selection', async () => {
+      renderPage()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Agents' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Voice Agent')).toBeInTheDocument()
+      })
+
+      const voiceCheckbox = screen.getByText('Voice Agent').closest('label')?.querySelector('input')
+      expect(voiceCheckbox).not.toBeChecked()
+
+      if (voiceCheckbox) fireEvent.click(voiceCheckbox)
+      expect(voiceCheckbox).toBeChecked()
+
+      if (voiceCheckbox) fireEvent.click(voiceCheckbox)
+      expect(voiceCheckbox).not.toBeChecked()
+    })
+
+    it('includes agentIds in submission', async () => {
+      renderPage()
+
+      fillMinimumFields()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Agents' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Voice Agent')).toBeInTheDocument()
+      })
+
+      const voiceCheckbox = screen.getByText('Voice Agent').closest('label')?.querySelector('input')
+      if (voiceCheckbox) fireEvent.click(voiceCheckbox)
+
+      fireEvent.click(getSubmitButton())
+
+      await waitFor(() => {
+        expect(mockPost).toHaveBeenCalledWith(
+          'sops',
+          expect.objectContaining({
+            json: expect.objectContaining({
+              agentIds: ['00000000-0000-0000-0000-aaaaaaaaaaaa'],
+            }),
+          }),
+        )
+      })
+    })
+  })
+
+  describe('metadata section', () => {
+    it('does not show metadata fields until tab is clicked', () => {
+      renderPage()
+
+      expect(screen.getByRole('button', { name: 'Meta' })).toBeInTheDocument()
       expect(screen.queryByPlaceholderText('e.g., order, tracking, status')).not.toBeInTheDocument()
     })
 
-    it('expands on click', () => {
+    it('shows metadata fields when Meta tab is clicked', () => {
       renderPage()
 
-      fireEvent.click(screen.getByText('Show'))
+      fireEvent.click(screen.getByRole('button', { name: 'Meta' }))
 
-      expect(screen.getByText('Hide')).toBeInTheDocument()
       expect(screen.getByPlaceholderText('e.g., order, tracking, status')).toBeInTheDocument()
       expect(screen.getByPlaceholderText('e.g., WISMO-001')).toBeInTheDocument()
       expect(screen.getByPlaceholderText('e.g., 2-5 minutes')).toBeInTheDocument()

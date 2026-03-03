@@ -101,17 +101,39 @@ describe('SopDetailPage', () => {
     expect(screen.getAllByText('order-lookup')).toHaveLength(2)
   })
 
-  it('renders all detail cards', async () => {
+  it('renders steps and sidebar tabs', async () => {
     renderPage()
 
     await waitFor(() => {
       expect(screen.getByText('Details')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Trigger')).toBeInTheDocument()
     expect(screen.getByText(/Steps/)).toBeInTheDocument()
+
+    // Sidebar tabs are visible
+    expect(screen.getByText('Trigger')).toBeInTheDocument()
     expect(screen.getByText('Metadata')).toBeInTheDocument()
-    expect(screen.getByText(/Assigned Agents/)).toBeInTheDocument()
+    expect(screen.getByText('Agents')).toBeInTheDocument()
+  })
+
+  it('switches sidebar tabs to show different content', async () => {
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Details')).toBeInTheDocument()
+    })
+
+    // Click Agents tab
+    fireEvent.click(screen.getByText('Agents'))
+    await waitFor(() => {
+      expect(screen.getByText(/Assigned Agents/)).toBeInTheDocument()
+    })
+
+    // Click Trigger tab
+    fireEvent.click(screen.getByText('Trigger'))
+    await waitFor(() => {
+      expect(screen.getByText('Type')).toBeInTheDocument()
+    })
   })
 
   it('shows error state when API fails', async () => {
@@ -133,20 +155,22 @@ describe('SopDetailPage', () => {
       await waitFor(() => {
         expect(screen.getByText('Activate')).toBeInTheDocument()
       })
-
-      expect(screen.queryByText('Archive')).not.toBeInTheDocument()
     })
 
-    it('shows Archive button for active SOPs', async () => {
+    it('shows Archive in Settings tab for active SOPs', async () => {
       sopFixture = makeSopDetail({ status: 'active' })
 
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Archive')).toBeInTheDocument()
+        expect(screen.getByText('Settings')).toBeInTheDocument()
       })
 
-      expect(screen.queryByText('Activate')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByText('Settings'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Archive SOP')).toBeInTheDocument()
+      })
     })
 
     it('shows Activate button for archived SOPs (re-activation fix)', async () => {
@@ -177,19 +201,25 @@ describe('SopDetailPage', () => {
       })
     })
 
-    it('calls archive API when Archive is clicked', async () => {
+    it('calls archive API when Archive SOP is clicked', async () => {
       sopFixture = makeSopDetail({ status: 'active' })
 
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Archive')).toBeInTheDocument()
+        expect(screen.getByText('Settings')).toBeInTheDocument()
       })
 
-      fireEvent.click(screen.getByText('Archive'))
+      fireEvent.click(screen.getByText('Settings'))
 
       await waitFor(() => {
-        expect(screen.getByText('Archive')).toBeInTheDocument()
+        expect(screen.getByText('Archive SOP')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('Archive SOP'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Archive SOP')).toBeInTheDocument()
       })
     })
 
@@ -233,10 +263,16 @@ describe('SopDetailPage', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Archive')).toBeInTheDocument()
+        expect(screen.getByText('Settings')).toBeInTheDocument()
       })
 
-      fireEvent.click(screen.getByText('Archive'))
+      fireEvent.click(screen.getByText('Settings'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Archive SOP')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('Archive SOP'))
 
       await waitFor(() => {
         expect(screen.getByText('Failed to archive SOP')).toBeInTheDocument()
@@ -245,17 +281,23 @@ describe('SopDetailPage', () => {
   })
 
   describe('admin features', () => {
-    it('shows danger zone for admins', async () => {
+    it('shows danger zone for admins under Settings tab', async () => {
       mockIsAdmin = true
 
       renderPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Settings')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('Settings'))
 
       await waitFor(() => {
         expect(screen.getByText('Danger Zone')).toBeInTheDocument()
       })
     })
 
-    it('hides danger zone for non-admins', async () => {
+    it('hides Settings tab for non-admins', async () => {
       mockIsAdmin = false
 
       renderPage()
@@ -264,7 +306,7 @@ describe('SopDetailPage', () => {
         expect(screen.getByText('Details')).toBeInTheDocument()
       })
 
-      expect(screen.queryByText('Danger Zone')).not.toBeInTheDocument()
+      expect(screen.queryByText('Settings')).not.toBeInTheDocument()
     })
   })
 

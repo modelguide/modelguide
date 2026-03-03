@@ -5,6 +5,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeAssignedAgent } from '../../../../test/sop-fixtures'
 import { SopAgentsCard } from './sop-agents-card'
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    className,
+  }: { children: React.ReactNode; className?: string; to?: string; params?: unknown }) => (
+    // biome-ignore lint/a11y/useValidAnchor: mock Link for tests
+    <a className={className}>{children}</a>
+  ),
+}))
+
 // Mock the dialog element methods (jsdom doesn't support showModal/close)
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn()

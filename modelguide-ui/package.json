@@ -21,6 +21,7 @@
     "prepare": "lefthook install || true"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.7.9",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-router": "^1.158.1",
     "@tanstack/react-router-devtools": "^1.158.1",
@@ -34,6 +35,7 @@
     "recharts": "^3.7.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.0",
+    "tiny-invariant": "^1.3.3",
     "zod": "^3.24.2",
     "zustand": "^5.0.2"
   },

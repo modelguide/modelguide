@@ -4,10 +4,7 @@ import { makeAssignedAgent, makeSopSummary } from '../../../../test/sop-fixtures
 import { SopsTable } from './sops-table'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    // biome-ignore lint/a11y/useValidAnchor: mock Link for tests
-    <a className={className}>{children}</a>
-  ),
+  useNavigate: () => vi.fn(),
 }))
 
 describe('SopsTable', () => {

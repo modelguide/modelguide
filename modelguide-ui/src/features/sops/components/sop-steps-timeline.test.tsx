@@ -1,7 +1,17 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { makeSopStep, makeStepWarning } from '../../../../test/sop-fixtures'
 import { SopStepsTimeline } from './sop-steps-timeline'
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    className,
+  }: { children: React.ReactNode; className?: string; to?: string; params?: unknown }) => (
+    // biome-ignore lint/a11y/useValidAnchor: mock Link for tests
+    <a className={className}>{children}</a>
+  ),
+}))
 
 describe('SopStepsTimeline', () => {
   it('renders steps with correct order numbers', () => {
@@ -60,7 +70,8 @@ describe('SopStepsTimeline', () => {
 
     render(<SopStepsTimeline steps={steps} />)
 
-    expect(screen.getByText('glowbox_get_order')).toBeInTheDocument()
+    expect(screen.getByText('get_order')).toBeInTheDocument()
+    expect(screen.getByText('glowbox_')).toBeInTheDocument()
   })
 
   it('does not show tool pill when no tool', () => {
@@ -68,7 +79,7 @@ describe('SopStepsTimeline', () => {
 
     render(<SopStepsTimeline steps={steps} />)
 
-    expect(screen.queryByText('glowbox_get_order')).not.toBeInTheDocument()
+    expect(screen.queryByText('get_order')).not.toBeInTheDocument()
   })
 
   it('shows notes in italic when present', () => {
