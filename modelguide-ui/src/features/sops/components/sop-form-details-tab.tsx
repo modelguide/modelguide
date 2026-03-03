@@ -1,3 +1,4 @@
+import { AutoTextarea } from '~/components/ui/auto-textarea'
 import { Card, CardContent } from '~/components/ui/card'
 import type { UseSopFormReturn } from '../hooks/use-sop-form'
 
@@ -43,22 +44,12 @@ export function SopFormDetailsTab({ form }: SopFormDetailsTabProps) {
           <div>
             <dt className="text-xs font-medium text-fg-muted">Description</dt>
             <dd className="mt-1">
-              <textarea
+              <AutoTextarea
                 value={form.description}
-                onChange={(e) => {
-                  form.setDescription(e.target.value)
-                  e.target.style.height = 'auto'
-                  e.target.style.height = `${e.target.scrollHeight}px`
-                }}
-                ref={(el) => {
-                  if (el) {
-                    el.style.height = 'auto'
-                    el.style.height = `${el.scrollHeight}px`
-                  }
-                }}
+                onChange={(e) => form.setDescription(e.target.value)}
                 placeholder="What does this SOP do?"
                 rows={2}
-                className="w-full resize-none bg-transparent px-1.5 py-1 text-sm text-fg-primary placeholder:text-fg-muted rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30"
+                className="bg-transparent px-1.5 py-1 text-sm text-fg-primary placeholder:text-fg-muted rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30"
               />
             </dd>
           </div>

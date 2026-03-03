@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
+import { MutationError } from '~/components/ui/mutation-error'
 import { cn } from '~/lib/cn'
 import type { SopCreate, SopDetail } from '~/schemas/sops'
 import { sidebarTabs, useSopForm } from '../hooks/use-sop-form'
@@ -113,11 +114,7 @@ export function SopForm({
         </div>
 
         {/* Error + Actions — full width below the grid */}
-        {error ? (
-          <p className="font-sans text-sm text-error lg:col-span-2">
-            {error instanceof Error ? error.message : 'Something went wrong'}
-          </p>
-        ) : null}
+        <MutationError error={error} className="font-sans text-sm text-error lg:col-span-2" />
 
         <div className="sticky bottom-0 z-10 flex gap-3 border-t border-fg-subtle/10 bg-bg-base/95 py-4 backdrop-blur-sm lg:col-span-2">
           <Button type="submit" loading={isPending} disabled={!form.isValid}>

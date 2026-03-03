@@ -1,5 +1,6 @@
 import { MessageSquare, MousePointer, Radio, Terminal } from 'lucide-react'
 import { Badge } from '~/components/ui/badge'
+import { TRIGGER_LABELS } from '~/schemas/sops'
 import type { SopTrigger } from '~/schemas/sops'
 
 interface SopTriggerBadgeProps {
@@ -39,7 +40,7 @@ export function SopTriggerBadge({ trigger }: SopTriggerBadgeProps) {
       return (
         <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
           <MousePointer className="h-3 w-3" />
-          <span>Manual</span>
+          <span>{TRIGGER_LABELS.manual}</span>
         </span>
       )
   }
@@ -82,6 +83,6 @@ export function SopTriggerDetail({ trigger }: SopTriggerBadgeProps) {
         </div>
       )
     case 'manual':
-      return <p className="text-sm text-fg-secondary">Manual activation</p>
+      return <p className="text-sm text-fg-secondary">{TRIGGER_LABELS.manual} activation</p>
   }
 }

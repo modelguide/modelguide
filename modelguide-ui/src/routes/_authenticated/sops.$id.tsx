@@ -16,7 +16,7 @@ import { cn } from '~/lib/cn'
 import { useCanMutate, useIsAdmin } from '~/lib/permissions'
 import { formatDate } from '~/lib/utils'
 import type { SopDetail } from '~/schemas/sops'
-import { statusVariantMap } from '~/schemas/sops'
+import { TRIGGER_LABELS, statusVariantMap } from '~/schemas/sops'
 
 export const Route = createFileRoute('/_authenticated/sops/$id')({
   component: SopDetailPage,
@@ -323,22 +323,13 @@ function DetailsCard({ sop }: { sop: SopDetail }) {
 function TriggerCard({ sop }: { sop: SopDetail }) {
   const trigger = sop.definition.trigger
 
-  const triggerLabels: Record<string, string> = {
-    manual: 'Manual',
-    channel: 'Channel',
-    intent_detected: 'Intent Detected',
-    tool_present: 'Tool Present',
-  }
-
   return (
     <Card>
       <CardContent className="pt-6">
         <dl className="space-y-4">
           <div>
             <dt className="text-xs font-medium text-fg-muted">Type</dt>
-            <dd className="mt-1 text-sm text-fg-primary">
-              {triggerLabels[trigger.type] ?? trigger.type}
-            </dd>
+            <dd className="mt-1 text-sm text-fg-primary">{TRIGGER_LABELS[trigger.type]}</dd>
           </div>
           {trigger.type !== 'manual' ? (
             <div>

@@ -232,6 +232,15 @@ export const forkFromTemplateSchema = z.object({
 
 export type ForkFromTemplate = z.infer<typeof forkFromTemplateSchema>
 
+// --- Trigger labels ---
+
+export const TRIGGER_LABELS: Record<SopTrigger['type'], string> = {
+  manual: 'Manual',
+  channel: 'Channel',
+  intent_detected: 'Intent Detected',
+  tool_present: 'Tool Present',
+}
+
 // --- Status helpers ---
 
 export type SopStatus = 'draft' | 'active' | 'archived'

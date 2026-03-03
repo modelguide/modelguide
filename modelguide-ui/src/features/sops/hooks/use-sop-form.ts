@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
+import { useAutoSlug } from '~/hooks/use-auto-slug'
 import { useSortableList } from '~/hooks/use-sortable-list'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
-import { slugify } from '~/lib/utils'
 import type { Connector, ConnectorTool } from '~/schemas/connectors'
 import type { SopDetail, SopTrigger } from '~/schemas/sops'
 import type { SopFormData, SopFormProps } from '../components/sop-form'
@@ -107,9 +107,11 @@ export function useSopForm({
 
   // --- Field state ---
 
-  const [name, setName] = useState(initialData?.name ?? '')
-  const [slug, setSlug] = useState(initialData?.slug ?? '')
-  const [slugEdited, setSlugEdited] = useState(isEditMode)
+  const { name, slug, handleNameChange, handleSlugChange } = useAutoSlug({
+    initialName: initialData?.name ?? '',
+    initialSlug: initialData?.slug ?? '',
+    locked: isEditMode,
+  })
   const [description, setDescription] = useState(initialData?.description ?? '')
   const [version, setVersion] = useState(initialData?.version ?? '')
 
@@ -162,18 +164,6 @@ export function useSopForm({
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('details')
 
   // --- Handlers ---
-
-  const handleNameChange = (value: string) => {
-    setName(value)
-    if (!slugEdited) {
-      setSlug(slugify(value))
-    }
-  }
-
-  const handleSlugChange = (value: string) => {
-    setSlug(value)
-    setSlugEdited(true)
-  }
 
   const toggleAgent = (agentId: string) => {
     setSelectedAgentIds((prev) => {

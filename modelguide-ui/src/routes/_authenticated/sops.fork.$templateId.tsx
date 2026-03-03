@@ -6,13 +6,14 @@ import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Input } from '~/components/ui/input'
+import { MutationError } from '~/components/ui/mutation-error'
 import { Select } from '~/components/ui/select'
 import { Spinner } from '~/components/ui/spinner'
 import { SopStepsTimeline } from '~/features/sops/components/sop-steps-timeline'
 import { SopTriggerDetail } from '~/features/sops/components/sop-trigger-badge'
+import { useAutoSlug } from '~/hooks/use-auto-slug'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
-import { slugify } from '~/lib/utils'
 import type { Connector } from '~/schemas/connectors'
 import type { ForkFromTemplate, SopDetail, SopTemplate } from '~/schemas/sops'
 
@@ -91,9 +92,9 @@ function ForkForm({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [name, setName] = useState(template.name)
-  const [slug, setSlug] = useState('')
-  const [slugEdited, setSlugEdited] = useState(false)
+  const { name, slug, handleNameChange, handleSlugChange } = useAutoSlug({
+    initialName: template.name,
+  })
   const [connectorMapping, setConnectorMapping] = useState<Record<string, string>>({})
 
   const forkMutation = useMutation({
@@ -104,13 +105,6 @@ function ForkForm({
       navigate({ to: '/sops/$id', params: { id: data.id } })
     },
   })
-
-  const handleNameChange = (value: string) => {
-    setName(value)
-    if (!slugEdited) {
-      setSlug(slugify(value))
-    }
-  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -213,10 +207,7 @@ function ForkForm({
               <Input
                 label="Slug (optional)"
                 value={slug}
-                onChange={(e) => {
-                  setSlug(e.target.value)
-                  setSlugEdited(true)
-                }}
+                onChange={(e) => handleSlugChange(e.target.value)}
                 placeholder="Auto-generated from name"
                 hint="URL-friendly identifier"
                 className="font-mono"
@@ -259,13 +250,7 @@ function ForkForm({
           ) : null}
 
           {/* Error */}
-          {forkMutation.isError ? (
-            <p className="font-sans text-sm text-error">
-              {forkMutation.error instanceof Error
-                ? forkMutation.error.message
-                : 'Failed to fork template'}
-            </p>
-          ) : null}
+          <MutationError error={forkMutation.error} fallback="Failed to fork template" />
 
           {/* Actions */}
           <div className="flex gap-3">
