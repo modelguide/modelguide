@@ -69,7 +69,7 @@ export function useSortableList<T extends SortableItem>({
             const edge: DropEdge = srcIdx < dstIdx ? 'bottom' : 'top'
             setDropIndicator({ id: item.id, edge })
           },
-          onDrag: ({ source, self }) => {
+          onDrag: ({ source }) => {
             const srcIdx = items.findIndex((i) => i.id === source.data.itemId)
             const dstIdx = items.findIndex((i) => i.id === item.id)
             const edge: DropEdge = srcIdx < dstIdx ? 'bottom' : 'top'
