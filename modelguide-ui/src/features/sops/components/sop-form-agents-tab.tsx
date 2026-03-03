@@ -1,6 +1,7 @@
 import { Bot } from 'lucide-react'
 import { Card, CardContent } from '~/components/ui/card'
 import type { UseSopFormReturn } from '../hooks/use-sop-form'
+import { inlineCheckbox } from './sop-form-classes'
 
 interface SopFormAgentsTabProps {
   form: UseSopFormReturn
@@ -23,7 +24,7 @@ export function SopFormAgentsTab({ form }: SopFormAgentsTabProps) {
                   type="checkbox"
                   checked={form.selectedAgentIds.has(agent.id)}
                   onChange={() => form.toggleAgent(agent.id)}
-                  className="h-3.5 w-3.5 rounded border-fg-subtle/30 bg-bg-subtle text-brand-500 focus:ring-brand-500"
+                  className={inlineCheckbox}
                 />
                 <Bot className="h-3.5 w-3.5 text-fg-muted" />
                 <span className="flex-1 text-sm text-fg-primary">{agent.name}</span>

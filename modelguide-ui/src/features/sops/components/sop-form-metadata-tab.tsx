@@ -1,5 +1,6 @@
 import { Card, CardContent } from '~/components/ui/card'
 import type { UseSopFormReturn } from '../hooks/use-sop-form'
+import { inlineInput } from './sop-form-classes'
 
 interface SopFormMetadataTabProps {
   form: UseSopFormReturn
@@ -17,7 +18,7 @@ export function SopFormMetadataTab({ form }: SopFormMetadataTabProps) {
                 value={form.tags}
                 onChange={(e) => form.setTags(e.target.value)}
                 placeholder="e.g., order, tracking, status"
-                className="w-full bg-transparent px-1.5 py-1 text-sm text-fg-primary placeholder:text-fg-muted rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30"
+                className={inlineInput()}
               />
             </dd>
           </div>
@@ -28,7 +29,7 @@ export function SopFormMetadataTab({ form }: SopFormMetadataTabProps) {
                 value={form.reasonCode}
                 onChange={(e) => form.setReasonCode(e.target.value)}
                 placeholder="e.g., WISMO-001"
-                className="w-full bg-transparent px-1.5 py-1 font-mono text-sm text-fg-primary placeholder:text-fg-muted rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30"
+                className={inlineInput({ font: 'mono' })}
               />
             </dd>
           </div>
@@ -39,7 +40,7 @@ export function SopFormMetadataTab({ form }: SopFormMetadataTabProps) {
                 value={form.estimatedDuration}
                 onChange={(e) => form.setEstimatedDuration(e.target.value)}
                 placeholder="e.g., 2-5 minutes"
-                className="w-full bg-transparent px-1.5 py-1 text-sm text-fg-primary placeholder:text-fg-muted rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30"
+                className={inlineInput()}
               />
             </dd>
           </div>

@@ -3,6 +3,7 @@ import { Button } from '~/components/ui/button'
 import { Card, CardContent } from '~/components/ui/card'
 import type { SopTrigger } from '~/schemas/sops'
 import type { UseSopFormReturn } from '../hooks/use-sop-form'
+import { inlineCheckbox, inlineInput, inlineSelect } from './sop-form-classes'
 
 interface SopFormTriggerTabProps {
   form: UseSopFormReturn
@@ -20,7 +21,7 @@ export function SopFormTriggerTab({ form }: SopFormTriggerTabProps) {
                 aria-label="Trigger Type"
                 value={form.triggerType}
                 onChange={(e) => form.setTriggerType(e.target.value as SopTrigger['type'])}
-                className="w-full appearance-none bg-transparent px-1.5 py-1 text-sm text-fg-primary rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30 cursor-pointer"
+                className={inlineSelect}
               >
                 <option value="manual">Manual</option>
                 <option value="channel">Channel</option>
@@ -43,7 +44,7 @@ export function SopFormTriggerTab({ form }: SopFormTriggerTabProps) {
                         type="checkbox"
                         checked={form.channelTypes.includes(ch)}
                         onChange={(e) => form.toggleChannel(ch, e.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-fg-subtle/30 bg-bg-subtle text-brand-500 focus:ring-brand-500"
+                        className={inlineCheckbox}
                       />
                       <span className="text-xs text-fg-primary capitalize">{ch}</span>
                     </label>
@@ -65,7 +66,7 @@ export function SopFormTriggerTab({ form }: SopFormTriggerTabProps) {
                       value={pattern.value}
                       onChange={(e) => form.updatePattern(pattern.id, e.target.value)}
                       placeholder="e.g., where is my order"
-                      className="flex-1 bg-transparent px-1.5 py-1 text-sm text-fg-primary placeholder:text-fg-muted rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30"
+                      className={inlineInput({ width: 'flex' })}
                     />
                     {form.patterns.length > 1 ? (
                       <Button
@@ -106,7 +107,7 @@ export function SopFormTriggerTab({ form }: SopFormTriggerTabProps) {
                       value={ts.value}
                       onChange={(e) => form.updateToolSlug(ts.id, e.target.value)}
                       placeholder="e.g., get_order"
-                      className="flex-1 bg-transparent px-1.5 py-1 font-mono text-sm text-fg-primary placeholder:text-fg-muted rounded outline-none transition-colors hover:bg-bg-subtle focus:bg-bg-subtle focus:ring-1 focus:ring-brand-500/30"
+                      className={inlineInput({ width: 'flex', font: 'mono' })}
                     />
                     {form.toolSlugs.length > 1 ? (
                       <Button
