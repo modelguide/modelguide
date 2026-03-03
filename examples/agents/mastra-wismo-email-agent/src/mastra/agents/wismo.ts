@@ -140,30 +140,19 @@ export async function runWismoAgent(params: {
     logAgentTurns(steps, stepLatenciesMs);
 
     // Extract token usage and compute cost
-    // Mastra (AI SDK v5) uses inputTokens/outputTokens/totalTokens naming
-    const agentInputTokens = result.totalUsage?.inputTokens ?? 0;
-    const agentOutputTokens = result.totalUsage?.outputTokens ?? 0;
-    // Processor model usage is not separately tracked by Mastra — estimate as ~10% of agent tokens
-    // (structured output extraction is a small call). When Mastra exposes per-model usage, update this.
-    const processorInputTokens = Math.round(agentOutputTokens * 0.1);
-    const processorOutputTokens = Math.round(agentOutputTokens * 0.05);
+    const inputTokens = result.totalUsage?.inputTokens ?? 0;
+    const outputTokens = result.totalUsage?.outputTokens ?? 0;
 
-    const totalInputTokens = agentInputTokens + processorInputTokens;
-    const totalOutputTokens = agentOutputTokens + processorOutputTokens;
-
-    const agentCost =
-      (agentInputTokens / 1_000_000) * config.AGENT_MODEL_INPUT_COST +
-      (agentOutputTokens / 1_000_000) * config.AGENT_MODEL_OUTPUT_COST;
-    const processorCost =
-      (processorInputTokens / 1_000_000) * config.PROCESSOR_MODEL_INPUT_COST +
-      (processorOutputTokens / 1_000_000) * config.PROCESSOR_MODEL_OUTPUT_COST;
+    const cost =
+      (inputTokens / 1_000_000) * config.AGENT_MODEL_INPUT_COST +
+      (outputTokens / 1_000_000) * config.AGENT_MODEL_OUTPUT_COST;
 
     const usage: UsageData = {
       llm_model: config.AGENT_MODEL,
-      llm_input_tokens: totalInputTokens,
-      llm_output_tokens: totalOutputTokens,
-      llm_total_tokens: totalInputTokens + totalOutputTokens,
-      cost_usd: Number((agentCost + processorCost).toFixed(6)),
+      llm_input_tokens: inputTokens,
+      llm_output_tokens: outputTokens,
+      llm_total_tokens: inputTokens + outputTokens,
+      cost_usd: Number(cost.toFixed(6)),
     };
 
     logger.info({ usage }, "Token usage and cost computed");
@@ -177,7 +166,7 @@ export async function runWismoAgent(params: {
 export const wismoAgent = new Agent({
   id: "wismo-agent",
   name: "wismo-agent",
-  model: "anthropic/claude-haiku-4-5-20251001",
+  model: config.AGENT_MODEL,
   requestContextSchema: wismoRequestContextSchema,
 
   // Instructions are a function so session_id and sender email are injected

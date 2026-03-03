@@ -85,7 +85,7 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                 {(() => {
                   const meta = (session.metadata ?? {}) as Record<string, unknown>
                   if (meta.cost_usd != null) return `$${Number(meta.cost_usd).toFixed(4)}`
-                  if (meta.cost_credits) return `${String(meta.cost_credits)} credits`
+                  if (meta.cost_credits != null) return `${String(meta.cost_credits)} credits`
                   return '\u2014'
                 })()}
               </span>

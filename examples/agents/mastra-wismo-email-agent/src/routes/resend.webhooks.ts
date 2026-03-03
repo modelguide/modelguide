@@ -230,7 +230,7 @@ async function processEmail(
   const status = isEscalated ? "abandoned" : "completed";
 
   // PATCH final status + cost metadata (fire-and-forget — reply is already sent)
-  patchSessionStatus(sessionId, status, { ...usage }).catch((err) =>
+  patchSessionStatus(sessionId, status, usage).catch((err) =>
     logger.error({ err, sessionId }, "Background session status patch failed"),
   );
 }

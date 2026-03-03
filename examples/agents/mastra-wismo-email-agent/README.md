@@ -77,21 +77,16 @@ Emails addressed to any other recipient return `{ "skipped": true }` immediately
 | `ZENDESK_TOOL` | Tool name, e.g. `glowbox_zendesk_create_ticket` |
 | `PORT` | Server port (default: `3000`) |
 | `LOG_LEVEL` | `trace`/`debug`/`info`/`warn`/`error`/`fatal` (default: `info`) |
-| `AGENT_MODEL` | Main agent model (default: `anthropic/claude-sonnet-4-6-20250514`) |
-| `PROCESSOR_MODEL` | Structured output processor model (default: `anthropic/claude-haiku-4-5-20251001`) |
-| `AGENT_MODEL_INPUT_COST` | USD per 1M input tokens for agent model (default: `3`) |
-| `AGENT_MODEL_OUTPUT_COST` | USD per 1M output tokens for agent model (default: `15`) |
-| `PROCESSOR_MODEL_INPUT_COST` | USD per 1M input tokens for processor model (default: `1`) |
-| `PROCESSOR_MODEL_OUTPUT_COST` | USD per 1M output tokens for processor model (default: `5`) |
+| `AGENT_MODEL` | Agent model (default: `anthropic/claude-sonnet-4-6-20250514`) |
+| `AGENT_MODEL_INPUT_COST` | USD per 1M input tokens (default: `3`) |
+| `AGENT_MODEL_OUTPUT_COST` | USD per 1M output tokens (default: `15`) |
 | `AGENT_INSTRUCTIONS` | Full system prompt override. Must include `{{sessionId}}` and `{{senderEmail}}` placeholders. |
 
 ### Cost tracking
 
 The agent reports token usage and estimated USD cost to ModelGuide when closing a session. This data appears in the sessions list ("Cost" column) and session detail view.
 
-**How it works:** The Anthropic API returns `usage` (input/output tokens) on every response. Mastra exposes the main agent model's usage via `result.usage`. Cost is computed as `(tokens / 1M) × price_per_1M` using the pricing env vars above.
-
-**Processor model caveat:** Mastra uses a second model call internally to extract structured output from the agent's response (the `structuredOutput` option). Currently, Mastra does not expose the processor model's token usage separately — only the main agent model's usage is available in `result.usage`. The processor call is small (it just parses the agent's text into JSON), so its tokens are estimated as ~10% of agent output tokens. When Mastra adds per-model usage tracking, this estimate can be replaced with real data.
+**How it works:** The Anthropic API returns `usage` (input/output tokens) on every response. Mastra exposes the agent model's usage via `result.totalUsage`. Cost is computed as `(tokens / 1M) × price_per_1M` using the pricing env vars above. Structured output is extracted deterministically from agent step text (no second LLM call).
 
 ## Deploying to Railway
 

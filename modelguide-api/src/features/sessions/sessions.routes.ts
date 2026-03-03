@@ -142,14 +142,19 @@ const createSessionSchema = z.object({
   }),
 });
 
-const updateSessionSchema = z.object({
-  status: z
-    .enum(["completed", "abandoned"])
-    .openapi({ description: "New session status (terminal)" }),
-  metadata: z.record(z.unknown()).optional().openapi({
-    description: "Session metadata to merge (e.g. cost/token data)",
-  }),
-});
+const updateSessionSchema = z
+  .object({
+    status: z
+      .enum(["completed", "abandoned"])
+      .optional()
+      .openapi({ description: "New session status (terminal)" }),
+    metadata: z.record(z.unknown()).optional().openapi({
+      description: "Session metadata to merge (e.g. cost/token data)",
+    }),
+  })
+  .refine((data) => data.status !== undefined || data.metadata !== undefined, {
+    message: "At least one of status or metadata must be provided",
+  });
 
 const createMessageSchema = z.object({
   role: z.enum(["user", "assistant"]).openapi({ example: "user" }),
