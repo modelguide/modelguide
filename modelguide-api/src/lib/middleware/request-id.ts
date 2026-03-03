@@ -24,11 +24,13 @@ export function requestId(): MiddlewareHandler<AppBindings> {
 
     reqLogger.info({ method, path }, "request started");
 
-    await next();
+    try {
+      await next();
+    } finally {
+      const duration = Math.round(performance.now() - start);
+      const status = c.res.status;
 
-    const duration = Math.round(performance.now() - start);
-    const status = c.res.status;
-
-    reqLogger.info({ method, path, status, duration }, "request completed");
+      reqLogger.info({ method, path, status, duration }, "request completed");
+    }
   };
 }

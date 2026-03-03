@@ -41,12 +41,10 @@ describe("generateApiKey", () => {
     expect(/^[a-f0-9]+$/.test(hash)).toBe(true);
   });
 
-  test("generates prefix as masked key (last 4 chars visible)", () => {
-    const { key, prefix } = generateApiKey();
-    // mask() shows last 4 chars, pads the rest with *
-    expect(prefix.length).toBe(key.length);
-    expect(prefix.endsWith(key.slice(-4))).toBe(true);
-    expect(prefix.startsWith("*")).toBe(true);
+  test("generates short prefix for display (mgk_ + 4 chars)", () => {
+    const { prefix } = generateApiKey();
+    expect(prefix.startsWith("mgk_")).toBe(true);
+    expect(prefix.length).toBe(8);
   });
 });
 
