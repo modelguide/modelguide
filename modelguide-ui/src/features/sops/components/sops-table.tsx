@@ -15,14 +15,26 @@ export function SopsTable({ sops }: SopsTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-fg-subtle/15 bg-bg-elevated">
       <table className="w-full">
-        <thead>
+        <thead className="bg-bg-elevated">
           <tr className="border-b border-fg-subtle/10">
-            <th className="px-4 py-3 text-left text-xs font-medium text-fg-muted">Name</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-fg-muted">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-fg-muted">Steps</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-fg-muted">Agents</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-fg-muted">Template</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-fg-muted">Updated</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Name
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Status
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Steps
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Agents
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Template
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Updated
+            </th>
           </tr>
         </thead>
         <tbody>

@@ -208,7 +208,6 @@ export const sopUpdateSchema = z.object({
     })
     .optional(),
   version: z.string().optional(),
-  agentIds: z.array(z.string().uuid()).optional(),
 })
 
 export type SopUpdate = z.infer<typeof sopUpdateSchema>

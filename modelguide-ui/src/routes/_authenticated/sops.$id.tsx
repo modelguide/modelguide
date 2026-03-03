@@ -6,7 +6,7 @@ import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Spinner } from '~/components/ui/spinner'
-import { DangerZoneCard } from '~/features/sops/components/delete-sop-dialog'
+import { DangerZoneCard } from '~/features/sops/components/danger-zone-card'
 import { SopAgentsCard } from '~/features/sops/components/sop-agents-card'
 import { SopMetadataCard } from '~/features/sops/components/sop-metadata-card'
 import { SopStepsTimeline } from '~/features/sops/components/sop-steps-timeline'
@@ -68,6 +68,7 @@ function SopDetailPage() {
       <div className="flex items-center gap-4 animate-fade-up">
         <Link
           to="/sops"
+          aria-label="Back to SOPs"
           className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-secondary hover:bg-bg-subtle hover:text-fg-primary transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />

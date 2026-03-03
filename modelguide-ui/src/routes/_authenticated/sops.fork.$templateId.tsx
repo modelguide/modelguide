@@ -12,6 +12,7 @@ import { SopStepsTimeline } from '~/features/sops/components/sop-steps-timeline'
 import { SopTriggerDetail } from '~/features/sops/components/sop-trigger-badge'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
+import { slugify } from '~/lib/utils'
 import type { Connector } from '~/schemas/connectors'
 import type { ForkFromTemplate, SopDetail, SopTemplate } from '~/schemas/sops'
 
@@ -65,6 +66,7 @@ function BackHeader() {
       <Link
         to="/sops"
         search={{ tab: 'templates' }}
+        aria-label="Back to templates"
         className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-secondary hover:bg-bg-subtle hover:text-fg-primary transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -106,12 +108,7 @@ function ForkForm({
   const handleNameChange = (value: string) => {
     setName(value)
     if (!slugEdited) {
-      setSlug(
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, ''),
-      )
+      setSlug(slugify(value))
     }
   }
 
@@ -133,6 +130,7 @@ function ForkForm({
         <Link
           to="/sops"
           search={{ tab: 'templates' }}
+          aria-label="Back to templates"
           className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-secondary hover:bg-bg-subtle hover:text-fg-primary transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />

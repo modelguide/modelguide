@@ -9,6 +9,7 @@ import { useSortableList } from '~/hooks/use-sortable-list'
 import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
 import type { PaginatedResponse } from '~/lib/pagination'
+import { slugify } from '~/lib/utils'
 import type { Connector, ConnectorTool } from '~/schemas/connectors'
 import type { SopCreate, SopDetail, SopTrigger } from '~/schemas/sops'
 
@@ -17,7 +18,7 @@ type SidebarTab = 'details' | 'trigger' | 'metadata' | 'agents'
 const sidebarTabs: { key: SidebarTab; label: string }[] = [
   { key: 'details', label: 'Details' },
   { key: 'trigger', label: 'Trigger' },
-  { key: 'metadata', label: 'Meta' },
+  { key: 'metadata', label: 'Metadata' },
   { key: 'agents', label: 'Agents' },
 ]
 
@@ -103,8 +104,9 @@ export function SopForm({
     queryFn: () => api.get('connectors').json<{ data: Connector[] }>(),
   })
 
+  const connectorIds = connectorsData?.data?.map((c) => c.id)
   const { data: connectorTools } = useQuery({
-    queryKey: ['connector-tools-all'],
+    queryKey: ['connector-tools-all', connectorIds],
     queryFn: async () => {
       const connectors = connectorsData?.data ?? []
       const results: ConnectorWithTools[] = await Promise.all(
@@ -192,12 +194,7 @@ export function SopForm({
   const handleNameChange = (value: string) => {
     setName(value)
     if (!slugEdited) {
-      setSlug(
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, ''),
-      )
+      setSlug(slugify(value))
     }
   }
 
@@ -296,6 +293,7 @@ export function SopForm({
       <div className="flex items-center gap-4 animate-fade-up">
         <Link
           to={backTo}
+          aria-label="Back to SOPs"
           className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-secondary hover:bg-bg-subtle hover:text-fg-primary transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />

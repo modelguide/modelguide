@@ -52,6 +52,7 @@ function SopsPage() {
   const { data: templatesData, isLoading: templatesLoading } = useQuery({
     queryKey: ['sop-templates'],
     queryFn: () => api.get('sops/templates').json<PaginatedResponse<SopTemplate>>(),
+    enabled: activeTab === 'templates',
   })
 
   const sops = sopsData?.data ?? []

@@ -147,6 +147,11 @@ function AgentPickerDialog({
           ))
         )}
       </div>
+      {mutation.isError ? (
+        <p className="text-sm text-error px-1">
+          {mutation.error instanceof Error ? mutation.error.message : 'Failed to update agents'}
+        </p>
+      ) : null}
       <DialogFooter>
         <Button variant="secondary" onClick={onClose}>
           Cancel

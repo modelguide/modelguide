@@ -107,7 +107,7 @@ describe('NewSopPage', () => {
     expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Trigger' })).toBeInTheDocument()
     expect(screen.getByText('Steps')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Meta' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Metadata' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Agents' })).toBeInTheDocument()
   })
 
@@ -450,14 +450,14 @@ describe('NewSopPage', () => {
     it('does not show metadata fields until tab is clicked', () => {
       renderPage()
 
-      expect(screen.getByRole('button', { name: 'Meta' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Metadata' })).toBeInTheDocument()
       expect(screen.queryByPlaceholderText('e.g., order, tracking, status')).not.toBeInTheDocument()
     })
 
     it('shows metadata fields when Meta tab is clicked', () => {
       renderPage()
 
-      fireEvent.click(screen.getByRole('button', { name: 'Meta' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Metadata' }))
 
       expect(screen.getByPlaceholderText('e.g., order, tracking, status')).toBeInTheDocument()
       expect(screen.getByPlaceholderText('e.g., WISMO-001')).toBeInTheDocument()

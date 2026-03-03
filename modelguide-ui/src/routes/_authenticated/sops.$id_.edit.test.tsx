@@ -236,7 +236,7 @@ describe('EditSopPage', () => {
       expect(screen.getByRole('heading', { name: 'Edit SOP' })).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Meta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Metadata' }))
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('order, tracking')).toBeInTheDocument()
@@ -327,7 +327,7 @@ describe('EditSopPage', () => {
     expect(chatCheckbox).not.toBeChecked()
   })
 
-  it('includes agentIds in PATCH payload', async () => {
+  it('does not include agentIds in PATCH payload (managed via dedicated dialog)', async () => {
     renderPage()
 
     await waitFor(() => {
@@ -337,15 +337,11 @@ describe('EditSopPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }))
 
     await waitFor(() => {
-      expect(mockPatch).toHaveBeenCalledWith(
-        'sops/00000000-0000-0000-0000-000000000001',
-        expect.objectContaining({
-          json: expect.objectContaining({
-            agentIds: ['00000000-0000-0000-0000-aaaaaaaaaaaa'],
-          }),
-        }),
-      )
+      expect(mockPatch).toHaveBeenCalled()
     })
+
+    const payload = mockPatch.mock.calls[0][1] as { json: Record<string, unknown> }
+    expect(payload.json).not.toHaveProperty('agentIds')
   })
 
   it('does not send slug in PATCH payload', async () => {

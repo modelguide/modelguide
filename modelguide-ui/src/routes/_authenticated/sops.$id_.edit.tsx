@@ -57,7 +57,6 @@ function EditSopPage() {
       description: data.description,
       definition: data.definition,
       version: data.version,
-      agentIds: data.agentIds,
     }
     updateMutation.mutate(update)
   }
