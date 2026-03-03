@@ -7,6 +7,12 @@ import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
 import type { SessionListItem, SessionStatus } from '~/schemas/sessions'
 
+function formatCost(costUsd?: number | null, totalTokens?: number | null): string {
+  if (costUsd != null) return `$${costUsd.toFixed(4)}`
+  if (totalTokens != null) return `${totalTokens.toLocaleString()} tok`
+  return '\u2014'
+}
+
 const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
   active: 'active',
   completed: 'completed',
@@ -73,23 +79,26 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
               <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Time
               </th>
-              <th className="w-[18%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[16%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Agent
               </th>
-              <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Channel
               </th>
-              <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
-              <th className="w-[11%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[11%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Duration
               </th>
               <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Msgs
+              </th>
+              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                Cost
               </th>
               <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
@@ -185,6 +194,11 @@ function SessionRow({ session, index }: SessionRowProps) {
       </td>
       <td className="px-4 py-3">
         <span className="font-mono text-sm text-fg-secondary">{session.messageCount}</span>
+      </td>
+      <td className="px-4 py-3">
+        <span className="font-mono text-sm text-fg-secondary">
+          {formatCost(session.costUsd, session.totalTokens)}
+        </span>
       </td>
       <td className="px-4 py-3">
         <RatingBadge rating={session.feedbackSummary.customerRating ?? undefined} size="xs" />

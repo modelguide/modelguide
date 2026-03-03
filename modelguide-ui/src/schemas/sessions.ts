@@ -66,6 +66,8 @@ export const sessionListItemSchema = z.object({
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   durationSeconds: z.number().nullable(),
+  totalTokens: z.number().nullable().optional(),
+  costUsd: z.number().nullable().optional(),
   metadata: z.record(z.unknown()).optional(),
   messageCount: z.number(),
   feedbackSummary: z.object({

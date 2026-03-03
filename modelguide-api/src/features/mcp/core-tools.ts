@@ -28,6 +28,15 @@ export function registerCoreTools(
               .enum(["user", "assistant", "system", "tool"])
               .describe("Message role"),
             content: z.string().optional().describe("Message text content"),
+            model_used: z
+              .string()
+              .optional()
+              .describe("LLM model used for this message"),
+            tokens_used: z
+              .number()
+              .int()
+              .optional()
+              .describe("Total tokens consumed by this message"),
             occurred_at: z
               .string()
               .datetime()
@@ -65,6 +74,8 @@ export function registerCoreTools(
           messages.map((msg) => ({
             role: msg.role,
             content: msg.content,
+            modelUsed: msg.model_used,
+            tokensUsed: msg.tokens_used,
             occurredAt: new Date(msg.occurred_at),
             toolCalls: msg.tool_calls?.map((tc) => ({
               toolCallId: tc.tool_call_id,

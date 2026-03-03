@@ -180,6 +180,7 @@ export function convertPostCallToSession(
       llm_output_tokens: llmUsage.outputTokens,
       llm_total_tokens: llmUsage.totalTokens,
       cost_credits: llmUsage.cost,
+      cost_usd: null,
     },
   };
 

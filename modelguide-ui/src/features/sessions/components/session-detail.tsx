@@ -80,6 +80,17 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
               </span>
             </InfoItem>
 
+            <InfoItem label="Cost">
+              <span className="text-sm text-fg-primary">
+                {(() => {
+                  const meta = (session.metadata ?? {}) as Record<string, unknown>
+                  if (meta.cost_usd != null) return `$${Number(meta.cost_usd).toFixed(4)}`
+                  if (meta.cost_credits != null) return `${String(meta.cost_credits)} credits`
+                  return '\u2014'
+                })()}
+              </span>
+            </InfoItem>
+
             <InfoItem label="User Rating">
               <RatingBadge rating={latestCustomer?.rating} size="sm" />
             </InfoItem>
@@ -139,14 +150,7 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                         </span>
                       </span>
                     ) : null}
-                    {meta.cost_credits ? (
-                      <span>
-                        Cost:{' '}
-                        <span className="text-fg-secondary">
-                          {String(meta.cost_credits)} credits
-                        </span>
-                      </span>
-                    ) : null}
+                    {/* Cost is shown in the header summary above */}
                     {meta.call_successful ? (
                       <span>
                         Result:{' '}

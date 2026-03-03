@@ -131,20 +131,27 @@ export async function listSessions(orgId: string, filters: SessionFilters) {
     ]);
 
     return {
-      data: items.map((row) => ({
-        ...row.session,
-        agent: { id: row.session.agentId, name: row.agentName ?? "Unknown" },
-        messageCount: Number(row.messageCount),
-        durationSeconds: computeDuration(
-          row.session.startedAt,
-          row.session.endedAt,
-        ),
-        feedbackSummary: {
-          hasFeedback: Number(row.feedbackCount) > 0,
-          customerRating: row.customerRating ?? null,
-          supportRating: row.supportRating ?? null,
-        },
-      })),
+      data: items.map((row) => {
+        const meta = (row.session.metadata ?? {}) as Record<string, unknown>;
+        const rawTokens = meta.llm_total_tokens;
+        const rawCost = meta.cost_usd;
+        return {
+          ...row.session,
+          agent: { id: row.session.agentId, name: row.agentName ?? "Unknown" },
+          messageCount: Number(row.messageCount),
+          durationSeconds: computeDuration(
+            row.session.startedAt,
+            row.session.endedAt,
+          ),
+          totalTokens: typeof rawTokens === "number" ? rawTokens : null,
+          costUsd: typeof rawCost === "number" ? rawCost : null,
+          feedbackSummary: {
+            hasFeedback: Number(row.feedbackCount) > 0,
+            customerRating: row.customerRating ?? null,
+            supportRating: row.supportRating ?? null,
+          },
+        };
+      }),
       pagination: buildPaginationMeta(page, pageSize, total),
     };
   });
@@ -250,6 +257,7 @@ export async function updateSession(
   agentId: string,
   data: {
     status?: string;
+    metadata?: Record<string, unknown>;
   },
 ) {
   return forOrg(orgId, async (tx) => {
@@ -278,6 +286,11 @@ export async function updateSession(
       updateData.endedAt = new Date();
     }
 
+    if (data.metadata) {
+      updateData.metadata =
+        sql`coalesce(${sessions.metadata}, '{}'::jsonb) || ${JSON.stringify(data.metadata)}::jsonb` as unknown as typeof updateData.metadata;
+    }
+
     const [updated] = await tx
       .update(sessions)
       .set(updateData)
@@ -300,6 +313,8 @@ export interface MessageData {
   content?: string;
   audioUrl?: string;
   occurredAt?: Date;
+  modelUsed?: string;
+  tokensUsed?: number;
   toolCalls?: Array<{
     toolCallId: string;
     toolName: string;
@@ -359,6 +374,8 @@ export async function addMessages(
           role: msg.role as (typeof sessionMessages.role.enumValues)[number],
           content: msg.content ?? null,
           audioUrl: msg.audioUrl ?? null,
+          modelUsed: msg.modelUsed ?? null,
+          tokensUsed: msg.tokensUsed ?? null,
           occurredAt: msg.occurredAt ?? null,
         });
       }

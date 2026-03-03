@@ -77,6 +77,16 @@ Emails addressed to any other recipient return `{ "skipped": true }` immediately
 | `ZENDESK_TOOL` | Tool name, e.g. `glowbox_zendesk_create_ticket` |
 | `PORT` | Server port (default: `3000`) |
 | `LOG_LEVEL` | `trace`/`debug`/`info`/`warn`/`error`/`fatal` (default: `info`) |
+| `AGENT_MODEL` | Agent model (default: `anthropic/claude-sonnet-4-6-20250514`) |
+| `AGENT_MODEL_INPUT_COST` | USD per 1M input tokens (default: `3`) |
+| `AGENT_MODEL_OUTPUT_COST` | USD per 1M output tokens (default: `15`) |
+| `AGENT_INSTRUCTIONS` | Full system prompt override. Must include `{{sessionId}}` and `{{senderEmail}}` placeholders. |
+
+### Cost tracking
+
+The agent reports token usage and estimated USD cost to ModelGuide when closing a session. This data appears in the sessions list ("Cost" column) and session detail view.
+
+**How it works:** The Anthropic API returns `usage` (input/output tokens) on every response. Mastra exposes the agent model's usage via `result.totalUsage`. Cost is computed as `(tokens / 1M) × price_per_1M` using the pricing env vars above. Structured output is extracted deterministically from agent step text (no second LLM call).
 
 ## Deploying to Railway
 
