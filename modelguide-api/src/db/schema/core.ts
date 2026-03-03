@@ -16,6 +16,11 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import type {
+  SopMetadata,
+  SopSchema,
+  SopTrigger,
+} from "@features/sops/sops.types";
 import {
   agentPlatformEnum,
   channelTypeEnum,
@@ -26,6 +31,7 @@ import {
   ownerTypeEnum,
   secretTypeEnum,
   sessionStatusEnum,
+  sopStatusEnum,
   toolStatusEnum,
   userRoleEnum,
 } from "./enums";
@@ -59,6 +65,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   apiKeys: many(apiKeys),
   secrets: many(secrets),
   sessions: many(sessions),
+  sops: many(sops),
 }));
 
 // ============================================================================
@@ -308,6 +315,7 @@ export const connectorToolsRelations = relations(
       references: [connectors.id],
     }),
     agentConnectorTools: many(agentConnectorTools),
+    sopSteps: many(sopSteps),
   }),
 );
 
@@ -396,6 +404,7 @@ export const agentsRelations = relations(agents, ({ one, many }) => ({
   }),
   apiKeys: many(apiKeys),
   agentConnectorTools: many(agentConnectorTools),
+  agentSops: many(agentSops),
   sessions: many(sessions),
 }));
 
@@ -674,5 +683,175 @@ export const sessionLinksRelations = relations(sessionLinks, ({ one }) => ({
   session: one(sessions, {
     fields: [sessionLinks.sessionId],
     references: [sessions.id],
+  }),
+}));
+
+// ============================================================================
+// SOP Templates (Global Catalog — no RLS, like connectors_catalog)
+// ============================================================================
+
+export const sopTemplates = pgTable(
+  "sop_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    description: text("description"),
+    catalogSlugs: text("catalog_slugs").array().default([]),
+    /** Full SopSchema blueprint (trigger + steps + metadata). Self-contained catalog item. */
+    definition: jsonb("definition")
+      .$type<SopSchema>()
+      .default({} as SopSchema),
+    version: varchar("version", { length: 50 }).notNull().default("1.0"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+      () => new Date(),
+    ),
+  },
+  (table) => [
+    uniqueIndex("sop_templates_slug_unique").on(table.slug),
+    index("sop_templates_is_active_idx").on(table.isActive),
+  ],
+);
+
+export const sopTemplatesRelations = relations(sopTemplates, ({ many }) => ({
+  sops: many(sops),
+}));
+
+// ============================================================================
+// SOPs (Org-scoped definitions — RLS enabled)
+// ============================================================================
+
+export const sops = pgTable(
+  "sops",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sopTemplateId: uuid("sop_template_id").references(() => sopTemplates.id, {
+      onDelete: "set null",
+    }),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    description: text("description"),
+    /** SopTrigger — when this SOP activates. Steps stored in sop_steps table. */
+    trigger: jsonb("trigger").$type<SopTrigger>().notNull(),
+    /** SopMetadata — tags, reason codes, duration estimates. */
+    metadata: jsonb("metadata").$type<SopMetadata>().notNull().default({}),
+    status: sopStatusEnum("status").notNull().default("draft"),
+    version: varchar("version", { length: 50 }).notNull().default("1.0"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+      () => new Date(),
+    ),
+  },
+  (table) => [
+    uniqueIndex("sops_org_slug_unique").on(table.organizationId, table.slug),
+    index("sops_org_idx").on(table.organizationId),
+    index("sops_org_status_idx").on(table.organizationId, table.status),
+  ],
+).enableRLS();
+
+export const sopsRelations = relations(sops, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [sops.organizationId],
+    references: [organizations.id],
+  }),
+  template: one(sopTemplates, {
+    fields: [sops.sopTemplateId],
+    references: [sopTemplates.id],
+  }),
+  creator: one(users, {
+    fields: [sops.createdBy],
+    references: [users.id],
+  }),
+  steps: many(sopSteps),
+  agentSops: many(agentSops),
+}));
+
+// ============================================================================
+// SOP Steps (Relational steps — no RLS, queried through RLS-protected sops)
+// ============================================================================
+
+export const sopSteps = pgTable(
+  "sop_steps",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sopId: uuid("sop_id")
+      .notNull()
+      .references(() => sops.id, { onDelete: "cascade" }),
+    stepId: varchar("step_id", { length: 100 }).notNull(),
+    order: integer("order").notNull(),
+    instruction: text("instruction").notNull(),
+    required: boolean("required").notNull().default(true),
+    connectorToolId: uuid("connector_tool_id").references(
+      () => connectorTools.id,
+      { onDelete: "set null" },
+    ),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("sop_steps_sop_step_id_unique").on(table.sopId, table.stepId),
+    index("sop_steps_sop_idx").on(table.sopId),
+    index("sop_steps_connector_tool_idx").on(table.connectorToolId),
+  ],
+);
+
+export const sopStepsRelations = relations(sopSteps, ({ one }) => ({
+  sop: one(sops, {
+    fields: [sopSteps.sopId],
+    references: [sops.id],
+  }),
+  connectorTool: one(connectorTools, {
+    fields: [sopSteps.connectorToolId],
+    references: [connectorTools.id],
+  }),
+}));
+
+// ============================================================================
+// Agent SOPs (Junction Table — no RLS, queried via RLS-protected parents)
+// ============================================================================
+
+export const agentSops = pgTable(
+  "agent_sops",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    sopId: uuid("sop_id")
+      .notNull()
+      .references(() => sops.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("agent_sops_unique").on(table.agentId, table.sopId),
+    index("agent_sops_agent_idx").on(table.agentId),
+    index("agent_sops_sop_idx").on(table.sopId),
+  ],
+);
+
+export const agentSopsRelations = relations(agentSops, ({ one }) => ({
+  agent: one(agents, {
+    fields: [agentSops.agentId],
+    references: [agents.id],
+  }),
+  sop: one(sops, {
+    fields: [agentSops.sopId],
+    references: [sops.id],
   }),
 }));

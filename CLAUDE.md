@@ -13,7 +13,7 @@ ModelGuide is an AI agent management platform that connects external AI agents (
 - `docs/guide/mcp-integration.md` — Agent developer MCP integration guide
 - `docs/guide/admin-guide.md` — Platform admin configuration guide
 - `docs/UI_STRUCTURE.md` — Dashboard design system and component patterns
-- `docs/decisions/` — Architecture Decision Records (ADR-001: refresh tokens, ADR-002: magic links)
+- `docs/decisions/` — Architecture Decision Records (ADR-001 through ADR-005)
 - `Makefile` — All dev commands (`make help` for full list, `make quickstart` for first-time setup)
 
 ## Local Workspace
@@ -79,6 +79,7 @@ modelguide-api/src/
     ├── agents/           # Agent CRUD, activation, API key generation
     ├── connectors/       # Connector catalog, instances, tools
     ├── secrets/          # Encrypted credentials (AES-256-GCM)
+    ├── sops/             # SOP templates, definitions, agent assignments
     ├── sessions/         # Session lifecycle, messages
     ├── feedback/         # Customer CSAT, support evaluations
     ├── analytics/        # Summary metrics, trends
@@ -105,10 +106,13 @@ modelguide-api/src/
 - **Tool Naming:** `{connector_slug}_{tool_name}` (e.g., `glowbox_store_add_to_cart`)
 - **Core Tools:** Built-in platform tools (`core_add_messages`)
 - **requires_confirmation:** Tools that need user confirmation before execution
+- **SOP Templates:** Global catalog of reusable SOP blueprints (like `connectors_catalog` for connectors)
+- **SOPs:** Org-scoped definitions forked from templates or created from scratch. Draft/active/archived lifecycle. Steps stored relationally in `sop_steps`
+- **Agent SOPs:** Many-to-many via `agent_sops` junction table (same pattern as `agent_connector_tools`)
 
 ### Database
 
-Key tables: `organizations`, `users`, `agents`, `api_keys`, `connectors_catalog`, `connectors`, `connector_tools`, `secrets`, `sessions`, `session_messages`, `session_feedback`, `magic_tokens`, `security_tokens`. Schema defined in `modelguide-api/src/db/schema/`.
+Key tables: `organizations`, `users`, `agents`, `api_keys`, `connectors_catalog`, `connectors`, `connector_tools`, `secrets`, `sessions`, `session_messages`, `session_feedback`, `magic_tokens`, `security_tokens`, `sop_templates`, `sops`, `sop_steps`, `agent_sops`. Schema defined in `modelguide-api/src/db/schema/`.
 
 ---
 

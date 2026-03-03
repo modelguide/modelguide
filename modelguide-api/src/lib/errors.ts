@@ -63,6 +63,12 @@ export const ErrorCode = {
   SESSION_NOT_FOUND: "SESSION_NOT_FOUND",
   SESSION_ALREADY_ENDED: "SESSION_ALREADY_ENDED",
 
+  // SOP errors
+  SOP_NOT_FOUND: "SOP_NOT_FOUND",
+  SOP_TEMPLATE_NOT_FOUND: "SOP_TEMPLATE_NOT_FOUND",
+  SOP_SLUG_EXISTS: "SOP_SLUG_EXISTS",
+  SOP_INVALID_CONNECTOR_REF: "SOP_INVALID_CONNECTOR_REF",
+
   // Server errors
   INTERNAL_ERROR: "INTERNAL_ERROR",
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
@@ -103,12 +109,15 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.CONNECTOR_NOT_FOUND]: 404,
   [ErrorCode.TOOL_NOT_FOUND]: 404,
   [ErrorCode.SESSION_NOT_FOUND]: 404,
+  [ErrorCode.SOP_NOT_FOUND]: 404,
+  [ErrorCode.SOP_TEMPLATE_NOT_FOUND]: 404,
 
   // 409 Conflict
   [ErrorCode.CONFLICT]: 409,
   [ErrorCode.ALREADY_EXISTS]: 409,
   [ErrorCode.USER_EMAIL_EXISTS]: 409,
   [ErrorCode.SESSION_ALREADY_ENDED]: 409,
+  [ErrorCode.SOP_SLUG_EXISTS]: 409,
 
   // 400 Bad Request
   [ErrorCode.VALIDATION_ERROR]: 400,
@@ -117,6 +126,7 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.CONNECTOR_NOT_CONFIGURED]: 400,
   [ErrorCode.CONNECTOR_INACTIVE]: 400,
   [ErrorCode.TOOL_INACTIVE]: 400,
+  [ErrorCode.SOP_INVALID_CONNECTOR_REF]: 400,
 
   // 500 Internal Server Error
   [ErrorCode.INTERNAL_ERROR]: 500,
@@ -362,6 +372,32 @@ export const Errors = {
       ErrorCode.SESSION_ALREADY_ENDED,
       id ? `Session already ended: ${id}` : "Session has already ended",
     );
+  },
+
+  // SOP
+  sopNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.SOP_NOT_FOUND,
+      id ? `SOP not found: ${id}` : "SOP not found",
+    );
+  },
+
+  sopTemplateNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.SOP_TEMPLATE_NOT_FOUND,
+      id ? `SOP template not found: ${id}` : "SOP template not found",
+    );
+  },
+
+  sopSlugExists(slug: string) {
+    return new AppError(
+      ErrorCode.SOP_SLUG_EXISTS,
+      `SOP with slug "${slug}" already exists`,
+    );
+  },
+
+  sopInvalidConnectorRef(message: string) {
+    return new AppError(ErrorCode.SOP_INVALID_CONNECTOR_REF, message);
   },
 
   // Server

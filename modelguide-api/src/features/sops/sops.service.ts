@@ -1,0 +1,786 @@
+/**
+ * SOPs service — business logic for SOP templates, definitions, and agent assignments.
+ */
+
+import { db } from "@db/client";
+import { type Transaction, forOrg } from "@db/rls";
+import {
+  agentSops,
+  agents,
+  connectorTools,
+  connectors,
+  sopSteps,
+  sopTemplates,
+  sops,
+} from "@db/schema";
+import type { NewSop } from "@db/schema";
+import { Errors } from "@lib/errors";
+import {
+  type PaginationParams,
+  buildPaginationMeta,
+  getOffset,
+} from "@lib/pagination";
+import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import type { SopSchema, SopStep } from "./sops.types";
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/** Generate a slug from a name. */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/** Validate step IDs are unique within an SOP. */
+function validateUniqueStepIds(steps: SopStep[]): void {
+  const ids = new Set<string>();
+  for (const step of steps) {
+    if (ids.has(step.id)) {
+      throw Errors.validationError(`Duplicate step ID: "${step.id}"`);
+    }
+    ids.add(step.id);
+  }
+}
+
+/** Normalize step order to be 1-based from array position. */
+function normalizeStepOrder(steps: SopStep[]): SopStep[] {
+  return steps.map((step, index) => ({ ...step, order: index + 1 }));
+}
+
+/** Verify SOP exists within the org-scoped transaction, throw 404 if not. */
+async function requireSopExists(tx: Transaction, sopId: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: sops.id })
+    .from(sops)
+    .where(eq(sops.id, sopId));
+  if (!row) throw Errors.sopNotFound(sopId);
+}
+
+// ============================================================================
+// Step persistence helpers (sop_steps table)
+// ============================================================================
+
+/** Insert SopStep[] into sop_steps table. */
+async function insertSteps(
+  tx: Transaction,
+  sopId: string,
+  steps: SopStep[],
+): Promise<void> {
+  if (steps.length === 0) return;
+  await tx.insert(sopSteps).values(
+    steps.map((s) => ({
+      sopId,
+      stepId: s.id,
+      order: s.order,
+      instruction: s.instruction,
+      required: s.required,
+      connectorToolId: s.tool?.connectorToolId ?? null,
+      notes: s.notes ?? null,
+    })),
+  );
+}
+
+/** Load sop_steps rows and convert back to SopStep[]. Computes resolvedName at read time. */
+async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
+  const rows = await tx
+    .select({
+      stepId: sopSteps.stepId,
+      order: sopSteps.order,
+      instruction: sopSteps.instruction,
+      required: sopSteps.required,
+      connectorToolId: sopSteps.connectorToolId,
+      notes: sopSteps.notes,
+      toolSlug: connectorTools.slug,
+      connectorSlug: connectors.slug,
+    })
+    .from(sopSteps)
+    .leftJoin(connectorTools, eq(sopSteps.connectorToolId, connectorTools.id))
+    .leftJoin(connectors, eq(connectorTools.connectorId, connectors.id))
+    .where(eq(sopSteps.sopId, sopId))
+    .orderBy(asc(sopSteps.order));
+
+  return rows.map((r) => {
+    const step: SopStep = {
+      id: r.stepId,
+      order: r.order,
+      instruction: r.instruction,
+      required: r.required,
+    };
+    if (r.connectorToolId) {
+      step.tool = {
+        connectorToolId: r.connectorToolId,
+        resolvedName:
+          r.connectorSlug && r.toolSlug
+            ? `${r.connectorSlug}_${r.toolSlug}`
+            : undefined,
+      };
+    }
+    if (r.notes) step.notes = r.notes;
+    return step;
+  });
+}
+
+// ============================================================================
+// Step connector/tool validation
+// ============================================================================
+
+/**
+ * Validate that step tool references point to valid org connector tools.
+ *
+ * Accepts a transaction so callers can run this inside their forOrg block,
+ * avoiding TOCTOU races between validation and insert.
+ */
+async function validateSteps(tx: Transaction, steps: SopStep[]): Promise<void> {
+  const stepsWithTools = steps.filter((s) => s.tool?.connectorToolId);
+  if (stepsWithTools.length === 0) return;
+
+  const toolIds = [
+    ...new Set(stepsWithTools.map((s) => s.tool!.connectorToolId!)),
+  ];
+
+  // Look up connector tools within org scope (tx already has org context via RLS)
+  const orgTools = await tx
+    .select({ id: connectorTools.id })
+    .from(connectorTools)
+    .where(
+      and(
+        inArray(connectorTools.id, toolIds),
+        isNull(connectorTools.deletedAt),
+      ),
+    );
+
+  const foundIds = new Set(orgTools.map((t) => t.id));
+
+  for (const tid of toolIds) {
+    if (!foundIds.has(tid)) {
+      throw Errors.sopInvalidConnectorRef(
+        `Connector tool not found in this organization: ${tid}`,
+      );
+    }
+  }
+}
+
+/** Resolve template tool references (catalogSlug + toolSlug) to connectorToolId. */
+async function resolveTemplateTools(
+  tx: Transaction,
+  steps: SopStep[],
+  connectorMapping: Record<string, string>,
+): Promise<SopStep[]> {
+  return Promise.all(
+    steps.map(async (step) => {
+      if (!step.tool?.catalogSlug) return step;
+
+      const connectorId = connectorMapping[step.tool.catalogSlug];
+      if (!connectorId) {
+        throw Errors.sopInvalidConnectorRef(
+          `No connector mapping provided for catalog slug "${step.tool.catalogSlug}"`,
+        );
+      }
+
+      if (!step.tool.toolSlug) {
+        throw Errors.sopInvalidConnectorRef(
+          `Template tool reference missing toolSlug for catalog "${step.tool.catalogSlug}"`,
+        );
+      }
+
+      const [ct] = await tx
+        .select({ id: connectorTools.id })
+        .from(connectorTools)
+        .where(
+          and(
+            eq(connectorTools.connectorId, connectorId),
+            eq(connectorTools.slug, step.tool.toolSlug),
+            isNull(connectorTools.deletedAt),
+          ),
+        );
+
+      if (!ct) {
+        throw Errors.sopInvalidConnectorRef(
+          `Tool "${step.tool.toolSlug}" not found on connector ${connectorId}`,
+        );
+      }
+
+      return {
+        ...step,
+        tool: { connectorToolId: ct.id },
+      };
+    }),
+  );
+}
+
+// ============================================================================
+// Templates (global catalog — no RLS)
+// ============================================================================
+
+export async function listTemplates(pagination: PaginationParams) {
+  const { page, pageSize } = pagination;
+  const offset = getOffset(page, pageSize);
+
+  const [items, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(sopTemplates)
+      .where(eq(sopTemplates.isActive, true))
+      .orderBy(asc(sopTemplates.name))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ total: count() })
+      .from(sopTemplates)
+      .where(eq(sopTemplates.isActive, true)),
+  ]);
+
+  return {
+    data: items,
+    pagination: buildPaginationMeta(page, pageSize, total),
+  };
+}
+
+export async function getTemplateById(templateId: string) {
+  const [template] = await db
+    .select()
+    .from(sopTemplates)
+    .where(eq(sopTemplates.id, templateId));
+
+  if (!template) {
+    throw Errors.sopTemplateNotFound(templateId);
+  }
+
+  return template;
+}
+
+// ============================================================================
+// SOPs (org-scoped via forOrg)
+// ============================================================================
+
+export async function listSops(
+  orgId: string,
+  params: {
+    status?: "draft" | "active" | "archived";
+    agentId?: string;
+  } & PaginationParams,
+) {
+  const { page, pageSize, status, agentId } = params;
+  const offset = getOffset(page, pageSize);
+
+  return forOrg(orgId, async (tx) => {
+    // Build conditions
+    const conditions = [];
+    if (status) conditions.push(eq(sops.status, status));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // If filtering by agent, get SOP IDs first
+    let sopIdsForAgent: string[] | undefined;
+    if (agentId) {
+      const agentSopRows = await tx
+        .select({ sopId: agentSops.sopId })
+        .from(agentSops)
+        .where(eq(agentSops.agentId, agentId));
+      sopIdsForAgent = agentSopRows.map((r) => r.sopId);
+      if (sopIdsForAgent.length === 0) {
+        return {
+          data: [],
+          pagination: buildPaginationMeta(page, pageSize, 0),
+        };
+      }
+    }
+
+    const agentFilter = sopIdsForAgent
+      ? inArray(sops.id, sopIdsForAgent)
+      : undefined;
+    const allConditions =
+      where && agentFilter
+        ? and(where, agentFilter)
+        : (where ?? agentFilter ?? undefined);
+
+    const [items, [{ total }]] = await Promise.all([
+      tx
+        .select()
+        .from(sops)
+        .where(allConditions)
+        .orderBy(desc(sops.updatedAt))
+        .limit(pageSize)
+        .offset(offset),
+      tx.select({ total: count() }).from(sops).where(allConditions),
+    ]);
+
+    // Batch-load all agent assignments for these SOPs (fix N+1)
+    const allSopIds = items.map((s) => s.id);
+    const allAssignments =
+      allSopIds.length > 0
+        ? await tx
+            .select({
+              sopId: agentSops.sopId,
+              id: agents.id,
+              name: agents.name,
+              modality: agents.modality,
+            })
+            .from(agentSops)
+            .innerJoin(agents, eq(agentSops.agentId, agents.id))
+            .where(inArray(agentSops.sopId, allSopIds))
+        : [];
+
+    const assignmentsBySop = new Map<
+      string,
+      { id: string; name: string; modality: string }[]
+    >();
+    for (const a of allAssignments) {
+      const list = assignmentsBySop.get(a.sopId) ?? [];
+      list.push({ id: a.id, name: a.name, modality: a.modality });
+      assignmentsBySop.set(a.sopId, list);
+    }
+
+    // Batch-load template names
+    const templateIds = [
+      ...new Set(
+        items.filter((s) => s.sopTemplateId).map((s) => s.sopTemplateId!),
+      ),
+    ];
+    const templateRows =
+      templateIds.length > 0
+        ? await db
+            .select({ id: sopTemplates.id, name: sopTemplates.name })
+            .from(sopTemplates)
+            .where(inArray(sopTemplates.id, templateIds))
+        : [];
+    const templateNameMap = new Map(templateRows.map((t) => [t.id, t.name]));
+
+    // Batch-load step counts from sop_steps table
+    const stepCountRows =
+      allSopIds.length > 0
+        ? await tx
+            .select({ sopId: sopSteps.sopId, total: count() })
+            .from(sopSteps)
+            .where(inArray(sopSteps.sopId, allSopIds))
+            .groupBy(sopSteps.sopId)
+        : [];
+    const stepCountMap = new Map(stepCountRows.map((r) => [r.sopId, r.total]));
+
+    const enriched = items.map((sop) => {
+      return {
+        ...sop,
+        assignedAgents: assignmentsBySop.get(sop.id) ?? [],
+        templateName: sop.sopTemplateId
+          ? (templateNameMap.get(sop.sopTemplateId) ?? null)
+          : null,
+        stepCount: stepCountMap.get(sop.id) ?? 0,
+      };
+    });
+
+    return {
+      data: enriched,
+      pagination: buildPaginationMeta(page, pageSize, total),
+    };
+  });
+}
+
+export async function getSopById(orgId: string, sopId: string) {
+  return forOrg(orgId, async (tx) => {
+    const [sop] = await tx.select().from(sops).where(eq(sops.id, sopId));
+
+    if (!sop) {
+      throw Errors.sopNotFound(sopId);
+    }
+
+    // Load steps from sop_steps table and assemble full definition
+    const steps = await loadSteps(tx, sopId);
+    const definition: SopSchema = {
+      schemaVersion: 1,
+      trigger: sop.trigger!,
+      steps,
+      metadata: sop.metadata ?? {},
+    };
+
+    // Agent assignments (agentSops has no RLS; agents is RLS-protected so tx filters by org)
+    const assignedAgents = await tx
+      .select({
+        id: agents.id,
+        name: agents.name,
+        modality: agents.modality,
+      })
+      .from(agentSops)
+      .innerJoin(agents, eq(agentSops.agentId, agents.id))
+      .where(eq(agentSops.sopId, sopId));
+
+    // Template lookup (no RLS — global table)
+    let template: { id: string; name: string; slug: string } | null = null;
+    if (sop.sopTemplateId) {
+      const [tpl] = await db
+        .select({
+          id: sopTemplates.id,
+          name: sopTemplates.name,
+          slug: sopTemplates.slug,
+        })
+        .from(sopTemplates)
+        .where(eq(sopTemplates.id, sop.sopTemplateId));
+      template = tpl ?? null;
+    }
+
+    // Compute step warnings for inactive tools/connectors (inside same tx)
+    const stepWarnings = await computeStepWarningsInTx(tx, steps);
+
+    return { ...sop, definition, assignedAgents, template, stepWarnings };
+  });
+}
+
+export async function createSop(
+  orgId: string,
+  data: {
+    name: string;
+    slug?: string;
+    description?: string;
+    definition: SopSchema;
+    agentIds?: string[];
+  },
+  createdBy?: string,
+) {
+  const slug = data.slug || slugify(data.name);
+  const steps = normalizeStepOrder(data.definition.steps);
+  validateUniqueStepIds(steps);
+
+  return forOrg(orgId, async (tx) => {
+    // Validate step tool references inside the transaction
+    await validateSteps(tx, steps);
+
+    // Check slug uniqueness
+    const [existing] = await tx
+      .select({ id: sops.id })
+      .from(sops)
+      .where(eq(sops.slug, slug));
+
+    if (existing) {
+      throw Errors.sopSlugExists(slug);
+    }
+
+    // Store trigger + metadata only (steps go to sop_steps table)
+    const [sop] = await tx
+      .insert(sops)
+      .values({
+        organizationId: orgId,
+        name: data.name,
+        slug,
+        description: data.description,
+        trigger: data.definition.trigger,
+        metadata: data.definition.metadata,
+        status: "draft",
+        createdBy,
+      })
+      .returning();
+
+    // Insert steps into relational table
+    await insertSteps(tx, sop.id, steps);
+
+    // Assign agents if provided
+    if (data.agentIds?.length) {
+      await setAssignedAgentsInternal(tx, sop.id, data.agentIds);
+    }
+
+    return sop;
+  });
+}
+
+export async function forkFromTemplate(
+  orgId: string,
+  templateId: string,
+  data: {
+    name?: string;
+    slug?: string;
+    connectorMapping: Record<string, string>;
+    agentIds?: string[];
+    overrides?: Pick<Partial<SopSchema>, "trigger" | "metadata">;
+  },
+  createdBy?: string,
+) {
+  const template = await getTemplateById(templateId);
+  const templateDef = template.definition!;
+
+  const name = data.name || template.name;
+  const slug = data.slug || slugify(name);
+
+  let steps = normalizeStepOrder(templateDef.steps ?? []);
+  validateUniqueStepIds(steps);
+
+  return forOrg(orgId, async (tx) => {
+    // Resolve template catalogSlug + toolSlug → connectorToolId
+    steps = await resolveTemplateTools(tx, steps, data.connectorMapping);
+
+    // Validate step tool references inside the transaction
+    await validateSteps(tx, steps);
+
+    const trigger = data.overrides?.trigger ?? templateDef.trigger;
+    const metadata = data.overrides?.metadata ?? templateDef.metadata ?? {};
+
+    const [existing] = await tx
+      .select({ id: sops.id })
+      .from(sops)
+      .where(eq(sops.slug, slug));
+
+    if (existing) {
+      throw Errors.sopSlugExists(slug);
+    }
+
+    // Store trigger + metadata only (steps go to sop_steps table)
+    const [sop] = await tx
+      .insert(sops)
+      .values({
+        organizationId: orgId,
+        sopTemplateId: templateId,
+        name,
+        slug,
+        description: template.description,
+        trigger,
+        metadata,
+        status: "draft",
+        createdBy,
+      })
+      .returning();
+
+    // Insert steps into relational table
+    await insertSteps(tx, sop.id, steps);
+
+    if (data.agentIds?.length) {
+      await setAssignedAgentsInternal(tx, sop.id, data.agentIds);
+    }
+
+    return sop;
+  });
+}
+
+export async function updateSop(
+  orgId: string,
+  sopId: string,
+  data: {
+    name?: string;
+    description?: string;
+    definition?: SopSchema;
+    version?: string;
+  },
+) {
+  const updateData: Partial<NewSop> = {};
+
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.version !== undefined) updateData.version = data.version;
+
+  return forOrg(orgId, async (tx) => {
+    await requireSopExists(tx, sopId);
+
+    if (data.definition) {
+      const steps = normalizeStepOrder(data.definition.steps);
+      validateUniqueStepIds(steps);
+      await validateSteps(tx, steps);
+
+      // Store trigger + metadata only
+      updateData.trigger = data.definition.trigger;
+      updateData.metadata = data.definition.metadata;
+
+      // Replace steps: delete old, insert new
+      await tx.delete(sopSteps).where(eq(sopSteps.sopId, sopId));
+      await insertSteps(tx, sopId, steps);
+    }
+
+    const [updated] = await tx
+      .update(sops)
+      .set(updateData)
+      .where(eq(sops.id, sopId))
+      .returning();
+
+    if (!updated) {
+      throw Errors.sopNotFound(sopId);
+    }
+
+    return updated;
+  });
+}
+
+export async function deleteSop(orgId: string, sopId: string): Promise<void> {
+  const [deleted] = await forOrg(orgId, (tx) =>
+    tx.delete(sops).where(eq(sops.id, sopId)).returning({ id: sops.id }),
+  );
+
+  if (!deleted) {
+    throw Errors.sopNotFound(sopId);
+  }
+}
+
+export async function activateSop(orgId: string, sopId: string) {
+  return forOrg(orgId, async (tx) => {
+    await requireSopExists(tx, sopId);
+
+    // Count steps from relational table
+    const [{ total }] = await tx
+      .select({ total: count() })
+      .from(sopSteps)
+      .where(eq(sopSteps.sopId, sopId));
+
+    if (total === 0) {
+      throw Errors.validationError(
+        "Cannot activate SOP with no steps. Add at least one step first.",
+      );
+    }
+
+    const [updated] = await tx
+      .update(sops)
+      .set({ status: "active", updatedAt: new Date() })
+      .where(eq(sops.id, sopId))
+      .returning();
+
+    return updated!;
+  });
+}
+
+export async function archiveSop(orgId: string, sopId: string) {
+  const [updated] = await forOrg(orgId, (tx) =>
+    tx
+      .update(sops)
+      .set({ status: "archived", updatedAt: new Date() })
+      .where(eq(sops.id, sopId))
+      .returning(),
+  );
+
+  if (!updated) {
+    throw Errors.sopNotFound(sopId);
+  }
+
+  return updated;
+}
+
+// ============================================================================
+// Agent assignment
+// ============================================================================
+
+/** Internal helper — query agent assignments within provided tx. */
+async function getAssignedAgentsInTx(tx: Transaction, sopId: string) {
+  return tx
+    .select({
+      id: agents.id,
+      name: agents.name,
+      modality: agents.modality,
+    })
+    .from(agentSops)
+    .innerJoin(agents, eq(agentSops.agentId, agents.id))
+    .where(eq(agentSops.sopId, sopId));
+}
+
+/** Internal helper — verify agents belong to org and set assignments. */
+async function setAssignedAgentsInternal(
+  tx: Transaction,
+  sopId: string,
+  agentIds: string[],
+) {
+  const uniqueAgentIds = [...new Set(agentIds)];
+
+  // Verify all agents belong to this org (agents table is RLS-protected,
+  // so querying inside forOrg only returns same-org agents)
+  if (uniqueAgentIds.length > 0) {
+    const foundAgents = await tx
+      .select({ id: agents.id })
+      .from(agents)
+      .where(inArray(agents.id, uniqueAgentIds));
+
+    const foundIds = new Set(foundAgents.map((a) => a.id));
+    for (const id of uniqueAgentIds) {
+      if (!foundIds.has(id)) {
+        throw Errors.agentNotFound(id);
+      }
+    }
+  }
+
+  // Delete existing assignments
+  await tx.delete(agentSops).where(eq(agentSops.sopId, sopId));
+
+  // Insert new
+  if (uniqueAgentIds.length > 0) {
+    await tx.insert(agentSops).values(
+      uniqueAgentIds.map((agentId) => ({
+        agentId,
+        sopId,
+      })),
+    );
+  }
+}
+
+export async function getAssignedAgents(orgId: string, sopId: string) {
+  return forOrg(orgId, async (tx) => {
+    await requireSopExists(tx, sopId);
+    return getAssignedAgentsInTx(tx, sopId);
+  });
+}
+
+export async function setAssignedAgents(
+  orgId: string,
+  sopId: string,
+  agentIds: string[],
+) {
+  return forOrg(orgId, async (tx) => {
+    await requireSopExists(tx, sopId);
+    await setAssignedAgentsInternal(tx, sopId, agentIds);
+
+    return getAssignedAgentsInTx(tx, sopId);
+  });
+}
+
+// ============================================================================
+// Step warnings (inactive tool/connector detection)
+// ============================================================================
+
+/** Compute step warnings using a provided transaction (avoids extra forOrg calls). */
+async function computeStepWarningsInTx(tx: Transaction, steps: SopStep[]) {
+  const warnings: { stepId: string; message: string }[] = [];
+  const stepsWithTools = steps.filter((s) => s.tool?.connectorToolId);
+  if (stepsWithTools.length === 0) return warnings;
+
+  const toolIds = [
+    ...new Set(stepsWithTools.map((s) => s.tool!.connectorToolId!)),
+  ];
+
+  // Look up connector tools + their parent connectors in one query
+  const toolRows = await tx
+    .select({
+      toolId: connectorTools.id,
+      toolSlug: connectorTools.slug,
+      toolIsActive: connectorTools.isActive,
+      toolDeletedAt: connectorTools.deletedAt,
+      connectorSlug: connectors.slug,
+      connectorIsActive: connectors.isActive,
+    })
+    .from(connectorTools)
+    .innerJoin(connectors, eq(connectorTools.connectorId, connectors.id))
+    .where(inArray(connectorTools.id, toolIds));
+
+  const toolMap = new Map(toolRows.map((t) => [t.toolId, t]));
+
+  for (const step of stepsWithTools) {
+    const tid = step.tool!.connectorToolId!;
+    const tool = toolMap.get(tid);
+
+    if (!tool || tool.toolDeletedAt) {
+      warnings.push({
+        stepId: step.id,
+        message: `Connector tool ${tid} no longer exists`,
+      });
+      continue;
+    }
+
+    if (!tool.connectorIsActive) {
+      warnings.push({
+        stepId: step.id,
+        message: `Connector "${tool.connectorSlug}" is currently inactive`,
+      });
+    }
+
+    if (!tool.toolIsActive) {
+      warnings.push({
+        stepId: step.id,
+        message: `Tool "${tool.toolSlug}" is currently inactive on connector "${tool.connectorSlug}"`,
+      });
+    }
+  }
+
+  return warnings;
+}

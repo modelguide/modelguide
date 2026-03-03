@@ -6,3 +6,4 @@
 | [002](002-magic-link-authentication.md) | Magic Link Authentication & Session Lifecycle | Accepted |
 | [003](003-medusa-checkout-auto-init.md) | Auto-Select Shipping & Payment on Cart Completion (Medusa) | Accepted |
 | [004](004-connectors-and-tools.md) | Connectors and Tools | Accepted |
+| [005](005-sops-as-core-primitive.md) | SOPs as Core Primitive | Accepted |
