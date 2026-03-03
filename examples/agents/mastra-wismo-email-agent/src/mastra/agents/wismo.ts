@@ -6,6 +6,14 @@ import { config } from "../../config.js";
 import { logger } from "../../lib/logger.js";
 import { type Step, logAgentTurns, postStepMessages } from "../../lib/modelguide.client.js";
 
+export interface UsageData {
+  llm_model: string;
+  llm_input_tokens: number;
+  llm_output_tokens: number;
+  llm_total_tokens: number;
+  cost_usd: number;
+}
+
 export const wismoRequestContextSchema = z.object({
   sessionId: z.string(),
   senderEmail: z.string().email(),
@@ -52,7 +60,7 @@ export async function runWismoAgent(params: {
   sessionId: string;
   senderEmail: string;
   emailBody: string;
-}): Promise<{ output: AgentOutput; steps: Step[] }> {
+}): Promise<{ output: AgentOutput; steps: Step[]; usage: UsageData }> {
   const { sessionId, senderEmail, emailBody } = params;
 
   const mcpClient = new MCPClient({
@@ -130,7 +138,26 @@ export async function runWismoAgent(params: {
     logger.debug({ output }, "Agent output derived from steps");
 
     logAgentTurns(steps, stepLatenciesMs);
-    return { output, steps };
+
+    // Extract token usage and compute cost
+    const inputTokens = result.totalUsage?.inputTokens ?? 0;
+    const outputTokens = result.totalUsage?.outputTokens ?? 0;
+
+    const cost =
+      (inputTokens / 1_000_000) * config.AGENT_MODEL_INPUT_COST +
+      (outputTokens / 1_000_000) * config.AGENT_MODEL_OUTPUT_COST;
+
+    const usage: UsageData = {
+      llm_model: config.AGENT_MODEL,
+      llm_input_tokens: inputTokens,
+      llm_output_tokens: outputTokens,
+      llm_total_tokens: inputTokens + outputTokens,
+      cost_usd: Number(cost.toFixed(6)),
+    };
+
+    logger.info({ usage }, "Token usage and cost computed");
+
+    return { output, steps, usage };
   } finally {
     await mcpClient.disconnect();
   }
@@ -139,7 +166,7 @@ export async function runWismoAgent(params: {
 export const wismoAgent = new Agent({
   id: "wismo-agent",
   name: "wismo-agent",
-  model: "anthropic/claude-haiku-4-5-20251001",
+  model: config.AGENT_MODEL,
   requestContextSchema: wismoRequestContextSchema,
 
   // Instructions are a function so session_id and sender email are injected

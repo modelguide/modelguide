@@ -255,11 +255,12 @@ async function postMessage(sessionId: string, message: MessageData): Promise<voi
 export async function patchSessionStatus(
   sessionId: string,
   status: "completed" | "abandoned",
+  metadata?: Record<string, unknown>,
 ): Promise<void> {
   const res = await fetch(`${apiBaseUrl}/api/sessions/${sessionId}`, {
     method: "PATCH",
     headers: authHeaders,
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...(metadata ? { metadata } : {}) }),
   });
   if (!res.ok) {
     const text = await res.text();
