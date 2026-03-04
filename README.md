@@ -5,13 +5,11 @@
   </picture>
 </p>
 
-<h3 align="center">Your call center & support agent demo worked. Now ship it.</h3>
+<h3 align="center">Your agent works. Now make it real.</h3>
 
 <p align="center">
-  Self-hosted, open-source AI contact centers.<br/>
-  Connect any voice/chat platform → your business systems → a full Contact Center for your team to run.<br/>
-  Built on agentic engineering principles — adding a connector is one TypeScript file. Any AI coding agent can build one for you.<br/>
-  No vendor lock-in. No per-resolution pricing. You own everything.
+  Open-source production harness for AI agents — voice, chat, email, any channel.<br/>
+  SOPs · Connectors · Session Recording · Evals · RBAC — one TypeScript codebase, zero vendor lock-in.
 </p>
 
 <p align="center">
@@ -27,35 +25,88 @@
 
 ## The Problem
 
-You showed a call center/customer support demo to your CEO. Got "great, ship it."
+Your agent handles demos. Production needs session tracking, tool management, evals, SOPs, and integrations with every system your company runs. Every team rebuilds this from scratch.
 
-Months later: the demo that worked for 10 calls breaks at 500. There's no QA. No way to know if Tuesday's prompt change helped or hurt. And you're rebuilding the same session tracking, tool integrations, and routing logic that every team rebuilds from scratch.
+Today you ship a chat agent. Tomorrow the business wants voice and email — and you're starting over because nothing was built to carry across channels.
 
-The AI agent is becoming a commodity. The voice stacks work. The LLMs work. What nobody gives you is the infrastructure to **run** AI agents like a real operation — with observability, tool management, vendor freedom, and the ability to swap any component without starting over.
+The boring stuff between "it works" and "it ships" — that's what kills timelines. Not the AI. SaaS charges $150K+ for this harness. We open-sourced it.
 
-SaaS charges $150K+ for that layer. We open-sourced it.
+80% of the infrastructure comes ready: auth, sessions, connectors, SOPs, evals, analytics. You customize the 20% that makes your agent yours. The first blueprint — a contact center agent — is shipping now. Fork it, or start fresh for any vertical: healthcare intake, field service, B2B sales, internal ops.
 
 ![Architecture diagram](./docs/architecture_image.png)
 
-## What Model Guide Does
+## What ModelGuide Does
 
-Model Guide sits between your AI agents and your business systems. It doesn't run the AI. It doesn't own the voice stack. It provides 4 layers:
+ModelGuide is the infrastructure layer between your AI agents and your business systems. It doesn't run the AI or own the voice stack — it gives you four production-ready layers you'd otherwise build from scratch:
 
 **Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
 
-![Connectors diagram](./docs/Connectors.png)
-
 **Observation layer** — Every session recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did*.
-
-![Conversation diagram](./docs/Converstation.png)
 
 **Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
 
-![Control diagram](./docs/Data.png)
+**SOP layer** — Define step-by-step procedures, link them to specific tools, and assign them to agents. Agents follow your playbook instead of improvising — consistent behavior across every interaction.
 
-**Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics CX leaders actually need to prove AI is working, not vanity dashboards.
+**Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics you need to prove agents are working, not vanity dashboards.
 
-![Optimize diagram](./docs/Optimize.png)
+<table>
+  <tbody>
+    <tr>
+      <td align="center"><strong>Connectors</strong></td>
+      <td align="center"><strong>Sessions</strong></td>
+      <td align="center"><strong>Agents</strong></td>
+    </tr>
+    <tr>
+      <td><a href="./docs/Connectors.png"><img src="./docs/Connectors.png" alt="Connectors" width="260"></a></td>
+      <td><a href="./docs/Converstation.png"><img src="./docs/Converstation.png" alt="Sessions" width="260"></a></td>
+      <td><a href="./docs/Data.png"><img src="./docs/Data.png" alt="Agents" width="260"></a></td>
+    </tr>
+    <tr>
+      <td align="center"><strong>SOPs</strong></td>
+      <td align="center"><strong>Analytics</strong></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><a href="./docs/SOPs.png"><img src="./docs/SOPs.png" alt="SOPs" width="260"></a></td>
+      <td><a href="./docs/Optimize.png"><img src="./docs/Optimize.png" alt="Analytics" width="260"></a></td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+## Features
+
+Everything you need to go from demo to production:
+
+✅ **Connector System** — Code-defined manifests with real HTTP handlers. Ships with a Medusa e-commerce connector as a reference implementation (8 tools: browse products, manage carts, checkout, orders). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
+
+✅ **Tool Namespacing** — Connector instances get a unique slug. Same connector type, different instances: `glowbox_store_add_to_cart` and `clearhealth_pharmacy_add_to_cart` coexist on the same agent.
+
+✅ **MCP Protocol** — Standard [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP. Tool discovery, execution, and resources. Works with any MCP-compatible client.
+
+✅ **Confirmation Gates** — Flag destructive tools as requiring customer confirmation before execution. The `requires_confirmation` flag tells the AI agent to verify intent before proceeding (e.g., completing a checkout).
+
+✅ **Session Recording** — Full message history with roles, timestamps, audio URLs, tool call inputs/outputs. Sequence-numbered for correct ordering.
+
+✅ **CSAT + QA** — Customer feedback via `core_rate_session`. Internal quality evaluation by support team with tags and comments. Both stored per session, filterable in dashboard.
+
+✅ **Multi-Tenant** — PostgreSQL row-level security on every org-scoped table. Separate DB roles: superuser for migrations, app role subject to RLS policies. One deployment, multiple organizations.
+
+✅ **Auth** — Magic link passwordless login for dashboard users. API key auth (`mgk_` prefix, SHA-256 hashed, shown once on creation) for agents. Refresh token rotation with family-based revocation.
+
+✅ **RBAC** — Granular permissions across admin and support roles. Agents get a separate auth path — they can only access MCP, not REST endpoints.
+
+✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
+
+✅ **SOPs (Standard Operating Procedures)** — Define agent behavioral contracts: ordered steps with tool references, triggers, and metadata. Fork from reusable templates or create from scratch. Draft/active/archived lifecycle. Assign SOPs to agents. Inactive-tool warnings at read time. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md).
+
+✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
+
+## AI-Assisted Development
+
+ModelGuide is built with AI coding agents, not just for them. We're progressively building a development harness — enforced module boundaries, structured issue specs, mechanical convention enforcement via CI, and agent-to-agent code review — so that any AI coding agent can implement features, write tests, and open PRs with minimal hand-holding. We also use slash commands available to all contributors for common workflows like committing, reviewing PRs, and implementing issues.
+
+We'll keep harness artifacts public.
 
 ## Quick Start
 
@@ -147,32 +198,6 @@ Every tool call, every message, every rating — stored and queryable through th
 ### 4. Dashboard for ops
 
 The dashboard gives support teams what they need: session list with filters (status, channel, agent, date range, feedback), full transcripts with expandable tool call traces showing request/response JSON, and the ability to evaluate agent performance with tags (`wrong_tool`, `hallucination`, `good_resolution`).
-
-## Features
-
-✅ **Connector System** — Code-defined manifests with real HTTP handlers. Ships with a Medusa e-commerce connector as a reference implementation (8 tools: browse products, manage carts, checkout, orders). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
-
-✅ **Tool Namespacing** — Connector instances get a unique slug. Same connector type, different instances: `glowbox_store_add_to_cart` and `clearhealth_pharmacy_add_to_cart` coexist on the same agent.
-
-✅ **MCP Protocol** — Standard [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP. Tool discovery, execution, and resources. Works with any MCP-compatible client.
-
-✅ **Confirmation Gates** — Flag destructive tools as requiring customer confirmation before execution. The `requires_confirmation` flag tells the AI agent to verify intent before proceeding (e.g., completing a checkout).
-
-✅ **Session Recording** — Full message history with roles, timestamps, audio URLs, tool call inputs/outputs. Sequence-numbered for correct ordering.
-
-✅ **CSAT + QA** — Customer feedback via `core_rate_session`. Internal quality evaluation by support team with tags and comments. Both stored per session, filterable in dashboard.
-
-✅ **Multi-Tenant** — PostgreSQL row-level security on every org-scoped table. Separate DB roles: superuser for migrations, app role subject to RLS policies. One deployment, multiple organizations.
-
-✅ **Auth** — Magic link passwordless login for dashboard users. API key auth (`mgk_` prefix, SHA-256 hashed, shown once on creation) for agents. Refresh token rotation with family-based revocation.
-
-✅ **RBAC** — Granular permissions across admin and support roles. Agents get a separate auth path — they can only access MCP, not REST endpoints.
-
-✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
-
-✅ **SOPs (Standard Operating Procedures)** — Define agent behavioral contracts: ordered steps with tool references, triggers, and metadata. Fork from reusable templates or create from scratch. Draft/active/archived lifecycle. Assign SOPs to agents. Inactive-tool warnings at read time. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md).
-
-✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
 
 ## Seed Data
 
@@ -297,19 +322,21 @@ const modules = await Promise.all([
 
 ## Roadmap
 
-🚧 **Confirmation token flow** — Flag exists per tool, full token-based confirmation with expiry coming
+🚧 **Evals Framework** — Structured evaluation pipelines for agent responses — accuracy, tool selection, hallucination detection, SOP adherence scoring
 
-🚧 **Analytics aggregation** — Session data is stored; summary endpoints and dashboard charts in progress
+🚧 **Sub-agents & Workflow Builder** — Compose multi-step agent workflows with branching and handoffs
 
-📋 **Chat channels** — Web widget, WhatsApp, SMS (session model already supports all channel types)
+🚧 **OTEL + A/B Testing via Langfuse** — OpenTelemetry traces, prompt variant experiments, side-by-side comparison
 
-📋 **Knowledge base connector** — Agents answer from your docs, not just perform actions
+🚧 **Agentic Insights** — Custom funnels tracking agent behavior through business-defined conversion paths
 
-📋 **Agent comparison** — Same tools, different platforms or prompts. Compare resolution rates, CSAT, tool success with real data
+🚧 **Auto-tuning SOPs** — Feedback loop from evals to automatically refine operating procedures
 
-📋 **Warm transfer** — Live agent availability + real-time context handoff
+🚧 **Full Interoperability** — Deploy the same agent via Pipecat, LiveKit, Google ADK, or any runtime
 
-📋 **Connector marketplace** — Community-built integrations
+📋 **More Blueprints** — Contact center ships first; healthcare intake, field service, B2B sales next
+
+📋 **Connector Marketplace** — Community-built integrations
 
 ## Deployment
 
@@ -379,5 +406,5 @@ Check [open issues](https://github.com/modelguide/modelguide/issues) — look fo
 ---
 
 <p align="center">
-  Built by <a href="https://modelguide.ai">ModelGuide</a> · 🇵🇱 Poland
+  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source harness for production AI agents · 🇵🇱 Poland
 </p>
