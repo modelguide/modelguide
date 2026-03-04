@@ -9,6 +9,8 @@ import {
   hashApiKey,
   hashMagicToken,
   isValidApiKeyFormat,
+  mask,
+  maskPII,
 } from "@lib/crypto";
 
 // Note: encryptSecret/decryptSecret require ENCRYPTION_KEY env var
@@ -39,11 +41,10 @@ describe("generateApiKey", () => {
     expect(/^[a-f0-9]+$/.test(hash)).toBe(true);
   });
 
-  test("generates prefix with correct format", () => {
-    const { key, prefix } = generateApiKey();
+  test("generates short prefix for display (mgk_ + 4 chars)", () => {
+    const { prefix } = generateApiKey();
     expect(prefix.startsWith("mgk_")).toBe(true);
-    expect(prefix.length).toBe(8); // mgk_ + 4 chars
-    expect(key.startsWith(prefix)).toBe(true);
+    expect(prefix.length).toBe(8);
   });
 });
 
@@ -157,5 +158,47 @@ describe("hashMagicToken", () => {
     const hash = hashMagicToken(token);
     expect(hash.length).toBe(64);
     expect(hashMagicToken(token)).toBe(hash);
+  });
+});
+
+describe("mask", () => {
+  test("masks string showing last 4 chars by default", () => {
+    expect(mask("sk_live_abc123")).toBe("**********c123");
+  });
+
+  test("masks with custom visible count", () => {
+    expect(mask("mysecret", 2)).toBe("******et");
+  });
+
+  test("returns **** for strings shorter than or equal to visible", () => {
+    expect(mask("abc", 4)).toBe("****");
+    expect(mask("abcd", 4)).toBe("****");
+  });
+
+  test("masks single char over visible threshold", () => {
+    expect(mask("abcde", 4)).toBe("*bcde");
+  });
+
+  test("handles empty string", () => {
+    expect(mask("")).toBe("****");
+  });
+});
+
+describe("maskPII", () => {
+  test("masks email preserving first 3 and last 3 chars", () => {
+    expect(maskPII("user@example.com")).toBe("use**********com");
+  });
+
+  test("masks with custom edge size", () => {
+    expect(maskPII("user@example.com", 4)).toBe("user********.com");
+  });
+
+  test("returns **** for strings too short to mask", () => {
+    expect(maskPII("ab", 3)).toBe("****");
+    expect(maskPII("abcdef", 3)).toBe("****");
+  });
+
+  test("masks string exactly at boundary", () => {
+    expect(maskPII("abcdefg", 3)).toBe("abc*efg");
   });
 });

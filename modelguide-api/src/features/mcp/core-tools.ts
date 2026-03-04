@@ -3,6 +3,7 @@
  */
 
 import { addMessages } from "@features/sessions";
+import { enrichLogger, getLogger } from "@lib/logger";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
@@ -63,6 +64,9 @@ export function registerCoreTools(
     },
     async ({ session_id, messages }) => {
       try {
+        enrichLogger({ sessionId: session_id });
+        const log = getLogger();
+
         const rows = await addMessages(
           orgId,
           session_id,
@@ -82,11 +86,17 @@ export function registerCoreTools(
           })),
         );
 
+        log.info({ messagesAdded: rows.length }, "messages added to session");
+
         return mcpResponse({
           session_id,
           messages_added: rows.length,
         });
       } catch (err) {
+        getLogger().warn(
+          { err, tool: "core_add_messages" },
+          "tool call rejected",
+        );
         return mcpErrorResponse(err, "Failed to add messages");
       }
     },

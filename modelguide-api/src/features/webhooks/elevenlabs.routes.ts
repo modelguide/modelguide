@@ -14,8 +14,11 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
+import type { AppBindings } from "@/types";
 import { getAgentSecretByType } from "@features/secrets";
 import { extractLinks } from "@features/sessions/link-extraction";
+import { mask } from "@lib/crypto";
+import { getLogger } from "@lib/logger";
 import { verifyApiKey } from "@lib/middleware/auth";
 import { convertPostCallToSession } from "./elevenlabs.converter";
 import {
@@ -23,7 +26,7 @@ import {
   postCallTranscriptionPayloadSchema,
 } from "./elevenlabs.schemas";
 
-const app = new Hono();
+const app = new Hono<AppBindings>();
 
 // ============================================================================
 // Helpers
@@ -55,6 +58,10 @@ async function getAgentWithMetadata(agentId: string) {
 
 app.post("/:agentId/post-call", async (c) => {
   const agentId = c.req.param("agentId");
+  const reqLog = getLogger().child({
+    webhook: "post-call",
+    agentId,
+  });
   const rawBody = await c.req.text();
   const signature = c.req.header("elevenlabs-signature") ?? "";
 
@@ -71,9 +78,7 @@ app.post("/:agentId/post-call", async (c) => {
   );
 
   if (!webhookSecret) {
-    console.error(
-      `[webhook/post-call] No webhook_secret in secrets table for agent=${agentId}`,
-    );
+    reqLog.error("no webhook_secret in secrets table");
     return c.json(
       { error: "Webhook secret not configured for this agent" },
       500,
@@ -90,7 +95,7 @@ app.post("/:agentId/post-call", async (c) => {
     try {
       await verifySignature(rawBody, signature, webhookSecret);
     } catch (err) {
-      console.error("[webhook/post-call] Signature verification failed:", err);
+      reqLog.error({ err }, "signature verification failed");
       return c.json({ error: "Invalid signature" }, 401);
     }
   }
@@ -100,15 +105,15 @@ app.post("/:agentId/post-call", async (c) => {
   try {
     rawJson = JSON.parse(rawBody);
   } catch {
-    console.error("[webhook/post-call] Invalid JSON body");
+    reqLog.error("invalid JSON body");
     return c.json({ error: "Invalid JSON" }, 400);
   }
 
   const parsed = postCallTranscriptionPayloadSchema.safeParse(rawJson);
   if (!parsed.success) {
-    console.error(
-      "[webhook/post-call] Validation failed:",
-      JSON.stringify(parsed.error.flatten()),
+    reqLog.error(
+      { validation: parsed.error.flatten() },
+      "payload validation failed",
     );
     return c.json(
       { error: "Invalid payload", details: parsed.error.flatten() },
@@ -130,9 +135,7 @@ app.post("/:agentId/post-call", async (c) => {
     data.conversation_id ?? dynamicVars?.system__conversation_id;
 
   if (!conversationId) {
-    console.error(
-      "[webhook/post-call] No conversation_id in payload or dynamic_variables",
-    );
+    reqLog.error("no conversation_id in payload or dynamic_variables");
     return c.json({ error: "Missing conversation_id" }, 400);
   }
 
@@ -163,8 +166,9 @@ app.post("/:agentId/post-call", async (c) => {
   );
 
   if (existingByExternalId) {
-    console.log(
-      `[webhook/post-call] Duplicate: conversation=${conversationId} already stored as session=${existingByExternalId.id}`,
+    reqLog.info(
+      { conversationId, sessionId: existingByExternalId.id },
+      "duplicate webhook — session already exists",
     );
     return c.json({ received: true, session_id: existingByExternalId.id });
   }
@@ -246,15 +250,18 @@ app.post("/:agentId/post-call", async (c) => {
       return session.id;
     });
   } catch (err) {
-    console.error(
-      `[webhook/post-call] DB error: conversation=${conversationId} agent=${agentId}`,
-      err,
-    );
+    reqLog.error({ err, conversationId }, "DB error storing session");
     return c.json({ error: "Failed to store session" }, 500);
   }
 
-  console.log(
-    `[webhook/post-call] ${existingSessionId ? "Updated" : "Created"} session=${sessionId} agent=${agentId} conversation=${conversationId} messages=${converted.messages.length}`,
+  reqLog.info(
+    {
+      action: existingSessionId ? "updated" : "created",
+      sessionId,
+      conversationId,
+      messages: converted.messages.length,
+    },
+    "post-call processed",
   );
 
   return c.json({ received: true, session_id: sessionId });
@@ -266,21 +273,21 @@ app.post("/:agentId/post-call", async (c) => {
 
 app.post("/:agentId/conversation-init", async (c) => {
   const agentId = c.req.param("agentId");
+  const reqLog = getLogger().child({
+    webhook: "conversation-init",
+    agentId,
+  });
   const apiKeyHeader = c.req.header("x-mg-api-key");
 
   // 1. Authenticate via API key header
   if (!apiKeyHeader) {
-    console.warn(
-      `[webhook/conversation-init] Missing x-mg-api-key header for agent=${agentId}`,
-    );
+    reqLog.warn("missing x-mg-api-key header");
     return c.json({ error: "Missing x-mg-api-key header" }, 401);
   }
 
   const authAgent = await verifyApiKey(apiKeyHeader);
   if (!authAgent || authAgent.id !== agentId) {
-    console.warn(
-      `[webhook/conversation-init] Auth failed for agent=${agentId}`,
-    );
+    reqLog.warn("auth failed");
     return c.json({ error: "Invalid API key" }, 401);
   }
 
@@ -293,9 +300,9 @@ app.post("/:agentId/conversation-init", async (c) => {
   }
   const parsed = conversationInitRequestSchema.safeParse(rawBody);
   if (!parsed.success) {
-    console.error(
-      "[webhook/conversation-init] Validation failed:",
-      JSON.stringify(parsed.error.flatten()),
+    reqLog.error(
+      { validation: parsed.error.flatten() },
+      "payload validation failed",
     );
     return c.json(
       { error: "Invalid payload", details: parsed.error.flatten() },
@@ -343,18 +350,18 @@ app.post("/:agentId/conversation-init", async (c) => {
       return session.id;
     });
   } catch (err) {
-    console.error(
-      `[webhook/conversation-init] DB error creating session for agent=${agentId}`,
-      err,
-    );
+    reqLog.error({ err }, "DB error creating session");
     return c.json({ error: "Failed to create session" }, 500);
   }
 
-  const maskedCallerId = caller_id
-    ? caller_id.slice(-4).padStart(caller_id.length, "*")
-    : undefined;
-  console.log(
-    `[webhook/conversation-init] session=${sessionId} agent=${agentId}${conversation_id ? ` conversation=${conversation_id}` : ""}${maskedCallerId ? ` caller=${maskedCallerId}` : ""}`,
+  const maskedCallerId = caller_id ? mask(caller_id) : undefined;
+  reqLog.info(
+    {
+      sessionId,
+      conversationId: conversation_id,
+      caller: maskedCallerId,
+    },
+    "conversation initiated",
   );
 
   return c.json({

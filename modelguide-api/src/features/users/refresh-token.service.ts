@@ -24,6 +24,7 @@ import {
   parseDuration,
   verifyRefreshJWT,
 } from "@lib/jwt";
+import { getLogger } from "@lib/logger";
 import { and, eq, lt } from "drizzle-orm";
 
 export interface SessionTokens {
@@ -58,6 +59,11 @@ export async function createSession(
     generateJWT(user),
     generateRefreshJWT(row.familyId, 0, user.id),
   ]);
+
+  getLogger().info(
+    { userId: user.id, familyId: row.familyId },
+    "auth session created",
+  );
 
   return { accessToken, refreshToken, refreshTtlSeconds: ttl, user };
 }
@@ -127,15 +133,21 @@ export async function rotateRefreshToken(
         .set({ isRevoked: true })
         .where(eq(securityTokens.familyId, payload.familyId));
 
-      console.warn(
-        `[SECURITY] Refresh token reuse detected for family=${payload.familyId}, token_gen=${payload.generation}, db_gen=${currentSession.generation}`,
+      getLogger().warn(
+        {
+          familyId: payload.familyId,
+          tokenGen: payload.generation,
+          dbGen: currentSession.generation,
+        },
+        "refresh token reuse detected — session revoked",
       );
       throw Errors.refreshTokenReused();
     }
 
     // Benign race (gap of 1) or already revoked
-    console.info(
-      `[REFRESH_IN_PROGRESS] CAS miss for family=${payload.familyId}, attempted_gen=${payload.generation}`,
+    getLogger().info(
+      { familyId: payload.familyId, attemptedGen: payload.generation },
+      "refresh CAS miss — concurrent refresh in progress",
     );
     throw Errors.refreshTokenInvalid("Refresh already in progress");
   }
@@ -185,6 +197,10 @@ export async function revokeSession(familyId: string): Promise<boolean> {
     .where(eq(securityTokens.familyId, familyId))
     .returning({ familyId: securityTokens.familyId });
 
+  if (updated.length > 0) {
+    getLogger().info({ familyId }, "session revoked (logout)");
+  }
+
   return updated.length > 0;
 }
 
@@ -197,6 +213,13 @@ export async function revokeAllUserSessions(userId: string): Promise<number> {
     .set({ isRevoked: true })
     .where(eq(securityTokens.userId, userId))
     .returning({ familyId: securityTokens.familyId });
+
+  if (updated.length > 0) {
+    getLogger().info(
+      { userId, revokedCount: updated.length },
+      "all user sessions revoked",
+    );
+  }
 
   return updated.length;
 }
@@ -212,6 +235,13 @@ export async function cleanupExpiredSessions(): Promise<number> {
     .delete(securityTokens)
     .where(lt(securityTokens.expiresAt, cutoff))
     .returning({ familyId: securityTokens.familyId });
+
+  if (deleted.length > 0) {
+    getLogger().info(
+      { deletedCount: deleted.length, retentionDays },
+      "expired sessions cleaned up",
+    );
+  }
 
   return deleted.length;
 }

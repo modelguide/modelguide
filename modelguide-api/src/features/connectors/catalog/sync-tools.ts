@@ -17,6 +17,7 @@ import {
 } from "@db/schema";
 import type { CatalogTool, NewConnectorCatalog } from "@db/schema";
 import { stableStringify } from "@lib/json";
+import { getLogger } from "@lib/logger";
 import { toolSlug } from "@lib/slugify";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { getAllManifests } from "./registry";
@@ -316,8 +317,9 @@ export async function syncCatalogAndTools(): Promise<void> {
   const { inserted, updated, softDeleted, agentLinks } = await syncTools();
 
   if (inserted > 0 || updated > 0 || softDeleted > 0 || agentLinks > 0) {
-    console.log(
-      `[sync] +${inserted} inserted, ~${updated} updated, -${softDeleted} soft-deleted; ${agentLinks} agent assignments`,
+    getLogger().info(
+      { inserted, updated, softDeleted, agentLinks },
+      "connector tools synced",
     );
   }
 }

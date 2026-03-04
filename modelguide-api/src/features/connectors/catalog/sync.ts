@@ -5,21 +5,22 @@
  * Usage: bun run src/features/connectors/catalog/sync.ts
  */
 
+import { getLogger } from "@lib/logger";
 import { loadAllManifests } from "./registry";
 import { syncCatalogAndTools } from "./sync-tools";
 
 async function sync() {
-  console.log("Loading connector manifests...");
+  getLogger().info("loading connector manifests");
   const manifests = await loadAllManifests();
-  console.log(`Found ${manifests.length} connector(s)`);
+  getLogger().info({ count: manifests.length }, "connectors found");
 
   await syncCatalogAndTools();
 
-  console.log("Sync complete.");
+  getLogger().info("sync complete");
   process.exit(0);
 }
 
 sync().catch((err) => {
-  console.error("Sync failed:", err);
+  getLogger().fatal({ err }, "sync failed");
   process.exit(1);
 });

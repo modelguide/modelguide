@@ -14,7 +14,8 @@ import {
   getAgentModelGuideKey,
 } from "@features/secrets";
 import { encryptSecret } from "@lib/crypto";
-import { Errors } from "@lib/errors";
+import { Errors, getErrorMessage, logAndThrow } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import { and, eq } from "drizzle-orm";
 
 /**
@@ -61,6 +62,15 @@ export interface SyncResult {
 }
 
 export async function syncAgentToElevenLabs(
+  orgId: string,
+  agentId: string,
+): Promise<SyncResult> {
+  return _syncAgentToElevenLabs(orgId, agentId).catch((err) => {
+    logAndThrow(getLogger(), err, { agentId }, "ElevenLabs sync failed");
+  });
+}
+
+async function _syncAgentToElevenLabs(
   orgId: string,
   agentId: string,
 ): Promise<SyncResult> {
@@ -139,7 +149,7 @@ export async function syncAgentToElevenLabs(
       steps.push({
         step: "API key secret",
         status: "error",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
       });
       throw err;
     }
@@ -158,7 +168,17 @@ export async function syncAgentToElevenLabs(
   };
 
   // Fetch current ElevenLabs agent state (used for MCP list + agent name)
-  const elAgent = await client.conversationalAi.agents.get(elevenLabsAgentId);
+  let elAgent: Awaited<ReturnType<typeof client.conversationalAi.agents.get>>;
+  try {
+    elAgent = await client.conversationalAi.agents.get(elevenLabsAgentId);
+  } catch (err) {
+    logAndThrow(
+      getLogger(),
+      err,
+      { agentId, elevenLabsAgentId },
+      "ElevenLabs agent fetch failed — check agent ID and API key",
+    );
+  }
 
   // ElevenLabs API silently ignores URL changes on MCP server update, so we
   // must delete + recreate.  We also clean up any orphaned MCP servers from
@@ -224,7 +244,7 @@ export async function syncAgentToElevenLabs(
     steps.push({
       step: "MCP server",
       status: "error",
-      message: err instanceof Error ? err.message : "Unknown error",
+      message: getErrorMessage(err),
     });
     throw err;
   }
@@ -260,7 +280,7 @@ export async function syncAgentToElevenLabs(
     steps.push({
       step: "Post-call webhook",
       status: "error",
-      message: err instanceof Error ? err.message : "Unknown error",
+      message: getErrorMessage(err),
     });
     throw err;
   }
@@ -308,7 +328,7 @@ export async function syncAgentToElevenLabs(
     steps.push({
       step: "Agent configuration",
       status: "error",
-      message: err instanceof Error ? err.message : "Unknown error",
+      message: getErrorMessage(err),
     });
     throw err;
   }
