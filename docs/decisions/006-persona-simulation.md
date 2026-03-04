@@ -1,4 +1,4 @@
-# ADR-005: Persona Simulation
+# ADR-006: Persona Simulation
 
 **Status:** Accepted
 
