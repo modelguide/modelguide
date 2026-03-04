@@ -32,7 +32,13 @@ export async function startSimulation(
     throw Errors.simulationLlmNotConfigured();
   }
 
-  return runSimulation({ orgId, agentId, persona, maxTurns });
+  return runSimulation({
+    orgId,
+    agentId,
+    agentName: agent.name,
+    persona,
+    maxTurns,
+  });
 }
 
 export function listPersonas() {

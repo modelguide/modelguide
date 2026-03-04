@@ -1,5 +1,5 @@
 ---
-name: integrity-check
+name: mg-integrity-check
 description: Use before committing significant code changes to verify project integrity. Checks code style, project structure, naming conventions, and change management rules from CONTRIBUTING.md. Trigger phrases include "pre-commit check", "integrity check", "check before commit", "review my changes", "verify changes".
 ---
 

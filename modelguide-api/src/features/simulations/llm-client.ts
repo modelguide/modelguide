@@ -12,6 +12,8 @@ import type {
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
 
+const SIMULATION_MAX_TOKENS = 16_000;
+
 let client: OpenAI | null = null;
 
 function getClient(): OpenAI {
@@ -65,7 +67,7 @@ export async function generatePersonaMessage(
 
   const response = await openai.chat.completions.create({
     model: env.SIMULATION_LLM_MODEL,
-    max_completion_tokens: 16000,
+    max_completion_tokens: SIMULATION_MAX_TOKENS,
     messages: [{ role: "system", content: personaSystemPrompt }, ...messages],
   });
 
@@ -88,7 +90,7 @@ export async function generateAgentResponse(
 
   const response = await openai.chat.completions.create({
     model: env.SIMULATION_LLM_MODEL,
-    max_completion_tokens: 16000,
+    max_completion_tokens: SIMULATION_MAX_TOKENS,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
     ...(tools.length > 0 && { tools }),
   });
@@ -101,14 +103,17 @@ export async function generateAgentResponse(
       (tc): tc is Extract<typeof tc, { type: "function" }> =>
         tc.type === "function",
     )
-    .map((tc) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: JSON.parse(tc.function.arguments || "{}") as Record<
-        string,
-        unknown
-      >,
-    }));
+    .map((tc) => {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(tc.function.arguments || "{}");
+      } catch {
+        console.warn(
+          `[simulation] malformed tool call arguments for ${tc.function.name}, falling back to {}`,
+        );
+      }
+      return { id: tc.id, name: tc.function.name, arguments: args };
+    });
 
   return {
     content: msg?.content ?? "",

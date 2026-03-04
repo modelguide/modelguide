@@ -191,39 +191,43 @@ const hasLlmKey = !!process.env.SIMULATION_LLM_API_KEY;
 describe.skipIf(!hasLlmKey)(
   "POST /api/simulations/run — full simulation",
   () => {
-    test("runs simulation and creates session with mode=simulation", async () => {
-      const response = await request("/api/simulations/run", {
-        method: "POST",
-        headers: {
-          ...adminHeaders,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          agentId: s.orgAAgentId,
-          personaId: "polite-buyer",
-          maxTurns: 5,
-        }),
-      });
-      expect(response.status).toBe(200);
+    test(
+      "runs simulation and creates session with mode=simulation",
+      { timeout: 300_000 },
+      async () => {
+        const response = await request("/api/simulations/run", {
+          method: "POST",
+          headers: {
+            ...adminHeaders,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            agentId: s.orgAAgentId,
+            personaId: "polite-buyer",
+            maxTurns: 5,
+          }),
+        });
+        expect(response.status).toBe(200);
 
-      const body = await response.json();
-      expect(body.sessionId).toBeDefined();
-      expect(body.personaId).toBe("polite-buyer");
-      expect(body.turnCount).toBeGreaterThan(0);
-      expect(body.turnCount).toBeLessThanOrEqual(5);
-      expect(["completed", "max_turns_reached"]).toContain(body.status);
-      expect(body.durationMs).toBeGreaterThan(0);
+        const body = await response.json();
+        expect(body.sessionId).toBeDefined();
+        expect(body.personaId).toBe("polite-buyer");
+        expect(body.turnCount).toBeGreaterThan(0);
+        expect(body.turnCount).toBeLessThanOrEqual(5);
+        expect(["completed", "max_turns_reached"]).toContain(body.status);
+        expect(body.durationMs).toBeGreaterThan(0);
 
-      createdSessionIds.push(body.sessionId);
+        createdSessionIds.push(body.sessionId);
 
-      // Verify session was created with simulation mode
-      const [session] = await forApp(async (tx) =>
-        tx.select().from(sessions).where(eq(sessions.id, body.sessionId)),
-      );
-      expect(session).toBeDefined();
-      expect(session.mode).toBe("simulation");
-      expect(session.channelType).toBe("api");
-      expect(session.userIdentifier).toBe("simulation:polite-buyer");
-    });
+        // Verify session was created with simulation mode
+        const [session] = await forApp(async (tx) =>
+          tx.select().from(sessions).where(eq(sessions.id, body.sessionId)),
+        );
+        expect(session).toBeDefined();
+        expect(session.mode).toBe("simulation");
+        expect(session.channelType).toBe("api");
+        expect(session.userIdentifier).toBe("simulation:polite-buyer");
+      },
+    );
   },
 );

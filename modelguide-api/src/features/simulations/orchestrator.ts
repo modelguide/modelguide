@@ -6,15 +6,17 @@
 import { env } from "@/env";
 import { forOrg } from "@db/rls";
 import { sessions } from "@db/schema";
-import { getAgentById } from "@features/agents/agents.service";
 import {
   executeTool,
   getAgentTools,
   resolveConnectorConfigById,
 } from "@features/mcp/mcp.service";
 import type { ResolvedTool } from "@features/mcp/mcp.types";
-import { addMessage, updateSession } from "@features/sessions/sessions.service";
-import { Errors } from "@lib/errors";
+import {
+  addMessage,
+  createSession,
+  updateSession,
+} from "@features/sessions/sessions.service";
 import { eq } from "drizzle-orm";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
@@ -39,6 +41,7 @@ export interface SimulationResult {
 export async function runSimulation(params: {
   orgId: string;
   agentId: string;
+  agentName: string;
   persona: Persona;
   maxTurns?: number;
 }): Promise<SimulationResult> {
@@ -46,12 +49,6 @@ export async function runSimulation(params: {
   const maxTurns =
     params.maxTurns ?? persona.maxTurns ?? env.SIMULATION_MAX_TURNS;
   const startTime = Date.now();
-
-  // Validate agent
-  const agent = await getAgentById(orgId, agentId);
-  if (!agent.isActive) {
-    throw Errors.agentInactive(agentId);
-  }
 
   // Resolve agent tools
   const resolvedTools = await getAgentTools(orgId, agentId);
@@ -72,29 +69,21 @@ export async function runSimulation(params: {
     }
   }
 
-  // Create simulation session
-  const session = await forOrg(orgId, async (tx) => {
-    const [s] = await tx
-      .insert(sessions)
-      .values({
-        organizationId: orgId,
-        agentId,
-        channelType: "api",
-        userIdentifier: `simulation:${persona.id}`,
-        mode: "simulation",
-        status: "active",
-        startedAt: new Date(),
-        metadata: {
-          simulation: true,
-          personaId: persona.id,
-          personaName: persona.name,
-        },
-      })
-      .returning();
-    return s;
+  // Create simulation session via session service
+  const session = await createSession(orgId, agentId, {
+    channelType: "api",
+    userIdentifier: `simulation:${persona.id}`,
+    mode: "simulation",
+    metadata: {
+      personaId: persona.id,
+      personaName: persona.name,
+    },
   });
 
-  const agentSystemPrompt = buildAgentSystemPrompt(agent.name, resolvedTools);
+  const agentSystemPrompt = buildAgentSystemPrompt(
+    params.agentName ?? "Agent",
+    resolvedTools,
+  );
 
   // Conversation history for the LLM (not stored in DB — DB messages are the source of truth)
   const personaHistory: ChatCompletionMessageParam[] = [];
@@ -257,9 +246,12 @@ export async function runSimulation(params: {
     error = err instanceof Error ? err.message : "Unknown simulation error";
   }
 
-  // End the session
+  // End the session — map simulation status to session status
+  const sessionStatus = status === "error" ? "abandoned" : "completed";
   try {
-    await updateSession(orgId, session.id, agentId, { status: "completed" });
+    await updateSession(orgId, session.id, agentId, {
+      status: sessionStatus,
+    });
   } catch {
     // Session may already be ended if error occurred during addMessage
   }
@@ -311,19 +303,20 @@ Guidelines:
 
 /**
  * Simple heuristic to detect if the persona is ending the conversation.
+ * Uses word-boundary matching to avoid false positives (e.g. "maybe" matching "bye").
  */
-function isConversationEnding(content: string): boolean {
+export function isConversationEnding(content: string): boolean {
   const lower = content.toLowerCase();
   const endings = [
-    "goodbye",
-    "bye",
-    "that's all",
-    "thanks, that's all",
-    "thank you, goodbye",
-    "i'll think about it",
-    "have a good day",
-    "nothing else",
-    "that's everything",
+    /\bgoodbye\b/,
+    /\bbye\b/,
+    /that's all\b/,
+    /thanks,?\s*that's all/,
+    /thank you,?\s*goodbye/,
+    /i'll think about it/,
+    /have a good day/,
+    /nothing else\b/,
+    /that's everything\b/,
   ];
-  return endings.some((e) => lower.includes(e));
+  return endings.some((re) => re.test(lower));
 }

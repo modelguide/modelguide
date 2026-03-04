@@ -9,7 +9,7 @@ import {
   requireOrganization,
   requireUser,
 } from "@lib/middleware";
-import { requireAdmin } from "@lib/middleware/rbac";
+import { requirePermission } from "@lib/middleware/rbac";
 import { errorResponse } from "@lib/schemas";
 import {
   listPersonasResponseSchema,
@@ -24,8 +24,18 @@ const router = createRouter();
 // Middleware
 // ============================================================================
 
-router.post("/run", requireUser(), requireAdmin(), requireOrganization());
-router.get("/personas", requireUser(), requireOrganization());
+router.post(
+  "/run",
+  requireUser(),
+  requirePermission("simulations:run"),
+  requireOrganization(),
+);
+router.get(
+  "/personas",
+  requireUser(),
+  requirePermission("simulations:read"),
+  requireOrganization(),
+);
 
 // ============================================================================
 // Routes
@@ -51,7 +61,7 @@ const runSimulationRoute = createRoute({
     },
     422: errorResponse("Invalid input"),
     401: errorResponse("Not authenticated"),
-    403: errorResponse("Admin access required"),
+    403: errorResponse("Insufficient permissions"),
     404: errorResponse("Agent or persona not found"),
     503: errorResponse("Simulation LLM not configured"),
   },
