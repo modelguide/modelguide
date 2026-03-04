@@ -5,13 +5,11 @@
   </picture>
 </p>
 
-<h3 align="center">Your call center & support agent demo worked. Now ship it.</h3>
+<h3 align="center">Your agent works. Now make it real.</h3>
 
 <p align="center">
-  Self-hosted, open-source AI contact centers.<br/>
-  Connect any voice/chat platform → your business systems → a full Contact Center for your team to run.<br/>
-  Built on agentic engineering principles — adding a connector is one TypeScript file. Any AI coding agent can build one for you.<br/>
-  No vendor lock-in. No per-resolution pricing. You own everything.
+  Open-source production harness for AI agents — voice, chat, email, any channel.<br/>
+  SOPs · Connectors · Session Recording · Evals · RBAC — one TypeScript codebase, zero vendor lock-in.
 </p>
 
 <p align="center">
@@ -27,19 +25,19 @@
 
 ## The Problem
 
-You showed a call center/customer support demo to your CEO. Got "great, ship it."
+Your agent handles demos. Production needs session tracking, tool management, evals, SOPs, and integrations with every system your company runs. Every team rebuilds this from scratch.
 
-Months later: the demo that worked for 10 calls breaks at 500. There's no QA. No way to know if Tuesday's prompt change helped or hurt. And you're rebuilding the same session tracking, tool integrations, and routing logic that every team rebuilds from scratch.
+Today you ship a chat agent. Tomorrow the business wants voice and email — and you're starting over because nothing was built to carry across channels.
 
-The AI agent is becoming a commodity. The voice stacks work. The LLMs work. What nobody gives you is the infrastructure to **run** AI agents like a real operation — with observability, tool management, vendor freedom, and the ability to swap any component without starting over.
+The boring stuff between "it works" and "it ships" — that's what kills timelines. Not the AI. SaaS charges $150K+ for this harness. We open-sourced it.
 
-SaaS charges $150K+ for that layer. We open-sourced it.
+80% of the infrastructure comes ready: auth, sessions, connectors, SOPs, evals, analytics. You customize the 20% that makes your agent yours. The first blueprint — a contact center agent — is shipping now. Fork it, or start fresh for any vertical: healthcare intake, field service, B2B sales, internal ops.
 
 ![Architecture diagram](./docs/architecture_image.png)
 
-## What Model Guide Does
+## What ModelGuide Does
 
-Model Guide sits between your AI agents and your business systems. It doesn't run the AI. It doesn't own the voice stack. It provides 4 layers:
+ModelGuide is the infrastructure layer between your AI agents and your business systems. It doesn't run the AI or own the voice stack — it gives you four production-ready layers you'd otherwise build from scratch:
 
 **Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
 
@@ -53,7 +51,7 @@ Model Guide sits between your AI agents and your business systems. It doesn't ru
 
 ![Control diagram](./docs/Data.png)
 
-**Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics CX leaders actually need to prove AI is working, not vanity dashboards.
+**Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics you need to prove agents are working, not vanity dashboards.
 
 ![Optimize diagram](./docs/Optimize.png)
 
@@ -149,6 +147,8 @@ Every tool call, every message, every rating — stored and queryable through th
 The dashboard gives support teams what they need: session list with filters (status, channel, agent, date range, feedback), full transcripts with expandable tool call traces showing request/response JSON, and the ability to evaluate agent performance with tags (`wrong_tool`, `hallucination`, `good_resolution`).
 
 ## Features
+
+Everything you need to go from demo to production:
 
 ✅ **Connector System** — Code-defined manifests with real HTTP handlers. Ships with a Medusa e-commerce connector as a reference implementation (8 tools: browse products, manage carts, checkout, orders). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
 
@@ -297,19 +297,19 @@ const modules = await Promise.all([
 
 ## Roadmap
 
-🚧 **Confirmation token flow** — Flag exists per tool, full token-based confirmation with expiry coming
+🚧 **Sub-agents & Workflow Builder** — Compose multi-step agent workflows with branching and handoffs
 
-🚧 **Analytics aggregation** — Session data is stored; summary endpoints and dashboard charts in progress
+🚧 **OTEL + A/B Testing via Langfuse** — OpenTelemetry traces, prompt variant experiments, side-by-side comparison
 
-📋 **Chat channels** — Web widget, WhatsApp, SMS (session model already supports all channel types)
+🚧 **Agentic Insights** — Custom funnels tracking agent behavior through business-defined conversion paths
 
-📋 **Knowledge base connector** — Agents answer from your docs, not just perform actions
+🚧 **Auto-tuning SOPs** — Feedback loop from evals to automatically refine operating procedures
 
-📋 **Agent comparison** — Same tools, different platforms or prompts. Compare resolution rates, CSAT, tool success with real data
+🚧 **Full Interoperability** — Deploy the same agent via Pipecat, LiveKit, Google ADK, or any runtime
 
-📋 **Warm transfer** — Live agent availability + real-time context handoff
+📋 **More Blueprints** — Contact center ships first; healthcare intake, field service, B2B sales next
 
-📋 **Connector marketplace** — Community-built integrations
+📋 **Connector Marketplace** — Community-built integrations
 
 ## Deployment
 
@@ -379,5 +379,5 @@ Check [open issues](https://github.com/modelguide/modelguide/issues) — look fo
 ---
 
 <p align="center">
-  Built by <a href="https://modelguide.ai">ModelGuide</a> · 🇵🇱 Poland
+  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source harness for production AI agents · 🇵🇱 Poland
 </p>
