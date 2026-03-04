@@ -1,5 +1,7 @@
 export * from "./enums";
 export * from "./core";
+export * from "./eval-configs";
+export * from "./eval-runs";
 
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import type {
@@ -23,6 +25,8 @@ import type {
   sops,
   users,
 } from "./core";
+import type { evalConfigs } from "./eval-configs";
+import type { evalRunScores, evalRuns } from "./eval-runs";
 
 export type Organization = InferSelectModel<typeof organizations>;
 export type NewOrganization = InferInsertModel<typeof organizations>;
@@ -82,3 +86,12 @@ export type NewSopStepRow = InferInsertModel<typeof sopSteps>;
 
 export type AgentSop = InferSelectModel<typeof agentSops>;
 export type NewAgentSop = InferInsertModel<typeof agentSops>;
+
+export type EvalConfig = InferSelectModel<typeof evalConfigs>;
+export type NewEvalConfig = InferInsertModel<typeof evalConfigs>;
+
+export type EvalRun = InferSelectModel<typeof evalRuns>;
+export type NewEvalRun = InferInsertModel<typeof evalRuns>;
+
+export type EvalRunScore = InferSelectModel<typeof evalRunScores>;
+export type NewEvalRunScore = InferInsertModel<typeof evalRunScores>;

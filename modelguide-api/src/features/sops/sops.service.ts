@@ -79,6 +79,7 @@ async function insertSteps(
       instruction: s.instruction,
       required: s.required,
       connectorToolId: s.tool?.connectorToolId ?? null,
+      evalConfigId: s.evalConfigId ?? null,
       notes: s.notes ?? null,
     })),
   );
@@ -93,6 +94,7 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
       instruction: sopSteps.instruction,
       required: sopSteps.required,
       connectorToolId: sopSteps.connectorToolId,
+      evalConfigId: sopSteps.evalConfigId,
       notes: sopSteps.notes,
       toolSlug: connectorTools.slug,
       connectorSlug: connectors.slug,
@@ -121,6 +123,7 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
             : undefined,
       };
     }
+    if (r.evalConfigId) step.evalConfigId = r.evalConfigId;
     if (r.notes) step.notes = r.notes;
     return step;
   });

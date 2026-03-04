@@ -797,6 +797,7 @@ export const sopSteps = pgTable(
       () => connectorTools.id,
       { onDelete: "set null" },
     ),
+    evalConfigId: uuid("eval_config_id"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -806,6 +807,7 @@ export const sopSteps = pgTable(
     uniqueIndex("sop_steps_sop_step_id_unique").on(table.sopId, table.stepId),
     index("sop_steps_sop_idx").on(table.sopId),
     index("sop_steps_connector_tool_idx").on(table.connectorToolId),
+    index("sop_steps_eval_config_idx").on(table.evalConfigId),
   ],
 );
 

@@ -64,6 +64,16 @@ export const Permissions = {
   "sops:create": ["admin"],
   "sops:update": ["admin", "support"],
   "sops:delete": ["admin"],
+
+  // Eval config management
+  "eval_configs:read": ["admin", "support", "viewer"],
+  "eval_configs:create": ["admin"],
+  "eval_configs:update": ["admin"],
+  "eval_configs:delete": ["admin"],
+
+  // Eval run management
+  "eval_runs:read": ["admin", "support", "viewer"],
+  "eval_runs:create": ["admin", "support"],
 } as const;
 
 export type Permission = keyof typeof Permissions;
