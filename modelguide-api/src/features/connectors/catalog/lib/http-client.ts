@@ -64,6 +64,7 @@ export function createBaseFetcher(
 
     const log = getLogger();
     const callCtx = { connector: connectorName, method, path };
+    log.debug({ ...callCtx, body }, "connector call request");
     const start = performance.now();
 
     let response: Response;
