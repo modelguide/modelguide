@@ -1,6 +1,11 @@
 /**
  * Thin OpenAI SDK wrapper for persona simulation.
  * Handles both persona (user-simulator) and agent (tool-calling) LLM calls.
+ *
+ * Supports any OpenAI-compatible endpoint including Anthropic's compatibility
+ * layer (https://api.anthropic.com/v1/). Note: Anthropic ignores the `strict`
+ * parameter for function calling, so tool call arguments may not conform to the
+ * schema. All JSON.parse calls are wrapped in try/catch to handle this gracefully.
  */
 
 import { env } from "@/env";
