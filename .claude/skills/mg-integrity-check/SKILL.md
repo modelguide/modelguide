@@ -18,7 +18,8 @@ Run `git diff --name-only HEAD` (unstaged) and `git diff --cached --name-only` (
 - **Migration files** — paths matching `modelguide-api/drizzle/*.sql`
 - **Connector files** — paths matching `modelguide-api/src/features/connectors/catalog/*/`
 - **Env files** — `modelguide-api/src/env.ts`
-- **Route files** — paths matching `modelguide-api/src/features/*/routes.ts` or `*.routes.ts`
+- **API route files** — paths matching `modelguide-api/src/features/*/routes.ts` or `*.routes.ts`
+- **UI route files** — paths matching `modelguide-ui/src/routes/**/*.tsx`
 - **Test files** — paths matching `modelguide-api/tests/**` or `modelguide-ui/src/**/*.test.*`
 
 ## Check 1: File Naming
@@ -108,6 +109,63 @@ Across all changed files:
 - No `.env` files being committed (should be gitignored)
 - Connector config fields storing secrets use `type: "secret"` in `configSchema`
 
+## Check 11: Commit Message Format
+
+Skip this check if on the default branch.
+
+Get the default branch name and check every commit since diverging:
+
+```bash
+DEFAULT=$(git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}')
+git log "origin/$DEFAULT..HEAD" --pretty=format:"%h %s"
+```
+
+Each commit subject must match:
+
+```
+<type>(<scope>): <summary>
+```
+
+| Field | Valid values |
+|-------|-------------|
+| type | `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`, `ci` |
+| scope | `agents`, `connectors`, `sessions`, `auth`, `mcp`, `ui`, `db`, `analytics`, `secrets`, `feedback`, `sops`, `simulations` |
+
+Additional rules:
+- First line must be ≤ 72 characters
+- Summary must be imperative mood, lowercase start
+
+**Fail** on commits that do not match the format. List each offending commit hash and subject line.
+
+## Check 12: Branch Naming
+
+Skip this check if on the default branch.
+
+Current branch must match:
+
+```
+<type>/<short-kebab-description>
+```
+
+Where `<type>` is one of: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`, `ci`.
+
+Examples: `feat/add-agent-search`, `fix/session-timeout`, `chore/update-deps`.
+
+**Fail** if the branch name does not match the pattern.
+
+## Check 13: Staging Hygiene
+
+Skip this check if nothing is staged (`git diff --cached --name-only` is empty).
+
+If files are staged, check for potentially unrelated or dangerous files:
+
+1. **Sensitive files** — `.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`
+2. **Scratch / generated** — `node_modules/`, `.DS_Store`, `*.log`, `*.tmp`
+3. **Large binaries** — images, videos, archives (> 500 KB)
+4. **Cross-concern files** — e.g., API schema changes staged alongside a UI-only branch (infer branch intent from branch name and majority of changed files)
+
+**Warn** on any suspicious staged files. This is advisory — the user may have a good reason.
+
 ## Report Format
 
 After running all checks, output a summary:
@@ -123,6 +181,9 @@ Files checked: N
 | 2 | File location | PASS | |
 | 3 | Import aliases | FAIL | `modelguide-api/src/features/agents/foo.ts` uses relative import `../../lib/crypto` |
 | ... | ... | ... | ... |
+| 11 | Commit message format | PASS | |
+| 12 | Branch naming | PASS | |
+| 13 | Staging hygiene | PASS | |
 
 ### Issues to Fix (N)
 - [FAIL] Check 3: ...
