@@ -19,7 +19,7 @@ import {
   getOffset,
 } from "@lib/pagination";
 import { toolSlug } from "@lib/slugify";
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { getConnectorManifest } from "./catalog/registry";
 import type { HealthCheckResult } from "./catalog/types";
 
@@ -187,6 +187,11 @@ export async function updateConnector(
     isActive?: boolean;
   },
 ) {
+  // Validate config against catalog configSchema when config is provided
+  if (data.config) {
+    await validateConnectorConfig(orgId, connectorId, data.config);
+  }
+
   const [updated] = await forOrg(orgId, (tx) =>
     tx
       .update(connectors)
@@ -200,6 +205,63 @@ export async function updateConnector(
   }
 
   return updated;
+}
+
+/**
+ * Validate connector config against the catalog's configSchema.
+ * Checks that secret references (UUID values for "secret" type fields) exist in the org.
+ */
+async function validateConnectorConfig(
+  orgId: string,
+  connectorId: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  // Look up the connector to get its catalog entry
+  const connector = await getConnectorById(orgId, connectorId);
+  const catalog = await getCatalogEntry(connector.connectorCatalogId);
+
+  const configSchema = (catalog.configSchema ?? {}) as Record<
+    string,
+    { type: string; required?: boolean }
+  >;
+
+  // Validate secret references exist in the org
+  const missingSecrets: string[] = [];
+  const secretIds: string[] = [];
+
+  for (const [key, fieldSchema] of Object.entries(configSchema)) {
+    const value = config[key];
+    if (fieldSchema.type === "secret" && typeof value === "string" && value) {
+      secretIds.push(value);
+    }
+  }
+
+  if (secretIds.length > 0) {
+    const foundSecrets = await forOrg(orgId, (tx) =>
+      tx
+        .select({ id: secrets.id })
+        .from(secrets)
+        .where(inArray(secrets.id, secretIds)),
+    );
+
+    const foundIds = new Set(foundSecrets.map((s) => s.id));
+
+    for (const [key, fieldSchema] of Object.entries(configSchema)) {
+      const value = config[key];
+      if (fieldSchema.type === "secret" && typeof value === "string" && value) {
+        if (!foundIds.has(value)) {
+          missingSecrets.push(key);
+        }
+      }
+    }
+  }
+
+  if (missingSecrets.length > 0) {
+    throw Errors.validationError(
+      `Config references non-existent secrets: ${missingSecrets.join(", ")}`,
+      { missingSecrets },
+    );
+  }
 }
 
 export async function deleteConnector(
