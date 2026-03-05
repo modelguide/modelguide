@@ -308,7 +308,7 @@ describe("Connector config validation on update", () => {
       body: JSON.stringify({
         config: {
           baseUrl: "https://example.com",
-          apiKey: fakeSecretId,
+          secretApiKey: fakeSecretId,
         },
       }),
     });
