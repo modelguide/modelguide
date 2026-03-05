@@ -108,6 +108,7 @@ const updateConnectorSchema = z
     config: z.record(z.unknown()).optional(),
     isActive: z.boolean().optional(),
   })
+  .strict()
   .refine(
     (data) =>
       data.name !== undefined ||
@@ -124,6 +125,7 @@ const updateToolSchema = z
     isActive: z.boolean().optional(),
     timeoutSeconds: z.number().int().min(1).max(300).optional(),
   })
+  .strict()
   .refine(
     (data) => data.isActive !== undefined || data.timeoutSeconds !== undefined,
     {

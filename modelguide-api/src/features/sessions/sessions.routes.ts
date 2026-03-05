@@ -153,6 +153,7 @@ const updateSessionSchema = z
       description: "Session metadata to merge (e.g. cost/token data)",
     }),
   })
+  .strict()
   .refine((data) => data.status !== undefined || data.metadata !== undefined, {
     message: "At least one of status or metadata must be provided",
   });

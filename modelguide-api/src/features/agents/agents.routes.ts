@@ -106,6 +106,7 @@ const updateAgentSchema = z
     metadata: z.record(z.unknown()).optional(),
     agentPlatform: z.enum(["custom", "elevenlabs"]).optional(),
   })
+  .strict()
   .refine(
     (data) =>
       data.name !== undefined ||
