@@ -428,6 +428,24 @@ describe("SOP status lifecycle", () => {
     expect(body.status).toBe("active");
   });
 
+  test("deactivate → draft (200)", async () => {
+    const sopId = createdSopIds[0];
+
+    const activateRes = await request(`/api/sops/${sopId}/activate`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(activateRes.status).toBe(200);
+
+    const res = await request(`/api/sops/${sopId}/deactivate`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("draft");
+  });
+
   test("cannot activate SOP with no steps (400)", async () => {
     // Create a new SOP with empty steps
     const createRes = await request("/api/sops", {
@@ -932,6 +950,14 @@ describe("404 for non-existent SOP", () => {
     expect(res.status).toBe(404);
   });
 
+  test("deactivate returns 404", async () => {
+    const res = await request(`/api/sops/${fakeId}/deactivate`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(res.status).toBe(404);
+  });
+
   test("get agents returns 404", async () => {
     const res = await request(`/api/sops/${fakeId}/agents`, {
       headers: orgAAdminHeaders,
@@ -1009,6 +1035,15 @@ describe("Viewer role access", () => {
   test("viewer cannot activate SOP (403)", async () => {
     const sopId = createdSopIds[0];
     const res = await request(`/api/sops/${sopId}/activate`, {
+      method: "POST",
+      headers: viewerHeaders,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("viewer cannot deactivate SOP (403)", async () => {
+    const sopId = createdSopIds[0];
+    const res = await request(`/api/sops/${sopId}/deactivate`, {
       method: "POST",
       headers: viewerHeaders,
     });
