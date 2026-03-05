@@ -74,6 +74,7 @@ export const toolInputEvaluator: Evaluator = {
     const toolInput = (toolMsg.toolInput ?? {}) as Record<string, unknown>;
     const assertions = config.assertions as Record<string, Assertion>;
     const failures: string[] = [];
+    const errors: string[] = [];
     const expectedFields: Record<string, unknown> = {};
     const actualFields: Record<string, unknown> = {};
 
@@ -82,9 +83,22 @@ export const toolInputEvaluator: Evaluator = {
       expectedFields[field] = result.expected;
       actualFields[field] = result.actual;
 
-      if (!result.passed) {
+      if (result.errored) {
+        errors.push(result.message);
+      } else if (!result.passed) {
         failures.push(result.message);
       }
+    }
+
+    // Config errors (bad regex, etc.) → error, not fail
+    if (errors.length > 0) {
+      return {
+        result: "error",
+        reasoning: `Assertion config error on tool "${resolvedName}": ${errors.join("; ")}`,
+        expected: expectedFields,
+        actual: actualFields,
+        durationMs: Math.round(performance.now() - start),
+      };
     }
 
     if (failures.length === 0) {

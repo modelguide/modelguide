@@ -21,13 +21,17 @@ import { and, asc, count, desc, eq } from "drizzle-orm";
 
 import { compileSopToEvalPlan } from "./evals.compile";
 import type {
+  EvalPlan,
   EvalScoreResult,
   EvalSourceType,
   EvalStatus,
   StepEvaluatorConfig,
 } from "./evals.types";
 import { getEvaluator } from "./evaluators";
-import type { EvalContext } from "./evaluators/evaluator.types";
+import type {
+  EvalContext,
+  EvaluatorResult,
+} from "./evaluators/evaluator.types";
 import { getReporter } from "./reporters";
 import type { EvalRunReport } from "./reporters/reporter.types";
 
@@ -50,6 +54,234 @@ function buildScoreName(order: number, instruction: string): string {
 
 const TERMINAL_STATUSES = new Set(["completed", "abandoned"]);
 
+type SessionMessage = typeof sessionMessages.$inferSelect;
+type ScoreInsert = typeof evalRunScores.$inferInsert;
+
+// ============================================================================
+// Evaluator execution
+// ============================================================================
+
+/** Execute evaluators for all plan steps, returning score rows. */
+async function executeEvaluators(
+  plan: EvalPlan,
+  messages: SessionMessage[],
+  evalRunId: string,
+  orgId: string,
+  startTime: number,
+): Promise<{ scoreRows: ScoreInsert[]; metadata: Record<string, unknown> }> {
+  const toolMsgs = messages.filter((m) => m.role === "tool");
+  const scoreRows: ScoreInsert[] = [];
+  let shortCircuited = false;
+  let shortCircuitReason = "";
+
+  for (const step of plan.steps) {
+    const scoreName = buildScoreName(step.order, step.instruction);
+
+    // No eval config → skip (no score row, tracked in coverage warnings)
+    if (!step.evaluator) {
+      continue;
+    }
+
+    if (shortCircuited) {
+      scoreRows.push({
+        evalRunId,
+        organizationId: orgId,
+        evalConfigId: step.evaluator.configId,
+        name: scoreName,
+        scoreOrder: step.order,
+        required: step.required,
+        evaluatorType: step.evaluator.evaluatorType,
+        result: "skip",
+        reasoning: shortCircuitReason,
+      });
+      continue;
+    }
+
+    const resolvedToolNames = new Map(Object.entries(step.toolNameMap));
+    const ctx: EvalContext = {
+      messages,
+      toolMessages: toolMsgs,
+      resolvedToolNames,
+    };
+
+    const evaluator = getEvaluator(step.evaluator.evaluatorType);
+    const evalConfig: StepEvaluatorConfig = {
+      type: step.evaluator.evaluatorType,
+      ...step.evaluator.config,
+    } as StepEvaluatorConfig;
+
+    let evalResult: EvaluatorResult;
+    try {
+      evalResult = await evaluator.evaluate(ctx, evalConfig);
+    } catch (err) {
+      evalResult = {
+        result: "error",
+        reasoning: `Evaluator threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+        durationMs: Math.round(performance.now() - startTime),
+      };
+    }
+
+    scoreRows.push({
+      evalRunId,
+      organizationId: orgId,
+      evalConfigId: step.evaluator.configId,
+      name: scoreName,
+      scoreOrder: step.order,
+      required: step.required,
+      evaluatorType: step.evaluator.evaluatorType,
+      result: evalResult.result as EvalScoreResult,
+      reasoning: evalResult.reasoning,
+      failureClassification: evalResult.failureClassification ?? null,
+      expected: evalResult.expected ?? null,
+      actual: evalResult.actual ?? null,
+      durationMs: evalResult.durationMs ?? null,
+    });
+
+    if (
+      step.required &&
+      (evalResult.result === "fail" || evalResult.result === "error")
+    ) {
+      shortCircuited = true;
+      const verb = evalResult.result === "fail" ? "failed" : "errored";
+      shortCircuitReason = `Skipped: required step "${step.stepId}" ${verb}`;
+    }
+  }
+
+  // Coverage warnings
+  const stepsWithoutConfig = plan.steps.filter((s) => !s.evaluator);
+  const metadata: Record<string, unknown> = {};
+  if (stepsWithoutConfig.length > 0) {
+    metadata.coverageWarning = `${stepsWithoutConfig.length} of ${plan.steps.length} steps have no eval config assigned`;
+    metadata.uncoveredSteps = stepsWithoutConfig.map((s) => s.stepId);
+  }
+
+  return { scoreRows, metadata };
+}
+
+// ============================================================================
+// Result persistence
+// ============================================================================
+
+/** Persist scores, update eval run, and return response data. */
+async function persistResults(
+  orgId: string,
+  evalRunId: string,
+  sourceId: string,
+  scoreRows: ScoreInsert[],
+  passed: boolean,
+  durationMs: number,
+  metadata: Record<string, unknown>,
+) {
+  return forOrg(orgId, async (tx) => {
+    if (scoreRows.length > 0) {
+      await tx.insert(evalRunScores).values(scoreRows);
+    }
+
+    const [completedRun] = await tx
+      .update(evalRuns)
+      .set({
+        status: "completed" as EvalStatus,
+        passed,
+        durationMs,
+        metadata: Object.keys(metadata).length > 0 ? metadata : null,
+        completedAt: new Date(),
+      })
+      .where(eq(evalRuns.id, evalRunId))
+      .returning();
+
+    const persistedScores = await tx
+      .select()
+      .from(evalRunScores)
+      .where(eq(evalRunScores.evalRunId, evalRunId))
+      .orderBy(asc(evalRunScores.scoreOrder));
+
+    const [sopRow] = await tx
+      .select({ name: sops.name })
+      .from(sops)
+      .where(eq(sops.id, sourceId));
+
+    return {
+      updatedRun: completedRun,
+      scores: persistedScores,
+      sourceName: sopRow?.name ?? sourceId,
+    };
+  });
+}
+
+// ============================================================================
+// Reporter dispatch
+// ============================================================================
+
+/** Fire reporter in background — never blocks eval completion. */
+function dispatchReporter(
+  orgId: string,
+  evalRunId: string,
+  sessionId: string,
+  sourceType: EvalSourceType,
+  sourceId: string,
+  sourceName: string,
+  passed: boolean,
+  scores: Array<typeof evalRunScores.$inferSelect>,
+  metadata: Record<string, unknown>,
+  options?: { reporter?: string },
+) {
+  try {
+    const reporter = getReporter(options?.reporter);
+
+    const report: EvalRunReport = {
+      runId: evalRunId,
+      sessionId,
+      sourceType,
+      sourceId,
+      sourceName,
+      passed,
+      scores: scores.map((s) => ({
+        name: s.name,
+        evalConfigId: s.evalConfigId ?? "",
+        evaluatorType: s.evaluatorType,
+        result: s.result as "pass" | "fail" | "skip" | "error",
+        reasoning: s.reasoning,
+        failureClassification: s.failureClassification ?? undefined,
+        expected: (s.expected as Record<string, unknown> | null) ?? undefined,
+        actual: (s.actual as Record<string, unknown> | null) ?? undefined,
+      })),
+      metadata,
+    };
+
+    reporter
+      .report(report)
+      .then((result) => {
+        if (result.externalRunId || result.externalRunUrl) {
+          forOrg(orgId, (innerTx) =>
+            innerTx
+              .update(evalRuns)
+              .set({
+                externalRunId: result.externalRunId,
+                externalRunUrl: result.externalRunUrl,
+              })
+              .where(eq(evalRuns.id, evalRunId)),
+          ).catch((err) => {
+            log.warn(
+              { err, evalRunId },
+              "failed to update external run references",
+            );
+          });
+        }
+      })
+      .catch((err) => {
+        log.warn(
+          { err, reporter: options?.reporter, evalRunId },
+          "eval reporter failed (results saved locally)",
+        );
+      });
+  } catch (err) {
+    log.warn(
+      { err, reporter: options?.reporter },
+      "failed to initialize eval reporter",
+    );
+  }
+}
+
 // ============================================================================
 // Runner
 // ============================================================================
@@ -61,14 +293,13 @@ export async function runEvaluation(
   sourceId: string,
   options?: { reporter?: string; triggeredBy?: string },
 ) {
-  // 1. Validate sourceType
   if (sourceType !== "sop") {
     throw Errors.validationError(`Unsupported source type: "${sourceType}"`);
   }
 
   const startTime = performance.now();
 
-  // 2. Validate session + create eval_runs row (short transaction)
+  // 1. Validate session + create eval_runs row (short transaction)
   const evalRun = await forOrg(orgId, async (tx) => {
     const [session] = await tx
       .select({ id: sessions.id, status: sessions.status })
@@ -107,13 +338,11 @@ export async function runEvaluation(
     }
   });
 
-  let metadata: Record<string, unknown> = {};
-
   try {
-    // 3. Compile eval plan (outside long-lived DB transaction)
+    // 2. Compile eval plan (outside long-lived DB transaction)
     const plan = await compileSopToEvalPlan(orgId, sourceId, sessionId);
 
-    // 4. Load transcript messages (short transaction)
+    // 3. Load transcript messages (short transaction)
     const messages = await forOrg(orgId, (tx) =>
       tx
         .select()
@@ -125,186 +354,45 @@ export async function runEvaluation(
         ),
     );
 
-    const toolMsgs = messages.filter((m) => m.role === "tool");
-
-    // 5. Execute evaluators (no DB transaction held)
-    const scoreRows: Array<typeof evalRunScores.$inferInsert> = [];
-    let shortCircuited = false;
-    let shortCircuitReason = "";
-
-    for (const step of plan.steps) {
-      const scoreName = buildScoreName(step.order, step.instruction);
-
-      // No eval config → skip (no score row, tracked in coverage warnings)
-      if (!step.evaluator) {
-        continue;
-      }
-
-      if (shortCircuited) {
-        scoreRows.push({
-          evalRunId: evalRun.id,
-          organizationId: orgId,
-          evalConfigId: step.evaluator.configId,
-          name: scoreName,
-          scoreOrder: step.order,
-          required: step.required,
-          evaluatorType: step.evaluator.evaluatorType,
-          result: "skip",
-          reasoning: shortCircuitReason,
-        });
-        continue;
-      }
-
-      const resolvedToolNames = new Map(Object.entries(step.toolNameMap));
-      const ctx: EvalContext = {
-        messages,
-        toolMessages: toolMsgs,
-        resolvedToolNames,
-      };
-
-      const evaluator = getEvaluator(step.evaluator.evaluatorType);
-      const evalConfig: StepEvaluatorConfig = {
-        type: step.evaluator.evaluatorType,
-        ...step.evaluator.config,
-      } as StepEvaluatorConfig;
-
-      const evalResult = await evaluator.evaluate(ctx, evalConfig);
-
-      scoreRows.push({
-        evalRunId: evalRun.id,
-        organizationId: orgId,
-        evalConfigId: step.evaluator.configId,
-        name: scoreName,
-        scoreOrder: step.order,
-        required: step.required,
-        evaluatorType: step.evaluator.evaluatorType,
-        result: evalResult.result as EvalScoreResult,
-        reasoning: evalResult.reasoning,
-        failureClassification: evalResult.failureClassification ?? null,
-        expected: evalResult.expected ?? null,
-        actual: evalResult.actual ?? null,
-        durationMs: evalResult.durationMs ?? null,
-      });
-
-      if (
-        step.required &&
-        (evalResult.result === "fail" || evalResult.result === "error")
-      ) {
-        shortCircuited = true;
-        const verb = evalResult.result === "fail" ? "failed" : "errored";
-        shortCircuitReason = `Skipped: required step "${step.stepId}" ${verb}`;
-      }
-    }
+    // 4. Execute evaluators (no DB transaction held)
+    const { scoreRows, metadata } = await executeEvaluators(
+      plan,
+      messages,
+      evalRun.id,
+      orgId,
+      startTime,
+    );
 
     const failedOrErroredRequired = scoreRows.filter(
       (s) => s.required && (s.result === "fail" || s.result === "error"),
     );
     const passed = failedOrErroredRequired.length === 0;
-
-    const stepsWithoutConfig = plan.steps.filter((s) => !s.evaluator);
-    metadata = {};
-    if (stepsWithoutConfig.length > 0) {
-      metadata.coverageWarning = `${stepsWithoutConfig.length} of ${plan.steps.length} steps have no eval config assigned`;
-      metadata.uncoveredSteps = stepsWithoutConfig.map((s) => s.stepId);
-    }
-
     const durationMs = Math.round(performance.now() - startTime);
 
-    // 6. Persist scores + final run state (short transaction)
-    const { updatedRun, scores, sourceName } = await forOrg(
+    // 5. Persist scores + final run state (short transaction)
+    const { updatedRun, scores, sourceName } = await persistResults(
       orgId,
-      async (tx) => {
-        if (scoreRows.length > 0) {
-          await tx.insert(evalRunScores).values(scoreRows);
-        }
-
-        const [completedRun] = await tx
-          .update(evalRuns)
-          .set({
-            status: "completed" as EvalStatus,
-            passed,
-            durationMs,
-            metadata: Object.keys(metadata).length > 0 ? metadata : null,
-            completedAt: new Date(),
-          })
-          .where(eq(evalRuns.id, evalRun.id))
-          .returning();
-
-        const persistedScores = await tx
-          .select()
-          .from(evalRunScores)
-          .where(eq(evalRunScores.evalRunId, evalRun.id))
-          .orderBy(asc(evalRunScores.scoreOrder));
-
-        const [sopRow] = await tx
-          .select({ name: sops.name })
-          .from(sops)
-          .where(eq(sops.id, sourceId));
-
-        return {
-          updatedRun: completedRun,
-          scores: persistedScores,
-          sourceName: sopRow?.name ?? sourceId,
-        };
-      },
+      evalRun.id,
+      sourceId,
+      scoreRows,
+      passed,
+      durationMs,
+      metadata,
     );
 
-    // 7. Fire reporter (non-blocking)
-    try {
-      const reporter = getReporter(options?.reporter);
-
-      const report: EvalRunReport = {
-        runId: updatedRun.id,
-        sessionId,
-        sourceType,
-        sourceId,
-        sourceName,
-        passed,
-        scores: scores.map((s) => ({
-          name: s.name,
-          evalConfigId: s.evalConfigId ?? "",
-          evaluatorType: s.evaluatorType,
-          result: s.result as "pass" | "fail" | "skip" | "error",
-          reasoning: s.reasoning,
-          failureClassification: s.failureClassification ?? undefined,
-          expected: (s.expected as Record<string, unknown> | null) ?? undefined,
-          actual: (s.actual as Record<string, unknown> | null) ?? undefined,
-        })),
-        metadata,
-      };
-
-      reporter
-        .report(report)
-        .then((result) => {
-          if (result.externalRunId || result.externalRunUrl) {
-            forOrg(orgId, (innerTx) =>
-              innerTx
-                .update(evalRuns)
-                .set({
-                  externalRunId: result.externalRunId,
-                  externalRunUrl: result.externalRunUrl,
-                })
-                .where(eq(evalRuns.id, evalRun.id)),
-            ).catch((err) => {
-              log.warn(
-                { err, evalRunId: evalRun.id },
-                "failed to update external run references",
-              );
-            });
-          }
-        })
-        .catch((err) => {
-          log.warn(
-            { err, reporter: options?.reporter, evalRunId: evalRun.id },
-            "eval reporter failed (results saved locally)",
-          );
-        });
-    } catch (err) {
-      log.warn(
-        { err, reporter: options?.reporter },
-        "failed to initialize eval reporter",
-      );
-    }
+    // 6. Fire reporter (non-blocking)
+    dispatchReporter(
+      orgId,
+      evalRun.id,
+      sessionId,
+      sourceType,
+      sourceId,
+      sourceName,
+      passed,
+      scores,
+      metadata,
+      options,
+    );
 
     return { ...updatedRun, scores };
   } catch (err) {

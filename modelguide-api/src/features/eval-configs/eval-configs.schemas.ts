@@ -24,7 +24,7 @@ const evaluatorTypeEnum = z.enum([
 // Config JSONB schemas per evaluator type
 // ============================================================================
 
-const toolCalledConfigSchema = z
+const connectorToolConfigSchema = z
   .object({
     connectorToolId: z.string().uuid(),
   })
@@ -38,12 +38,6 @@ const toolInputContainsConfigSchema = z
       .refine((a) => Object.keys(a).length > 0, {
         message: "At least one assertion is required",
       }),
-  })
-  .strict();
-
-const noToolCalledConfigSchema = z
-  .object({
-    connectorToolId: z.string().uuid(),
   })
   .strict();
 
@@ -64,6 +58,29 @@ const llmJudgeConfigSchema = z
   .strict();
 
 // ============================================================================
+// Config validation
+// ============================================================================
+
+const CONFIG_SCHEMA_MAP = {
+  tool_called: connectorToolConfigSchema,
+  tool_input_contains: toolInputContainsConfigSchema,
+  no_tool_called: connectorToolConfigSchema,
+  llm_judge: llmJudgeConfigSchema,
+} as const;
+
+/** Validate config JSONB against the evaluator type's schema. Exported for use in update path. */
+export function validateEvalConfig(
+  evaluatorType: string,
+  config: Record<string, unknown>,
+): z.ZodIssue[] {
+  const schema =
+    CONFIG_SCHEMA_MAP[evaluatorType as keyof typeof CONFIG_SCHEMA_MAP];
+  if (!schema) return [];
+  const result = schema.safeParse(config);
+  return result.success ? [] : result.error.issues;
+}
+
+// ============================================================================
 // Request schemas
 // ============================================================================
 
@@ -75,22 +92,8 @@ export const createEvalConfigSchema = z
     config: z.record(z.string(), z.unknown()),
   })
   .superRefine((data, ctx) => {
-    const schemaMap = {
-      tool_called: toolCalledConfigSchema,
-      tool_input_contains: toolInputContainsConfigSchema,
-      no_tool_called: noToolCalledConfigSchema,
-      llm_judge: llmJudgeConfigSchema,
-    } as const;
-
-    const schema = schemaMap[data.evaluatorType];
-    const result = schema.safeParse(data.config);
-    if (!result.success) {
-      for (const issue of result.error.issues) {
-        ctx.addIssue({
-          ...issue,
-          path: ["config", ...issue.path],
-        });
-      }
+    for (const issue of validateEvalConfig(data.evaluatorType, data.config)) {
+      ctx.addIssue({ ...issue, path: ["config", ...issue.path] });
     }
   });
 

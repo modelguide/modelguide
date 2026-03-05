@@ -12,6 +12,8 @@ import {
   getOffset,
 } from "@lib/pagination";
 import { and, count, eq, inArray } from "drizzle-orm";
+import type { EvaluatorType } from "../evals/evals.types";
+import { validateEvalConfig } from "./eval-configs.schemas";
 
 const log = getLogger();
 
@@ -30,14 +32,7 @@ export async function listEvalConfigs(
     const conditions = [];
     if (evaluatorType) {
       conditions.push(
-        eq(
-          evalConfigs.evaluatorType,
-          evaluatorType as
-            | "tool_called"
-            | "tool_input_contains"
-            | "no_tool_called"
-            | "llm_judge",
-        ),
+        eq(evalConfigs.evaluatorType, evaluatorType as EvaluatorType),
       );
     }
 
@@ -97,11 +92,7 @@ export async function createEvalConfig(
         organizationId: orgId,
         name: data.name,
         description: data.description,
-        evaluatorType: data.evaluatorType as
-          | "tool_called"
-          | "tool_input_contains"
-          | "no_tool_called"
-          | "llm_judge",
+        evaluatorType: data.evaluatorType as EvaluatorType,
         config: data.config,
         createdBy,
       })
@@ -130,15 +121,20 @@ export async function updateEvalConfig(
       throw Errors.evalConfigNotFound(configId);
     }
 
-    const updateData: Record<string, unknown> = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.description !== undefined)
-      updateData.description = data.description;
-    if (data.config !== undefined) updateData.config = data.config;
+    // Validate config against the existing evaluator type
+    if (data.config !== undefined) {
+      const issues = validateEvalConfig(existing.evaluatorType, data.config);
+      if (issues.length > 0) {
+        const details = issues.map((i) => i.message).join("; ");
+        throw Errors.validationError(
+          `Invalid config for evaluator type "${existing.evaluatorType}": ${details}`,
+        );
+      }
+    }
 
     const [updated] = await tx
       .update(evalConfigs)
-      .set(updateData)
+      .set(data)
       .where(eq(evalConfigs.id, configId))
       .returning();
 

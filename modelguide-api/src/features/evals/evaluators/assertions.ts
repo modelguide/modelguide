@@ -21,6 +21,7 @@ const DANGEROUS_REGEX_PATTERN = /(\([^)]*[+*][^)]*\))[+*]|\(\?[^)]*\)\{/;
 
 export interface AssertionResult {
   passed: boolean;
+  errored?: boolean;
   expected: unknown;
   actual: unknown;
   message: string;
@@ -154,6 +155,7 @@ export function runAssertion(
       if ("error" in result) {
         return {
           passed: false,
+          errored: true,
           expected: `matches /${strExpected}/`,
           actual: result.error,
           message: `Field "${field}": regex error — ${result.error}`,
