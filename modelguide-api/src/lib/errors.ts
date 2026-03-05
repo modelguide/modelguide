@@ -441,10 +441,18 @@ export const Errors = {
     );
   },
 
-  evalConfigInUse(configId: string, referenceCount: number) {
+  evalConfigInUse(
+    configId: string,
+    referenceCount: number,
+    sopNames?: string[],
+  ) {
+    const sopDetail =
+      sopNames && sopNames.length > 0
+        ? `. Remove it from: ${sopNames.join(", ")}`
+        : "";
     return new AppError(
       ErrorCode.EVAL_CONFIG_IN_USE,
-      `Eval config "${configId}" is referenced by ${referenceCount} SOP step(s) and cannot be deleted`,
+      `Eval config "${configId}" is referenced by ${referenceCount} SOP step(s) and cannot be deleted${sopDetail}`,
     );
   },
 

@@ -3,14 +3,17 @@
  */
 
 import { forOrg } from "@db/rls";
-import { evalConfigs, sopSteps } from "@db/schema";
+import { evalConfigs, sopSteps, sops } from "@db/schema";
 import { Errors } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import {
   type PaginationParams,
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
+
+const log = getLogger();
 
 // ============================================================================
 // Queries
@@ -158,13 +161,26 @@ export async function deleteEvalConfig(
     }
 
     // Check if any SOP steps reference this eval config
-    const [{ total }] = await tx
-      .select({ total: count() })
+    const referencingSteps = await tx
+      .select({ sopId: sopSteps.sopId, stepId: sopSteps.stepId })
       .from(sopSteps)
       .where(eq(sopSteps.evalConfigId, configId));
 
-    if (total > 0) {
-      throw Errors.evalConfigInUse(configId, total);
+    if (referencingSteps.length > 0) {
+      const sopIds = [...new Set(referencingSteps.map((s) => s.sopId))];
+      const referencingSops = await tx
+        .select({ id: sops.id, name: sops.name })
+        .from(sops)
+        .where(inArray(sops.id, sopIds));
+
+      const sopNames = referencingSops.map((s) => s.name);
+
+      log.warn(
+        { configId, sopNames, stepCount: referencingSteps.length },
+        "eval config deletion blocked — referenced by SOP steps",
+      );
+
+      throw Errors.evalConfigInUse(configId, referencingSteps.length, sopNames);
     }
 
     await tx.delete(evalConfigs).where(eq(evalConfigs.id, configId));
