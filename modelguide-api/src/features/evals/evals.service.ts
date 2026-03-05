@@ -67,7 +67,6 @@ async function executeEvaluators(
   messages: SessionMessage[],
   evalRunId: string,
   orgId: string,
-  startTime: number,
 ): Promise<{ scoreRows: ScoreInsert[]; metadata: Record<string, unknown> }> {
   const toolMsgs = messages.filter((m) => m.role === "tool");
   const scoreRows: ScoreInsert[] = [];
@@ -117,7 +116,6 @@ async function executeEvaluators(
       evalResult = {
         result: "error",
         reasoning: `Evaluator threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
-        durationMs: Math.round(performance.now() - startTime),
       };
     }
 
@@ -163,15 +161,24 @@ async function executeEvaluators(
 // ============================================================================
 
 /** Persist scores, update eval run, and return response data. */
-async function persistResults(
-  orgId: string,
-  evalRunId: string,
-  sourceId: string,
-  scoreRows: ScoreInsert[],
-  passed: boolean,
-  durationMs: number,
-  metadata: Record<string, unknown>,
-) {
+async function persistResults(opts: {
+  orgId: string;
+  evalRunId: string;
+  sourceId: string;
+  scoreRows: ScoreInsert[];
+  passed: boolean;
+  durationMs: number;
+  metadata: Record<string, unknown>;
+}) {
+  const {
+    orgId,
+    evalRunId,
+    sourceId,
+    scoreRows,
+    passed,
+    durationMs,
+    metadata,
+  } = opts;
   return forOrg(orgId, async (tx) => {
     if (scoreRows.length > 0) {
       await tx.insert(evalRunScores).values(scoreRows);
@@ -213,20 +220,31 @@ async function persistResults(
 // ============================================================================
 
 /** Fire reporter in background — never blocks eval completion. */
-function dispatchReporter(
-  orgId: string,
-  evalRunId: string,
-  sessionId: string,
-  sourceType: EvalSourceType,
-  sourceId: string,
-  sourceName: string,
-  passed: boolean,
-  scores: Array<typeof evalRunScores.$inferSelect>,
-  metadata: Record<string, unknown>,
-  options?: { reporter?: string },
-) {
+function dispatchReporter(opts: {
+  orgId: string;
+  evalRunId: string;
+  sessionId: string;
+  sourceType: EvalSourceType;
+  sourceId: string;
+  sourceName: string;
+  passed: boolean;
+  scores: Array<typeof evalRunScores.$inferSelect>;
+  metadata: Record<string, unknown>;
+  reporter?: string;
+}) {
+  const {
+    orgId,
+    evalRunId,
+    sessionId,
+    sourceType,
+    sourceId,
+    sourceName,
+    passed,
+    scores,
+    metadata,
+  } = opts;
   try {
-    const reporter = getReporter(options?.reporter);
+    const reporter = getReporter(opts.reporter);
 
     const report: EvalRunReport = {
       runId: evalRunId,
@@ -237,7 +255,7 @@ function dispatchReporter(
       passed,
       scores: scores.map((s) => ({
         name: s.name,
-        evalConfigId: s.evalConfigId ?? "",
+        evalConfigId: s.evalConfigId,
         evaluatorType: s.evaluatorType,
         result: s.result as "pass" | "fail" | "skip" | "error",
         reasoning: s.reasoning,
@@ -270,13 +288,13 @@ function dispatchReporter(
       })
       .catch((err) => {
         log.warn(
-          { err, reporter: options?.reporter, evalRunId },
+          { err, reporter: opts.reporter, evalRunId },
           "eval reporter failed (results saved locally)",
         );
       });
   } catch (err) {
     log.warn(
-      { err, reporter: options?.reporter },
+      { err, reporter: opts.reporter },
       "failed to initialize eval reporter",
     );
   }
@@ -360,7 +378,6 @@ export async function runEvaluation(
       messages,
       evalRun.id,
       orgId,
-      startTime,
     );
 
     const failedOrErroredRequired = scoreRows.filter(
@@ -370,20 +387,20 @@ export async function runEvaluation(
     const durationMs = Math.round(performance.now() - startTime);
 
     // 5. Persist scores + final run state (short transaction)
-    const { updatedRun, scores, sourceName } = await persistResults(
+    const { updatedRun, scores, sourceName } = await persistResults({
       orgId,
-      evalRun.id,
+      evalRunId: evalRun.id,
       sourceId,
       scoreRows,
       passed,
       durationMs,
       metadata,
-    );
+    });
 
     // 6. Fire reporter (non-blocking)
-    dispatchReporter(
+    dispatchReporter({
       orgId,
-      evalRun.id,
+      evalRunId: evalRun.id,
       sessionId,
       sourceType,
       sourceId,
@@ -391,8 +408,8 @@ export async function runEvaluation(
       passed,
       scores,
       metadata,
-      options,
-    );
+      reporter: options?.reporter,
+    });
 
     return { ...updatedRun, scores };
   } catch (err) {

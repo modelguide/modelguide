@@ -75,7 +75,16 @@ export function validateEvalConfig(
 ): z.ZodIssue[] {
   const schema =
     CONFIG_SCHEMA_MAP[evaluatorType as keyof typeof CONFIG_SCHEMA_MAP];
-  if (!schema) return [];
+  if (!schema) {
+    return [
+      {
+        code: "custom" as const,
+        message: `Unknown evaluator type: "${evaluatorType}"`,
+        path: [],
+        params: {},
+      },
+    ];
+  }
   const result = schema.safeParse(config);
   return result.success ? [] : result.error.issues;
 }
