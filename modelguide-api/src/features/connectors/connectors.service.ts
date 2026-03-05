@@ -208,63 +208,52 @@ export async function updateConnector(
     isActive?: boolean;
   },
 ) {
-  // Validate config against catalog configSchema when config is provided
+  // Look up catalog entry outside the transaction (global table, no RLS)
+  let catalogConfigSchema: ConfigSchema | undefined;
   if (data.config) {
-    await validateConnectorConfig(orgId, connectorId, data.config);
+    const connector = await getConnectorById(orgId, connectorId);
+    const catalog = await getCatalogEntry(connector.connectorCatalogId);
+    catalogConfigSchema = (catalog.configSchema ?? {}) as ConfigSchema;
   }
 
-  const [updated] = await forOrg(orgId, (tx) =>
-    tx
+  const [updated] = await forOrg(orgId, async (tx) => {
+    // Validate secret refs inside the same transaction as the update
+    if (data.config && catalogConfigSchema) {
+      const secretRefs = extractSecretRefs(data.config, catalogConfigSchema);
+      const secretIds = [...secretRefs.keys()];
+
+      if (secretIds.length > 0) {
+        const foundSecrets = await tx
+          .select({ id: secrets.id })
+          .from(secrets)
+          .where(inArray(secrets.id, secretIds));
+
+        const foundIds = new Set(foundSecrets.map((s) => s.id));
+        const missingSecrets = secretIds
+          .filter((id) => !foundIds.has(id))
+          .map((id) => secretRefs.get(id)!);
+
+        if (missingSecrets.length > 0) {
+          throw Errors.validationError(
+            `Config references non-existent secrets: ${missingSecrets.join(", ")}`,
+            { missingSecrets },
+          );
+        }
+      }
+    }
+
+    return tx
       .update(connectors)
       .set(data)
       .where(eq(connectors.id, connectorId))
-      .returning(),
-  );
+      .returning();
+  });
 
   if (!updated) {
     throw Errors.connectorNotFound(connectorId);
   }
 
   return updated;
-}
-
-/**
- * Validate connector config against the catalog's configSchema.
- * Checks that secret references (UUID values for "secret" type fields) exist in the org.
- */
-async function validateConnectorConfig(
-  orgId: string,
-  connectorId: string,
-  config: Record<string, unknown>,
-): Promise<void> {
-  // Look up the connector to get its catalog entry
-  const connector = await getConnectorById(orgId, connectorId);
-  const catalog = await getCatalogEntry(connector.connectorCatalogId);
-  const configSchema = (catalog.configSchema ?? {}) as ConfigSchema;
-
-  const secretRefs = extractSecretRefs(config, configSchema);
-  const secretIds = [...secretRefs.keys()];
-
-  if (secretIds.length > 0) {
-    const foundSecrets = await forOrg(orgId, (tx) =>
-      tx
-        .select({ id: secrets.id })
-        .from(secrets)
-        .where(inArray(secrets.id, secretIds)),
-    );
-
-    const foundIds = new Set(foundSecrets.map((s) => s.id));
-    const missingSecrets = secretIds
-      .filter((id) => !foundIds.has(id))
-      .map((id) => secretRefs.get(id)!);
-
-    if (missingSecrets.length > 0) {
-      throw Errors.validationError(
-        `Config references non-existent secrets: ${missingSecrets.join(", ")}`,
-        { missingSecrets },
-      );
-    }
-  }
 }
 
 export async function deleteConnector(
