@@ -68,8 +68,8 @@ export async function runEvaluation(
 
   const startTime = performance.now();
 
-  return forOrg(orgId, async (tx) => {
-    // 2. Load session and validate terminal status
+  // 2. Validate session + create eval_runs row (short transaction)
+  const evalRun = await forOrg(orgId, async (tx) => {
     const [session] = await tx
       .select({ id: sessions.id, status: sessions.status })
       .from(sessions)
@@ -83,8 +83,6 @@ export async function runEvaluation(
       throw Errors.evalSessionNotTerminal(sessionId, session.status);
     }
 
-    // 3. Create eval_runs row — unique index prevents duplicate active evals
-    let evalRun: typeof evalRuns.$inferSelect;
     try {
       const [row] = await tx
         .insert(evalRuns)
@@ -97,9 +95,8 @@ export async function runEvaluation(
           triggeredBy: options?.triggeredBy,
         })
         .returning();
-      evalRun = row;
+      return row;
     } catch (err) {
-      // Unique index conflict → active eval already exists
       if (
         err instanceof Error &&
         err.message.includes("eval_runs_active_unique")
@@ -108,20 +105,29 @@ export async function runEvaluation(
       }
       throw err;
     }
+  });
 
-    // 4. Compile eval plan
+  let metadata: Record<string, unknown> = {};
+
+  try {
+    // 3. Compile eval plan (outside long-lived DB transaction)
     const plan = await compileSopToEvalPlan(orgId, sourceId, sessionId);
 
-    // 5. Build EvalContext from session messages
-    const messages = await tx
-      .select()
-      .from(sessionMessages)
-      .where(eq(sessionMessages.sessionId, sessionId))
-      .orderBy(asc(sessionMessages.occurredAt), asc(sessionMessages.createdAt));
+    // 4. Load transcript messages (short transaction)
+    const messages = await forOrg(orgId, (tx) =>
+      tx
+        .select()
+        .from(sessionMessages)
+        .where(eq(sessionMessages.sessionId, sessionId))
+        .orderBy(
+          asc(sessionMessages.occurredAt),
+          asc(sessionMessages.createdAt),
+        ),
+    );
 
     const toolMsgs = messages.filter((m) => m.role === "tool");
 
-    // 6. Execute evaluators
+    // 5. Execute evaluators (no DB transaction held)
     const scoreRows: Array<typeof evalRunScores.$inferInsert> = [];
     let shortCircuited = false;
     let shortCircuitReason = "";
@@ -134,7 +140,6 @@ export async function runEvaluation(
         continue;
       }
 
-      // Short-circuited steps (only for steps that have eval configs)
       if (shortCircuited) {
         scoreRows.push({
           evalRunId: evalRun.id,
@@ -150,7 +155,6 @@ export async function runEvaluation(
         continue;
       }
 
-      // Build eval context with resolved tool names for this step
       const resolvedToolNames = new Map(Object.entries(step.toolNameMap));
       const ctx: EvalContext = {
         messages,
@@ -158,7 +162,6 @@ export async function runEvaluation(
         resolvedToolNames,
       };
 
-      // Run evaluator
       const evaluator = getEvaluator(step.evaluator.evaluatorType);
       const evalConfig: StepEvaluatorConfig = {
         type: step.evaluator.evaluatorType,
@@ -183,7 +186,6 @@ export async function runEvaluation(
         durationMs: evalResult.durationMs ?? null,
       });
 
-      // Short-circuit on required step fail or error
       if (
         step.required &&
         (evalResult.result === "fail" || evalResult.result === "error")
@@ -194,20 +196,13 @@ export async function runEvaluation(
       }
     }
 
-    // 7. Insert all scores
-    if (scoreRows.length > 0) {
-      await tx.insert(evalRunScores).values(scoreRows);
-    }
-
-    // 8. Compute verdict
     const failedOrErroredRequired = scoreRows.filter(
       (s) => s.required && (s.result === "fail" || s.result === "error"),
     );
     const passed = failedOrErroredRequired.length === 0;
 
-    // Coverage warnings
     const stepsWithoutConfig = plan.steps.filter((s) => !s.evaluator);
-    const metadata: Record<string, unknown> = {};
+    metadata = {};
     if (stepsWithoutConfig.length > 0) {
       metadata.coverageWarning = `${stepsWithoutConfig.length} of ${plan.steps.length} steps have no eval config assigned`;
       metadata.uncoveredSteps = stepsWithoutConfig.map((s) => s.stepId);
@@ -215,42 +210,55 @@ export async function runEvaluation(
 
     const durationMs = Math.round(performance.now() - startTime);
 
-    // 9. Update eval run with verdict
-    const [updatedRun] = await tx
-      .update(evalRuns)
-      .set({
-        status: "completed" as EvalStatus,
-        passed,
-        durationMs,
-        metadata: Object.keys(metadata).length > 0 ? metadata : null,
-        completedAt: new Date(),
-      })
-      .where(eq(evalRuns.id, evalRun.id))
-      .returning();
+    // 6. Persist scores + final run state (short transaction)
+    const { updatedRun, scores, sourceName } = await forOrg(
+      orgId,
+      async (tx) => {
+        if (scoreRows.length > 0) {
+          await tx.insert(evalRunScores).values(scoreRows);
+        }
 
-    // 10. Load scores for response
-    const scores = await tx
-      .select()
-      .from(evalRunScores)
-      .where(eq(evalRunScores.evalRunId, evalRun.id))
-      .orderBy(asc(evalRunScores.scoreOrder));
+        const [completedRun] = await tx
+          .update(evalRuns)
+          .set({
+            status: "completed" as EvalStatus,
+            passed,
+            durationMs,
+            metadata: Object.keys(metadata).length > 0 ? metadata : null,
+            completedAt: new Date(),
+          })
+          .where(eq(evalRuns.id, evalRun.id))
+          .returning();
 
-    // 11. Fire reporter (non-blocking)
+        const persistedScores = await tx
+          .select()
+          .from(evalRunScores)
+          .where(eq(evalRunScores.evalRunId, evalRun.id))
+          .orderBy(asc(evalRunScores.scoreOrder));
+
+        const [sopRow] = await tx
+          .select({ name: sops.name })
+          .from(sops)
+          .where(eq(sops.id, sourceId));
+
+        return {
+          updatedRun: completedRun,
+          scores: persistedScores,
+          sourceName: sopRow?.name ?? sourceId,
+        };
+      },
+    );
+
+    // 7. Fire reporter (non-blocking)
     try {
       const reporter = getReporter(options?.reporter);
-
-      // Load source name for report
-      const [sopRow] = await tx
-        .select({ name: sops.name })
-        .from(sops)
-        .where(eq(sops.id, sourceId));
 
       const report: EvalRunReport = {
         runId: updatedRun.id,
         sessionId,
         sourceType,
         sourceId,
-        sourceName: sopRow?.name ?? sourceId,
+        sourceName,
         passed,
         scores: scores.map((s) => ({
           name: s.name,
@@ -265,12 +273,10 @@ export async function runEvaluation(
         metadata,
       };
 
-      // Fire and forget — don't await, catch errors
       reporter
         .report(report)
         .then((result) => {
           if (result.externalRunId || result.externalRunUrl) {
-            // Update external references (best-effort, outside transaction)
             forOrg(orgId, (innerTx) =>
               innerTx
                 .update(evalRuns)
@@ -301,7 +307,26 @@ export async function runEvaluation(
     }
 
     return { ...updatedRun, scores };
-  });
+  } catch (err) {
+    const durationMs = Math.round(performance.now() - startTime);
+    const message =
+      err instanceof Error ? err.message : "Unknown evaluation error";
+
+    await forOrg(orgId, (tx) =>
+      tx
+        .update(evalRuns)
+        .set({
+          status: "failed" as EvalStatus,
+          passed: null,
+          durationMs,
+          metadata: { error: message },
+          completedAt: new Date(),
+        })
+        .where(eq(evalRuns.id, evalRun.id)),
+    );
+
+    throw err;
+  }
 }
 
 // ============================================================================

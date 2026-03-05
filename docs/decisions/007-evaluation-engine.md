@@ -18,7 +18,7 @@ Evals execute locally with zero external dependencies. Session transcripts live 
 
 Reusable evaluator definitions stored in `eval_configs`, org-scoped with RLS. Each config has a `evaluator_type` column (DB enum) plus a `config` JSONB with type-specific parameters. The type is structural (determines which evaluator runs), not configuration — hence a column, not nested in JSONB. Queryable, indexable, validated at the DB level.
 
-SOP steps reference eval configs by `eval_config_id` (nullable FK on `sop_steps`). Steps without a config are not evaluated — the runner produces a coverage warning in run metadata instead of a phantom score row. This keeps the scores table clean: every `eval_run_scores` row traces back to the config that produced it (`eval_config_id NOT NULL`).
+SOP steps reference eval configs by `eval_config_id` (FK on `sop_steps`). We allow missing configs only for intentionally optional coverage gaps. Required steps should always have a valid eval config. Steps without a config are not evaluated — the runner produces a coverage warning in run metadata instead of a phantom score row. This keeps the scores table clean: every `eval_run_scores` row traces back to the config that produced it (`eval_config_id NOT NULL`).
 
 ### Four evaluators for v1
 
@@ -39,7 +39,7 @@ Eval configs reference tools by `connectorToolId` (UUID FK to `connector_tools`)
 
 - **Per-step:** pass / fail / skip / error
 - **Per-run:** `passed = true` when zero required steps failed or errored
-- **Short-circuit:** If a required step fails or errors, remaining steps with eval configs are marked `skip` with reasoning. Steps without configs are always excluded from scoring regardless.
+- **Short-circuit:** If a required step fails or errors, remaining steps with eval configs are marked `skip` with reasoning. Optional steps without configs are excluded from scoring and appear as coverage warnings.
 - **Skip semantics:** Tool evaluators return `skip` (not fail) when no tool messages exist (verbal resolution). Skips don't affect the verdict.
 
 ### Eval runs are immutable (no DELETE API)
@@ -82,6 +82,6 @@ Six operators for `tool_input_contains`: `equals`, `contains`, `gt`, `lt`, `exis
 - Evals work on localhost with zero external services — `ANTHROPIC_API_KEY` optional (only for `llm_judge`, which returns `skip` without it)
 - LLM judge results carry "uncalibrated" label — consumers must not treat as ground truth
 - No eval run deletion mechanism — acceptable at expected volume (tens of runs/day)
-- Coverage warnings surface steps without eval configs, encouraging gradual coverage improvement
+- Coverage warnings surface intentionally uncovered optional steps and help track remaining coverage work
 - The reporter interface decouples eval execution from analytics platforms, avoiding vendor lock-in
 - Adding new evaluator types requires one file + one DB enum addition — low friction

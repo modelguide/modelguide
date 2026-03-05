@@ -6,9 +6,54 @@
 import type { SopStep } from "@features/sops/sops.types";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "../schema";
-import { agentSops, sopSteps, sops } from "../schema";
+import { agentSops, evalConfigs, sopSteps, sops } from "../schema";
 
 type SeedDb = PostgresJsDatabase<typeof schema>;
+
+type EvalConfigSeed = {
+  name: string;
+  description?: string;
+  evaluatorType:
+    | "tool_called"
+    | "tool_input_contains"
+    | "no_tool_called"
+    | "llm_judge";
+  config: Record<string, unknown>;
+};
+
+async function ensureEvalConfig(
+  db: SeedDb,
+  orgId: string,
+  createdBy: string | undefined,
+  seed: EvalConfigSeed,
+): Promise<string> {
+  const existing = await db.query.evalConfigs.findFirst({
+    where: (ec, { and, eq }) =>
+      and(
+        eq(ec.organizationId, orgId),
+        eq(ec.name, seed.name),
+        eq(ec.evaluatorType, seed.evaluatorType),
+      ),
+  });
+
+  if (existing) {
+    return existing.id;
+  }
+
+  const [created] = await db
+    .insert(evalConfigs)
+    .values({
+      organizationId: orgId,
+      name: seed.name,
+      description: seed.description,
+      evaluatorType: seed.evaluatorType,
+      config: seed.config,
+      createdBy,
+    })
+    .returning({ id: evalConfigs.id });
+
+  return created.id;
+}
 
 export async function seedSopDefinitions(db: SeedDb): Promise<void> {
   console.log("\n--- Seeding SOP definitions for demo org ---");
@@ -57,6 +102,60 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
     return;
   }
 
+  // Eval configs for required SOP steps
+  const lookupToolCalledEvalConfigId = await ensureEvalConfig(
+    db,
+    org.id,
+    admin?.id,
+    {
+      name: "Seed: Lookup order tool called",
+      description:
+        "Required seeded SOP step: verify get_order was called during order lookup.",
+      evaluatorType: "tool_called",
+      config: { connectorToolId: getOrderTool.id },
+    },
+  );
+  const greetEvalConfigId = await ensureEvalConfig(db, org.id, admin?.id, {
+    name: "Seed: Greeting completed",
+    description:
+      "Required seeded SOP step: agent greets customer and offers help.",
+    evaluatorType: "llm_judge",
+    config: {
+      criterion:
+        "The agent greets the customer and invites them to describe how they can help.",
+    },
+  });
+  const verifyIdentityEvalConfigId = await ensureEvalConfig(
+    db,
+    org.id,
+    admin?.id,
+    {
+      name: "Seed: Identity verification requested",
+      description:
+        "Required seeded SOP step: agent asks for an order identifier or email to verify identity.",
+      evaluatorType: "llm_judge",
+      config: {
+        criterion:
+          "The agent asks the customer for an identifying detail (for example order number or email) before account-specific actions.",
+      },
+    },
+  );
+  const communicateStatusEvalConfigId = await ensureEvalConfig(
+    db,
+    org.id,
+    admin?.id,
+    {
+      name: "Seed: Order status communicated",
+      description:
+        "Required seeded SOP step: agent communicates order status clearly after lookup.",
+      evaluatorType: "llm_judge",
+      config: {
+        criterion:
+          "After lookup, the agent communicates the order status clearly to the customer.",
+      },
+    },
+  );
+
   // Look up the order-lookup template
   const orderLookupTemplate = await db.query.sopTemplates.findFirst({
     where: (t, { eq }) => eq(t.slug, "order-lookup"),
@@ -74,18 +173,21 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       id: "greet",
       instruction: "Greet the customer and ask how you can help.",
       required: true,
+      evalConfigId: greetEvalConfigId,
     },
     {
       id: "verify-identity",
       instruction:
         "Ask for the customer's email address or order number to verify their identity.",
       required: true,
+      evalConfigId: verifyIdentityEvalConfigId,
     },
     {
       id: "lookup-order",
       instruction:
         "Look up the customer's order using the provided identifier.",
       required: true,
+      evalConfigId: lookupToolCalledEvalConfigId,
       tool: {
         connectorToolId: getOrderTool.id,
       },
@@ -95,6 +197,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       instruction:
         "Communicate the order status clearly. Include expected delivery date if available.",
       required: true,
+      evalConfigId: communicateStatusEvalConfigId,
     },
     {
       id: "offer-help",
@@ -141,6 +244,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
         instruction: s.instruction,
         required: s.required,
         connectorToolId: s.tool?.connectorToolId ?? null,
+        evalConfigId: s.evalConfigId ?? null,
         notes: s.notes ?? null,
       })),
     );
@@ -162,17 +266,20 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
       id: "greet",
       instruction: "Greet the customer and acknowledge their return request.",
       required: true,
+      evalConfigId: greetEvalConfigId,
     },
     {
       id: "verify-identity",
       instruction:
         "Verify the customer's identity by asking for their email or order number.",
       required: true,
+      evalConfigId: verifyIdentityEvalConfigId,
     },
     {
       id: "lookup-order",
       instruction: "Look up the original order to verify the purchase.",
       required: true,
+      evalConfigId: lookupToolCalledEvalConfigId,
       tool: {
         connectorToolId: getOrderTool.id,
       },
@@ -213,6 +320,7 @@ export async function seedSopDefinitions(db: SeedDb): Promise<void> {
         instruction: s.instruction,
         required: s.required,
         connectorToolId: s.tool?.connectorToolId ?? null,
+        evalConfigId: s.evalConfigId ?? null,
         notes: s.notes ?? null,
       })),
     );

@@ -701,82 +701,29 @@ describe("GET /api/evals/runs/:runId", () => {
 // ============================================================================
 
 describe("Eval edge cases", () => {
-  test("deleted eval config → step unevaluated, no score row", async () => {
-    // Create a disposable eval config
-    const cfgRes = await request("/api/eval-configs", {
-      method: "POST",
-      headers: orgAAdminHeaders,
-      body: JSON.stringify({
-        name: "Disposable config for deletion test",
-        evaluatorType: "tool_called",
-        config: { connectorToolId: orgAGetOrderToolId },
-      }),
-    });
-    const cfg = await cfgRes.json();
-    createdEvalConfigIds.push(cfg.id);
-
-    // Create SOP referencing it
+  test("rejects SOP step with non-existent evalConfigId (400)", async () => {
     const sopRes = await request("/api/sops", {
       method: "POST",
       headers: orgAAdminHeaders,
       body: JSON.stringify({
-        name: "SOP with deleted eval config",
+        name: "SOP with invalid eval config ref",
         definition: {
           schemaVersion: 1,
           trigger: { type: "manual", config: {} },
           steps: [
             {
-              id: "step-with-deleted-cfg",
+              id: "step-with-invalid-cfg",
               order: 1,
               instruction: "Call get_order",
               required: true,
-              evalConfigId: cfg.id,
-            },
-            {
-              id: "step-without-cfg",
-              order: 2,
-              instruction: "Confirm resolution",
-              required: false,
+              evalConfigId: "00000000-0000-0000-0000-000000000099",
             },
           ],
           metadata: {},
         },
       }),
     });
-    const sop = await sopRes.json();
-    createdSopIds.push(sop.id);
-
-    // Delete the eval config (need to remove SOP reference first — use a fresh config)
-    // Actually the config is referenced by the SOP step, so deletion will 409.
-    // Instead, delete via DB directly to simulate the edge case.
-    await forApp(async (tx) => {
-      await tx.delete(evalConfigs).where(eq(evalConfigs.id, cfg.id));
-    });
-    // Remove from cleanup list since we already deleted it
-    createdEvalConfigIds.pop();
-
-    // Now trigger eval — step references a config that no longer exists
-    const sessionId = await createCompletedSessionWithToolCall(
-      resolvedGetOrderToolName,
-      { orderId: "ORD-DEL" },
-    );
-
-    const evalRes = await request("/api/evals/runs", {
-      method: "POST",
-      headers: orgAAdminHeaders,
-      body: JSON.stringify({
-        sessionId,
-        sourceType: "sop",
-        sourceId: sop.id,
-      }),
-    });
-
-    expect(evalRes.status).toBe(201);
-    const body = await evalRes.json();
-    // Step with deleted config treated as having no evaluator → no score row
-    expect(body.passed).toBe(true);
-    expect(body.scores).toHaveLength(0);
-    createdEvalRunIds.push(body.id);
+    expect(sopRes.status).toBe(400);
   });
 
   test("multiple steps referencing same eval config → works correctly", async () => {
