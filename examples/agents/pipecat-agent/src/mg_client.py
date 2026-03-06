@@ -1,0 +1,116 @@
+"""ModelGuide REST client (sessions) and MCP client (tool execution)."""
+
+import logging
+
+import httpx
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+from config import MODELGUIDE_AGENT_ID, MODELGUIDE_API_KEY, MODELGUIDE_API_URL
+
+logger = logging.getLogger("mg_client")
+
+_auth_headers = {
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {MODELGUIDE_API_KEY}",
+}
+
+_mcp_url = f"{MODELGUIDE_API_URL}/mcp/{MODELGUIDE_AGENT_ID}"
+
+
+# ---------------------------------------------------------------------------
+# Session management (REST)
+# ---------------------------------------------------------------------------
+
+
+async def create_session(user_identifier: str | None = None) -> str:
+    """Create a new ModelGuide session. Returns the session ID."""
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            f"{MODELGUIDE_API_URL}/api/sessions",
+            headers=_auth_headers,
+            json={
+                "channelType": "voice",
+                "userIdentifier": user_identifier or "voice-caller",
+            },
+        )
+        res.raise_for_status()
+        data = res.json()
+        session_id = data["id"]
+        logger.info("Session created: %s", session_id)
+        return session_id
+
+
+async def add_messages(session_id: str, messages: list[dict]) -> None:
+    """Post messages to a session. Errors are logged, not raised."""
+    async with httpx.AsyncClient() as client:
+        for msg in messages:
+            try:
+                res = await client.post(
+                    f"{MODELGUIDE_API_URL}/api/sessions/{session_id}/messages",
+                    headers=_auth_headers,
+                    json=msg,
+                )
+                if not res.is_success:
+                    logger.warning(
+                        "Failed to post message (status %s): %s",
+                        res.status_code,
+                        res.text,
+                    )
+            except Exception:
+                logger.exception("Error posting message to session %s", session_id)
+
+
+async def complete_session(
+    session_id: str,
+    metadata: dict | None = None,
+) -> None:
+    """Mark session as completed."""
+    async with httpx.AsyncClient() as client:
+        body: dict = {"status": "completed"}
+        if metadata:
+            body["metadata"] = metadata
+        try:
+            res = await client.patch(
+                f"{MODELGUIDE_API_URL}/api/sessions/{session_id}",
+                headers=_auth_headers,
+                json=body,
+            )
+            if res.is_success:
+                logger.info("Session %s completed", session_id)
+            else:
+                logger.warning(
+                    "Failed to complete session %s (status %s): %s",
+                    session_id,
+                    res.status_code,
+                    res.text,
+                )
+        except Exception:
+            logger.exception("Error completing session %s", session_id)
+
+
+# ---------------------------------------------------------------------------
+# Tool execution (MCP)
+# ---------------------------------------------------------------------------
+
+
+async def call_tool(tool_name: str, args: dict, session_id: str) -> dict:
+    """Execute a tool via ModelGuide's MCP endpoint."""
+    args_with_session = {**args, "session_id": session_id}
+    headers = {"Authorization": f"Bearer {MODELGUIDE_API_KEY}"}
+
+    async with streamablehttp_client(_mcp_url, headers=headers) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, args_with_session)
+            # MCP result.content is a list of content blocks
+            if result.content and len(result.content) > 0:
+                block = result.content[0]
+                if hasattr(block, "text"):
+                    import json
+
+                    try:
+                        return json.loads(block.text)
+                    except (json.JSONDecodeError, TypeError):
+                        return {"result": block.text}
+            return {"result": str(result.content)}

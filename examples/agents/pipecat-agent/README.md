@@ -1,0 +1,87 @@
+# Pipecat Voice Agent for ModelGuide
+
+A WebRTC voice agent powered by [Pipecat](https://github.com/pipecat-ai/pipecat) that connects to ModelGuide for tool execution and session management. Implements the BuildPro "Sam" demo.
+
+## Stack
+
+| Component | Service |
+|-----------|---------|
+| Transport | Daily.co WebRTC |
+| STT | Deepgram |
+| LLM | OpenAI GPT-4o |
+| TTS | Cartesia |
+| Tools | ModelGuide MCP |
+
+## Prerequisites
+
+- Python 3.11+
+- A running ModelGuide API with a configured agent (API key + connector tools assigned)
+- API keys for Daily.co, OpenAI, Deepgram, and Cartesia
+
+## Setup
+
+```bash
+cd examples/agents/pipecat-agent
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -e .
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+## Running
+
+```bash
+python src/bot.py
+```
+
+The bot will:
+1. Create a Daily.co room and print the URL
+2. Create a ModelGuide session
+3. Wait for a participant to join
+
+Open the printed Daily room URL in your browser to start talking to Sam.
+
+## How it works
+
+```
+Daily WebRTC Input
+  -> Deepgram STT (speech-to-text)
+  -> OpenAI GPT-4o (with function calling)
+  -> Cartesia TTS (text-to-speech)
+  -> Daily WebRTC Output
+```
+
+**Session lifecycle:**
+- On start: Creates a ModelGuide session via `POST /api/sessions`
+- During call: LLM tool calls execute via ModelGuide's MCP endpoint (`POST /mcp/:agentId`)
+- On hang up: Posts the full transcript to ModelGuide, then marks the session as completed
+
+**Tool mapping:** The LLM uses short tool names (`list_products`, `add_to_cart`). These are mapped to connector-prefixed MCP names (`buildpro_store_list_products`, `buildpro_store_add_to_cart`) before execution.
+
+## Architecture
+
+```
+src/
+  bot.py          # Main pipeline wiring and lifecycle
+  config.py       # Environment variable loading
+  mg_client.py    # ModelGuide REST + MCP client
+  tools.py        # Tool schemas and MCP-backed handlers
+  prompts.py      # BuildPro "Sam" system prompt
+  transcript.py   # In-memory transcript collector
+```
+
+## Known limitations
+
+- **Latency:** Each tool call is a network round trip to the ModelGuide MCP server. Pipecat's streaming pipeline mitigates perceived latency, but total latency is higher than a co-located setup. For production, consider deploying the Pipecat agent on the same infrastructure as the ModelGuide API.
+- **No interruption during tool calls:** While a tool is executing, the bot cannot be interrupted. This is a limitation of the sequential pipeline design.
+
+## Pipecat Cloud deployment
+
+See [DEPLOY.md](./DEPLOY.md) for deployment instructions.
