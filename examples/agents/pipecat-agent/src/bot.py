@@ -23,17 +23,17 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameProcessor
-from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.transports.services.daily import DailyParams, DailyTransport
+from pipecat.transports.daily.transport import DailyParams, DailyTransport
 
 import mg_client
 from config import (
-    CARTESIA_API_KEY,
-    CARTESIA_VOICE_ID,
     DAILY_API_KEY,
     DEEPGRAM_API_KEY,
+    ELEVENLABS_API_KEY,
+    ELEVENLABS_VOICE_ID,
     OPENAI_API_KEY,
     USER_EMAIL,
 )
@@ -114,9 +114,9 @@ async def main():
 
     llm = OpenAILLMService(api_key=OPENAI_API_KEY, model="gpt-4o")
 
-    tts = CartesiaTTSService(
-        api_key=CARTESIA_API_KEY,
-        voice_id=CARTESIA_VOICE_ID,
+    tts = ElevenLabsTTSService(
+        api_key=ELEVENLABS_API_KEY,
+        voice_id=ELEVENLABS_VOICE_ID,
     )
 
     # --- System prompt + context ---

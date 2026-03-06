@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Pipecat voice agent for ModelGuide (BuildPro Sam demo)"
 requires-python = ">=3.11"
 dependencies = [
-    "pipecat-ai[daily,openai,deepgram,cartesia,silero]",
+    "pipecat-ai[daily,openai,deepgram,elevenlabs,silero]",
     "httpx",
     "python-dotenv",
     "mcp",

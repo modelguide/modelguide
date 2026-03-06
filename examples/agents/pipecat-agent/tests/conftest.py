@@ -9,7 +9,7 @@ _TEST_ENV = {
     "DAILY_API_KEY": "test_daily_key",
     "OPENAI_API_KEY": "test_openai_key",
     "DEEPGRAM_API_KEY": "test_deepgram_key",
-    "CARTESIA_API_KEY": "test_cartesia_key",
+    "ELEVENLABS_API_KEY": "test_elevenlabs_key",
     "MODELGUIDE_API_URL": "http://localhost:3000",
     "MODELGUIDE_API_KEY": "mgk_test_key",
     "MODELGUIDE_AGENT_ID": "agt_test_123",
