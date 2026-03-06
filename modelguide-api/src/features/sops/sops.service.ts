@@ -662,6 +662,22 @@ export async function activateSop(orgId: string, sopId: string) {
   });
 }
 
+export async function deactivateSop(orgId: string, sopId: string) {
+  const [updated] = await forOrg(orgId, (tx) =>
+    tx
+      .update(sops)
+      .set({ status: "draft", updatedAt: new Date() })
+      .where(eq(sops.id, sopId))
+      .returning(),
+  );
+
+  if (!updated) {
+    throw Errors.sopNotFound(sopId);
+  }
+
+  return updated;
+}
+
 export async function archiveSop(orgId: string, sopId: string) {
   const [updated] = await forOrg(orgId, (tx) =>
     tx

@@ -30,6 +30,7 @@ import {
   activateSop,
   archiveSop,
   createSop,
+  deactivateSop,
   deleteSop,
   forkFromTemplate,
   getAssignedAgents,
@@ -179,6 +180,12 @@ router.post(
 );
 router.post(
   "/:id/archive",
+  requireUser(),
+  requirePermission("sops:update"),
+  requireOrganization(),
+);
+router.post(
+  "/:id/deactivate",
   requireUser(),
   requirePermission("sops:update"),
   requireOrganization(),
@@ -527,6 +534,34 @@ router.openapi(archiveRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
   await archiveSop(orgId, id);
+  const detail = await getSopById(orgId, id);
+  return c.json(formatSopDetail(detail), 200);
+});
+
+const deactivateRoute = createRoute({
+  method: "post",
+  path: "/{id}/deactivate",
+  tags: ["SOPs"],
+  summary: "Deactivate SOP",
+  description: "Sets SOP status back to draft.",
+  security: [{ bearerAuth: [] }],
+  request: { params: idParams },
+  responses: {
+    200: {
+      description: "SOP deactivated",
+      content: {
+        "application/json": { schema: sopDetailResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    404: errorResponse("SOP not found"),
+  },
+});
+
+router.openapi(deactivateRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  await deactivateSop(orgId, id);
   const detail = await getSopById(orgId, id);
   return c.json(formatSopDetail(detail), 200);
 });
