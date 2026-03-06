@@ -10,6 +10,8 @@ interface SecretSelectorProps {
   label?: string
   error?: string
   disabled?: boolean
+  /** Scope filter: fetch secrets with this scope + unscoped ones */
+  scope?: 'connector' | 'agent'
 }
 
 export function SecretSelector({
@@ -18,10 +20,16 @@ export function SecretSelector({
   label = 'API Token',
   error,
   disabled,
+  scope = 'connector',
 }: SecretSelectorProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ['secrets'],
-    queryFn: () => api.get('secrets').json<PaginatedResponse<Secret>>(),
+    queryKey: ['secrets', { scope, includeUnscoped: true }],
+    queryFn: () =>
+      api
+        .get('secrets', {
+          searchParams: { scope, includeUnscoped: 'true', pageSize: '100' },
+        })
+        .json<PaginatedResponse<Secret>>(),
   })
 
   const secrets = data?.data ?? []
@@ -45,6 +53,7 @@ export function SecretSelector({
           {secrets.map((secret) => (
             <option key={secret.id} value={secret.id}>
               {secret.name}
+              {secret.scope ? '' : ' (unscoped)'}
             </option>
           ))}
         </select>

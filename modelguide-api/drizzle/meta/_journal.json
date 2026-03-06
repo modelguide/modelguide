@@ -176,6 +176,20 @@
       "when": 1772736000000,
       "tag": "0024_enforce-sop-step-eval-config-fk",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1772810486884,
+      "tag": "0025_add-entity-secret-refs",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1772810645986,
+      "tag": "0026_drop-secret-owner-columns",
+      "breakpoints": true
     }
   ]
 }

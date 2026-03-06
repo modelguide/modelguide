@@ -8,6 +8,7 @@
 import { env } from "@/env";
 import { forOrg } from "@db/rls";
 import { agents, secrets } from "@db/schema";
+import type { EntitySecretsMap } from "@db/schema";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
   getAgentElevenLabsKey,
@@ -16,7 +17,7 @@ import {
 import { encryptSecret } from "@lib/crypto";
 import { Errors, getErrorMessage, logAndThrow } from "@lib/errors";
 import { getLogger } from "@lib/logger";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 /**
  * Thin wrapper around ElevenLabs secrets API.
@@ -367,35 +368,45 @@ async function _syncAgentToElevenLabs(
   };
 
   await forOrg(orgId, async (tx) => {
-    // Upsert webhook secret in secrets table
+    // Upsert webhook secret in org vault and maintain ref in agents.secrets map
     if (webhookSecret) {
       const encryptedValue = await encryptSecret(webhookSecret);
-      const [existing] = await tx
-        .select({ id: secrets.id })
-        .from(secrets)
-        .where(
-          and(
-            eq(secrets.ownerType, "agent"),
-            eq(secrets.ownerId, agentId),
-            eq(secrets.secretType, "webhook_secret"),
-          ),
-        )
+
+      // Fetch current secrets map for this agent
+      const [agentRow] = await tx
+        .select({ secrets: agents.secrets })
+        .from(agents)
+        .where(eq(agents.id, agentId))
         .limit(1);
 
-      if (existing) {
+      const secretsMap = (agentRow?.secrets ?? {}) as EntitySecretsMap;
+      const existingSecretId = secretsMap.webhook_secret;
+
+      if (existingSecretId) {
+        // Update vault entry in-place; ref unchanged
         await tx
           .update(secrets)
           .set({ encryptedValue })
-          .where(eq(secrets.id, existing.id));
+          .where(eq(secrets.id, existingSecretId));
       } else {
-        await tx.insert(secrets).values({
-          organizationId: orgId,
-          name: "Webhook HMAC Secret",
-          secretType: "webhook_secret",
-          encryptedValue,
-          ownerType: "agent",
-          ownerId: agentId,
-        });
+        // Create new vault entry and write ref into agents.secrets map
+        const [newSecret] = await tx
+          .insert(secrets)
+          .values({
+            organizationId: orgId,
+            name: "Webhook HMAC Secret",
+            secretType: "webhook_secret",
+            encryptedValue,
+            scope: "agent",
+          })
+          .returning({ id: secrets.id });
+
+        await tx
+          .update(agents)
+          .set({
+            secrets: { ...secretsMap, webhook_secret: newSecret.id },
+          })
+          .where(eq(agents.id, agentId));
       }
     }
 

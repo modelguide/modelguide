@@ -1,11 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Select } from '~/components/ui/select'
-import { api } from '~/lib/api'
-import type { PaginatedResponse } from '~/lib/pagination'
-import type { Connector } from '~/schemas/connectors'
 import type { SecretCreate } from '~/schemas/secrets'
 
 interface SecretFormProps {
@@ -18,19 +14,11 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
   const [secretType, setSecretType] = useState<SecretCreate['secretType']>('api_key')
-  const [ownerId, setOwnerId] = useState('')
+  const [scope, setScope] = useState<string>('')
   const [errors, setErrors] = useState<{
     name?: string
     value?: string
-    ownerId?: string
   }>({})
-
-  const { data: connectorsData, isLoading: connectorsLoading } = useQuery({
-    queryKey: ['connectors'],
-    queryFn: () => api.get('connectors').json<PaginatedResponse<Connector>>(),
-  })
-
-  const connectors = connectorsData?.data ?? []
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,9 +30,6 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
     if (!value.trim()) {
       newErrors.value = 'Value is required'
     }
-    if (!ownerId) {
-      newErrors.ownerId = 'Connector is required'
-    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -55,8 +40,7 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
       name: name.trim(),
       value: value.trim(),
       secretType,
-      ownerType: 'connector',
-      ownerId,
+      ...(scope ? { scope: scope as 'connector' | 'agent' } : {}),
     })
   }
 
@@ -97,26 +81,20 @@ export function SecretForm({ onSubmit, onCancel, isSubmitting }: SecretFormProps
         <option value="api_key">API Key</option>
         <option value="oauth_token">OAuth Token</option>
         <option value="credentials">Credentials</option>
+        <option value="platform_api_key">Platform API Key</option>
+        <option value="webhook_secret">Webhook Secret</option>
       </Select>
 
       <Select
-        label="Connector"
-        value={ownerId}
+        label="Scope"
+        value={scope}
         onChange={(e) => {
-          setOwnerId(e.target.value)
-          setErrors((prev) => ({ ...prev, ownerId: undefined }))
+          setScope(e.target.value)
         }}
-        error={errors.ownerId}
-        disabled={connectorsLoading}
       >
-        <option value="">
-          {connectorsLoading ? 'Loading connectors...' : 'Select a connector'}
-        </option>
-        {connectors.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name} ({c.slug})
-          </option>
-        ))}
+        <option value="">Unscoped (visible everywhere)</option>
+        <option value="connector">Connector</option>
+        <option value="agent">Agent</option>
       </Select>
 
       <div className="flex justify-end gap-3 pt-2">

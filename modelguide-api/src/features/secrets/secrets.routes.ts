@@ -19,6 +19,7 @@ import {
   listSecrets,
   updateSecret,
 } from "./secrets.service";
+import type { SecretScope } from "./secrets.service";
 
 const router = createRouter();
 
@@ -34,15 +35,20 @@ const secretResponseSchema = z.object({
     example: "Medusa API Key",
   }),
   secretType: z
-    .enum(["api_key", "oauth_token", "credentials", "platform_api_key"])
+    .enum([
+      "api_key",
+      "oauth_token",
+      "credentials",
+      "platform_api_key",
+      "webhook_secret",
+    ])
     .openapi({
       example: "api_key",
     }),
-  ownerType: z.enum(["connector", "agent"]).openapi({
+  scope: z.enum(["connector", "agent"]).nullable().openapi({
     example: "connector",
-  }),
-  ownerId: z.string().uuid().openapi({
-    example: "550e8400-e29b-41d4-a716-446655440001",
+    description:
+      "Browsing label for vault filtering. NULL = unscoped (appears in all selectors).",
   }),
   createdAt: z.string().openapi({
     example: "2024-01-01T00:00:00.000Z",
@@ -52,27 +58,34 @@ const secretResponseSchema = z.object({
   }),
 });
 
-const createSecretRequestSchema = z.object({
-  name: z.string().min(1).max(255).openapi({
-    example: "Medusa API Key",
-    description: "Human-readable name for the secret",
-  }),
-  value: z.string().min(1).max(10000).openapi({
-    example: "sk_live_xxx...",
-    description: "The secret value to encrypt and store",
-  }),
-  secretType: z
-    .enum(["api_key", "oauth_token", "credentials", "platform_api_key"])
-    .openapi({
-      example: "api_key",
+const createSecretRequestSchema = z
+  .object({
+    name: z.string().min(1).max(255).openapi({
+      example: "Medusa API Key",
+      description: "Human-readable name for the secret",
     }),
-  ownerType: z.enum(["connector", "agent"]).openapi({
-    example: "connector",
-  }),
-  ownerId: z.string().uuid().openapi({
-    example: "550e8400-e29b-41d4-a716-446655440001",
-  }),
-});
+    value: z.string().min(1).max(10000).openapi({
+      example: "sk_live_xxx...",
+      description: "The secret value to encrypt and store",
+    }),
+    secretType: z
+      .enum([
+        "api_key",
+        "oauth_token",
+        "credentials",
+        "platform_api_key",
+        "webhook_secret",
+      ])
+      .openapi({
+        example: "api_key",
+      }),
+    scope: z.enum(["connector", "agent"]).optional().openapi({
+      example: "connector",
+      description:
+        "Optional browsing label. Omit to create an unscoped secret.",
+    }),
+  })
+  .strict();
 
 const updateSecretRequestSchema = z
   .object({
@@ -103,8 +116,7 @@ function formatSecret(secret: {
   id: string;
   name: string;
   secretType: string;
-  ownerType: string;
-  ownerId: string;
+  scope: "connector" | "agent" | null;
   createdAt: Date;
   updatedAt: Date | null;
 }) {
@@ -115,9 +127,9 @@ function formatSecret(secret: {
       | "api_key"
       | "oauth_token"
       | "credentials"
-      | "platform_api_key",
-    ownerType: secret.ownerType as "connector" | "agent",
-    ownerId: secret.ownerId,
+      | "platform_api_key"
+      | "webhook_secret",
+    scope: secret.scope,
     createdAt: secret.createdAt.toISOString(),
     updatedAt: secret.updatedAt?.toISOString() ?? null,
   };
@@ -126,6 +138,17 @@ function formatSecret(secret: {
 // ============================================================================
 // Routes
 // ============================================================================
+
+const listSecretsQuerySchema = paginationSchema.extend({
+  scope: z.enum(["connector", "agent"]).optional().openapi({
+    description:
+      "Filter by scope. Strict match — excludes unscoped secrets unless includeUnscoped=true.",
+  }),
+  includeUnscoped: z.coerce.boolean().optional().openapi({
+    description:
+      "When true and scope is set, also returns unscoped secrets after scoped ones.",
+  }),
+});
 
 // GET /
 const listRoute = createRoute({
@@ -137,7 +160,7 @@ const listRoute = createRoute({
     "Returns paginated list of secrets metadata. Secret values are never returned.",
   security: [{ bearerAuth: [] }],
   request: {
-    query: paginationSchema,
+    query: listSecretsQuerySchema,
   },
   responses: {
     200: {
@@ -168,9 +191,16 @@ router.post(
 
 router.openapi(listRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const query = c.req.valid("query");
+  const { page, pageSize, scope, includeUnscoped } = c.req.valid("query");
 
-  const result = await listSecrets(orgId, query);
+  const result = await listSecrets(
+    orgId,
+    { page, pageSize },
+    {
+      scope: scope as SecretScope | undefined,
+      includeUnscoped,
+    },
+  );
 
   return c.json(
     {
@@ -206,7 +236,6 @@ const createSecretRoute = createRoute({
     },
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
-    404: errorResponse("Referenced owner not found"),
     422: errorResponse("Validation error"),
   },
 });
@@ -215,7 +244,12 @@ router.openapi(createSecretRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const body = c.req.valid("json");
 
-  const secret = await createSecret(orgId, body);
+  const secret = await createSecret(orgId, {
+    name: body.name,
+    value: body.value,
+    secretType: body.secretType,
+    scope: body.scope as SecretScope | undefined,
+  });
 
   return c.json(formatSecret(secret), 201);
 });
