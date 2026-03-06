@@ -37,6 +37,7 @@ export type StepEvaluatorConfig =
       criterion: string;
       rubric?: { pass: string; fail: string };
       model?: string;
+      skipOnFailure?: boolean;
     };
 
 export type EvaluatorType = StepEvaluatorConfig["type"];

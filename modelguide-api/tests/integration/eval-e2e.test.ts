@@ -6,7 +6,7 @@
  *
  * Scenarios:
  *   S1: Happy path — realistic 4-step SOP (skip, tool_called, tool_input, llm_judge)
- *   S2: Required step fails → short-circuit remaining steps
+ *   S2: Required step fails → all steps still evaluated (forensic)
  *   S3: tool_input_contains — wrong arguments
  *   S4: evalConfigId lifecycle — SOP CRUD round-trip + delete guard
  *   S5: Optional fail does not affect verdict
@@ -433,10 +433,10 @@ describe("Scenario 1: happy path — 4-step Order Lookup SOP", () => {
   //
   // Real scenario: customer asks "where's my order?", agent calls
   // add_to_cart instead of get_order (confused tool selection), then
-  // fabricates a tracking number. tool_called fails → short-circuit.
+  // fabricates a tracking number. All steps run for forensic visibility.
   // --------------------------------------------------------------------------
 
-  test("1f. agent called wrong tool instead of get_order → fail + short-circuit", async () => {
+  test("1f. agent called wrong tool instead of get_order → all steps evaluated", async () => {
     const sessionId = await buildSession([
       { role: "user", content: "Where's my order ORD-42?" },
       {
@@ -477,11 +477,13 @@ describe("Scenario 1: happy path — 4-step Order Lookup SOP", () => {
     expect(body.scores[0].evaluatorType).toBe("tool_called");
     expect(body.scores[0].failureClassification).toBe("tool_not_called");
 
-    // Steps 3+4: short-circuited because required step 2 failed
-    expect(body.scores[1].result).toBe("skip");
-    expect(body.scores[1].reasoning).toContain("required step");
+    // Step 3: tool_input_contains → fail (get_order was never called)
+    expect(body.scores[1].result).toBe("fail");
+    expect(body.scores[1].evaluatorType).toBe("tool_input_contains");
+
+    // Step 4: llm_judge → skip (no API key configured)
     expect(body.scores[2].result).toBe("skip");
-    expect(body.scores[2].reasoning).toContain("required step");
+    expect(body.scores[2].evaluatorType).toBe("llm_judge");
   });
 
   // --------------------------------------------------------------------------
@@ -556,14 +558,14 @@ describe("Scenario 1: happy path — 4-step Order Lookup SOP", () => {
 });
 
 // ============================================================================
-// Scenario 2: Required step fails → short-circuit
+// Scenario 2: Required step fails — all steps still evaluated
 //
 // SOP: step 1 (required, tool_called get_order), step 2 (required, tool_input)
 // Session: agent calls add_to_cart instead of get_order
-// Expected: step 1 fails → step 2 skipped → passed = false
+// Expected: step 1 fails, step 2 also evaluated → passed = false
 // ============================================================================
 
-describe("Scenario 2: required fail → short-circuit", () => {
+describe("Scenario 2: required fail — forensic evaluation", () => {
   let sopId: string;
 
   test("2a. create configs and SOP", async () => {
@@ -614,7 +616,7 @@ describe("Scenario 2: required fail → short-circuit", () => {
     cleanupSopIds.push(sopId);
   });
 
-  test("2b. agent calls wrong tool → required step fails, rest skipped", async () => {
+  test("2b. agent calls wrong tool → both steps evaluated for forensic visibility", async () => {
     const sessionId = await buildSession([
       { role: "user", content: "Add this to my cart" },
       {
@@ -651,9 +653,10 @@ describe("Scenario 2: required fail → short-circuit", () => {
     expect(body.scores[0].failureClassification).toBe("tool_not_called");
     expect(body.scores[0].required).toBe(true);
 
-    // Step 2: short-circuited → skip
-    expect(body.scores[1].result).toBe("skip");
-    expect(body.scores[1].reasoning).toContain("required step");
+    // Step 2: tool_input_contains → fail (get_order was never called)
+    expect(body.scores[1].result).toBe("fail");
+    expect(body.scores[1].evaluatorType).toBe("tool_input_contains");
+    expect(body.scores[1].required).toBe(true);
   });
 });
 

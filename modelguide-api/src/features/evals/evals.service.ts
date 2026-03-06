@@ -19,13 +19,14 @@ import {
 } from "@lib/pagination";
 import { and, asc, count, desc, eq } from "drizzle-orm";
 
+import { parseStepEvaluatorConfig } from "../eval-configs/eval-configs.schemas";
 import { compileSopToEvalPlan } from "./evals.compile";
+import { elapsedMs } from "./evals.time";
 import type {
   EvalPlan,
   EvalScoreResult,
   EvalSourceType,
   EvalStatus,
-  StepEvaluatorConfig,
 } from "./evals.types";
 import { getEvaluator } from "./evaluators";
 import type {
@@ -61,7 +62,12 @@ type ScoreInsert = typeof evalRunScores.$inferInsert;
 // Evaluator execution
 // ============================================================================
 
-/** Execute evaluators for all plan steps, returning score rows. */
+/** Execute evaluators for all plan steps, returning score rows.
+ *
+ * All steps are always evaluated — no short-circuit on required step failure.
+ * This gives forensic visibility into what else went wrong, which is critical
+ * for debugging and improving SOPs.
+ */
 async function executeEvaluators(
   plan: EvalPlan,
   messages: SessionMessage[],
@@ -70,29 +76,12 @@ async function executeEvaluators(
 ): Promise<{ scoreRows: ScoreInsert[]; metadata: Record<string, unknown> }> {
   const toolMsgs = messages.filter((m) => m.role === "tool");
   const scoreRows: ScoreInsert[] = [];
-  let shortCircuited = false;
-  let shortCircuitReason = "";
 
   for (const step of plan.steps) {
     const scoreName = buildScoreName(step.order, step.instruction);
 
     // No eval config → skip (no score row, tracked in coverage warnings)
     if (!step.evaluator) {
-      continue;
-    }
-
-    if (shortCircuited) {
-      scoreRows.push({
-        evalRunId,
-        organizationId: orgId,
-        evalConfigId: step.evaluator.configId,
-        name: scoreName,
-        scoreOrder: step.order,
-        required: step.required,
-        evaluatorType: step.evaluator.evaluatorType,
-        result: "skip",
-        reasoning: shortCircuitReason,
-      });
       continue;
     }
 
@@ -103,15 +92,32 @@ async function executeEvaluators(
       resolvedToolNames,
     };
 
+    // Parse + validate config against the evaluator's runtime shape before dispatch.
+    const parsedConfig = parseStepEvaluatorConfig(
+      step.evaluator.evaluatorType,
+      step.evaluator.config,
+    );
+    if (!parsedConfig.success) {
+      const details = parsedConfig.issues.map((i) => i.message).join("; ");
+      scoreRows.push({
+        evalRunId,
+        organizationId: orgId,
+        evalConfigId: step.evaluator.configId,
+        name: scoreName,
+        scoreOrder: step.order,
+        required: step.required,
+        evaluatorType: step.evaluator.evaluatorType,
+        result: "error" as EvalScoreResult,
+        reasoning: `Invalid eval config: ${details}`,
+      });
+      continue;
+    }
+
     const evaluator = getEvaluator(step.evaluator.evaluatorType);
-    const evalConfig: StepEvaluatorConfig = {
-      type: step.evaluator.evaluatorType,
-      ...step.evaluator.config,
-    } as StepEvaluatorConfig;
 
     let evalResult: EvaluatorResult;
     try {
-      evalResult = await evaluator.evaluate(ctx, evalConfig);
+      evalResult = await evaluator.evaluate(ctx, parsedConfig.config);
     } catch (err) {
       evalResult = {
         result: "error",
@@ -134,15 +140,6 @@ async function executeEvaluators(
       actual: evalResult.actual ?? null,
       durationMs: evalResult.durationMs ?? null,
     });
-
-    if (
-      step.required &&
-      (evalResult.result === "fail" || evalResult.result === "error")
-    ) {
-      shortCircuited = true;
-      const verb = evalResult.result === "fail" ? "failed" : "errored";
-      shortCircuitReason = `Skipped: required step "${step.stepId}" ${verb}`;
-    }
   }
 
   // Coverage warnings
@@ -384,7 +381,7 @@ export async function runEvaluation(
       (s) => s.required && (s.result === "fail" || s.result === "error"),
     );
     const passed = failedOrErroredRequired.length === 0;
-    const durationMs = Math.round(performance.now() - startTime);
+    const durationMs = elapsedMs(startTime);
 
     // 5. Persist scores + final run state (short transaction)
     const { updatedRun, scores, sourceName } = await persistResults({
@@ -413,7 +410,7 @@ export async function runEvaluation(
 
     return { ...updatedRun, scores };
   } catch (err) {
-    const durationMs = Math.round(performance.now() - startTime);
+    const durationMs = elapsedMs(startTime);
     const message =
       err instanceof Error ? err.message : "Unknown evaluation error";
 

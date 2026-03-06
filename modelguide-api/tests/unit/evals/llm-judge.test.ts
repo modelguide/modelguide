@@ -152,7 +152,7 @@ describe("llm_judge evaluator", () => {
     expect(result.actual).toEqual({ verdict: "fail" });
   });
 
-  test("returns error on non-200 HTTP response", async () => {
+  test("returns error on transient HTTP errors (429) by default", async () => {
     overrideEnv("EVAL_LLM_API_KEY", "test-key");
     overrideEnv("EVAL_LLM_BASE_URL", "http://localhost:9999");
 
@@ -163,6 +163,39 @@ describe("llm_judge evaluator", () => {
     const result = await llmJudgeEvaluator.evaluate(makeCtx(), config);
     expect(result.result).toBe("error");
     expect(result.reasoning).toContain("429");
+    expect(result.durationMs).toBeDefined();
+  });
+
+  test("returns skip on transient HTTP errors (503) when skipOnFailure=true", async () => {
+    overrideEnv("EVAL_LLM_API_KEY", "test-key");
+    overrideEnv("EVAL_LLM_BASE_URL", "http://localhost:9999");
+
+    const skipConfig: StepEvaluatorConfig = {
+      ...config,
+      skipOnFailure: true,
+    };
+
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response("Service unavailable", { status: 503 })),
+    ) as typeof fetch;
+
+    const result = await llmJudgeEvaluator.evaluate(makeCtx(), skipConfig);
+    expect(result.result).toBe("skip");
+    expect(result.reasoning).toContain("skipped by policy");
+    expect(result.reasoning).toContain("503");
+  });
+
+  test("returns error on permanent HTTP errors (401)", async () => {
+    overrideEnv("EVAL_LLM_API_KEY", "test-key");
+    overrideEnv("EVAL_LLM_BASE_URL", "http://localhost:9999");
+
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response("Unauthorized", { status: 401 })),
+    ) as typeof fetch;
+
+    const result = await llmJudgeEvaluator.evaluate(makeCtx(), config);
+    expect(result.result).toBe("error");
+    expect(result.reasoning).toContain("401");
     expect(result.durationMs).toBeDefined();
   });
 
@@ -234,7 +267,7 @@ describe("llm_judge evaluator", () => {
     expect(result.reasoning).toContain('invalid verdict "maybe"');
   });
 
-  test("returns error on fetch timeout (AbortError)", async () => {
+  test("returns error on fetch timeout (AbortError) by default", async () => {
     overrideEnv("EVAL_LLM_API_KEY", "test-key");
     overrideEnv("EVAL_LLM_BASE_URL", "http://localhost:9999");
 
@@ -249,7 +282,27 @@ describe("llm_judge evaluator", () => {
     expect(result.durationMs).toBeDefined();
   });
 
-  test("returns error on generic fetch failure", async () => {
+  test("returns skip on timeout when skipOnFailure=true", async () => {
+    overrideEnv("EVAL_LLM_API_KEY", "test-key");
+    overrideEnv("EVAL_LLM_BASE_URL", "http://localhost:9999");
+
+    const skipConfig: StepEvaluatorConfig = {
+      ...config,
+      skipOnFailure: true,
+    };
+
+    globalThis.fetch = mock(() => {
+      const err = new DOMException("The operation was aborted", "AbortError");
+      return Promise.reject(err);
+    }) as typeof fetch;
+
+    const result = await llmJudgeEvaluator.evaluate(makeCtx(), skipConfig);
+    expect(result.result).toBe("skip");
+    expect(result.reasoning).toContain("skipped by policy");
+    expect(result.reasoning).toContain("timed out");
+  });
+
+  test("returns error on generic fetch failure by default", async () => {
     overrideEnv("EVAL_LLM_API_KEY", "test-key");
     overrideEnv("EVAL_LLM_BASE_URL", "http://localhost:9999");
 
@@ -259,6 +312,25 @@ describe("llm_judge evaluator", () => {
 
     const result = await llmJudgeEvaluator.evaluate(makeCtx(), config);
     expect(result.result).toBe("error");
+    expect(result.reasoning).toContain("Connection refused");
+  });
+
+  test("returns skip on generic fetch failure when skipOnFailure=true", async () => {
+    overrideEnv("EVAL_LLM_API_KEY", "test-key");
+    overrideEnv("EVAL_LLM_BASE_URL", "http://localhost:9999");
+
+    const skipConfig: StepEvaluatorConfig = {
+      ...config,
+      skipOnFailure: true,
+    };
+
+    globalThis.fetch = mock(() =>
+      Promise.reject(new Error("Connection refused")),
+    ) as typeof fetch;
+
+    const result = await llmJudgeEvaluator.evaluate(makeCtx(), skipConfig);
+    expect(result.result).toBe("skip");
+    expect(result.reasoning).toContain("skipped by policy");
     expect(result.reasoning).toContain("Connection refused");
   });
 

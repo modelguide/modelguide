@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import type { EvaluatorType, StepEvaluatorConfig } from "../evals/evals.types";
 
 // ============================================================================
 // Shared sub-schemas
@@ -54,6 +55,7 @@ const llmJudgeConfigSchema = z
       })
       .optional(),
     model: z.string().max(100).optional(),
+    skipOnFailure: z.boolean().optional(),
   })
   .strict();
 
@@ -87,6 +89,44 @@ export function validateEvalConfig(
   }
   const result = schema.safeParse(config);
   return result.success ? [] : result.error.issues;
+}
+
+/** Parse JSONB config into the typed evaluator union used at runtime. */
+export function parseStepEvaluatorConfig(
+  evaluatorType: EvaluatorType,
+  config: Record<string, unknown>,
+):
+  | { success: true; config: StepEvaluatorConfig }
+  | { success: false; issues: z.ZodIssue[] } {
+  switch (evaluatorType) {
+    case "tool_called": {
+      const result = connectorToolConfigSchema.safeParse(config);
+      return result.success
+        ? { success: true, config: { type: "tool_called", ...result.data } }
+        : { success: false, issues: result.error.issues };
+    }
+    case "tool_input_contains": {
+      const result = toolInputContainsConfigSchema.safeParse(config);
+      return result.success
+        ? {
+            success: true,
+            config: { type: "tool_input_contains", ...result.data },
+          }
+        : { success: false, issues: result.error.issues };
+    }
+    case "no_tool_called": {
+      const result = connectorToolConfigSchema.safeParse(config);
+      return result.success
+        ? { success: true, config: { type: "no_tool_called", ...result.data } }
+        : { success: false, issues: result.error.issues };
+    }
+    case "llm_judge": {
+      const result = llmJudgeConfigSchema.safeParse(config);
+      return result.success
+        ? { success: true, config: { type: "llm_judge", ...result.data } }
+        : { success: false, issues: result.error.issues };
+    }
+  }
 }
 
 // ============================================================================

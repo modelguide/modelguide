@@ -37,59 +37,75 @@ const runIdParams = z.object({
 // ============================================================================
 
 type ServiceRunDetail = Awaited<ReturnType<typeof getEvalRunById>>;
-function formatRunDetail(r: ServiceRunDetail) {
+type ServiceRunSummary = Awaited<
+  ReturnType<typeof listEvalRuns>
+>["data"][number];
+
+type RunStatus = "pending" | "running" | "completed" | "failed";
+
+function formatRunCore(
+  r: Pick<
+    ServiceRunDetail,
+    | "id"
+    | "sessionId"
+    | "sourceType"
+    | "sourceId"
+    | "status"
+    | "passed"
+    | "durationMs"
+    | "triggeredBy"
+    | "metadata"
+    | "createdAt"
+    | "updatedAt"
+    | "completedAt"
+  >,
+) {
   return {
     id: r.id,
     sessionId: r.sessionId,
     sourceType: r.sourceType,
     sourceId: r.sourceId,
-    sourceName: r.sourceName ?? null,
-    status: r.status as "pending" | "running" | "completed" | "failed",
+    status: r.status as RunStatus,
     passed: r.passed,
     durationMs: r.durationMs,
     triggeredBy: r.triggeredBy,
-    externalRunId: r.externalRunId,
-    externalRunUrl: r.externalRunUrl,
     metadata: r.metadata as Record<string, unknown> | null,
-    scores: r.scores.map((s) => ({
-      id: s.id,
-      evalConfigId: s.evalConfigId,
-      name: s.name,
-      scoreOrder: s.scoreOrder,
-      required: s.required,
-      evaluatorType: s.evaluatorType,
-      result: s.result as "pass" | "fail" | "skip" | "error",
-      reasoning: s.reasoning,
-      failureClassification: s.failureClassification,
-      expected: s.expected as Record<string, unknown> | null,
-      actual: s.actual as Record<string, unknown> | null,
-      durationMs: s.durationMs,
-      createdAt: s.createdAt.toISOString(),
-    })),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
     completedAt: r.completedAt?.toISOString() ?? null,
   };
 }
 
-type ServiceRunSummary = Awaited<
-  ReturnType<typeof listEvalRuns>
->["data"][number];
-function formatRunSummary(r: ServiceRunSummary) {
+function formatScore(s: ServiceRunDetail["scores"][number]) {
   return {
-    id: r.id,
-    sessionId: r.sessionId,
-    sourceType: r.sourceType,
-    sourceId: r.sourceId,
-    status: r.status as "pending" | "running" | "completed" | "failed",
-    passed: r.passed,
-    durationMs: r.durationMs,
-    triggeredBy: r.triggeredBy,
-    metadata: r.metadata as Record<string, unknown> | null,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-    completedAt: r.completedAt?.toISOString() ?? null,
+    id: s.id,
+    evalConfigId: s.evalConfigId,
+    name: s.name,
+    scoreOrder: s.scoreOrder,
+    required: s.required,
+    evaluatorType: s.evaluatorType,
+    result: s.result as "pass" | "fail" | "skip" | "error",
+    reasoning: s.reasoning,
+    failureClassification: s.failureClassification,
+    expected: s.expected as Record<string, unknown> | null,
+    actual: s.actual as Record<string, unknown> | null,
+    durationMs: s.durationMs,
+    createdAt: s.createdAt.toISOString(),
   };
+}
+
+function formatRunDetail(r: ServiceRunDetail) {
+  return {
+    ...formatRunCore(r),
+    sourceName: r.sourceName ?? null,
+    externalRunId: r.externalRunId,
+    externalRunUrl: r.externalRunUrl,
+    scores: r.scores.map(formatScore),
+  };
+}
+
+function formatRunSummary(r: ServiceRunSummary) {
+  return formatRunCore(r);
 }
 
 // ============================================================================

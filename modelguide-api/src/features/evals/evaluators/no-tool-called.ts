@@ -2,6 +2,7 @@
  * no_tool_called evaluator — verifies a specific tool was NOT called (guardrail-style).
  */
 
+import { elapsedMs } from "../evals.time";
 import type { StepEvaluatorConfig } from "../evals.types";
 import type {
   EvalContext,
@@ -30,7 +31,7 @@ export const noToolCalledEvaluator: Evaluator = {
       return {
         result: "error",
         reasoning: `Could not resolve connector tool ID "${config.connectorToolId}" to a runtime tool name`,
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -42,7 +43,7 @@ export const noToolCalledEvaluator: Evaluator = {
         reasoning: `Tool "${resolvedName}" was correctly not called during the session`,
         expected: { toolNotCalled: resolvedName },
         actual: { toolNotCalled: true },
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -52,7 +53,7 @@ export const noToolCalledEvaluator: Evaluator = {
       failureClassification: "policy_violation",
       expected: { toolNotCalled: resolvedName },
       actual: { toolNotCalled: false, toolName: resolvedName },
-      durationMs: Math.round(performance.now() - start),
+      durationMs: elapsedMs(start),
     };
   },
 };

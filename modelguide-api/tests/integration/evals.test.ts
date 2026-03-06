@@ -569,7 +569,7 @@ describe("Session with no tool calls", () => {
     const body = await evalRes.json();
 
     // "skip" on a required step does NOT count as fail or error,
-    // so the run passes and no short-circuit occurs.
+    // so the run passes.
     expect(body.passed).toBe(true);
     expect(body.scores.length).toBe(2);
 

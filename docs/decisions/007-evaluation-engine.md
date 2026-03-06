@@ -35,12 +35,13 @@ All evaluators are pure functions: `(EvalContext, config) -> EvaluatorResult`. N
 
 Eval configs reference tools by `connectorToolId` (UUID FK to `connector_tools`). The compilation layer resolves each to the runtime tool name via `connector_tools -> connectors -> {connectorSlug}_{toolSlug}`. This is the same name format stored in `session_messages.toolName`. Unresolved IDs (deleted tools) fall back to the raw UUID — evaluators handle gracefully.
 
-### Binary scoring with short-circuit
+### Binary scoring with full-step execution
 
 - **Per-step:** pass / fail / skip / error
 - **Per-run:** `passed = true` when zero required steps failed or errored
-- **Short-circuit:** If a required step fails or errors, remaining steps with eval configs are marked `skip` with reasoning. Optional steps without configs are excluded from scoring and appear as coverage warnings.
+- **Execution model:** All configured steps are evaluated even after a required step fails/errs, to preserve forensic visibility across the whole SOP.
 - **Skip semantics:** Tool evaluators return `skip` (not fail) when no tool messages exist (verbal resolution). Skips don't affect the verdict.
+- **LLM transient failures:** `llm_judge` treats transient transport failures as `error` by default; set `skipOnFailure: true` in the eval config to downgrade transient failures to `skip`.
 
 ### Eval runs are immutable (no DELETE API)
 

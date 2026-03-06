@@ -2,6 +2,7 @@
  * tool_input_contains evaluator — verifies a tool was called with expected input fields.
  */
 
+import { elapsedMs } from "../evals.time";
 import type { Assertion, StepEvaluatorConfig } from "../evals.types";
 import { runAssertion } from "./assertions";
 import type {
@@ -31,7 +32,7 @@ export const toolInputEvaluator: Evaluator = {
       return {
         result: "error",
         reasoning: `Could not resolve connector tool ID "${config.connectorToolId}" to a runtime tool name`,
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -42,7 +43,7 @@ export const toolInputEvaluator: Evaluator = {
           "No tool calls in session — agent may have resolved without tools",
         expected: { toolName: resolvedName },
         actual: { toolCallCount: 0 },
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -66,7 +67,7 @@ export const toolInputEvaluator: Evaluator = {
         failureClassification: "tool_not_called",
         expected: { toolName: resolvedName },
         actual: { calledTools },
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -97,7 +98,7 @@ export const toolInputEvaluator: Evaluator = {
         reasoning: `Assertion config error on tool "${resolvedName}": ${errors.join("; ")}`,
         expected: expectedFields,
         actual: actualFields,
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -107,7 +108,7 @@ export const toolInputEvaluator: Evaluator = {
         reasoning: `Tool "${resolvedName}" was called with all expected input fields: ${Object.keys(assertions).join(", ")}`,
         expected: expectedFields,
         actual: actualFields,
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -117,7 +118,7 @@ export const toolInputEvaluator: Evaluator = {
       failureClassification: "wrong_arguments",
       expected: expectedFields,
       actual: actualFields,
-      durationMs: Math.round(performance.now() - start),
+      durationMs: elapsedMs(start),
     };
   },
 };

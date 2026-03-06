@@ -2,6 +2,7 @@
  * tool_called evaluator — verifies a specific tool was called during the session.
  */
 
+import { elapsedMs } from "../evals.time";
 import type { StepEvaluatorConfig } from "../evals.types";
 import type {
   EvalContext,
@@ -30,7 +31,7 @@ export const toolCalledEvaluator: Evaluator = {
       return {
         result: "error",
         reasoning: `Could not resolve connector tool ID "${config.connectorToolId}" to a runtime tool name`,
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -42,7 +43,7 @@ export const toolCalledEvaluator: Evaluator = {
           "No tool calls in session — agent may have resolved without tools",
         expected: { toolName: resolvedName },
         actual: { toolCallCount: 0 },
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -54,7 +55,7 @@ export const toolCalledEvaluator: Evaluator = {
         reasoning: `Tool "${resolvedName}" was called during the session`,
         expected: { toolName: resolvedName },
         actual: { toolName: resolvedName },
-        durationMs: Math.round(performance.now() - start),
+        durationMs: elapsedMs(start),
       };
     }
 
@@ -72,7 +73,7 @@ export const toolCalledEvaluator: Evaluator = {
       failureClassification: "tool_not_called",
       expected: { toolName: resolvedName },
       actual: { calledTools },
-      durationMs: Math.round(performance.now() - start),
+      durationMs: elapsedMs(start),
     };
   },
 };

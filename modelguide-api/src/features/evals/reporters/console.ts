@@ -6,14 +6,13 @@
 import { getLogger } from "@lib/logger";
 import type { EvalReporter, EvalRunReport } from "./reporter.types";
 
-const log = getLogger();
-
 export const consoleReporter: EvalReporter = {
   name: "console",
 
   async report(
     run: EvalRunReport,
   ): Promise<{ externalRunId?: string; externalRunUrl?: string }> {
+    const log = getLogger();
     const summary = {
       runId: run.runId,
       sessionId: run.sessionId,

@@ -28,14 +28,84 @@ import type { EvalPlan, EvalPlanStep, ResolvedEvaluator } from "./evals.types";
 export function extractConnectorToolIds(
   config: Record<string, unknown>,
 ): string[] {
-  const ids: string[] = [];
-  if (
-    typeof config.connectorToolId === "string" &&
+  return typeof config.connectorToolId === "string" &&
     config.connectorToolId.length > 0
-  ) {
-    ids.push(config.connectorToolId);
+    ? [config.connectorToolId]
+    : [];
+}
+
+// ============================================================================
+// Plan step builder
+// ============================================================================
+
+type StepRow = {
+  stepId: string;
+  order: number;
+  instruction: string;
+  required: boolean;
+  evalConfigId: string | null;
+};
+
+type EvalConfigRow = typeof evalConfigs.$inferSelect;
+
+/** Build a single plan step from a SOP step row, resolving eval config and tool names. */
+function buildPlanStep(
+  row: StepRow,
+  evalConfigMap: Map<string, EvalConfigRow>,
+  toolNameMap: Map<string, string>,
+): EvalPlanStep {
+  if (!row.evalConfigId) {
+    return {
+      stepId: row.stepId,
+      order: row.order,
+      instruction: row.instruction,
+      required: row.required,
+      evaluator: null,
+      toolNameMap: {},
+    };
   }
-  return ids;
+
+  const cfg = evalConfigMap.get(row.evalConfigId);
+  if (!cfg) {
+    return {
+      stepId: row.stepId,
+      order: row.order,
+      instruction: row.instruction,
+      required: row.required,
+      evaluator: null,
+      toolNameMap: {},
+    };
+  }
+
+  const evaluator: ResolvedEvaluator = {
+    configId: cfg.id,
+    evaluatorType: cfg.evaluatorType as ResolvedEvaluator["evaluatorType"],
+    config: cfg.config as Record<string, unknown>,
+  };
+
+  // Build per-step tool name map from the eval config's connector tool IDs
+  const stepToolNameMap: Record<string, string> = {};
+  const configToolIds = extractConnectorToolIds(
+    cfg.config as Record<string, unknown>,
+  );
+  for (const toolId of configToolIds) {
+    const resolved = toolNameMap.get(toolId);
+    if (resolved) {
+      stepToolNameMap[toolId] = resolved;
+    } else {
+      // Unresolved — evaluator handles gracefully
+      stepToolNameMap[toolId] = toolId;
+    }
+  }
+
+  return {
+    stepId: row.stepId,
+    order: row.order,
+    instruction: row.instruction,
+    required: row.required,
+    evaluator,
+    toolNameMap: stepToolNameMap,
+  };
 }
 
 // ============================================================================
@@ -131,60 +201,9 @@ export async function compileSopToEvalPlan(
     }
 
     // 5. Build plan steps
-    const steps: EvalPlanStep[] = stepRows.map((row) => {
-      if (!row.evalConfigId) {
-        return {
-          stepId: row.stepId,
-          order: row.order,
-          instruction: row.instruction,
-          required: row.required,
-          evaluator: null,
-          toolNameMap: {},
-        };
-      }
-
-      const cfg = evalConfigMap.get(row.evalConfigId);
-      if (!cfg) {
-        return {
-          stepId: row.stepId,
-          order: row.order,
-          instruction: row.instruction,
-          required: row.required,
-          evaluator: null,
-          toolNameMap: {},
-        };
-      }
-
-      const evaluator: ResolvedEvaluator = {
-        configId: cfg.id,
-        evaluatorType: cfg.evaluatorType as ResolvedEvaluator["evaluatorType"],
-        config: cfg.config as Record<string, unknown>,
-      };
-
-      // Build per-step tool name map from the eval config's connector tool IDs
-      const stepToolNameMap: Record<string, string> = {};
-      const configToolIds = extractConnectorToolIds(
-        cfg.config as Record<string, unknown>,
-      );
-      for (const toolId of configToolIds) {
-        const resolved = toolNameMap.get(toolId);
-        if (resolved) {
-          stepToolNameMap[toolId] = resolved;
-        } else {
-          // Unresolved — evaluator handles gracefully
-          stepToolNameMap[toolId] = toolId;
-        }
-      }
-
-      return {
-        stepId: row.stepId,
-        order: row.order,
-        instruction: row.instruction,
-        required: row.required,
-        evaluator,
-        toolNameMap: stepToolNameMap,
-      };
-    });
+    const steps: EvalPlanStep[] = stepRows.map((row) =>
+      buildPlanStep(row, evalConfigMap, toolNameMap),
+    );
 
     return { sessionId, sopId, steps };
   });
