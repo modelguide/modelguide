@@ -1,5 +1,6 @@
 """ModelGuide REST client (sessions) and MCP client (tool execution)."""
 
+import json
 import logging
 
 import httpx
@@ -95,7 +96,12 @@ async def complete_session(
 
 
 async def call_tool(tool_name: str, args: dict, session_id: str) -> dict:
-    """Execute a tool via ModelGuide's MCP endpoint."""
+    """Execute a tool via ModelGuide's MCP endpoint.
+
+    NOTE: Each call opens a new MCP connection and runs initialize(). For
+    production use with many tool calls per session, consider holding a
+    persistent MCP ClientSession for the lifetime of the voice call.
+    """
     args_with_session = {**args, "session_id": session_id}
     headers = {"Authorization": f"Bearer {MODELGUIDE_API_KEY}"}
 
@@ -107,8 +113,6 @@ async def call_tool(tool_name: str, args: dict, session_id: str) -> dict:
             if result.content and len(result.content) > 0:
                 block = result.content[0]
                 if hasattr(block, "text"):
-                    import json
-
                     try:
                         return json.loads(block.text)
                     except (json.JSONDecodeError, TypeError):

@@ -1,7 +1,6 @@
 """Environment variable loading and validation."""
 
 import os
-import sys
 
 from dotenv import load_dotenv
 
@@ -38,4 +37,6 @@ CARTESIA_API_KEY: str = _env["CARTESIA_API_KEY"]
 MODELGUIDE_API_URL: str = _env["MODELGUIDE_API_URL"].rstrip("/")
 MODELGUIDE_API_KEY: str = _env["MODELGUIDE_API_KEY"]
 MODELGUIDE_AGENT_ID: str = _env["MODELGUIDE_AGENT_ID"]
+# Default: Cartesia "Barbershop Man" neutral US English voice
 CARTESIA_VOICE_ID: str = os.getenv("CARTESIA_VOICE_ID", "79a125e8-cd45-4c13-8a67-188112f4dd22")
+USER_EMAIL: str = os.getenv("USER_EMAIL", "voice-caller")
