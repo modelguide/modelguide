@@ -771,3 +771,76 @@ describe("RLS isolation", () => {
     expect(response.status).toBe(404);
   });
 });
+
+// ============================================================================
+// CRUD audit — strict validation (#64)
+// ============================================================================
+
+describe("Strict PATCH schema", () => {
+  test("rejects unknown fields with 422", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}`,
+      {
+        method: "PATCH",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ name: "Valid Name", bogusField: "nope" }),
+      },
+    );
+
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.error?.formErrors || body.error?.fieldErrors).toBeDefined();
+  });
+});
+
+describe("Connector config validation on update", () => {
+  let configTestConnectorId: string;
+
+  beforeAll(async () => {
+    const createRes = await request("/api/connectors", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        connectorCatalogId: s.medusaCatalogId,
+        name: "Config Validation Test Connector",
+        slug: "config-validation-test",
+      }),
+    });
+    const created = await createRes.json();
+    configTestConnectorId = created.id;
+    createdConnectorIds.push(created.id);
+  });
+
+  test("update with non-existent secret ref returns 400 VALIDATION_ERROR", async () => {
+    const fakeSecretId = "00000000-0000-0000-0000-000000000099";
+
+    const response = await request(`/api/connectors/${configTestConnectorId}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        config: {
+          baseUrl: "https://example.com",
+          secretApiKey: fakeSecretId,
+        },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.code).toBe("VALIDATION_ERROR");
+  });
+
+  test("update with valid config (no secret refs) succeeds", async () => {
+    const response = await request(`/api/connectors/${configTestConnectorId}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        config: {
+          baseUrl: "https://medusa.example.com",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+  });
+});

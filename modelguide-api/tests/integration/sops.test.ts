@@ -1092,3 +1092,21 @@ describe("Fork with overrides and agents", () => {
     expect(res.status).toBe(409);
   });
 });
+
+// ============================================================================
+// CRUD audit — strict validation (#64)
+// ============================================================================
+
+describe("Strict PATCH schema", () => {
+  test("rejects unknown fields with 422", async () => {
+    const sopId = createdSopIds[0];
+
+    const response = await request(`/api/sops/${sopId}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Updated", phantom: "field" }),
+    });
+
+    expect(response.status).toBe(422);
+  });
+});
