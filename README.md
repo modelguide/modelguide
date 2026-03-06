@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<h3 align="center">Your agent works. Now make it real.</h3>
+<h3 align="center">Ship support & sales agents with confidence.</h3>
 
 <p align="center">
   Open-source production harness for AI agents — voice, chat, email, any channel.<br/>
