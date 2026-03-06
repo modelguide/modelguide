@@ -77,6 +77,7 @@ export const sopStepSchema = z.object({
     .max(2000, "Instruction must be 2000 characters or less"),
   required: z.boolean(),
   tool: sopStepToolSchema.optional(),
+  evalConfigId: z.string().uuid().nullable().optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -89,6 +90,7 @@ const sopStepWriteSchema = z.object({
     .max(2000, "Instruction must be 2000 characters or less"),
   required: z.boolean(),
   tool: sopStepToolWriteSchema.optional(),
+  evalConfigId: z.string().uuid().nullable().optional(),
   notes: z.string().max(2000).optional(),
 });
 

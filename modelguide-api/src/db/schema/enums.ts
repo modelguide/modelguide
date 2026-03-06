@@ -103,3 +103,42 @@ export const sopStatusEnum = pgEnum("sop_status", [
   "active",
   "archived",
 ]);
+
+// ============================================================================
+// Evaluation engine enums
+// ============================================================================
+
+/**
+ * Evaluator types — determines which evaluator function runs
+ */
+export const evaluatorTypeEnum = pgEnum("evaluator_type", [
+  "tool_called",
+  "tool_input_contains",
+  "no_tool_called",
+  "llm_judge",
+]);
+
+/**
+ * Eval source types — what produced the eval (SOP, guardrail, etc.)
+ */
+export const evalSourceTypeEnum = pgEnum("eval_source_type", ["sop"]);
+
+/**
+ * Eval run status
+ */
+export const evalStatusEnum = pgEnum("eval_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+]);
+
+/**
+ * Eval score result
+ */
+export const evalScoreResultEnum = pgEnum("eval_score_result", [
+  "pass",
+  "fail",
+  "skip",
+  "error",
+]);

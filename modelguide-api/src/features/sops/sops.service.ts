@@ -9,6 +9,7 @@ import {
   agents,
   connectorTools,
   connectors,
+  evalConfigs,
   sopSteps,
   sopTemplates,
   sops,
@@ -79,6 +80,7 @@ async function insertSteps(
       instruction: s.instruction,
       required: s.required,
       connectorToolId: s.tool?.connectorToolId ?? null,
+      evalConfigId: s.evalConfigId ?? null,
       notes: s.notes ?? null,
     })),
   );
@@ -93,6 +95,7 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
       instruction: sopSteps.instruction,
       required: sopSteps.required,
       connectorToolId: sopSteps.connectorToolId,
+      evalConfigId: sopSteps.evalConfigId,
       notes: sopSteps.notes,
       toolSlug: connectorTools.slug,
       connectorSlug: connectors.slug,
@@ -121,6 +124,7 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
             : undefined,
       };
     }
+    if (r.evalConfigId) step.evalConfigId = r.evalConfigId;
     if (r.notes) step.notes = r.notes;
     return step;
   });
@@ -138,30 +142,52 @@ async function loadSteps(tx: Transaction, sopId: string): Promise<SopStep[]> {
  */
 async function validateSteps(tx: Transaction, steps: SopStep[]): Promise<void> {
   const stepsWithTools = steps.filter((s) => s.tool?.connectorToolId);
-  if (stepsWithTools.length === 0) return;
+  if (stepsWithTools.length > 0) {
+    const toolIds = [
+      ...new Set(stepsWithTools.map((s) => s.tool!.connectorToolId!)),
+    ];
 
-  const toolIds = [
-    ...new Set(stepsWithTools.map((s) => s.tool!.connectorToolId!)),
-  ];
-
-  // Look up connector tools within org scope (tx already has org context via RLS)
-  const orgTools = await tx
-    .select({ id: connectorTools.id })
-    .from(connectorTools)
-    .where(
-      and(
-        inArray(connectorTools.id, toolIds),
-        isNull(connectorTools.deletedAt),
-      ),
-    );
-
-  const foundIds = new Set(orgTools.map((t) => t.id));
-
-  for (const tid of toolIds) {
-    if (!foundIds.has(tid)) {
-      throw Errors.sopInvalidConnectorRef(
-        `Connector tool not found in this organization: ${tid}`,
+    // Look up connector tools within org scope (tx already has org context via RLS)
+    const orgTools = await tx
+      .select({ id: connectorTools.id })
+      .from(connectorTools)
+      .where(
+        and(
+          inArray(connectorTools.id, toolIds),
+          isNull(connectorTools.deletedAt),
+        ),
       );
+
+    const foundIds = new Set(orgTools.map((t) => t.id));
+
+    for (const tid of toolIds) {
+      if (!foundIds.has(tid)) {
+        throw Errors.sopInvalidConnectorRef(
+          `Connector tool not found in this organization: ${tid}`,
+        );
+      }
+    }
+  }
+
+  const stepsWithEvalConfigs = steps.filter((s) => s.evalConfigId);
+  if (stepsWithEvalConfigs.length > 0) {
+    const evalConfigIds = [
+      ...new Set(stepsWithEvalConfigs.map((s) => s.evalConfigId!)),
+    ];
+
+    // RLS on eval_configs guarantees org ownership in this transaction.
+    const configs = await tx
+      .select({ id: evalConfigs.id })
+      .from(evalConfigs)
+      .where(inArray(evalConfigs.id, evalConfigIds));
+
+    const foundConfigIds = new Set(configs.map((cfg) => cfg.id));
+    for (const evalConfigId of evalConfigIds) {
+      if (!foundConfigIds.has(evalConfigId)) {
+        throw Errors.validationError(
+          `Eval config not found in this organization: ${evalConfigId}`,
+        );
+      }
     }
   }
 }

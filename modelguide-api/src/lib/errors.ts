@@ -69,6 +69,13 @@ export const ErrorCode = {
   SOP_SLUG_EXISTS: "SOP_SLUG_EXISTS",
   SOP_INVALID_CONNECTOR_REF: "SOP_INVALID_CONNECTOR_REF",
 
+  // Eval errors
+  EVAL_RUN_NOT_FOUND: "EVAL_RUN_NOT_FOUND",
+  EVAL_CONFIG_NOT_FOUND: "EVAL_CONFIG_NOT_FOUND",
+  EVAL_SESSION_NOT_TERMINAL: "EVAL_SESSION_NOT_TERMINAL",
+  EVAL_ALREADY_RUNNING: "EVAL_ALREADY_RUNNING",
+  EVAL_CONFIG_IN_USE: "EVAL_CONFIG_IN_USE",
+
   // Server errors
   INTERNAL_ERROR: "INTERNAL_ERROR",
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
@@ -111,6 +118,8 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.SESSION_NOT_FOUND]: 404,
   [ErrorCode.SOP_NOT_FOUND]: 404,
   [ErrorCode.SOP_TEMPLATE_NOT_FOUND]: 404,
+  [ErrorCode.EVAL_RUN_NOT_FOUND]: 404,
+  [ErrorCode.EVAL_CONFIG_NOT_FOUND]: 404,
 
   // 409 Conflict
   [ErrorCode.CONFLICT]: 409,
@@ -118,6 +127,8 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.USER_EMAIL_EXISTS]: 409,
   [ErrorCode.SESSION_ALREADY_ENDED]: 409,
   [ErrorCode.SOP_SLUG_EXISTS]: 409,
+  [ErrorCode.EVAL_ALREADY_RUNNING]: 409,
+  [ErrorCode.EVAL_CONFIG_IN_USE]: 409,
 
   // 400 Bad Request
   [ErrorCode.VALIDATION_ERROR]: 400,
@@ -127,6 +138,7 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.CONNECTOR_INACTIVE]: 400,
   [ErrorCode.TOOL_INACTIVE]: 400,
   [ErrorCode.SOP_INVALID_CONNECTOR_REF]: 400,
+  [ErrorCode.EVAL_SESSION_NOT_TERMINAL]: 400,
 
   // 500 Internal Server Error
   [ErrorCode.INTERNAL_ERROR]: 500,
@@ -398,6 +410,50 @@ export const Errors = {
 
   sopInvalidConnectorRef(message: string) {
     return new AppError(ErrorCode.SOP_INVALID_CONNECTOR_REF, message);
+  },
+
+  // Eval
+  evalRunNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.EVAL_RUN_NOT_FOUND,
+      id ? `Eval run not found: ${id}` : "Eval run not found",
+    );
+  },
+
+  evalConfigNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.EVAL_CONFIG_NOT_FOUND,
+      id ? `Eval config not found: ${id}` : "Eval config not found",
+    );
+  },
+
+  evalSessionNotTerminal(sessionId: string, status: string) {
+    return new AppError(
+      ErrorCode.EVAL_SESSION_NOT_TERMINAL,
+      `Session "${sessionId}" is in "${status}" status — evaluation requires a terminal session (completed or abandoned)`,
+    );
+  },
+
+  evalAlreadyRunning(sessionId: string, sourceId: string) {
+    return new AppError(
+      ErrorCode.EVAL_ALREADY_RUNNING,
+      `An evaluation is already running for session "${sessionId}" and source "${sourceId}"`,
+    );
+  },
+
+  evalConfigInUse(
+    configId: string,
+    referenceCount: number,
+    sopNames?: string[],
+  ) {
+    const sopDetail =
+      sopNames && sopNames.length > 0
+        ? `. Remove it from: ${sopNames.join(", ")}`
+        : "";
+    return new AppError(
+      ErrorCode.EVAL_CONFIG_IN_USE,
+      `Eval config "${configId}" is referenced by ${referenceCount} SOP step(s) and cannot be deleted${sopDetail}`,
+    );
   },
 
   // Server

@@ -56,6 +56,7 @@ export interface SopStep {
   instruction: string;
   required: boolean;
   tool?: SopStepTool;
+  evalConfigId?: string;
   notes?: string;
 }
 

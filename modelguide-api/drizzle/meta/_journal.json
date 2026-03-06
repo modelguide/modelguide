@@ -155,6 +155,27 @@
       "when": 1772486717513,
       "tag": "0021_add-sop-tables",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1772650866438,
+      "tag": "0022_add-evals",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1772657478107,
+      "tag": "0023_eval-score-config-not-null",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1772736000000,
+      "tag": "0024_enforce-sop-step-eval-config-fk",
+      "breakpoints": true
     }
   ]
 }

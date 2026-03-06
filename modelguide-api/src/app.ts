@@ -5,6 +5,8 @@ import { env } from "@/env";
 import { agentRoutes } from "@features/agents";
 import { analyticsRoutes } from "@features/analytics";
 import { connectorRoutes } from "@features/connectors";
+import { evalConfigRoutes } from "@features/eval-configs";
+import { evalRoutes } from "@features/evals";
 import { feedbackRoutes } from "@features/feedback";
 import { mcpHandler } from "@features/mcp";
 import { organizationRoutes } from "@features/organizations";
@@ -59,6 +61,8 @@ apiRouter.route("/organizations", organizationRoutes);
 apiRouter.route("/secrets", secretsRoutes);
 apiRouter.route("/sessions", sessionRoutes);
 apiRouter.route("/sops", sopRoutes);
+apiRouter.route("/eval-configs", evalConfigRoutes);
+apiRouter.route("/evals", evalRoutes);
 apiRouter.route("/sessions", feedbackRoutes); // sub-resource: /:id/feedback
 apiRouter.route("/users", userRoutes);
 

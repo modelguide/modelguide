@@ -1,0 +1,1 @@
+ALTER TABLE "eval_run_scores" ALTER COLUMN "eval_config_id" SET NOT NULL;

@@ -51,6 +51,11 @@ const envSchema = z
     // CORS allowed origins (comma-separated). Leave empty to disable CORS.
     // E.g. "http://localhost:5173,https://demo.example.com"
     CORS_ORIGINS: z.string().optional(),
+
+    // Eval engine — LLM judge configuration (optional)
+    EVAL_LLM_API_KEY: z.string().optional(),
+    EVAL_LLM_BASE_URL: z.string().url().optional(),
+    EVAL_LLM_MODEL: z.string().max(100).optional(),
   })
   .refine(
     (data) => {
