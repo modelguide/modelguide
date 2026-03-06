@@ -19,7 +19,7 @@ import {
   getOffset,
 } from "@lib/pagination";
 import { toolSlug } from "@lib/slugify";
-import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull } from "drizzle-orm";
 import { getConnectorManifest } from "./catalog/registry";
 import type { HealthCheckResult } from "./catalog/types";
 
@@ -208,46 +208,13 @@ export async function updateConnector(
     isActive?: boolean;
   },
 ) {
-  // Look up catalog entry outside the transaction (global table, no RLS)
-  let catalogConfigSchema: ConfigSchema | undefined;
-  if (data.config) {
-    const connector = await getConnectorById(orgId, connectorId);
-    const catalog = await getCatalogEntry(connector.connectorCatalogId);
-    catalogConfigSchema = (catalog.configSchema ?? {}) as ConfigSchema;
-  }
-
-  const [updated] = await forOrg(orgId, async (tx) => {
-    // Validate secret refs inside the same transaction as the update
-    if (data.config && catalogConfigSchema) {
-      const secretRefs = extractSecretRefs(data.config, catalogConfigSchema);
-      const secretIds = [...secretRefs.keys()];
-
-      if (secretIds.length > 0) {
-        const foundSecrets = await tx
-          .select({ id: secrets.id })
-          .from(secrets)
-          .where(inArray(secrets.id, secretIds));
-
-        const foundIds = new Set(foundSecrets.map((s) => s.id));
-        const missingSecrets = secretIds
-          .filter((id) => !foundIds.has(id))
-          .map((id) => secretRefs.get(id)!);
-
-        if (missingSecrets.length > 0) {
-          throw Errors.validationError(
-            `Config references non-existent secrets: ${missingSecrets.join(", ")}`,
-            { missingSecrets },
-          );
-        }
-      }
-    }
-
-    return tx
+  const [updated] = await forOrg(orgId, (tx) =>
+    tx
       .update(connectors)
       .set(data)
       .where(eq(connectors.id, connectorId))
-      .returning();
-  });
+      .returning(),
+  );
 
   if (!updated) {
     throw Errors.connectorNotFound(connectorId);
