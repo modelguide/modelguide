@@ -23,6 +23,27 @@ import { and, asc, count, eq, isNull } from "drizzle-orm";
 import { getConnectorManifest } from "./catalog/registry";
 import type { HealthCheckResult } from "./catalog/types";
 
+type ConfigSchema = Record<string, { type: string; required?: boolean }>;
+
+/**
+ * Extract secret references from a config object using the catalog schema.
+ * Returns a Map of secretId → fieldName for all "secret" type fields that
+ * have a non-empty string value in the config.
+ */
+function extractSecretRefs(
+  config: Record<string, unknown>,
+  configSchema: ConfigSchema,
+): Map<string, string> {
+  const refs = new Map<string, string>();
+  for (const [key, fieldSchema] of Object.entries(configSchema)) {
+    const value = config[key];
+    if (fieldSchema.type === "secret" && typeof value === "string" && value) {
+      refs.set(value, key);
+    }
+  }
+  return refs;
+}
+
 // ============================================================================
 // Catalog queries (no RLS — global table)
 // ============================================================================
@@ -276,10 +297,7 @@ export async function resolveConnectorConfig(
   connector: { id: string; config: unknown },
   catalogConfigSchema: unknown,
 ): Promise<{ resolved: Record<string, string>; missingFields: string[] }> {
-  const configSchema = (catalogConfigSchema ?? {}) as Record<
-    string,
-    { type: string; required?: boolean }
-  >;
+  const configSchema = (catalogConfigSchema ?? {}) as ConfigSchema;
   const rawConfig = (connector.config ?? {}) as Record<string, unknown>;
 
   const connectorSecrets = await forOrg(orgId, (tx) =>
@@ -297,6 +315,7 @@ export async function resolveConnectorConfig(
 
   const resolved: Record<string, string> = {};
   const missingFields: string[] = [];
+  const secretRefs = extractSecretRefs(rawConfig, configSchema);
 
   for (const [key, fieldSchema] of Object.entries(configSchema)) {
     const value = rawConfig[key];
@@ -308,8 +327,8 @@ export async function resolveConnectorConfig(
       continue;
     }
 
-    if (fieldSchema.type === "secret" && typeof value === "string") {
-      const secret = secretById.get(value);
+    if (secretRefs.has(String(value)) && fieldSchema.type === "secret") {
+      const secret = secretById.get(String(value));
       if (secret) {
         try {
           resolved[key] = await decryptSecret(secret.encryptedValue);

@@ -166,6 +166,16 @@ export async function createAgent(
   return forOrg(orgId, async (tx) => {
     const slug = data.slug || slugify(data.name);
 
+    // Check slug uniqueness within the org before insert
+    const [existing] = await tx
+      .select({ id: agents.id })
+      .from(agents)
+      .where(eq(agents.slug, slug));
+
+    if (existing) {
+      throw Errors.alreadyExists("Agent", "slug");
+    }
+
     const [agent] = await tx
       .insert(agents)
       .values({

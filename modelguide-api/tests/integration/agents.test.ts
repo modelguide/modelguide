@@ -799,3 +799,71 @@ describe("RLS isolation", () => {
     expect(response.status).toBe(404);
   });
 });
+
+// ============================================================================
+// CRUD audit — strict validation (#64)
+// ============================================================================
+
+describe("Strict PATCH schema", () => {
+  test("rejects unknown fields with 422", async () => {
+    const response = await request(`/api/agents/${s.orgAAgentId}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Valid Name", bogusField: "nope" }),
+    });
+
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.error?.formErrors || body.error?.fieldErrors).toBeDefined();
+  });
+});
+
+describe("Agent slug uniqueness", () => {
+  test("creating agent with duplicate name (same slug) returns 409", async () => {
+    const res1 = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Slug Collision Agent" }),
+    });
+    expect(res1.status).toBe(201);
+    const agent1 = await res1.json();
+    createdAgentIds.push(agent1.id);
+
+    const res2 = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Slug Collision Agent" }),
+    });
+
+    expect(res2.status).toBe(409);
+    const body = await res2.json();
+    expect(body.code).toBe("ALREADY_EXISTS");
+  });
+
+  test("creating agent with explicit duplicate slug returns 409", async () => {
+    const res1 = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Explicit Slug Agent",
+        slug: "explicit-slug-test-64",
+      }),
+    });
+    expect(res1.status).toBe(201);
+    const agent1 = await res1.json();
+    createdAgentIds.push(agent1.id);
+
+    const res2 = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Different Name",
+        slug: "explicit-slug-test-64",
+      }),
+    });
+
+    expect(res2.status).toBe(409);
+    const body = await res2.json();
+    expect(body.code).toBe("ALREADY_EXISTS");
+  });
+});

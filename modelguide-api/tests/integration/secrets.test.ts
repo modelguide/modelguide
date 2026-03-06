@@ -514,3 +514,33 @@ describe("RLS isolation", () => {
     expect(response.status).toBe(404);
   });
 });
+
+// ============================================================================
+// CRUD audit — strict validation (#64)
+// ============================================================================
+
+describe("Strict PATCH schema", () => {
+  test("rejects unknown fields with 422", async () => {
+    const createRes = await request("/api/secrets", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Strict Test Secret",
+        value: "test-value",
+        secretType: "api_key",
+        ownerType: "connector",
+        ownerId: s.orgAMedusaConnectorId,
+      }),
+    });
+    const secret = await createRes.json();
+    createdSecretIds.push(secret.id);
+
+    const response = await request(`/api/secrets/${secret.id}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Updated", unknownProp: true }),
+    });
+
+    expect(response.status).toBe(422);
+  });
+});

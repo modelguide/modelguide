@@ -467,3 +467,38 @@ describe("RLS isolation — feedback", () => {
     expect(response.status).toBe(404);
   });
 });
+
+// ============================================================================
+// CRUD audit — strict validation (#64)
+// ============================================================================
+
+describe("Strict PATCH schema", () => {
+  test("rejects unknown fields with 422", async () => {
+    const sessionId = await createTestSession(
+      orgAAgentHeaders,
+      "strict-feedback@test.com",
+      "web",
+    );
+
+    const fbRes = await request(`/api/sessions/${sessionId}/feedback`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        rating: 2,
+        feedbackSource: "support",
+      }),
+    });
+    const fb = await fbRes.json();
+
+    const response = await request(
+      `/api/sessions/${sessionId}/feedback/${fb.id}`,
+      {
+        method: "PATCH",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ rating: 1, invisible: "ghost" }),
+      },
+    );
+
+    expect(response.status).toBe(422);
+  });
+});

@@ -771,3 +771,24 @@ describe("RLS isolation", () => {
     expect(response.status).toBe(404);
   });
 });
+
+// ============================================================================
+// CRUD audit — strict validation (#64)
+// ============================================================================
+
+describe("Strict PATCH schema", () => {
+  test("rejects unknown fields with 422", async () => {
+    const response = await request(
+      `/api/connectors/${s.orgAMedusaConnectorId}`,
+      {
+        method: "PATCH",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ name: "Valid Name", bogusField: "nope" }),
+      },
+    );
+
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.error?.formErrors || body.error?.fieldErrors).toBeDefined();
+  });
+});

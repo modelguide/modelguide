@@ -163,6 +163,7 @@ export const updateSopSchema = z
     definition: sopDefinitionWriteSchema.optional(),
     version: z.string().max(50).optional(),
   })
+  .strict()
   .refine(
     (data) =>
       data.name !== undefined ||

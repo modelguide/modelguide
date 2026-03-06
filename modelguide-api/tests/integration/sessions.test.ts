@@ -940,3 +940,30 @@ describe("GET /api/sessions (filtering & sorting)", () => {
     expect(body1.data[0].id).not.toBe(body2.data[0].id);
   });
 });
+
+// ============================================================================
+// CRUD audit — strict validation (#64)
+// ============================================================================
+
+describe("Strict PATCH schema", () => {
+  test("rejects unknown fields with 422", async () => {
+    const sessionRes = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "voice",
+        userIdentifier: "+1999888777",
+      }),
+    });
+    const session = await sessionRes.json();
+    createdSessionIds.push(session.id);
+
+    const response = await request(`/api/sessions/${session.id}`, {
+      method: "PATCH",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({ status: "completed", extraField: "bad" }),
+    });
+
+    expect(response.status).toBe(422);
+  });
+});

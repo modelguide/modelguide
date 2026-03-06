@@ -168,6 +168,7 @@ const updateFeedbackSchema = z
       .optional()
       .openapi({ description: "Optional tags" }),
   })
+  .strict()
   .refine(
     (data) =>
       data.rating !== undefined ||

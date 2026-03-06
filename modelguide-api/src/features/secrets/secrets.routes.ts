@@ -83,6 +83,7 @@ const updateSecretRequestSchema = z
       example: "sk_live_new_xxx...",
     }),
   })
+  .strict()
   .refine((data) => data.name !== undefined || data.value !== undefined, {
     message: "At least one of 'name' or 'value' must be provided",
   });
