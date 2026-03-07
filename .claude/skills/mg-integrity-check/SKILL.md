@@ -27,7 +27,7 @@ Run `git diff --name-only HEAD` (unstaged) and `git diff --cached --name-only` (
 For every changed file, verify:
 - File name is **kebab-case** (e.g., `agent-form.tsx`, `auth.routes.ts`)
 - No PascalCase or camelCase file names (exception: `SKILL.md`, `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`)
-- Route files follow TanStack Router convention: `name.tsx` or `name.$param.tsx`
+- UI Route files follow TanStack Router convention: `name.tsx` or `name.$param.tsx`
 
 ## Check 2: File Location
 
