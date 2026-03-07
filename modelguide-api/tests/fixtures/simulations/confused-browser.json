@@ -1,0 +1,38 @@
+{
+  "personaId": "confused-browser",
+  "expectedToolCalls": ["glowbox_store_search_products"],
+  "expectedTurnRange": [4, 12],
+  "expectedTraits": {
+    "polite": true,
+    "usesGreetings": true,
+    "escalates": false,
+    "changesDirection": true
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hi, I'm looking for something... I'm not sure what exactly. Maybe a skincare product?"
+    },
+    {
+      "role": "assistant",
+      "content": "No problem! I'd be happy to help you explore our options. Are you looking for something specific like a cleanser, moisturizer, or serum? Or would you like me to show you our most popular products?"
+    },
+    {
+      "role": "user",
+      "content": "Hmm, maybe a serum? Or wait, do you have anything blue? I like blue packaging."
+    },
+    {
+      "role": "tool",
+      "toolName": "glowbox_store_search_products",
+      "content": "{\"products\": [{\"id\": \"prod_003\", \"name\": \"Ocean Blue Hydrating Serum\", \"price\": 35.00}, {\"id\": \"prod_004\", \"name\": \"Azure Night Cream\", \"price\": 42.00}]}"
+    },
+    {
+      "role": "assistant",
+      "content": "I found a couple of options: the Ocean Blue Hydrating Serum ($35.00) and the Azure Night Cream ($42.00). Would either of these interest you?"
+    },
+    {
+      "role": "user",
+      "content": "Actually, do you also sell candles? My friend's birthday is coming up. Oh wait, never mind, let me think about the serum. Actually, I'll think about it and come back. Thanks!"
+    }
+  ]
+}

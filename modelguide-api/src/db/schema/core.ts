@@ -30,6 +30,7 @@ import {
   modalityEnum,
   ownerTypeEnum,
   secretTypeEnum,
+  sessionModeEnum,
   sessionStatusEnum,
   sopStatusEnum,
   toolStatusEnum,
@@ -527,6 +528,7 @@ export const sessions = pgTable(
       .$type<Record<string, unknown>>()
       .default({}),
     status: sessionStatusEnum("status").notNull().default("active"),
+    mode: sessionModeEnum("mode").notNull().default("live"),
     startedAt: timestamp("started_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

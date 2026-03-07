@@ -63,6 +63,11 @@ export const ErrorCode = {
   SESSION_NOT_FOUND: "SESSION_NOT_FOUND",
   SESSION_ALREADY_ENDED: "SESSION_ALREADY_ENDED",
 
+  // Simulation errors
+  SIMULATION_FAILED: "SIMULATION_FAILED",
+  SIMULATION_LLM_NOT_CONFIGURED: "SIMULATION_LLM_NOT_CONFIGURED",
+  PERSONA_NOT_FOUND: "PERSONA_NOT_FOUND",
+
   // SOP errors
   SOP_NOT_FOUND: "SOP_NOT_FOUND",
   SOP_TEMPLATE_NOT_FOUND: "SOP_TEMPLATE_NOT_FOUND",
@@ -137,13 +142,18 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.CONNECTOR_NOT_CONFIGURED]: 400,
   [ErrorCode.CONNECTOR_INACTIVE]: 400,
   [ErrorCode.TOOL_INACTIVE]: 400,
+
+  // 404 Simulation
+  [ErrorCode.PERSONA_NOT_FOUND]: 404,
   [ErrorCode.SOP_INVALID_CONNECTOR_REF]: 400,
   [ErrorCode.EVAL_SESSION_NOT_TERMINAL]: 400,
 
   // 500 Internal Server Error
   [ErrorCode.INTERNAL_ERROR]: 500,
   [ErrorCode.TOOL_EXECUTION_FAILED]: 500,
+  [ErrorCode.SIMULATION_FAILED]: 500,
   [ErrorCode.SERVICE_UNAVAILABLE]: 503,
+  [ErrorCode.SIMULATION_LLM_NOT_CONFIGURED]: 503,
 };
 
 /**
@@ -383,6 +393,28 @@ export const Errors = {
     return new AppError(
       ErrorCode.SESSION_ALREADY_ENDED,
       id ? `Session already ended: ${id}` : "Session has already ended",
+    );
+  },
+
+  // Simulation
+  simulationFailed(reason?: string) {
+    return new AppError(
+      ErrorCode.SIMULATION_FAILED,
+      reason ? `Simulation failed: ${reason}` : "Simulation failed",
+    );
+  },
+
+  simulationLlmNotConfigured() {
+    return new AppError(
+      ErrorCode.SIMULATION_LLM_NOT_CONFIGURED,
+      "Simulation LLM not configured. Set SIMULATION_LLM_API_KEY environment variable.",
+    );
+  },
+
+  personaNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.PERSONA_NOT_FOUND,
+      id ? `Persona not found: ${id}` : "Persona not found",
     );
   },
 

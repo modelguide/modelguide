@@ -12,6 +12,7 @@ import { mcpHandler } from "@features/mcp";
 import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
 import { sessionRoutes } from "@features/sessions";
+import { simulationRoutes } from "@features/simulations";
 import { sopRoutes } from "@features/sops";
 import { authRoutes, userRoutes } from "@features/users";
 import { elevenlabsWebhooks } from "@features/webhooks";
@@ -64,6 +65,7 @@ apiRouter.route("/sops", sopRoutes);
 apiRouter.route("/eval-configs", evalConfigRoutes);
 apiRouter.route("/evals", evalRoutes);
 apiRouter.route("/sessions", feedbackRoutes); // sub-resource: /:id/feedback
+apiRouter.route("/simulations", simulationRoutes);
 apiRouter.route("/users", userRoutes);
 
 const app = createApp();
