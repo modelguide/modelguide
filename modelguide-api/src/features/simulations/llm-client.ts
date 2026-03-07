@@ -11,6 +11,7 @@
 import { env } from "@/env";
 import type { ResolvedTool } from "@features/mcp/mcp.types";
 import { Errors } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import OpenAI from "openai";
 import type {
   ChatCompletionMessageParam,
@@ -18,6 +19,7 @@ import type {
 } from "openai/resources/chat/completions";
 
 const SIMULATION_MAX_TOKENS = 16_000;
+const logger = getLogger("simulation");
 
 let client: OpenAI | null = null;
 
@@ -113,8 +115,8 @@ export async function generateAgentResponse(
       try {
         args = JSON.parse(tc.function.arguments || "{}");
       } catch {
-        console.warn(
-          `[simulation] malformed tool call arguments for ${tc.function.name}, falling back to {}`,
+        logger.warn(
+          `malformed tool call arguments for ${tc.function.name}, falling back to {}`,
         );
       }
       return { id: tc.id, name: tc.function.name, arguments: args };

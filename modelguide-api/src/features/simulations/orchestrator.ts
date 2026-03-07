@@ -262,7 +262,6 @@ export async function runSimulation(params: {
       .update(sessions)
       .set({
         metadata: {
-          simulation: true,
           personaId: persona.id,
           personaName: persona.name,
           turnCount,
