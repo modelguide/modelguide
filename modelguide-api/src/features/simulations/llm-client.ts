@@ -19,7 +19,7 @@ import type {
 } from "openai/resources/chat/completions";
 
 const SIMULATION_MAX_TOKENS = 16_000;
-const logger = getLogger("simulation");
+const logger = getLogger();
 
 let client: OpenAI | null = null;
 
