@@ -108,10 +108,10 @@ describe("normaliseScore", () => {
     expect(normaliseScore(null)).toBeNull();
   });
 
-  test("returns null for 0 score (all negative feedback)", () => {
-    // This documents current behaviour: 0 is falsy → null
-    expect(normaliseScore(0)).toBeNull();
-    expect(normaliseScore(0.0)).toBeNull();
+  test("returns 0 for 0 score (all negative feedback)", () => {
+    // A genuine 0% score is distinguishable from "no data" (null)
+    expect(normaliseScore(0)).toBe(0);
+    expect(normaliseScore(0.0)).toBe(0);
   });
 
   test("respects custom decimal precision", () => {
