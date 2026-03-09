@@ -13,7 +13,7 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { asc, count, eq, isNull, or } from "drizzle-orm";
+import { asc, count, eq, inArray, isNull, or } from "drizzle-orm";
 
 export type SecretScope = "connector" | "agent";
 
@@ -200,6 +200,31 @@ export async function getAgentModelGuideKey(
   agentId: string,
 ): Promise<string | null> {
   return getAgentSecretByType(orgId, agentId, "api_key");
+}
+
+/**
+ * Batch-fetch and decrypt secrets by their IDs within an org.
+ * Returns a Map<secretId, decryptedValue>.
+ * IDs not found in the vault are silently omitted from the result.
+ */
+export async function decryptSecretsByIds(
+  orgId: string,
+  secretIds: string[],
+): Promise<Map<string, string>> {
+  if (secretIds.length === 0) return new Map();
+
+  const rows = await forOrg(orgId, (tx) =>
+    tx
+      .select({ id: secrets.id, encryptedValue: secrets.encryptedValue })
+      .from(secrets)
+      .where(inArray(secrets.id, secretIds)),
+  );
+
+  const result = new Map<string, string>();
+  for (const row of rows) {
+    result.set(row.id, await decryptSecret(row.encryptedValue));
+  }
+  return result;
 }
 
 export async function updateSecret(
