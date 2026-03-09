@@ -8,15 +8,15 @@ A WebRTC voice agent powered by [Pipecat](https://github.com/pipecat-ai/pipecat)
 |-----------|---------|
 | Transport | Daily.co WebRTC |
 | STT | Deepgram |
-| LLM | OpenAI GPT-4o |
-| TTS | Cartesia |
+| LLM | OpenAI GPT-4.1-mini / Google Gemini (configurable via `LLM_MODEL`) |
+| TTS | ElevenLabs (Flash v2.5) |
 | Tools | ModelGuide MCP |
 
 ## Prerequisites
 
 - Python 3.11+
 - A running ModelGuide API with a configured agent (API key + connector tools assigned)
-- API keys for Daily.co, OpenAI, Deepgram, and Cartesia
+- API keys for Daily.co, OpenAI, Deepgram, and ElevenLabs
 
 ## Setup
 
@@ -53,8 +53,8 @@ Open the printed Daily room URL in your browser to start talking to Sam.
 ```
 Daily WebRTC Input
   -> Deepgram STT (speech-to-text)
-  -> OpenAI GPT-4o (with function calling)
-  -> Cartesia TTS (text-to-speech)
+  -> LLM (GPT-4.1-mini or Gemini, with function calling)
+  -> ElevenLabs TTS (text-to-speech)
   -> Daily WebRTC Output
 ```
 
