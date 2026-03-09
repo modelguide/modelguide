@@ -66,8 +66,25 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
               </div>
             </InfoItem>
 
-            <InfoItem label="User">
-              <span className="text-sm text-fg-primary">{session.userIdentifier}</span>
+            <InfoItem label="Customer">
+              {session.customer ? (
+                <div className="space-y-0.5">
+                  {session.customer.name && (
+                    <div className="text-sm text-fg-primary">{session.customer.name}</div>
+                  )}
+                  {session.customer.email && (
+                    <div className="text-xs text-fg-muted">{session.customer.email}</div>
+                  )}
+                  {session.customer.phone && (
+                    <div className="text-xs text-fg-muted">{session.customer.phone}</div>
+                  )}
+                  {!session.customer.name && !session.customer.email && !session.customer.phone && (
+                    <span className="text-sm text-fg-muted">{'\u2014'}</span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-sm text-fg-muted">{'\u2014'}</span>
+              )}
             </InfoItem>
 
             <InfoItem label="Status">
@@ -217,8 +234,8 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                       <span className="capitalize">
                         {fb.feedbackSource === 'customer' ? 'User' : 'Expert'}
                       </span>
-                      {fb.userIdentifier && (
-                        <span className="text-fg-subtle"> &middot; {fb.userIdentifier}</span>
+                      {fb.customerExternalId && (
+                        <span className="text-fg-subtle"> &middot; {fb.customerExternalId}</span>
                       )}
                       {fb.updatedAt && <span className="text-fg-subtle"> &middot; edited</span>}
                     </p>
