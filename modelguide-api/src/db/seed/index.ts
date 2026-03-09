@@ -65,11 +65,13 @@ async function seedAll(db: SeedDb) {
       id: medusaCatalog.id,
       slug: medusaCatalog.slug,
       tools: medusaCatalog.tools,
+      configSchema: medusaCatalog.configSchema,
     },
     zendesk: {
       id: zendeskCatalog.id,
       slug: zendeskCatalog.slug,
       tools: zendeskCatalog.tools,
+      configSchema: zendeskCatalog.configSchema,
     },
   };
 

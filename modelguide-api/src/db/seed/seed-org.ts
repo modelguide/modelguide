@@ -33,6 +33,7 @@ export interface CatalogEntry {
   id: string;
   slug: string;
   tools: CatalogTool[] | unknown;
+  configSchema: Record<string, { type: string; required?: boolean }> | unknown;
 }
 
 export async function seedOrg(
@@ -334,16 +335,29 @@ async function createConnectorWithTools(
     .returning({ id: secrets.id });
 
   if (secretRow) {
-    // Write the ref into connector.secrets (merge with existing to be re-seed safe)
-    const [existing] = await db
-      .select({ secrets: connectors.secrets })
-      .from(connectors)
-      .where(eq(connectors.id, connector.id));
-    const currentSecrets = (existing?.secrets ?? {}) as Record<string, string>;
-    await db
-      .update(connectors)
-      .set({ secrets: { ...currentSecrets, secretApiKey: secretRow.id } })
-      .where(eq(connectors.id, connector.id));
+    // Derive the secret field key from the catalog's configSchema
+    const schema = (catalog.configSchema ?? {}) as Record<
+      string,
+      { type: string }
+    >;
+    const secretFieldKey = Object.entries(schema).find(
+      ([, v]) => v.type === "secret",
+    )?.[0];
+
+    if (secretFieldKey) {
+      const [existing] = await db
+        .select({ secrets: connectors.secrets })
+        .from(connectors)
+        .where(eq(connectors.id, connector.id));
+      const currentSecrets = (existing?.secrets ?? {}) as Record<
+        string,
+        string
+      >;
+      await db
+        .update(connectors)
+        .set({ secrets: { ...currentSecrets, [secretFieldKey]: secretRow.id } })
+        .where(eq(connectors.id, connector.id));
+    }
   }
 
   // Create tools from catalog

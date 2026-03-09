@@ -11,15 +11,26 @@ CREATE INDEX "secrets_scope_idx" ON "secrets" USING btree ("organization_id","sc
 UPDATE "secrets" SET "scope" = 'connector' WHERE "owner_type"::text = 'connector';--> statement-breakpoint
 UPDATE "secrets" SET "scope" = 'agent'     WHERE "owner_type"::text = 'agent';--> statement-breakpoint
 
--- Backfill connectors.secrets: for each connector find secrets with ownerType=connector
--- and build a JSON map of { secretType: secretId } (best-effort; uses secret_type as field name)
+-- Backfill connectors.secrets: for each connector, find the first config schema field
+-- with type "secret" and map it to the owned secret's ID. This correctly keys by the
+-- catalog field name (e.g. "secretApiKey" for Medusa, "apiToken" for Zendesk) rather
+-- than by secret_type which would mismatch at runtime.
 UPDATE "connectors" c
 SET "secrets" = (
   SELECT COALESCE(
-    jsonb_object_agg(s.secret_type, s.id),
+    jsonb_object_agg(sf.field_name, s.id),
     '{}'::jsonb
   )
   FROM "secrets" s
+  -- Find the secret field name from the catalog's configSchema
+  CROSS JOIN LATERAL (
+    SELECT key AS field_name
+    FROM jsonb_each(
+      (SELECT cat.config_schema FROM "connectors_catalog" cat WHERE cat.id = c.connector_catalog_id)
+    )
+    WHERE value->>'type' = 'secret'
+    LIMIT 1
+  ) sf
   WHERE s.owner_type::text = 'connector'
     AND s.owner_id = c.id
 );--> statement-breakpoint
