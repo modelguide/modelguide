@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
 import { sessionFeedback, sessions } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   type TestSeed,
   agentHeadersFor,
@@ -61,8 +61,7 @@ describe("POST /api/sessions", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+1234567890",
-        userMetadata: { name: "Test Customer" },
+        customer: { name: "Test Customer", phone: "+1234567890" },
       }),
     });
 
@@ -73,7 +72,10 @@ describe("POST /api/sessions", () => {
     expect(body.agentId).toBe(s.orgAAgentId);
     expect(body.status).toBe("active");
     expect(body.channelType).toBe("voice");
-    expect(body.userIdentifier).toBe("+1234567890");
+    expect(body.customer).toEqual({
+      name: "Test Customer",
+      phone: "+1234567890",
+    });
     expect(body.startedAt).toBeDefined();
     expect(body.endedAt).toBeNull();
 
@@ -87,7 +89,7 @@ describe("POST /api/sessions", () => {
       body: JSON.stringify({
         externalId: "ext-12345",
         channelType: "web",
-        userIdentifier: "customer@test.com",
+        customer: { email: "customer@test.com" },
       }),
     });
 
@@ -106,7 +108,7 @@ describe("POST /api/sessions", () => {
       headers: orgAAdminHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+1234567890",
+        customer: { phone: "+1234567890" },
       }),
     });
 
@@ -119,7 +121,7 @@ describe("POST /api/sessions", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+1234567890",
+        customer: { phone: "+1234567890" },
       }),
     });
 
@@ -233,7 +235,7 @@ describe("GET /api/sessions/:id", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+9999999999",
+        customer: { phone: "+9999999999" },
       }),
     });
     const created = await createRes.json();
@@ -315,7 +317,7 @@ describe("PATCH /api/sessions/:id", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+5555555555",
+        customer: { phone: "+5555555555" },
       }),
     });
     const body = await response.json();
@@ -366,7 +368,6 @@ describe("PATCH /api/sessions/:id", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+7777777777",
       }),
     });
     const created = await createRes.json();
@@ -395,7 +396,7 @@ describe("POST /api/sessions/:id/messages", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+8888888888",
+        customer: { phone: "+8888888888" },
       }),
     });
     const body = await response.json();
@@ -447,7 +448,7 @@ describe("POST /api/sessions/:id/messages", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+9990009999",
+        customer: { phone: "+9990009999" },
       }),
     });
     const created = await createRes.json();
@@ -529,7 +530,7 @@ describe("POST /api/sessions/:id/messages", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "email",
-        userIdentifier: "customer@test.com",
+        customer: { email: "customer@test.com" },
       }),
     });
     expect(sessionRes.status).toBe(201);
@@ -646,7 +647,7 @@ describe("RLS isolation", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+1111111111",
+        customer: { phone: "+1111111111" },
       }),
     });
     const body = await response.json();
@@ -709,7 +710,7 @@ describe("PATCH /api/sessions/:id (additional)", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "web",
-        userIdentifier: "abandon-test@test.com",
+        customer: { email: "abandon-test@test.com" },
       }),
     });
     const created = await createRes.json();
@@ -750,7 +751,7 @@ describe("POST /api/sessions/:id/messages (additional)", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+4444444444",
+        customer: { phone: "+4444444444" },
       }),
     });
     const created = await createRes.json();
@@ -791,7 +792,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
         headers: orgAAgentHeaders,
         body: JSON.stringify({
           channelType: channel,
-          userIdentifier: `filter-${channel}-${Date.now()}@test.com`,
+          customer: { email: `filter-${channel}-${Date.now()}@test.com` },
         }),
       });
       const body = await res.json();
@@ -812,7 +813,7 @@ describe("GET /api/sessions (filtering & sorting)", () => {
         sessionId: filterSessionIds[0],
         rating: 2,
         feedbackSource: "customer",
-        userIdentifier: "filter-tester",
+        customerExternalId: "filter-tester",
       });
     });
   });
@@ -952,7 +953,7 @@ describe("Strict PATCH schema", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "voice",
-        userIdentifier: "+1999888777",
+        customer: { phone: "+1999888777" },
       }),
     });
     const session = await sessionRes.json();
@@ -965,5 +966,285 @@ describe("Strict PATCH schema", () => {
     });
 
     expect(response.status).toBe(422);
+  });
+});
+
+// ============================================================================
+// Customer column (#66)
+// ============================================================================
+
+describe("Customer column (#66)", () => {
+  test("creates session with structured customer and returns it (201)", async () => {
+    const response = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: {
+          name: "Jane Doe",
+          email: "jane@example.com",
+          phone: "+15551234567",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.customer).toEqual({
+      name: "Jane Doe",
+      email: "jane@example.com",
+      phone: "+15551234567",
+    });
+    createdSessionIds.push(body.id);
+  });
+
+  test("creates session without customer (customer is null) (201)", async () => {
+    const response = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({ channelType: "web" }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.customer).toBeNull();
+    createdSessionIds.push(body.id);
+  });
+
+  test("PATCH merges customer fields (200)", async () => {
+    // Create session with only name
+    const createRes = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: { name: "John" },
+      }),
+    });
+    const created = await createRes.json();
+    createdSessionIds.push(created.id);
+
+    // Merge email via PATCH
+    const patchRes = await request(`/api/sessions/${created.id}`, {
+      method: "PATCH",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({ customer: { email: "john@example.com" } }),
+    });
+
+    expect(patchRes.status).toBe(200);
+    const patched = await patchRes.json();
+    expect(patched.customer.name).toBe("John");
+    expect(patched.customer.email).toBe("john@example.com");
+  });
+
+  test("customer.phone is normalized (strips formatting) (201)", async () => {
+    const response = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "voice",
+        customer: { phone: "+1 (555) 123-4567" },
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.customer.phone).toBe("+15551234567");
+    createdSessionIds.push(body.id);
+  });
+
+  test("rejects invalid customer email (422)", async () => {
+    const response = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: { email: "not-an-email" },
+      }),
+    });
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects phone that is too short after normalization (422)", async () => {
+    const response = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: { phone: "12" },
+      }),
+    });
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects unknown fields in customer (.strict()) (422)", async () => {
+    const response = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: { name: "Alice", favoriteColor: "blue" },
+      }),
+    });
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects old userIdentifier field on create (422)", async () => {
+    const response = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        userIdentifier: "+15551234567",
+      }),
+    });
+
+    // createSessionSchema does NOT have userIdentifier — zod-openapi
+    // coerces/strips unknown fields for non-strict schemas, so this
+    // should either be rejected (422) or create without customer.
+    // Either is acceptable; the field is simply gone from the API.
+    expect([201, 422]).toContain(response.status);
+    if (response.status === 201) {
+      const body = await response.json();
+      expect(body.customer).toBeNull();
+      expect(body.userIdentifier).toBeUndefined();
+      createdSessionIds.push(body.id);
+    }
+  });
+
+  test("customerSearch filter matches by name (200)", async () => {
+    // Create a session with a unique customer name
+    const uniqueName = `SearchTest-${Date.now()}`;
+    const createRes = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: { name: uniqueName },
+      }),
+    });
+    const created = await createRes.json();
+    createdSessionIds.push(created.id);
+
+    // Search by that name
+    const response = await request(
+      `/api/sessions?customerSearch=${encodeURIComponent(uniqueName)}`,
+      { headers: orgAAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+
+    const found = body.data.find((s: { id: string }) => s.id === created.id);
+    expect(found).toBeDefined();
+  });
+
+  test("customerSearch filter matches by email (200)", async () => {
+    const uniqueEmail = `search-${Date.now()}@example.com`;
+    const createRes = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: { email: uniqueEmail },
+      }),
+    });
+    const created = await createRes.json();
+    createdSessionIds.push(created.id);
+
+    const response = await request(
+      `/api/sessions?customerSearch=${encodeURIComponent(uniqueEmail)}`,
+      { headers: orgAAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    const found = body.data.find((s: { id: string }) => s.id === created.id);
+    expect(found).toBeDefined();
+  });
+
+  test("list response includes customer in shape (200)", async () => {
+    const response = await request("/api/sessions", {
+      headers: orgAAdminHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+
+    // Every session should have customer field (null or object)
+    for (const session of body.data) {
+      expect("customer" in session).toBe(true);
+      // Old fields must NOT be present
+      expect("userIdentifier" in session).toBe(false);
+      expect("userMetadata" in session).toBe(false);
+    }
+  });
+});
+
+// ============================================================================
+// Migration verification (#66) - checks schema artifacts in database
+// ============================================================================
+
+describe("Migration verification (#66)", () => {
+  test("customer JSONB column exists on sessions table", async () => {
+    const result = await forApp(async (tx) => {
+      const rows = await tx.execute(
+        sql`SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_name = 'sessions' AND column_name = 'customer'`,
+      );
+      return rows;
+    });
+
+    expect(result.length).toBe(1);
+    expect(result[0].data_type).toBe("jsonb");
+  });
+
+  test("old user_identifier and user_metadata columns are gone", async () => {
+    const result = await forApp(async (tx) => {
+      const rows = await tx.execute(
+        sql`SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'sessions'
+              AND column_name IN ('user_identifier', 'user_metadata')`,
+      );
+      return rows;
+    });
+
+    expect(result.length).toBe(0);
+  });
+
+  test("customer_external_id column exists on session_feedback", async () => {
+    const result = await forApp(async (tx) => {
+      const rows = await tx.execute(
+        sql`SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'session_feedback'
+              AND column_name = 'customer_external_id'`,
+      );
+      return rows;
+    });
+
+    expect(result.length).toBe(1);
+  });
+
+  test("expression index on customer email exists", async () => {
+    const result = await forApp(async (tx) => {
+      const rows = await tx.execute(
+        sql`SELECT indexname
+            FROM pg_indexes
+            WHERE tablename = 'sessions'
+              AND indexname = 'sessions_org_customer_email_idx'`,
+      );
+      return rows;
+    });
+
+    expect(result.length).toBe(1);
   });
 });

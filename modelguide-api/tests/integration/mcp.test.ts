@@ -34,14 +34,14 @@ function request(path: string, options?: RequestInit) {
 async function createSessionViaRest(
   agentHeaders: Record<string, string>,
   channelType = "voice",
-  userIdentifier = "+1234560000",
+  customerPhone = "+1234560000",
 ): Promise<string> {
   const response = await request("/api/sessions", {
     method: "POST",
     headers: { ...agentHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({
       channelType,
-      userIdentifier,
+      customer: { phone: customerPhone },
     }),
   });
   const body = await response.json();
@@ -205,7 +205,8 @@ describe("Tool discovery", () => {
       .map((t) => t.name);
 
     expect(coreToolNames).toContain("core_add_messages");
-    expect(coreToolNames.length).toBe(1);
+    expect(coreToolNames).toContain("core_set_customer");
+    expect(coreToolNames.length).toBe(2);
   });
 
   test("core_add_messages is hidden when enableCoreAddMessages is not set", async () => {

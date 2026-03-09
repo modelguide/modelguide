@@ -59,8 +59,8 @@ export interface McpTestContext {
 }
 
 interface SetupOptions {
-  /** Session user identifier (phone, email, etc.) */
-  userIdentifier?: string;
+  /** Customer phone number */
+  customerPhone?: string;
   channelType?: string;
 }
 
@@ -88,7 +88,7 @@ export async function setupMcpTest(
     method: "POST",
     body: JSON.stringify({
       channelType: opts.channelType ?? "voice",
-      userIdentifier: opts.userIdentifier ?? "+1234567890",
+      customer: { phone: opts.customerPhone ?? "+1234567890" },
     }),
   });
 
