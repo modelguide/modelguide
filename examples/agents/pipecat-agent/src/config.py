@@ -1,4 +1,9 @@
-"""Environment variable loading and validation."""
+"""Environment variable loading and validation.
+
+Validation is deferred so the Pipecat runner can start its HTTP server
+before env vars are checked.  Call ``validate()`` once at the top of
+``bot()`` — after that the module-level constants are safe to read.
+"""
 
 import os
 
@@ -20,23 +25,48 @@ class ConfigError(RuntimeError):
     pass
 
 
-def _validate() -> dict[str, str]:
+_validated = False
+
+
+def validate() -> None:
+    """Validate required env vars and populate module-level constants.
+
+    Safe to call multiple times — only runs once.
+    """
+    global _validated
+    global DAILY_API_KEY, OPENAI_API_KEY, DEEPGRAM_API_KEY, ELEVENLABS_API_KEY
+    global MODELGUIDE_API_URL, MODELGUIDE_API_KEY, MODELGUIDE_AGENT_ID
+    global ELEVENLABS_VOICE_ID, GOOGLE_API_KEY, USER_EMAIL
+
+    if _validated:
+        return
+
     missing = [v for v in REQUIRED_VARS if not os.getenv(v)]
     if missing:
         raise ConfigError(f"Missing required environment variables: {', '.join(missing)}")
-    return {v: os.environ[v] for v in REQUIRED_VARS}
+
+    DAILY_API_KEY = os.getenv("DAILY_API_KEY", "")
+    OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+    DEEPGRAM_API_KEY = os.environ["DEEPGRAM_API_KEY"]
+    ELEVENLABS_API_KEY = os.environ["ELEVENLABS_API_KEY"]
+    MODELGUIDE_API_URL = os.environ["MODELGUIDE_API_URL"].rstrip("/")
+    MODELGUIDE_API_KEY = os.environ["MODELGUIDE_API_KEY"]
+    MODELGUIDE_AGENT_ID = os.environ["MODELGUIDE_AGENT_ID"]
+    ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "iP95p4xoKVk53GoZ742B")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+    USER_EMAIL = os.getenv("USER_EMAIL", "voice-caller")
+
+    _validated = True
 
 
-_env = _validate()
-
-# Provided by Pipecat Cloud managed keys, or set manually for local dev
-DAILY_API_KEY: str = os.getenv("DAILY_API_KEY", "")
-OPENAI_API_KEY: str = _env["OPENAI_API_KEY"]
-DEEPGRAM_API_KEY: str = _env["DEEPGRAM_API_KEY"]
-ELEVENLABS_API_KEY: str = _env["ELEVENLABS_API_KEY"]
-MODELGUIDE_API_URL: str = _env["MODELGUIDE_API_URL"].rstrip("/")
-MODELGUIDE_API_KEY: str = _env["MODELGUIDE_API_KEY"]
-MODELGUIDE_AGENT_ID: str = _env["MODELGUIDE_AGENT_ID"]
-# Default: ElevenLabs "Chris" voice
-ELEVENLABS_VOICE_ID: str = os.getenv("ELEVENLABS_VOICE_ID", "iP95p4xoKVk53GoZ742B")
-USER_EMAIL: str = os.getenv("USER_EMAIL", "voice-caller")
+# Declare module-level names so imports don't fail — values set by validate()
+DAILY_API_KEY: str = ""
+OPENAI_API_KEY: str = ""
+DEEPGRAM_API_KEY: str = ""
+ELEVENLABS_API_KEY: str = ""
+MODELGUIDE_API_URL: str = ""
+MODELGUIDE_API_KEY: str = ""
+MODELGUIDE_AGENT_ID: str = ""
+ELEVENLABS_VOICE_ID: str = ""
+GOOGLE_API_KEY: str = ""
+USER_EMAIL: str = ""

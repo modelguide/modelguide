@@ -1,0 +1,4 @@
+pipecat-ai[daily,openai,google,deepgram,elevenlabs,silero]
+httpx
+python-dotenv
+mcp
