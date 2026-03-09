@@ -7,6 +7,8 @@ export {
   addMessage,
   addMessages,
   validateActiveSession,
+  setCustomerOnSession,
   normalizePhone,
+  validateAndNormalizeCustomer,
 } from "./sessions.service";
 export type { MessageData, CustomerData } from "./sessions.service";

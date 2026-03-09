@@ -52,6 +52,57 @@ export function normalizePhone(raw: string): string {
   return hasLeadingPlus ? `+${digits}` : digits;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Validate and normalize customer data. Picks only known keys (name, email, phone),
+ * enforces length limits matching the API Zod schema, and normalizes phone.
+ * Throws a validation error on bad input so both REST and MCP paths are protected.
+ */
+export function validateAndNormalizeCustomer(
+  raw: CustomerData | Record<string, unknown>,
+): CustomerData {
+  const customer: CustomerData = {};
+
+  if (raw.name !== undefined) {
+    if (typeof raw.name !== "string" || raw.name.length > 255) {
+      throw Errors.validationError(
+        "Customer name must be a string of at most 255 characters",
+      );
+    }
+    customer.name = raw.name;
+  }
+
+  if (raw.email !== undefined) {
+    if (typeof raw.email !== "string" || !EMAIL_RE.test(raw.email)) {
+      throw Errors.validationError(
+        "Customer email must be a valid email address",
+      );
+    }
+    customer.email = raw.email;
+  }
+
+  if (raw.phone !== undefined) {
+    if (typeof raw.phone !== "string") {
+      throw Errors.validationError("Customer phone must be a string");
+    }
+    const normalized = normalizePhone(raw.phone);
+    if (normalized.length < 5) {
+      throw Errors.validationError(
+        "Phone must be at least 5 characters after normalization",
+      );
+    }
+    if (normalized.length > 16) {
+      throw Errors.validationError(
+        "Phone must be at most 16 characters (15 digits + optional leading +)",
+      );
+    }
+    customer.phone = normalized;
+  }
+
+  return customer;
+}
+
 const TERMINAL_STATUSES = ["completed", "abandoned"] as const;
 
 function isTerminal(status: string): boolean {
@@ -313,8 +364,10 @@ export async function updateSession(
     }
 
     if (data.customer) {
+      // Sanitize: pick only known keys and re-validate (guards MCP/internal callers)
+      const safe = validateAndNormalizeCustomer(data.customer);
       updateData.customer =
-        sql`coalesce(${sessions.customer}, '{}'::jsonb) || ${JSON.stringify(data.customer)}::jsonb` as unknown as typeof updateData.customer;
+        sql`coalesce(${sessions.customer}, '{}'::jsonb) || ${JSON.stringify(safe)}::jsonb` as unknown as typeof updateData.customer;
     }
 
     const [updated] = await tx
@@ -534,5 +587,30 @@ export async function validateActiveSession(
       throw Errors.sessionAlreadyEnded(sessionId);
     }
     return session;
+  });
+}
+
+/**
+ * Set customer data on a session that has already been validated as active.
+ * Avoids a second session lookup (used by core_set_customer MCP tool).
+ */
+export async function setCustomerOnSession(
+  orgId: string,
+  sessionId: string,
+  rawCustomer: Record<string, unknown>,
+) {
+  const safe = validateAndNormalizeCustomer(rawCustomer);
+
+  return forOrg(orgId, async (tx) => {
+    const [updated] = await tx
+      .update(sessions)
+      .set({
+        customer:
+          sql`coalesce(${sessions.customer}, '{}'::jsonb) || ${JSON.stringify(safe)}::jsonb` as unknown as typeof sessions.$inferInsert.customer,
+      })
+      .where(eq(sessions.id, sessionId))
+      .returning();
+
+    return { session: updated, customer: safe };
   });
 }

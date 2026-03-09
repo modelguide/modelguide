@@ -1037,6 +1037,38 @@ describe("Customer column (#66)", () => {
     expect(patched.customer.email).toBe("john@example.com");
   });
 
+  test("PATCH customer on terminal session succeeds (200)", async () => {
+    // Create and complete a session
+    const createRes = await request("/api/sessions", {
+      method: "POST",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({
+        channelType: "web",
+        customer: { name: "Pre-close" },
+      }),
+    });
+    const created = await createRes.json();
+    createdSessionIds.push(created.id);
+
+    await request(`/api/sessions/${created.id}`, {
+      method: "PATCH",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({ status: "completed" }),
+    });
+
+    // Customer update on a completed session should still work
+    const patchRes = await request(`/api/sessions/${created.id}`, {
+      method: "PATCH",
+      headers: orgAAgentHeaders,
+      body: JSON.stringify({ customer: { email: "post-close@example.com" } }),
+    });
+
+    expect(patchRes.status).toBe(200);
+    const patched = await patchRes.json();
+    expect(patched.customer.name).toBe("Pre-close");
+    expect(patched.customer.email).toBe("post-close@example.com");
+  });
+
   test("customer.phone is normalized (strips formatting) (201)", async () => {
     const response = await request("/api/sessions", {
       method: "POST",

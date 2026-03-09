@@ -67,7 +67,10 @@ const customerSchema = z
         z
           .string()
           .min(5, "Phone must be at least 5 characters after normalization")
-          .max(16, "Phone must be at most 15 digits after normalization"),
+          .max(
+            16,
+            "Phone must be at most 16 characters (15 digits + optional leading +)",
+          ),
       )
       .optional()
       .openapi({

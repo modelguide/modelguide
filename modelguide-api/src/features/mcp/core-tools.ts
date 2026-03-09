@@ -4,8 +4,7 @@
 
 import {
   addMessages,
-  normalizePhone,
-  updateSession,
+  setCustomerOnSession,
   validateActiveSession,
 } from "@features/sessions";
 import { enrichLogger, getLogger } from "@lib/logger";
@@ -125,13 +124,14 @@ export function registerCoreTools(
         // Validate session is active and belongs to requesting agent
         await validateActiveSession(orgId, session_id, agentId);
 
-        // Normalize phone if provided
-        const customer: Record<string, string> = {};
-        if (name) customer.name = name;
-        if (email) customer.email = email;
-        if (phone) customer.phone = normalizePhone(phone);
+        // Build raw input — setCustomerOnSession validates, normalizes,
+        // and picks only known keys (name, email, phone)
+        const raw: Record<string, unknown> = {};
+        if (name) raw.name = name;
+        if (email) raw.email = email;
+        if (phone) raw.phone = phone;
 
-        await updateSession(orgId, session_id, agentId, { customer });
+        const { customer } = await setCustomerOnSession(orgId, session_id, raw);
 
         log.info(
           { sessionId: session_id, customer },
