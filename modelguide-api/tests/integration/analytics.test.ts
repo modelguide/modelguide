@@ -413,7 +413,7 @@ describe("GET /api/analytics/trends", () => {
   });
 
   test("supports all granularities", async () => {
-    for (const granularity of ["hour", "day", "week", "month"]) {
+    for (const granularity of ["day", "week", "month"]) {
       const response = await request(
         `/api/analytics/trends?metric=sessions&granularity=${granularity}&from_date=${FROM}&to_date=${TO}`,
         { headers: orgAAdminHeaders },
@@ -423,6 +423,19 @@ describe("GET /api/analytics/trends", () => {
       const body = await response.json();
       expect(body.granularity).toBe(granularity);
     }
+
+    // Hour granularity requires a narrow date range (max 7 days)
+    const today = new Date().toISOString().split("T")[0];
+    const sixDaysAgo = new Date(Date.now() - 6 * 86400_000)
+      .toISOString()
+      .split("T")[0];
+    const hourResponse = await request(
+      `/api/analytics/trends?metric=sessions&granularity=hour&from_date=${sixDaysAgo}&to_date=${today}`,
+      { headers: orgAAdminHeaders },
+    );
+    expect(hourResponse.status).toBe(200);
+    const hourBody = await hourResponse.json();
+    expect(hourBody.granularity).toBe("hour");
   });
 
   test("filters by agent_id", async () => {
