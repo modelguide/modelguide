@@ -22,7 +22,7 @@
   <a href="#quick-start">Quick Start</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="#adding-a-connector">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
-[![ModelGuide Demo](https://img.youtube.com/vi/melFDGiA6gg/maxresdefault.jpg)](https://www.youtube.com/watch?v=melFDGiA6gg)
+<a href="https://www.youtube.com/watch?v=melFDGiA6gg" target="_blank"><img src="https://img.youtube.com/vi/melFDGiA6gg/maxresdefault.jpg" alt="ModelGuide Demo" /></a>
 
 ## The Problem
 
