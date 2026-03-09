@@ -32,8 +32,24 @@ interface SessionFilters extends PaginationParams {
   hasFeedback?: boolean;
   startedAfter?: string;
   startedBefore?: string;
+  customerSearch?: string;
   sortBy?: "started_at" | "ended_at" | "status";
   sortOrder?: "asc" | "desc";
+}
+
+export interface CustomerData {
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
+/**
+ * Normalize a phone string: strip all characters except digits and leading '+'.
+ */
+export function normalizePhone(raw: string): string {
+  const hasLeadingPlus = raw.startsWith("+");
+  const digits = raw.replace(/\D/g, "");
+  return hasLeadingPlus ? `+${digits}` : digits;
 }
 
 const TERMINAL_STATUSES = ["completed", "abandoned"] as const;
@@ -213,8 +229,7 @@ export async function createSession(
   data: {
     externalId?: string;
     channelType: string;
-    userIdentifier: string;
-    userMetadata?: Record<string, unknown>;
+    customer?: CustomerData;
   },
 ) {
   return forOrg(orgId, async (tx) => {
@@ -235,8 +250,7 @@ export async function createSession(
         externalId: data.externalId,
         channelType:
           data.channelType as (typeof sessions.channelType.enumValues)[number],
-        userIdentifier: data.userIdentifier,
-        userMetadata: data.userMetadata ?? {},
+        customer: data.customer ?? null,
         status: "active",
         startedAt: new Date(),
       })
@@ -258,6 +272,7 @@ export async function updateSession(
   data: {
     status?: string;
     metadata?: Record<string, unknown>;
+    customer?: CustomerData;
   },
 ) {
   return forOrg(orgId, async (tx) => {
@@ -270,7 +285,13 @@ export async function updateSession(
       throw Errors.sessionNotFound(sessionId);
     }
 
-    if (isTerminal(existing.status)) {
+    // Allow customer updates on active sessions, but block status changes on terminal sessions
+    if (data.status && isTerminal(existing.status)) {
+      throw Errors.sessionAlreadyEnded(sessionId);
+    }
+
+    // Block metadata updates on terminal sessions too
+    if (data.metadata && isTerminal(existing.status)) {
       throw Errors.sessionAlreadyEnded(sessionId);
     }
 
@@ -289,6 +310,11 @@ export async function updateSession(
     if (data.metadata) {
       updateData.metadata =
         sql`coalesce(${sessions.metadata}, '{}'::jsonb) || ${JSON.stringify(data.metadata)}::jsonb` as unknown as typeof updateData.metadata;
+    }
+
+    if (data.customer) {
+      updateData.customer =
+        sql`coalesce(${sessions.customer}, '{}'::jsonb) || ${JSON.stringify(data.customer)}::jsonb` as unknown as typeof updateData.customer;
     }
 
     const [updated] = await tx
@@ -454,6 +480,13 @@ function buildFilterConditions(filters: SessionFilters) {
   }
   if (filters.startedBefore) {
     conditions.push(lte(sessions.startedAt, new Date(filters.startedBefore)));
+  }
+
+  if (filters.customerSearch) {
+    const pattern = `%${filters.customerSearch}%`;
+    conditions.push(
+      sql`(${sessions.customer}->>'name' ILIKE ${pattern} OR ${sessions.customer}->>'email' ILIKE ${pattern} OR ${sessions.customer}->>'phone' ILIKE ${pattern})`,
+    );
   }
 
   return conditions;

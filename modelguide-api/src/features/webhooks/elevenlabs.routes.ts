@@ -340,7 +340,7 @@ app.post("/:agentId/conversation-init", async (c) => {
           channelType: "voice",
           status: "active",
           externalId: conversation_id ?? null,
-          userIdentifier: caller_id ?? null,
+          customer: caller_id ? { phone: caller_id } : null,
           metadata: {
             ...(called_number ? { called_number } : {}),
             ...(call_sid ? { call_sid } : {}),

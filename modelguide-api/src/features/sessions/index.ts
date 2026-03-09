@@ -7,5 +7,6 @@ export {
   addMessage,
   addMessages,
   validateActiveSession,
+  normalizePhone,
 } from "./sessions.service";
-export type { MessageData } from "./sessions.service";
+export type { MessageData, CustomerData } from "./sessions.service";

@@ -249,7 +249,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+1-555-0301",
+      customer: { phone: "+15550301" },
       hoursAgo: 1,
       messages: [
         {
@@ -302,7 +302,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+1-555-0302",
+      customer: { phone: "+15550302" },
       hoursAgo: 4,
       messages: [
         {
@@ -362,7 +362,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "completed",
-      userIdentifier: "linda.k@example.com",
+      customer: { name: "Linda K.", email: "linda.k@example.com" },
       hoursAgo: 8,
       messages: [
         {
@@ -408,7 +408,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+1-555-0304",
+      customer: { phone: "+15550304" },
       hoursAgo: 24,
       messages: [
         {
@@ -454,7 +454,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "active",
-      userIdentifier: "robert.m@example.com",
+      customer: { name: "Robert M.", email: "robert.m@example.com" },
       hoursAgo: 0,
       messages: [
         {
@@ -479,7 +479,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "abandoned",
-      userIdentifier: "+1-555-0306",
+      customer: { phone: "+15550306" },
       hoursAgo: 36,
       messages: [
         {
@@ -498,7 +498,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "completed",
-      userIdentifier: "susan.b@example.com",
+      customer: { name: "Susan B.", email: "susan.b@example.com" },
       hoursAgo: 72,
       messages: [
         {

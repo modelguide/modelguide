@@ -250,7 +250,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+48-22-555-0101",
+      customer: { phone: "+48225550101" },
       hoursAgo: 2,
       messages: [
         {
@@ -306,7 +306,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "completed",
-      userIdentifier: "marek.z@factory-example.com",
+      customer: { name: "Marek Z.", email: "marek.z@factory-example.com" },
       hoursAgo: 6,
       messages: [
         {
@@ -363,7 +363,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "email",
       status: "completed",
-      userIdentifier: "anna.w@construction-example.com",
+      customer: { name: "Anna W.", email: "anna.w@construction-example.com" },
       hoursAgo: 12,
       messages: [
         {
@@ -411,7 +411,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+48-22-555-0103",
+      customer: { phone: "+48225550103" },
       hoursAgo: 24,
       messages: [
         {
@@ -461,7 +461,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "slack",
       status: "active",
-      userIdentifier: "pawel@workshop-example.com",
+      customer: { name: "Pawel", email: "pawel@workshop-example.com" },
       hoursAgo: 0,
       messages: [
         {
@@ -489,7 +489,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "abandoned",
-      userIdentifier: "+48-22-555-0105",
+      customer: { phone: "+48225550105" },
       hoursAgo: 48,
       messages: [
         {
@@ -509,7 +509,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "completed",
-      userIdentifier: "finance@metalworks-example.com",
+      customer: { email: "finance@metalworks-example.com" },
       hoursAgo: 96,
       messages: [
         {

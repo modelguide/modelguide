@@ -31,6 +31,7 @@ import {
   createSession,
   getSessionById,
   listSessions,
+  normalizePhone,
   updateSession,
 } from "./sessions.service";
 
@@ -51,14 +52,47 @@ const feedbackSummarySchema = z.object({
   supportRating: z.number().nullable(),
 });
 
+const customerSchema = z
+  .object({
+    name: z.string().max(255).optional().openapi({
+      description: "Customer name",
+    }),
+    email: z.string().email().optional().openapi({
+      description: "Customer email",
+    }),
+    phone: z
+      .string()
+      .transform((v) => normalizePhone(v))
+      .pipe(
+        z
+          .string()
+          .min(5, "Phone must be at least 5 characters after normalization")
+          .max(16, "Phone must be at most 15 digits after normalization"),
+      )
+      .optional()
+      .openapi({
+        description: "Customer phone (digits and optional leading +)",
+      }),
+  })
+  .strict()
+  .optional()
+  .openapi({ description: "Customer identity" });
+
+const customerResponseSchema = z
+  .object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+  })
+  .nullable();
+
 const sessionResponseSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
   agentId: z.string().uuid(),
   externalId: z.string().nullable(),
   channelType: z.string(),
-  userIdentifier: z.string().nullable(),
-  userMetadata: z.record(z.unknown()),
+  customer: customerResponseSchema,
   status: z.enum(["active", "completed", "abandoned"]),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
@@ -105,8 +139,7 @@ const sessionDetailSchema = z.object({
   agentId: z.string().uuid(),
   externalId: z.string().nullable(),
   channelType: z.string(),
-  userIdentifier: z.string().nullable(),
-  userMetadata: z.record(z.unknown()),
+  customer: customerResponseSchema,
   status: z.enum(["active", "completed", "abandoned"]),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
@@ -134,13 +167,7 @@ const createSessionSchema = z.object({
       "email",
     ])
     .openapi({ example: "voice" }),
-  userIdentifier: z.string().max(255).openapi({
-    description: "Customer identifier",
-    example: "+1234567890",
-  }),
-  userMetadata: z.record(z.unknown()).optional().openapi({
-    description: "Additional customer metadata",
-  }),
+  customer: customerSchema,
 });
 
 const updateSessionSchema = z
@@ -152,11 +179,18 @@ const updateSessionSchema = z
     metadata: z.record(z.unknown()).optional().openapi({
       description: "Session metadata to merge (e.g. cost/token data)",
     }),
+    customer: customerSchema,
   })
   .strict()
-  .refine((data) => data.status !== undefined || data.metadata !== undefined, {
-    message: "At least one of status or metadata must be provided",
-  });
+  .refine(
+    (data) =>
+      data.status !== undefined ||
+      data.metadata !== undefined ||
+      data.customer !== undefined,
+    {
+      message: "At least one of status, metadata, or customer must be provided",
+    },
+  );
 
 const createMessageSchema = z.object({
   role: z.enum(["user", "assistant"]).openapi({ example: "user" }),
@@ -224,6 +258,10 @@ const sessionFiltersSchema = paginationSchema.extend({
   startedBefore: z.string().datetime().optional().openapi({
     description: "Sessions started before this ISO timestamp",
   }),
+  customerSearch: z.string().optional().openapi({
+    description:
+      "Search across customer name, email, phone (case-insensitive OR)",
+  }),
   sortBy: z
     .enum(["started_at", "ended_at", "status"])
     .optional()
@@ -258,8 +296,7 @@ function formatSession(
     agentId: session.agentId,
     externalId: session.externalId,
     channelType: session.channelType,
-    userIdentifier: session.userIdentifier,
-    userMetadata: session.userMetadata ?? {},
+    customer: session.customer ?? null,
     status: session.status,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
@@ -288,8 +325,7 @@ function formatSessionDetail(
     agentId: session.agentId,
     externalId: session.externalId,
     channelType: session.channelType,
-    userIdentifier: session.userIdentifier,
-    userMetadata: session.userMetadata ?? {},
+    customer: session.customer ?? null,
     status: session.status,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
@@ -341,8 +377,7 @@ function formatCreatedSession(session: Session) {
     agentId: session.agentId,
     externalId: session.externalId,
     channelType: session.channelType,
-    userIdentifier: session.userIdentifier,
-    userMetadata: session.userMetadata ?? {},
+    customer: session.customer ?? null,
     status: session.status,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,

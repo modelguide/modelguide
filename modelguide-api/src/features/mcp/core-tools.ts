@@ -2,13 +2,18 @@
  * Core MCP tools — platform tools registered on every MCP server instance.
  */
 
-import { addMessages } from "@features/sessions";
+import {
+  addMessages,
+  normalizePhone,
+  updateSession,
+  validateActiveSession,
+} from "@features/sessions";
 import { enrichLogger, getLogger } from "@lib/logger";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
-export const CORE_TOOL_COUNT = 1;
+export const CORE_TOOL_COUNT = 2;
 
 export function registerCoreTools(
   server: McpServer,
@@ -98,6 +103,51 @@ export function registerCoreTools(
           "tool call rejected",
         );
         return mcpErrorResponse(err, "Failed to add messages");
+      }
+    },
+  );
+
+  // ── core_set_customer ──────────────────────────────────────────────
+  server.tool(
+    "core_set_customer",
+    "Set or update customer identity on the current session",
+    {
+      session_id: z.string().describe("The current session ID"),
+      name: z.string().optional().describe("Customer name"),
+      email: z.string().email().optional().describe("Customer email"),
+      phone: z.string().optional().describe("Customer phone number"),
+    },
+    async ({ session_id, name, email, phone }) => {
+      try {
+        enrichLogger({ sessionId: session_id });
+        const log = getLogger();
+
+        // Validate session is active and belongs to requesting agent
+        await validateActiveSession(orgId, session_id, agentId);
+
+        // Normalize phone if provided
+        const customer: Record<string, string> = {};
+        if (name) customer.name = name;
+        if (email) customer.email = email;
+        if (phone) customer.phone = normalizePhone(phone);
+
+        await updateSession(orgId, session_id, agentId, { customer });
+
+        log.info(
+          { sessionId: session_id, customer },
+          "customer set on session",
+        );
+
+        return mcpResponse({
+          session_id,
+          customer,
+        });
+      } catch (err) {
+        getLogger().warn(
+          { err, tool: "core_set_customer" },
+          "tool call rejected",
+        );
+        return mcpErrorResponse(err, "Failed to set customer");
       }
     },
   );

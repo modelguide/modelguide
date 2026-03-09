@@ -141,12 +141,12 @@ function makePhone(): string {
   return `+1-555-${String(randInt(1000, 9999))}`;
 }
 
-function userIdentifier(
+function makeCustomer(
   channel: ChannelType,
   config: OrgVerticalConfig,
-): string {
-  if (VOICE_CHANNELS.has(channel)) return makePhone();
-  return makeEmail(config);
+): { name?: string; email?: string; phone?: string } {
+  if (VOICE_CHANNELS.has(channel)) return { phone: makePhone() };
+  return { email: makeEmail(config) };
 }
 
 // ============================================================================
@@ -979,7 +979,7 @@ export async function generateSessions(
     agentId: string;
     channelType: ChannelType;
     status: "active" | "completed" | "abandoned";
-    userIdentifier: string;
+    customer: { name?: string; email?: string; phone?: string };
     startedAt: Date;
     endedAt: Date | null;
   }[] = [];
@@ -1014,7 +1014,7 @@ export async function generateSessions(
       agentId,
       channelType: channel,
       status,
-      userIdentifier: userIdentifier(channel, config),
+      customer: makeCustomer(channel, config),
       startedAt,
       endedAt,
     });
