@@ -45,5 +45,10 @@ drizzle/meta/
 .tanstack/
 .vite/
 
+# Playwright
+**/e2e/test-results/
+**/playwright-report/
+**/blob-report/
+
 # Manual test payloads
 **/tests/manual/payload*.json

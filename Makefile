@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format e2e db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose
 
 .DEFAULT_GOAL := help
 
@@ -86,6 +86,9 @@ ui-lint: ## [UI] Run linter
 
 ui-format: ## [UI] Format code
 	cd modelguide-ui && npm run format
+
+e2e: ## [UI] Run Playwright E2E tests (requires running API + UI)
+	cd modelguide-ui && npx playwright test
 
 # =============================================================================
 # Database
