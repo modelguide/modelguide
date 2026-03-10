@@ -47,12 +47,22 @@ export const sessionFeedbackSchema = z.object({
   feedbackSource: z.enum(['customer', 'support', 'system']),
   feedbackRef: z.string().nullable(),
   feedbackTags: z.array(z.string()).nullable(),
-  userIdentifier: z.string().nullable(),
+  customerExternalId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 })
 
 export type SessionFeedback = z.infer<typeof sessionFeedbackSchema>
+
+export const customerSchema = z
+  .object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+  })
+  .nullable()
+
+export type Customer = z.infer<typeof customerSchema>
 
 // List endpoint item — no inline messages/feedback arrays
 export const sessionListItemSchema = z.object({
@@ -61,8 +71,7 @@ export const sessionListItemSchema = z.object({
   agent: z.object({ id: z.string(), name: z.string() }),
   channelType: channelTypeSchema,
   status: sessionStatusSchema,
-  userIdentifier: z.string(),
-  userMetadata: z.record(z.unknown()).optional(),
+  customer: customerSchema,
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   durationSeconds: z.number().nullable(),

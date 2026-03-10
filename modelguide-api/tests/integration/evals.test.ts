@@ -63,7 +63,7 @@ async function createCompletedSessionWithToolCall(
     headers: orgAAgentHeaders,
     body: JSON.stringify({
       channelType: "web",
-      userIdentifier: "eval-test@example.com",
+      customer: { email: "eval-test@example.com" },
     }),
   });
   const session = await createRes.json();
@@ -309,7 +309,7 @@ describe("POST /api/evals/runs", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "web",
-        userIdentifier: "active-session@example.com",
+        customer: { email: "active-session@example.com" },
       }),
     });
     const session = await createRes.json();
@@ -447,7 +447,7 @@ describe("POST /api/evals/runs", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "web",
-        userIdentifier: "abandoned@example.com",
+        customer: { email: "abandoned@example.com" },
       }),
     });
     const session = await createRes.json();
@@ -530,7 +530,7 @@ describe("Session with no tool calls", () => {
       headers: orgAAgentHeaders,
       body: JSON.stringify({
         channelType: "web",
-        userIdentifier: "no-tools@example.com",
+        customer: { email: "no-tools@example.com" },
       }),
     });
     const session = await createRes.json();

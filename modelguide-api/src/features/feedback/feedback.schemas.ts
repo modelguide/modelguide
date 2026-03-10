@@ -20,7 +20,7 @@ export const feedbackResponseSchema = z.object({
   feedbackSource: z.enum(["customer", "support", "system"]),
   feedbackRef: z.string().nullable(),
   feedbackTags: z.array(z.string()).nullable(),
-  userIdentifier: z.string().nullable(),
+  customerExternalId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });
@@ -35,7 +35,7 @@ export function formatFeedback(feedback: SessionFeedback) {
     feedbackSource: feedback.feedbackSource,
     feedbackRef: feedback.feedbackRef,
     feedbackTags: feedback.feedbackTags,
-    userIdentifier: feedback.userIdentifier,
+    customerExternalId: feedback.customerExternalId,
     createdAt: feedback.createdAt.toISOString(),
     updatedAt: feedback.updatedAt?.toISOString() ?? null,
   };

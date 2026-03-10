@@ -382,7 +382,7 @@ async function insertHandwrittenSessions(
         agentId,
         channelType: sessionDef.channel,
         status: sessionDef.status,
-        userIdentifier: sessionDef.userIdentifier,
+        customer: sessionDef.customer,
         startedAt,
         endedAt,
       })

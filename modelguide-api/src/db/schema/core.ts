@@ -2,7 +2,7 @@
  * Core database table definitions
  */
 
-import { isNull, relations } from "drizzle-orm";
+import { isNull, relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -522,10 +522,11 @@ export const sessions = pgTable(
       .references(() => agents.id, { onDelete: "cascade" }),
     externalId: varchar("external_id", { length: 255 }),
     channelType: channelTypeEnum("channel_type").notNull().default("voice"),
-    userIdentifier: varchar("user_identifier", { length: 255 }),
-    userMetadata: jsonb("user_metadata")
-      .$type<Record<string, unknown>>()
-      .default({}),
+    customer: jsonb("customer").$type<{
+      name?: string;
+      email?: string;
+      phone?: string;
+    }>(),
     status: sessionStatusEnum("status").notNull().default("active"),
     startedAt: timestamp("started_at", { withTimezone: true })
       .defaultNow()
@@ -538,6 +539,10 @@ export const sessions = pgTable(
     index("sessions_agent_status_idx").on(table.agentId, table.status),
     index("sessions_started_at_idx").on(table.startedAt),
     index("sessions_external_id_idx").on(table.externalId),
+    index("sessions_org_customer_email_idx").on(
+      table.organizationId,
+      sql`(${table.customer}->>'email')`,
+    ),
   ],
 ).enableRLS();
 
@@ -621,7 +626,7 @@ export const sessionFeedback = pgTable(
     feedbackSource: feedbackSourceEnum("feedback_source").notNull(),
     feedbackRef: varchar("feedback_ref", { length: 255 }),
     feedbackTags: text("feedback_tags").array().default([]),
-    userIdentifier: varchar("user_identifier", { length: 255 }),
+    customerExternalId: varchar("customer_external_id", { length: 255 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

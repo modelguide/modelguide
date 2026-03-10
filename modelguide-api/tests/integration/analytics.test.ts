@@ -86,19 +86,19 @@ beforeAll(async () => {
         sessionId: inserted[0].id,
         rating: 2,
         feedbackSource: "customer",
-        userIdentifier: "analytics-test-customer-1",
+        customerExternalId: "analytics-test-customer-1",
       },
       {
         sessionId: inserted[0].id,
         rating: 1,
         feedbackSource: "support",
-        userIdentifier: "analytics-test-support-1",
+        customerExternalId: "analytics-test-support-1",
       },
       {
         sessionId: inserted[3].id,
         rating: 2,
         feedbackSource: "customer",
-        userIdentifier: "analytics-test-customer-2",
+        customerExternalId: "analytics-test-customer-2",
       },
     ]);
 

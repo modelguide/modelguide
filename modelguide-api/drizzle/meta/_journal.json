@@ -176,6 +176,13 @@
       "when": 1772736000000,
       "tag": "0024_enforce-sop-step-eval-config-fk",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1773068659003,
+      "tag": "0025_session-customer-column",
+      "breakpoints": true
     }
   ]
 }

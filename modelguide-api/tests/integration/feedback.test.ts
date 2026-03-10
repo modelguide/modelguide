@@ -31,13 +31,17 @@ function request(path: string, options?: RequestInit) {
 /** Helper to create a session via the agent API */
 async function createTestSession(
   agentHeaders: Record<string, string>,
-  userIdentifier: string,
+  customerIdentifier: string,
   channelType = "voice",
 ) {
+  // If it looks like a phone number, use phone; otherwise use email
+  const customer = customerIdentifier.startsWith("+")
+    ? { phone: customerIdentifier }
+    : { email: customerIdentifier };
   const res = await request("/api/sessions", {
     method: "POST",
     headers: agentHeaders,
-    body: JSON.stringify({ channelType, userIdentifier }),
+    body: JSON.stringify({ channelType, customer }),
   });
   const body = await res.json();
   createdSessionIds.push(body.id);
@@ -208,7 +212,7 @@ describe("POST /api/sessions/:id/feedback", () => {
     expect(body.feedbackTags).toEqual(["fast", "polite"]);
     // Auto-populated from authenticated user
     expect(body.feedbackRef).toBe(s.orgAAdmin.id);
-    expect(body.userIdentifier).toBe(s.orgAAdmin.email);
+    expect(body.customerExternalId).toBe(s.orgAAdmin.email);
     expect(body.createdAt).toBeDefined();
   });
 
@@ -251,7 +255,7 @@ describe("POST /api/sessions/:id/feedback", () => {
     const body = await response.json();
 
     expect(body.feedbackRef).toBe(s.orgASupport.id);
-    expect(body.userIdentifier).toBe(s.orgASupport.email);
+    expect(body.customerExternalId).toBe(s.orgASupport.email);
   });
 
   test("upserts when same user+source submits again (201)", async () => {

@@ -78,7 +78,7 @@ export interface HandwrittenSession {
   agentIndex: number;
   channel: ChannelType;
   status: "active" | "completed" | "abandoned";
-  userIdentifier: string;
+  customer: { name?: string; email?: string; phone?: string } | null;
   hoursAgo: number;
   messages: HandwrittenMessage[];
   feedback: HandwrittenFeedback | null;

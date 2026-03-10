@@ -2,13 +2,17 @@
  * Core MCP tools — platform tools registered on every MCP server instance.
  */
 
-import { addMessages } from "@features/sessions";
+import {
+  addMessages,
+  setCustomerOnSession,
+  validateActiveSession,
+} from "@features/sessions";
 import { enrichLogger, getLogger } from "@lib/logger";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
-export const CORE_TOOL_COUNT = 1;
+export const CORE_TOOL_COUNT = 2;
 
 export function registerCoreTools(
   server: McpServer,
@@ -98,6 +102,52 @@ export function registerCoreTools(
           "tool call rejected",
         );
         return mcpErrorResponse(err, "Failed to add messages");
+      }
+    },
+  );
+
+  // ── core_set_customer ──────────────────────────────────────────────
+  server.tool(
+    "core_set_customer",
+    "Set or update customer identity on the current session",
+    {
+      session_id: z.string().describe("The current session ID"),
+      name: z.string().optional().describe("Customer name"),
+      email: z.string().email().optional().describe("Customer email"),
+      phone: z.string().optional().describe("Customer phone number"),
+    },
+    async ({ session_id, name, email, phone }) => {
+      try {
+        enrichLogger({ sessionId: session_id });
+        const log = getLogger();
+
+        // Validate session is active and belongs to requesting agent
+        await validateActiveSession(orgId, session_id, agentId);
+
+        // Build raw input — setCustomerOnSession validates, normalizes,
+        // and picks only known keys (name, email, phone)
+        const raw: Record<string, unknown> = {};
+        if (name) raw.name = name;
+        if (email) raw.email = email;
+        if (phone) raw.phone = phone;
+
+        const { customer } = await setCustomerOnSession(orgId, session_id, raw);
+
+        log.info(
+          { sessionId: session_id, customer },
+          "customer set on session",
+        );
+
+        return mcpResponse({
+          session_id,
+          customer,
+        });
+      } catch (err) {
+        getLogger().warn(
+          { err, tool: "core_set_customer" },
+          "tool call rejected",
+        );
+        return mcpErrorResponse(err, "Failed to set customer");
       }
     },
   );

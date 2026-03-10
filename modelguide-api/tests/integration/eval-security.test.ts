@@ -40,7 +40,7 @@ async function createCompletedSession(): Promise<string> {
     headers: orgAAgentHeaders,
     body: JSON.stringify({
       channelType: "web",
-      userIdentifier: "security-test@example.com",
+      customer: { email: "security-test@example.com" },
     }),
   });
   const session = await createRes.json();

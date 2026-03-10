@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
+import { Search, User } from 'lucide-react'
 import { Input } from '~/components/ui/input'
 import { Select } from '~/components/ui/select'
 import { api } from '~/lib/api'
@@ -11,6 +11,7 @@ export interface SessionFilters {
   channelType?: ChannelType
   agentId?: string
   search?: string
+  customerSearch?: string
 }
 
 export interface SessionsFiltersProps {
@@ -61,6 +62,19 @@ export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersPro
             })
           }
           leftIcon={<Search className="h-4 w-4" />}
+        />
+      </div>
+      <div className="w-56">
+        <Input
+          placeholder="Customer name, email, phone..."
+          value={filters.customerSearch || ''}
+          onChange={(e) =>
+            onFiltersChange({
+              ...filters,
+              customerSearch: e.target.value || undefined,
+            })
+          }
+          leftIcon={<User className="h-4 w-4" />}
         />
       </div>
       <div className="w-36">

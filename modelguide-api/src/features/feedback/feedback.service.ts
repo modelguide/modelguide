@@ -41,7 +41,7 @@ export async function addFeedback(
     feedbackSource: "customer" | "support" | "system";
     feedbackRef?: string;
     feedbackTags?: string[];
-    userIdentifier?: string;
+    customerExternalId?: string;
   },
 ) {
   return forOrg(orgId, async (tx) => {
@@ -56,7 +56,7 @@ export async function addFeedback(
         feedbackSource: data.feedbackSource,
         feedbackRef: data.feedbackRef ?? null,
         feedbackTags: data.feedbackTags ?? [],
-        userIdentifier: data.userIdentifier ?? null,
+        customerExternalId: data.customerExternalId ?? null,
       })
       .onConflictDoUpdate({
         target: [

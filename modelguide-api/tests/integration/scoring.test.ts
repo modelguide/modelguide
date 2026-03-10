@@ -129,40 +129,40 @@ beforeAll(async () => {
         sessionId: inserted[0].id,
         rating: 2,
         feedbackSource: "customer",
-        userIdentifier: "scoring-cust-1",
+        customerExternalId: "scoring-cust-1",
       },
       {
         sessionId: inserted[0].id,
         rating: 2,
         feedbackSource: "support",
-        userIdentifier: "scoring-support-1",
+        customerExternalId: "scoring-support-1",
       },
       // Session 1: customer positive
       {
         sessionId: inserted[1].id,
         rating: 2,
         feedbackSource: "customer",
-        userIdentifier: "scoring-cust-2",
+        customerExternalId: "scoring-cust-2",
       },
       // Session 2: customer negative + support negative
       {
         sessionId: inserted[2].id,
         rating: 1,
         feedbackSource: "customer",
-        userIdentifier: "scoring-cust-3",
+        customerExternalId: "scoring-cust-3",
       },
       {
         sessionId: inserted[2].id,
         rating: 1,
         feedbackSource: "support",
-        userIdentifier: "scoring-support-2",
+        customerExternalId: "scoring-support-2",
       },
       // Session 3 (completed): customer positive
       {
         sessionId: inserted[3].id,
         rating: 2,
         feedbackSource: "customer",
-        userIdentifier: "scoring-cust-4",
+        customerExternalId: "scoring-cust-4",
       },
     ]);
   });
@@ -596,13 +596,13 @@ describe("Score edge cases", () => {
           sessionId: inserted[0].id,
           rating: 2,
           feedbackSource: "customer",
-          userIdentifier: "edge-all-pos-1",
+          customerExternalId: "edge-all-pos-1",
         },
         {
           sessionId: inserted[1].id,
           rating: 2,
           feedbackSource: "customer",
-          userIdentifier: "edge-all-pos-2",
+          customerExternalId: "edge-all-pos-2",
         },
       ]);
     });
@@ -652,13 +652,13 @@ describe("Score edge cases", () => {
           sessionId: inserted[0].id,
           rating: 1,
           feedbackSource: "customer",
-          userIdentifier: "edge-all-neg-1",
+          customerExternalId: "edge-all-neg-1",
         },
         {
           sessionId: inserted[1].id,
           rating: 1,
           feedbackSource: "customer",
-          userIdentifier: "edge-all-neg-2",
+          customerExternalId: "edge-all-neg-2",
         },
       ]);
     });
@@ -700,7 +700,7 @@ describe("Score edge cases", () => {
         sessionId: session.id,
         rating: 2,
         feedbackSource: "customer",
-        userIdentifier: "edge-single",
+        customerExternalId: "edge-single",
       });
     });
 

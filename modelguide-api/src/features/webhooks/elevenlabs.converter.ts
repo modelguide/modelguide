@@ -15,7 +15,7 @@ type PostCallData = PostCallTranscriptionPayload["data"];
 interface ConvertedSession {
   externalId: string;
   channelType: "voice";
-  userIdentifier: string | null;
+  customer: { name?: string; email?: string; phone?: string } | null;
   status: "completed";
   startedAt: Date;
   endedAt: Date;
@@ -164,7 +164,9 @@ export function convertPostCallToSession(
   const session: ConvertedSession = {
     externalId: conversationId,
     channelType: "voice",
-    userIdentifier: dynamicVars?.mg_user_id ?? null,
+    customer: dynamicVars?.mg_user_id
+      ? { phone: String(dynamicVars.mg_user_id) }
+      : null,
     status: "completed",
     startedAt: new Date(startTime * 1000),
     endedAt: new Date((startTime + data.metadata.call_duration_secs) * 1000),

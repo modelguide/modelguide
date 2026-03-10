@@ -103,7 +103,7 @@ const createFeedbackRoute = createRoute({
   tags: ["Feedback"],
   summary: "Create session feedback",
   description:
-    "Creates a feedback entry on a session. feedbackRef and userIdentifier are auto-populated from the authenticated user.",
+    "Creates a feedback entry on a session. feedbackRef and customerExternalId are auto-populated from the authenticated user.",
   security: [{ bearerAuth: [] }],
   request: {
     params: sessionIdParams,
@@ -135,7 +135,7 @@ router.openapi(createFeedbackRoute, async (c) => {
   const feedback = await addFeedback(orgId, id, {
     ...body,
     feedbackRef: user.id,
-    userIdentifier: user.email,
+    customerExternalId: user.email,
   });
 
   return c.json(formatFeedback(feedback), 201);

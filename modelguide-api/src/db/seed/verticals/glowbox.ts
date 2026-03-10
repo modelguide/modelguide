@@ -250,7 +250,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+1-555-0201",
+      customer: { phone: "+15550201" },
       hoursAgo: 2,
       messages: [
         { role: "user", content: "Hi, I want to check on my order." },
@@ -303,7 +303,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+1-555-0202",
+      customer: { phone: "+15550202" },
       hoursAgo: 5,
       messages: [
         {
@@ -367,7 +367,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "completed",
-      userIdentifier: "olivia.w@example.com",
+      customer: { name: "Olivia W.", email: "olivia.w@example.com" },
       hoursAgo: 8,
       messages: [
         {
@@ -415,7 +415,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "completed",
-      userIdentifier: "emma.t@example.com",
+      customer: { name: "Emma T.", email: "emma.t@example.com" },
       hoursAgo: 12,
       messages: [
         {
@@ -463,7 +463,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "active",
-      userIdentifier: "+1-555-0205",
+      customer: { phone: "+15550205" },
       hoursAgo: 0,
       messages: [
         {
@@ -488,7 +488,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "abandoned",
-      userIdentifier: "anon-visitor-3891",
+      customer: { name: "anon-visitor-3891" },
       hoursAgo: 24,
       messages: [
         {
@@ -508,7 +508,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 0,
       channel: "voice",
       status: "completed",
-      userIdentifier: "+1-555-0207",
+      customer: { phone: "+15550207" },
       hoursAgo: 48,
       messages: [
         {
@@ -554,7 +554,7 @@ const config: OrgVerticalConfig = {
       agentIndex: 1,
       channel: "web",
       status: "completed",
-      userIdentifier: "james.h@example.com",
+      customer: { name: "James H.", email: "james.h@example.com" },
       hoursAgo: 72,
       messages: [
         {

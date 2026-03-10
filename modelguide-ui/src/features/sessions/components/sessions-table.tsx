@@ -86,7 +86,7 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
                 Channel
               </th>
               <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                User
+                Customer
               </th>
               <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
@@ -182,7 +182,24 @@ function SessionRow({ session, index }: SessionRowProps) {
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className="text-sm text-fg-secondary">{session.userIdentifier}</span>
+        {session.customer ? (
+          <div className="min-w-0">
+            {session.customer.name && (
+              <div className="truncate text-sm text-fg-secondary">{session.customer.name}</div>
+            )}
+            {session.customer.email && (
+              <div className="truncate text-xs text-fg-muted">{session.customer.email}</div>
+            )}
+            {session.customer.phone && (
+              <div className="truncate text-xs text-fg-muted">{session.customer.phone}</div>
+            )}
+            {!session.customer.name && !session.customer.email && !session.customer.phone && (
+              <span className="text-sm text-fg-muted">{'\u2014'}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-sm text-fg-muted">{'\u2014'}</span>
+        )}
       </td>
       <td className="px-4 py-3">
         <Badge variant={statusVariants[session.status]}>{session.status}</Badge>

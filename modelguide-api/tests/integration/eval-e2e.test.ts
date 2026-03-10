@@ -83,7 +83,7 @@ async function buildSession(
 ): Promise<string> {
   const res = await post("/api/sessions", agentHeaders, {
     channelType: "web",
-    userIdentifier: `e2e-${Date.now()}@test.com`,
+    customer: { email: `e2e-${Date.now()}@test.com` },
   });
   const session = await res.json();
   cleanupSessionIds.push(session.id);

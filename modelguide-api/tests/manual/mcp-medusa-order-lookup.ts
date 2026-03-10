@@ -18,7 +18,7 @@ const orderDisplayId = Number(requireEnv("MG_ORDER_DISPLAY_ID"));
 
 const ctx = await setupMcpTest({
   connectorSlug: "acme-store",
-  userIdentifier: orderEmail,
+  customerPhone: orderEmail,
 });
 const tool = ctx.toolName("look_up_order");
 
