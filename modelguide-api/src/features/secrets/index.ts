@@ -12,4 +12,5 @@ export {
   getAgentElevenLabsKey,
   getAgentModelGuideKey,
   getAgentSecretByType,
+  decryptSecretsByIds,
 } from "./secrets.service";

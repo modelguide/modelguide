@@ -53,6 +53,7 @@ export const ErrorCode = {
   CONNECTOR_NOT_FOUND: "CONNECTOR_NOT_FOUND",
   CONNECTOR_NOT_CONFIGURED: "CONNECTOR_NOT_CONFIGURED",
   CONNECTOR_INACTIVE: "CONNECTOR_INACTIVE",
+  MISSING_SECRET_REF: "MISSING_SECRET_REF",
 
   // Tool errors
   TOOL_NOT_FOUND: "TOOL_NOT_FOUND",
@@ -136,6 +137,7 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.ORGANIZATION_REQUIRED]: 400,
   [ErrorCode.CONNECTOR_NOT_CONFIGURED]: 400,
   [ErrorCode.CONNECTOR_INACTIVE]: 400,
+  [ErrorCode.MISSING_SECRET_REF]: 400,
   [ErrorCode.TOOL_INACTIVE]: 400,
   [ErrorCode.SOP_INVALID_CONNECTOR_REF]: 400,
   [ErrorCode.EVAL_SESSION_NOT_TERMINAL]: 400,
@@ -344,6 +346,17 @@ export const Errors = {
     return new AppError(
       ErrorCode.CONNECTOR_INACTIVE,
       id ? `Connector is inactive: ${id}` : "Connector is inactive",
+    );
+  },
+
+  missingSecretRef(
+    fieldName: string,
+    entityType: "connector" | "agent",
+    entityId: string,
+  ) {
+    return new AppError(
+      ErrorCode.MISSING_SECRET_REF,
+      `Secret reference for field "${fieldName}" not found in org vault (${entityType}: ${entityId})`,
     );
   },
 

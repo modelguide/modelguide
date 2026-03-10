@@ -28,13 +28,19 @@ import {
   feedbackSourceEnum,
   messageRoleEnum,
   modalityEnum,
-  ownerTypeEnum,
+  secretScopeEnum,
   secretTypeEnum,
   sessionStatusEnum,
   sopStatusEnum,
   toolStatusEnum,
   userRoleEnum,
 } from "./enums";
+
+/**
+ * Flat map of { fieldName: secretId } stored on connectors and agents.
+ * Used to look up secrets by field name from the org vault.
+ */
+export type EntitySecretsMap = Record<string, string>;
 
 // ============================================================================
 // Organizations
@@ -232,6 +238,8 @@ export const connectors = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     config: jsonb("config").$type<Record<string, unknown>>().default({}),
+    /** Secret ref map: { fieldName: secretId }. Resolved at tool execution time. */
+    secrets: jsonb("secrets").$type<EntitySecretsMap>().notNull().default({}),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -333,8 +341,8 @@ export const secrets = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     secretType: secretTypeEnum("secret_type").notNull(),
     encryptedValue: text("encrypted_value").notNull(),
-    ownerType: ownerTypeEnum("owner_type").notNull(),
-    ownerId: uuid("owner_id").notNull(),
+    /** Browsing label — not an ownership constraint. NULL = unscoped. */
+    scope: secretScopeEnum("scope"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -345,7 +353,7 @@ export const secrets = pgTable(
   },
   (table) => [
     index("secrets_org_idx").on(table.organizationId),
-    index("secrets_owner_idx").on(table.ownerType, table.ownerId),
+    index("secrets_scope_idx").on(table.organizationId, table.scope),
   ],
 ).enableRLS();
 
@@ -382,6 +390,8 @@ export const agents = pgTable(
       .defaultNow()
       .notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    /** Secret ref map: { fieldName: secretId }. Resolved at tool execution time. */
+    secrets: jsonb("secrets").$type<EntitySecretsMap>().notNull().default({}),
     updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
       () => new Date(),
     ),

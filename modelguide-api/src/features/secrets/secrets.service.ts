@@ -3,7 +3,8 @@
  */
 
 import { forOrg } from "@db/rls";
-import { agents, connectors, secrets } from "@db/schema";
+import { agents, secrets } from "@db/schema";
+import type { EntitySecretsMap } from "@db/schema";
 import { decryptSecret, encryptSecret } from "@lib/crypto";
 import { Errors, logAndThrow } from "@lib/errors";
 import { getLogger } from "@lib/logger";
@@ -12,7 +13,9 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, asc, count, eq } from "drizzle-orm";
+import { asc, count, eq, inArray, isNull, or } from "drizzle-orm";
+
+export type SecretScope = "connector" | "agent";
 
 /**
  * Metadata columns returned for all secret queries.
@@ -22,25 +25,53 @@ const secretColumns = {
   id: secrets.id,
   name: secrets.name,
   secretType: secrets.secretType,
-  ownerType: secrets.ownerType,
-  ownerId: secrets.ownerId,
+  scope: secrets.scope,
   createdAt: secrets.createdAt,
   updatedAt: secrets.updatedAt,
 } as const;
 
-export async function listSecrets(orgId: string, pagination: PaginationParams) {
+export async function listSecrets(
+  orgId: string,
+  pagination: PaginationParams,
+  filters?: {
+    scope?: SecretScope;
+    includeUnscoped?: boolean;
+  },
+) {
   const { page, pageSize } = pagination;
   const offset = getOffset(page, pageSize);
 
   return forOrg(orgId, async (tx) => {
+    let whereClause = undefined;
+
+    if (filters?.scope) {
+      if (filters.includeUnscoped) {
+        // scope match OR unscoped — scoped rows ordered first via orderBy
+        whereClause = or(
+          eq(secrets.scope, filters.scope),
+          isNull(secrets.scope),
+        );
+      } else {
+        whereClause = eq(secrets.scope, filters.scope);
+      }
+    }
+    // no scope filter → return all
+
+    // When includeUnscoped: put scoped (non-null) rows first, unscoped (null) last
+    const orderClauses =
+      filters?.scope && filters.includeUnscoped
+        ? ([asc(secrets.scope), asc(secrets.createdAt)] as const)
+        : ([asc(secrets.createdAt)] as const);
+
     const [items, [{ total }]] = await Promise.all([
       tx
         .select(secretColumns)
         .from(secrets)
-        .orderBy(asc(secrets.createdAt))
+        .where(whereClause)
+        .orderBy(...orderClauses)
         .limit(pageSize)
         .offset(offset),
-      tx.select({ total: count() }).from(secrets),
+      tx.select({ total: count() }).from(secrets).where(whereClause),
     ]);
 
     return {
@@ -73,32 +104,12 @@ export async function createSecret(
       | "credentials"
       | "platform_api_key"
       | "webhook_secret";
-    ownerType: "connector" | "agent";
-    ownerId: string;
+    scope?: SecretScope;
   },
 ) {
   const encryptedValue = await encryptSecret(data.value);
 
   const [created] = await forOrg(orgId, async (tx) => {
-    // Validate that the referenced owner exists within the same org (RLS-scoped)
-    if (data.ownerType === "connector") {
-      const [owner] = await tx
-        .select({ id: connectors.id })
-        .from(connectors)
-        .where(eq(connectors.id, data.ownerId));
-      if (!owner) {
-        throw Errors.notFound("Connector", data.ownerId);
-      }
-    } else if (data.ownerType === "agent") {
-      const [owner] = await tx
-        .select({ id: agents.id })
-        .from(agents)
-        .where(eq(agents.id, data.ownerId));
-      if (!owner) {
-        throw Errors.notFound("Agent", data.ownerId);
-      }
-    }
-
     return tx
       .insert(secrets)
       .values({
@@ -106,8 +117,7 @@ export async function createSecret(
         name: data.name,
         secretType: data.secretType,
         encryptedValue,
-        ownerType: data.ownerType,
-        ownerId: data.ownerId,
+        scope: data.scope ?? null,
       })
       .returning(secretColumns);
   });
@@ -116,8 +126,7 @@ export async function createSecret(
     {
       secretId: created.id,
       secretType: data.secretType,
-      ownerType: data.ownerType,
-      ownerId: data.ownerId,
+      scope: data.scope ?? null,
     },
     "secret created",
   );
@@ -126,49 +135,54 @@ export async function createSecret(
 }
 
 /**
- * Get a decrypted agent secret by secretType.
- * Uses (ownerType=agent, ownerId, secretType) — no name matching.
+ * Get a decrypted agent secret by field name key.
+ * Reads agent.secrets map → fetches secret UUID from org vault → decrypts.
+ * Returns string | null (null if key absent or secret not in vault).
  */
 export async function getAgentSecretByType(
   orgId: string,
   agentId: string,
-  secretType:
-    | "api_key"
-    | "platform_api_key"
-    | "oauth_token"
-    | "credentials"
-    | "webhook_secret",
+  fieldName: string,
 ): Promise<string | null> {
-  const [secret] = await forOrg(orgId, (tx) =>
+  const [agentRow] = await forOrg(orgId, (tx) =>
     tx
-      .select({ encryptedValue: secrets.encryptedValue })
-      .from(secrets)
-      .where(
-        and(
-          eq(secrets.ownerType, "agent"),
-          eq(secrets.ownerId, agentId),
-          eq(secrets.secretType, secretType),
-        ),
-      )
+      .select({ secrets: agents.secrets })
+      .from(agents)
+      .where(eq(agents.id, agentId))
       .limit(1),
   );
 
-  if (!secret) return null;
+  if (!agentRow) return null;
+
+  const secretsMap = (agentRow.secrets ?? {}) as EntitySecretsMap;
+  const secretId = secretsMap[fieldName];
+  if (!secretId) return null;
+
+  const [secretRow] = await forOrg(orgId, (tx) =>
+    tx
+      .select({ encryptedValue: secrets.encryptedValue })
+      .from(secrets)
+      .where(eq(secrets.id, secretId))
+      .limit(1),
+  );
+
+  if (!secretRow) return null;
 
   try {
-    return await decryptSecret(secret.encryptedValue);
+    return await decryptSecret(secretRow.encryptedValue);
   } catch (err) {
     logAndThrow(
       getLogger(),
       err,
-      { agentId, secretType },
+      { agentId, fieldName, secretId },
       "failed to decrypt agent secret",
     );
   }
 }
 
 /**
- * Get decrypted ElevenLabs API key (platform_api_key) for an agent.
+ * Get decrypted ElevenLabs API key for an agent.
+ * Resolves from agent.secrets["platform_api_key"].
  */
 export async function getAgentElevenLabsKey(
   orgId: string,
@@ -178,13 +192,39 @@ export async function getAgentElevenLabsKey(
 }
 
 /**
- * Get decrypted ModelGuide API key (api_key) for an agent.
+ * Get decrypted ModelGuide API key for an agent.
+ * Resolves from agent.secrets["api_key"].
  */
 export async function getAgentModelGuideKey(
   orgId: string,
   agentId: string,
 ): Promise<string | null> {
   return getAgentSecretByType(orgId, agentId, "api_key");
+}
+
+/**
+ * Batch-fetch and decrypt secrets by their IDs within an org.
+ * Returns a Map<secretId, decryptedValue>.
+ * IDs not found in the vault are silently omitted from the result.
+ */
+export async function decryptSecretsByIds(
+  orgId: string,
+  secretIds: string[],
+): Promise<Map<string, string>> {
+  if (secretIds.length === 0) return new Map();
+
+  const rows = await forOrg(orgId, (tx) =>
+    tx
+      .select({ id: secrets.id, encryptedValue: secrets.encryptedValue })
+      .from(secrets)
+      .where(inArray(secrets.id, secretIds)),
+  );
+
+  const result = new Map<string, string>();
+  for (const row of rows) {
+    result.set(row.id, await decryptSecret(row.encryptedValue));
+  }
+  return result;
 }
 
 export async function updateSecret(

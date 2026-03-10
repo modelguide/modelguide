@@ -6,6 +6,7 @@
 
 import { encryptSecret, generateApiKey } from "@lib/crypto";
 import { toolSlug } from "@lib/slugify";
+import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "../schema";
 import {
@@ -32,6 +33,7 @@ export interface CatalogEntry {
   id: string;
   slug: string;
   tools: CatalogTool[] | unknown;
+  configSchema: Record<string, { type: string; required?: boolean }> | unknown;
 }
 
 export async function seedOrg(
@@ -288,6 +290,7 @@ async function createConnectorWithTools(
   connectorConfig: Record<string, string>,
   orgSlug: string,
 ): Promise<{ id: string } | null> {
+  // Seed the connector initially without secrets (inserted separately below)
   const [conn] = await db
     .insert(connectors)
     .values({
@@ -296,6 +299,7 @@ async function createConnectorWithTools(
       name: connectorName,
       slug: connectorSlug,
       config: connectorConfig,
+      secrets: {},
       isActive: true,
     })
     .onConflictDoNothing()
@@ -314,21 +318,47 @@ async function createConnectorWithTools(
   }
   console.log(`  Created/found connector: ${connector.name}`);
 
-  // Create secret
+  // Create a scoped secret in the org vault and reference it in connector.secrets
   const encrypted = await encryptSecret(
     `sk_${orgSlug}_${catalog.slug}_placeholder`,
   );
-  await db
+  const [secretRow] = await db
     .insert(secrets)
     .values({
       organizationId,
       name: `${connectorName} API Key`,
       secretType: "api_key",
       encryptedValue: encrypted,
-      ownerType: "connector",
-      ownerId: connector.id,
+      scope: "connector",
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: secrets.id });
+
+  if (secretRow) {
+    // Derive the secret field key from the catalog's configSchema
+    const schema = (catalog.configSchema ?? {}) as Record<
+      string,
+      { type: string }
+    >;
+    const secretFieldKey = Object.entries(schema).find(
+      ([, v]) => v.type === "secret",
+    )?.[0];
+
+    if (secretFieldKey) {
+      const [existing] = await db
+        .select({ secrets: connectors.secrets })
+        .from(connectors)
+        .where(eq(connectors.id, connector.id));
+      const currentSecrets = (existing?.secrets ?? {}) as Record<
+        string,
+        string
+      >;
+      await db
+        .update(connectors)
+        .set({ secrets: { ...currentSecrets, [secretFieldKey]: secretRow.id } })
+        .where(eq(connectors.id, connector.id));
+    }
+  }
 
   // Create tools from catalog
   if (Array.isArray(catalog.tools)) {

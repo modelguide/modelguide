@@ -62,6 +62,10 @@ const connectorResponseSchema = z.object({
   slug: z.string(),
   connectorCatalogId: z.string().uuid(),
   config: z.record(z.unknown()),
+  secrets: z.record(z.string()).openapi({
+    description:
+      "Secret ref map: { fieldName: secretId }. No decrypted values.",
+  }),
   isActive: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
@@ -98,7 +102,10 @@ const createConnectorSchema = z.object({
       example: "my-medusa-store",
     }),
   config: z.record(z.unknown()).optional().openapi({
-    description: "Connector configuration",
+    description: "Non-secret connector configuration",
+  }),
+  secrets: z.record(z.string().uuid()).optional().openapi({
+    description: "Secret ref map: { fieldName: secretId }",
   }),
 });
 
@@ -106,6 +113,9 @@ const updateConnectorSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     config: z.record(z.unknown()).optional(),
+    secrets: z.record(z.string().uuid()).optional().openapi({
+      description: "Secret ref map: { fieldName: secretId }",
+    }),
     isActive: z.boolean().optional(),
   })
   .strict()
@@ -113,10 +123,11 @@ const updateConnectorSchema = z
     (data) =>
       data.name !== undefined ||
       data.config !== undefined ||
+      data.secrets !== undefined ||
       data.isActive !== undefined,
     {
       message:
-        "At least one of 'name', 'config', or 'isActive' must be provided",
+        "At least one of 'name', 'config', 'secrets', or 'isActive' must be provided",
     },
   );
 
@@ -181,6 +192,7 @@ function formatConnector(connector: Connector) {
     slug: connector.slug,
     connectorCatalogId: connector.connectorCatalogId,
     config: connector.config ?? {},
+    secrets: (connector.secrets ?? {}) as Record<string, string>,
     isActive: connector.isActive,
     createdAt: connector.createdAt.toISOString(),
     updatedAt: connector.updatedAt?.toISOString() ?? null,
