@@ -93,7 +93,7 @@ function AgentPickerDialog({
 
   const { data: agentsData, isLoading } = useQuery({
     queryKey: ['agents'],
-    queryFn: () => api.get('agents').json<PaginatedResponse<Agent>>(),
+    queryFn: () => api.get('agents?pageSize=100').json<PaginatedResponse<Agent>>(),
   })
 
   const mutation = useMutation({

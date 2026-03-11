@@ -188,33 +188,35 @@ export async function createKnowledgeBase(
     createdBy?: string;
   },
 ) {
-  const slug = data.slug || slugify(data.name);
+  const slug = (data.slug || slugify(data.name)).slice(0, 100);
 
   return forOrg(orgId, async (tx) => {
-    // Check slug uniqueness within org+type
-    const [existing] = await tx
-      .select({ id: knowledgeBase.id })
-      .from(knowledgeBase)
-      .where(
-        and(eq(knowledgeBase.type, data.type), eq(knowledgeBase.slug, slug)),
-      );
-
-    if (existing) throw Errors.knowledgeBaseSlugExists(slug);
-
-    const [created] = await tx
-      .insert(knowledgeBase)
-      .values({
-        organizationId: orgId,
-        type: data.type,
-        name: data.name,
-        slug,
-        content: data.content,
-        description: data.description,
-        config: data.config,
-        isActive: data.isActive ?? true,
-        createdBy: data.createdBy,
-      })
-      .returning();
+    let created: typeof knowledgeBase.$inferSelect;
+    try {
+      [created] = await tx
+        .insert(knowledgeBase)
+        .values({
+          organizationId: orgId,
+          type: data.type,
+          name: data.name,
+          slug,
+          content: data.content,
+          description: data.description,
+          config: data.config,
+          isActive: data.isActive ?? true,
+          createdBy: data.createdBy,
+        })
+        .returning();
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        ((error as Error & { code?: string }).code === "23505" ||
+          error.message.includes("kb_org_type_slug_unique"))
+      ) {
+        throw Errors.knowledgeBaseSlugExists(slug);
+      }
+      throw error;
+    }
 
     if (data.agentIds && data.agentIds.length > 0) {
       await setAgentsInternal(tx, created.id, data.agentIds);
@@ -249,7 +251,7 @@ export async function updateKnowledgeBase(
 
     if (!existing) throw Errors.knowledgeBaseNotFound(id);
 
-    const updates: Record<string, unknown> = {};
+    const updates: Partial<typeof knowledgeBase.$inferInsert> = {};
     if (data.name !== undefined) updates.name = data.name;
     if (data.content !== undefined) updates.content = data.content;
     if (data.description !== undefined) updates.description = data.description;

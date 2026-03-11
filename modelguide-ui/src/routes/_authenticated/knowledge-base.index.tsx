@@ -40,6 +40,7 @@ function KnowledgeBasePage() {
     queryFn: () => {
       const params = new URLSearchParams()
       params.set('type', 'guardrail')
+      params.set('pageSize', '50')
       if (isActive) params.set('isActive', isActive)
       if (category) params.set('category', category)
       return api

@@ -66,7 +66,7 @@ export function KbForm({
 
   const { data: agentsData } = useQuery({
     queryKey: ['agents'],
-    queryFn: () => api.get('agents').json<PaginatedResponse<Agent>>(),
+    queryFn: () => api.get('agents?pageSize=100').json<PaginatedResponse<Agent>>(),
   })
 
   const agents = agentsData?.data ?? []
@@ -195,6 +195,7 @@ export function KbForm({
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="e.g., Never use the customer's surname in conversation"
                   rows={3}
+                  maxLength={5000}
                   className="w-full rounded-lg border border-fg-subtle/15 bg-bg-subtle px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none"
                 />
               </div>
