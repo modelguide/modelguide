@@ -6,12 +6,14 @@ export * from "./eval-runs";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import type {
   agentConnectorTools,
+  agentKnowledgeBase,
   agentSops,
   agents,
   apiKeys,
   connectorTools,
   connectors,
   connectorsCatalog,
+  knowledgeBase,
   magicTokens,
   organizations,
   secrets,
@@ -95,3 +97,9 @@ export type NewEvalRun = InferInsertModel<typeof evalRuns>;
 
 export type EvalRunScore = InferSelectModel<typeof evalRunScores>;
 export type NewEvalRunScore = InferInsertModel<typeof evalRunScores>;
+
+export type KnowledgeBase = InferSelectModel<typeof knowledgeBase>;
+export type NewKnowledgeBase = InferInsertModel<typeof knowledgeBase>;
+
+export type AgentKnowledgeBase = InferSelectModel<typeof agentKnowledgeBase>;
+export type NewAgentKnowledgeBase = InferInsertModel<typeof agentKnowledgeBase>;

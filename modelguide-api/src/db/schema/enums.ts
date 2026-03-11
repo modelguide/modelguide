@@ -143,3 +143,14 @@ export const evalScoreResultEnum = pgEnum("eval_score_result", [
   "skip",
   "error",
 ]);
+
+// ============================================================================
+// Knowledge Base enums
+// ============================================================================
+
+/**
+ * Knowledge base item types — discriminator for the unified KB table
+ */
+export const knowledgeBaseTypeEnum = pgEnum("knowledge_base_type", [
+  "guardrail",
+]);

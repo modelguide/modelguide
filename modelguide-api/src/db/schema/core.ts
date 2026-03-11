@@ -26,6 +26,7 @@ import {
   channelTypeEnum,
   connectorTypeEnum,
   feedbackSourceEnum,
+  knowledgeBaseTypeEnum,
   messageRoleEnum,
   modalityEnum,
   secretScopeEnum,
@@ -867,3 +868,98 @@ export const agentSopsRelations = relations(agentSops, ({ one }) => ({
     references: [sops.id],
   }),
 }));
+
+// ============================================================================
+// Knowledge Base (Unified — guardrails, FAQ, etc. — RLS enabled)
+// ============================================================================
+
+export const knowledgeBase = pgTable(
+  "knowledge_base",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    type: knowledgeBaseTypeEnum("type").notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    content: text("content").notNull(),
+    description: text("description"),
+    config: jsonb("config").$type<Record<string, unknown>>().default({}),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+      () => new Date(),
+    ),
+  },
+  (table) => [
+    uniqueIndex("kb_org_type_slug_unique").on(
+      table.organizationId,
+      table.type,
+      table.slug,
+    ),
+    index("kb_org_type_active_idx").on(
+      table.organizationId,
+      table.type,
+      table.isActive,
+    ),
+  ],
+).enableRLS();
+
+export const knowledgeBaseRelations = relations(
+  knowledgeBase,
+  ({ one, many }) => ({
+    organization: one(organizations, {
+      fields: [knowledgeBase.organizationId],
+      references: [organizations.id],
+    }),
+    creator: one(users, {
+      fields: [knowledgeBase.createdBy],
+      references: [users.id],
+    }),
+    agentKnowledgeBase: many(agentKnowledgeBase),
+  }),
+);
+
+// ============================================================================
+// Agent Knowledge Base (Junction Table — no RLS, queried via RLS-protected parents)
+// ============================================================================
+
+export const agentKnowledgeBase = pgTable(
+  "agent_knowledge_base",
+  {
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    knowledgeBaseId: uuid("knowledge_base_id")
+      .notNull()
+      .references(() => knowledgeBase.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("agent_kb_unique").on(table.agentId, table.knowledgeBaseId),
+    index("agent_kb_agent_idx").on(table.agentId),
+    index("agent_kb_kb_idx").on(table.knowledgeBaseId),
+  ],
+);
+
+export const agentKnowledgeBaseRelations = relations(
+  agentKnowledgeBase,
+  ({ one }) => ({
+    agent: one(agents, {
+      fields: [agentKnowledgeBase.agentId],
+      references: [agents.id],
+    }),
+    knowledgeBaseItem: one(knowledgeBase, {
+      fields: [agentKnowledgeBase.knowledgeBaseId],
+      references: [knowledgeBase.id],
+    }),
+  }),
+);

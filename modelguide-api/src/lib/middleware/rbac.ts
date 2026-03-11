@@ -65,6 +65,12 @@ export const Permissions = {
   "sops:update": ["admin", "support"],
   "sops:delete": ["admin"],
 
+  // Knowledge Base management
+  "knowledge_base:read": ["admin", "support", "viewer"],
+  "knowledge_base:create": ["admin"],
+  "knowledge_base:update": ["admin", "support"],
+  "knowledge_base:delete": ["admin"],
+
   // Eval config management
   "eval_configs:read": ["admin", "support", "viewer"],
   "eval_configs:create": ["admin"],
