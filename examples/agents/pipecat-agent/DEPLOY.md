@@ -2,8 +2,10 @@
 
 ## Prerequisites
 
-- [Pipecat Cloud CLI](https://docs.pipecat.daily.co/pipecat-cloud/cli) installed
-- A Pipecat Cloud account with a project set up
+- [Pipecat Cloud CLI](https://docs.pipecat.ai/deployment/pipecat-cloud/introduction) installed (`pip install pipecatcloud`)
+- A Pipecat Cloud account
+- Docker Desktop running
+- A Docker Hub account (or other container registry)
 - All required API keys
 
 ## Steps
@@ -11,52 +13,99 @@
 ### 1. Authenticate
 
 ```bash
-pipecat auth login
+pipecat cloud auth login
 ```
 
-### 2. Set environment variables
+### 2. Configure secrets
 
-Configure secrets in Pipecat Cloud (these are not committed to the repo):
+Create a secret set in Pipecat Cloud with your API keys:
+
+```
+OPENAI_API_KEY
+DEEPGRAM_API_KEY
+ELEVENLABS_API_KEY
+ELEVENLABS_VOICE_ID
+MODELGUIDE_API_URL        # e.g. https://modelguide-api-production.up.railway.app
+MODELGUIDE_API_KEY         # mgk_xxx agent API key
+MODELGUIDE_AGENT_ID        # agt_xxx agent ID
+USER_EMAIL                 # e.g. delivered+admin-glowbox@resend.dev
+```
+
+No `DAILY_API_KEY` needed when using `--enable-managed-keys`.
+
+### 3. Build and push Docker image
 
 ```bash
-pipecat secrets set DAILY_API_KEY "your-daily-key"
-pipecat secrets set OPENAI_API_KEY "sk-your-openai-key"
-pipecat secrets set DEEPGRAM_API_KEY "your-deepgram-key"
-pipecat secrets set ELEVENLABS_API_KEY "your-elevenlabs-key"
-pipecat secrets set ELEVENLABS_VOICE_ID "your-voice-id"
-pipecat secrets set MODELGUIDE_API_URL "https://your-modelguide-api.up.railway.app"
-pipecat secrets set MODELGUIDE_API_KEY "mgk_your-agent-key"
-pipecat secrets set MODELGUIDE_AGENT_ID "agt_xxx"
+cd examples/agents/pipecat-agent
+echo Y | pipecat cloud docker build-push buildpro-agent -v 0.17.7 -r dockerhub -u YOUR_DOCKERHUB_USER
 ```
 
-### 3. Deploy
+### 4. Deploy
 
 ```bash
-pipecat deploy
+pipecat cloud deploy buildpro-agent YOUR_DOCKERHUB_USER/buildpro-agent:0.17.7 \
+  -s my-secrets -min 1 --enable-managed-keys -nc -f
 ```
 
-This reads `pipecat.yaml` and builds + deploys the agent.
+The CLI may report a 90-second timeout — this is normal. Check status separately:
 
-### 4. Connect
+```bash
+pipecat cloud agent status buildpro-agent
+pipecat cloud agent logs buildpro-agent
+```
 
-Once deployed, Pipecat Cloud provides a WebRTC endpoint. You can connect to it from:
+Look for `Health: Ready` and `BuildPro Sam agent vX.Y.Z starting` in the logs.
 
-- The Pipecat Cloud dashboard (built-in test UI)
-- A custom web app using the [Daily.co client SDK](https://docs.daily.co/reference)
-- The Daily Prebuilt embed
+### 5. Test
 
-### Daily.co room configuration
+```bash
+pipecat cloud agent start buildpro-agent -f -D
+```
 
-For production, configure your Daily.co domain with:
-- **Room expiry:** Set `exp` to auto-expire rooms after a reasonable duration (e.g. 30 minutes)
-- **Privacy:** Set `privacy: "private"` and use meeting tokens for authenticated access
-- **Recording:** Enable cloud recording if you want audio archives
+### 6. Stop billing
 
-### Connecting to ModelGuide API
+```bash
+pipecat cloud agent delete buildpro-agent -f
+```
 
-The `MODELGUIDE_API_URL` must be reachable from wherever Pipecat Cloud runs your agent. If your ModelGuide API is on Railway:
+## Dockerfile Explained
 
-1. Use the public Railway URL (e.g. `https://modelguide-api-production.up.railway.app`)
-2. Ensure the agent's API key (`mgk_xxx`) is valid and the agent has the required connector tools assigned
+The PCC base image (`dailyco/pipecat-base:latest`) uses **0-byte stubs** for Python, pip, uv, and all pre-installed `.py`/`.so` files. PCC injects real binaries at deploy time. This means `RUN pip install` during `docker build` is a silent no-op.
 
-There is no need for webhook configuration (unlike the ElevenLabs integration). The Pipecat agent calls ModelGuide's REST and MCP APIs directly.
+We use a multi-stage build to work around this:
+
+```dockerfile
+# Stage 1: Real Python installs real packages
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS builder
+WORKDIR /deps
+COPY requirements.txt .
+RUN uv venv /deps/.venv && \
+    uv pip install --python /deps/.venv/bin/python --no-cache -r requirements.txt
+
+# Stage 2: Merge into PCC base image
+FROM dailyco/pipecat-base:latest
+COPY --from=builder /deps/.venv/lib/python3.12/site-packages/ /app/.venv/lib/python3.12/site-packages/
+COPY requirements.txt requirements.txt
+COPY src/ .
+```
+
+### Important: Version Pins
+
+The base image has specific versions of `starlette` (0.50.0) and `uvicorn` (0.40.0) that PCC's fastapi health check server depends on. Our COPY overwrites these, so `requirements.txt` must pin them to matching versions:
+
+```
+starlette==0.50.0
+uvicorn==0.40.0
+```
+
+Without these pins, newer versions get installed and break PCC's health check (causing `ValidationTimeout` on deploy).
+
+### Important: daily-python
+
+`daily-python` is included in the build (via `pipecat-ai[daily,...]`). Do NOT uninstall it from the builder stage — PCC's runtime injection of daily-python is unreliable.
+
+## Connecting to ModelGuide API
+
+The `MODELGUIDE_API_URL` must be reachable from Pipecat Cloud's infrastructure. If your ModelGuide API is on Railway, use the public URL (e.g. `https://modelguide-api-production.up.railway.app`).
+
+The agent's API key (`mgk_xxx`) must be valid and the agent must have the required connector tools assigned in the ModelGuide dashboard.

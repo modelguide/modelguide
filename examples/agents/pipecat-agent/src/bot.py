@@ -36,7 +36,6 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.google.llm import GoogleLLMService, GoogleThinkingConfig
 from pipecat.transports.daily.transport import DailyParams, DailyTransport
 
 import mg_client
@@ -46,7 +45,7 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call
 from transcript import TranscriptCollector
 
-VERSION = "0.17.0"
+VERSION = "0.17.9"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
@@ -117,6 +116,8 @@ def _create_llm():
     logger.info("LLM model: %s", model)
 
     if model.startswith("gemini"):
+        from pipecat.services.google.llm import GoogleLLMService, GoogleThinkingConfig
+
         return GoogleLLMService(
             api_key=config.GOOGLE_API_KEY,
             model=model,
@@ -160,7 +161,7 @@ async def main(transport: DailyTransport):
     # --- System prompt + context ---
     system_prompt = build_system_prompt(session_id, user_email=config.USER_EMAIL)
     messages = [{"role": "system", "content": system_prompt}]
-    tools = TOOL_SCHEMAS if not isinstance(llm, GoogleLLMService) else None
+    tools = TOOL_SCHEMAS if not LLM_MODEL.startswith("gemini") else None
     context = OpenAILLMContext(messages=messages, tools=tools)
     context_aggregator = llm.create_context_aggregator(context)
 

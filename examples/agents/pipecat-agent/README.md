@@ -82,6 +82,19 @@ src/
 - **Latency:** Each tool call is a network round trip to the ModelGuide MCP server. Pipecat's streaming pipeline mitigates perceived latency, but total latency is higher than a co-located setup. For production, consider deploying the Pipecat agent on the same infrastructure as the ModelGuide API.
 - **No interruption during tool calls:** While a tool is executing, the bot cannot be interrupted. This is a limitation of the sequential pipeline design.
 
-## Pipecat Cloud deployment
+## Pipecat Cloud Deployment
 
-See [DEPLOY.md](./DEPLOY.md) for deployment instructions.
+See [DEPLOY.md](./DEPLOY.md) for full deployment instructions.
+
+### Dockerfile: Why Multi-Stage Build?
+
+The PCC base image (`dailyco/pipecat-base:latest`) contains **0-byte stubs** for Python, pip, and all pre-installed packages. `RUN pip install` during `docker build` silently does nothing. The multi-stage build works around this:
+
+1. **Builder stage** uses a real Python image to install packages
+2. **COPY** merges the installed packages into the PCC base image's site-packages
+3. PCC replaces the stubs with real binaries at deploy time
+
+Two critical pins in `requirements.txt`:
+
+- **`starlette==0.50.0`** and **`uvicorn==0.40.0`** — must match the PCC base image versions. Without these, COPY overwrites them with newer versions that break PCC's fastapi health check server.
+- **`daily-python` is kept** (not uninstalled from builder) — PCC runtime injection of daily-python is unreliable, so we bundle it directly.

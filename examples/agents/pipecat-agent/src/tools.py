@@ -1,7 +1,7 @@
 """OpenAI function tool definitions and MCP-backed handlers.
 
 The LLM sees short tool names (e.g. `list_products`). Each maps to a
-connector-prefixed MCP tool name (e.g. `buildpro_store_list_products`).
+connector-prefixed MCP tool name (e.g. `glowbox_store_list_products`).
 """
 
 import json
@@ -18,16 +18,16 @@ logger = logging.getLogger("tools")
 # ---------------------------------------------------------------------------
 
 TOOL_NAME_MAP = {
-    "create_cart": "buildpro_store_create_cart",
-    "add_to_cart": "buildpro_store_add_to_cart",
-    "get_cart": "buildpro_store_get_cart",
-    "set_delivery_address": "buildpro_store_set_delivery_address",
-    "complete_cart": "buildpro_store_complete_cart",
-    "list_products": "buildpro_store_list_products",
-    "get_product": "buildpro_store_get_product",
-    "get_order": "buildpro_store_get_order",
-    "look_up_order_history": "buildpro_store_look_up_order_history",
-    "send_email": "buildpro_store_send_email",
+    "create_cart": "glowbox_store_create_cart",
+    "add_to_cart": "glowbox_store_add_to_cart",
+    "get_cart": "glowbox_store_get_cart",
+    "set_delivery_address": "glowbox_store_set_delivery_address",
+    "complete_cart": "glowbox_store_complete_cart",
+    "list_products": "glowbox_store_list_products",
+    "get_product": "glowbox_store_get_product",
+    "get_order": "glowbox_store_get_order",
+    "look_up_order_history": "glowbox_store_look_up_order_history",
+    "send_email": "glowbox_store_send_email",
 }
 
 # ---------------------------------------------------------------------------

@@ -7,16 +7,20 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-from config import MODELGUIDE_AGENT_ID, MODELGUIDE_API_KEY, MODELGUIDE_API_URL
+import config
 
 logger = logging.getLogger("mg_client")
 
-_auth_headers = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {MODELGUIDE_API_KEY}",
-}
 
-_mcp_url = f"{MODELGUIDE_API_URL}/mcp/{MODELGUIDE_AGENT_ID}"
+def _headers():
+    return {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {config.MODELGUIDE_API_KEY}",
+    }
+
+
+def _mcp_url():
+    return f"{config.MODELGUIDE_API_URL}/mcp/{config.MODELGUIDE_AGENT_ID}"
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +32,8 @@ async def create_session(user_identifier: str | None = None) -> str:
     """Create a new ModelGuide session. Returns the session ID."""
     async with httpx.AsyncClient() as client:
         res = await client.post(
-            f"{MODELGUIDE_API_URL}/api/sessions",
-            headers=_auth_headers,
+            f"{config.MODELGUIDE_API_URL}/api/sessions",
+            headers=_headers(),
             json={
                 "channelType": "voice",
                 "userIdentifier": user_identifier or "voice-caller",
@@ -48,8 +52,8 @@ async def add_messages(session_id: str, messages: list[dict]) -> None:
         for msg in messages:
             try:
                 res = await client.post(
-                    f"{MODELGUIDE_API_URL}/api/sessions/{session_id}/messages",
-                    headers=_auth_headers,
+                    f"{config.MODELGUIDE_API_URL}/api/sessions/{session_id}/messages",
+                    headers=_headers(),
                     json=msg,
                 )
                 if not res.is_success:
@@ -73,8 +77,8 @@ async def complete_session(
             body["metadata"] = metadata
         try:
             res = await client.patch(
-                f"{MODELGUIDE_API_URL}/api/sessions/{session_id}",
-                headers=_auth_headers,
+                f"{config.MODELGUIDE_API_URL}/api/sessions/{session_id}",
+                headers=_headers(),
                 json=body,
             )
             if res.is_success:
@@ -103,9 +107,9 @@ async def call_tool(tool_name: str, args: dict, session_id: str) -> dict:
     persistent MCP ClientSession for the lifetime of the voice call.
     """
     args_with_session = {**args, "session_id": session_id}
-    headers = {"Authorization": f"Bearer {MODELGUIDE_API_KEY}"}
+    headers = {"Authorization": f"Bearer {config.MODELGUIDE_API_KEY}"}
 
-    async with streamablehttp_client(_mcp_url, headers=headers) as (read, write, _):
+    async with streamablehttp_client(_mcp_url(), headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool_name, args_with_session)

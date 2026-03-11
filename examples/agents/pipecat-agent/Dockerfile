@@ -1,10 +1,15 @@
-FROM python:3.13-slim
+# Stage 1: Install packages with real Python (base image has 0-byte stubs)
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS builder
 
-WORKDIR /app
+WORKDIR /deps
+COPY requirements.txt .
+RUN uv venv /deps/.venv && \
+    uv pip install --python /deps/.venv/bin/python --no-cache -r requirements.txt
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+# Stage 2: Merge into PCC base image
+FROM dailyco/pipecat-base:latest
 
-COPY src/ src/
+COPY --from=builder /deps/.venv/lib/python3.12/site-packages/ /app/.venv/lib/python3.12/site-packages/
 
-CMD ["python", "src/bot.py"]
+COPY requirements.txt requirements.txt
+COPY src/ .
