@@ -104,6 +104,15 @@ class TestCompleteSession:
         assert call_kwargs[1]["json"]["metadata"] == {"duration_s": 120}
 
     @pytest.mark.asyncio
+    async def test_abandoned_status(self):
+        client = _mock_client("patch")
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            await mg_client.complete_session("sess_1", status="abandoned")
+
+        call_kwargs = client.patch.call_args
+        assert call_kwargs[1]["json"]["status"] == "abandoned"
+
+    @pytest.mark.asyncio
     async def test_does_not_raise_on_failure(self):
         client = _mock_client("patch", _mock_response(500, text="Server error"))
         with patch("mg_client.httpx.AsyncClient", return_value=client):

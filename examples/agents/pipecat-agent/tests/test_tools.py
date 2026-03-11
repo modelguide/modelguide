@@ -28,8 +28,8 @@ class TestToolSchemas:
 
     def test_tool_map_values_have_connector_prefix(self):
         for short_name, mcp_name in TOOL_NAME_MAP.items():
-            assert mcp_name.startswith("buildpro_store_"), (
-                f"MCP name for {short_name} should start with 'buildpro_store_', got {mcp_name}"
+            assert mcp_name.startswith("glowbox_store_"), (
+                f"MCP name for {short_name} should start with 'glowbox_store_', got {mcp_name}"
             )
 
     def test_ten_tools_defined(self):
@@ -82,7 +82,8 @@ class TestHandleToolCall:
         tc = msgs[0]["toolCalls"][0]
         assert tc["toolName"] == "list_products"
         assert tc["toolStatus"] == "success"
-        assert tc["latencyMs"] >= 0
+        # latencyMs is only included when > 0; mock calls complete instantly
+        assert tc.get("latencyMs", 0) >= 0
 
     @pytest.mark.asyncio
     async def test_tool_call_mcp_failure(self):
@@ -122,7 +123,7 @@ class TestHandleToolCall:
             )
 
         mock_call.assert_called_once_with(
-            "buildpro_store_add_to_cart",
+            "glowbox_store_add_to_cart",
             {"product_id": "p1", "quantity": 2},
             "sess_abc",
         )

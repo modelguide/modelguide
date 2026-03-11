@@ -45,7 +45,7 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call
 from transcript import TranscriptCollector
 
-VERSION = "0.17.9"
+VERSION = "0.18.2"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
@@ -141,8 +141,12 @@ async def main(transport: DailyTransport):
     logger.info("Config validated, setting up pipeline")
 
     # --- Create ModelGuide session ---
-    session_id = await mg_client.create_session(config.USER_EMAIL)
-    logger.info("ModelGuide session: %s", session_id)
+    try:
+        session_id = await mg_client.create_session(config.USER_EMAIL)
+        logger.info("ModelGuide session: %s", session_id)
+    except Exception:
+        logger.exception("Failed to create ModelGuide session — running without tracking")
+        session_id = "offline"
 
     # --- Transcript collector ---
     transcript = TranscriptCollector()
@@ -218,19 +222,40 @@ async def main(transport: DailyTransport):
             [LLMMessagesFrame(messages)]
         )
 
-    @transport.event_handler("on_participant_left")
-    async def on_participant_left(transport, participant, reason):
-        logger.info("Participant left: %s (reason: %s)", participant.get("id", "unknown"), reason)
+    # --- Run ---
+    transcript_posted = False
+
+    async def _post_transcript(status: str = "completed"):
+        nonlocal transcript_posted
+        if transcript_posted or session_id == "offline":
+            return
+        transcript_posted = True
         messages_to_post = transcript.get_messages()
         if messages_to_post:
             await mg_client.add_messages(session_id, messages_to_post)
             logger.info("Posted %d messages to session %s", len(messages_to_post), session_id)
-        await mg_client.complete_session(session_id)
-        await task.queue_frame(EndFrame())
+        await mg_client.complete_session(session_id, status=status)
 
-    # --- Run ---
+    @transport.event_handler("on_participant_left")
+    async def on_participant_left(transport, participant, reason):
+        logger.info("Participant left: %s (reason: %s)", participant.get("id", "unknown"), reason)
+        try:
+            messages = transcript.get_messages()
+            status = "completed" if len(messages) > 1 else "abandoned"
+            await _post_transcript(status=status)
+        except Exception:
+            logger.exception("Failed to post transcript / complete session %s", session_id)
+        finally:
+            await task.queue_frame(EndFrame())
+
     runner = PipelineRunner(handle_sigint=not is_local)
     await runner.run(task)
+
+    # Safety net: post transcript if pipeline ended without on_participant_left
+    try:
+        await _post_transcript(status="abandoned")
+    except Exception:
+        logger.exception("Failed to post transcript in cleanup for session %s", session_id)
 
 
 # ---------------------------------------------------------------------------

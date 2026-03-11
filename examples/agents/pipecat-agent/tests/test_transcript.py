@@ -82,8 +82,8 @@ class TestTranscriptCollector:
         assert "toolCalls" in msgs[0]
         assert msgs[1]["content"] == "Your cart is empty"
 
-    def test_multiple_tool_calls_batched(self):
-        """Multiple tool calls without intervening text are batched into one message."""
+    def test_multiple_tool_calls_separate_messages(self):
+        """Each tool call is recorded as its own message for correct ordering."""
         tc = TranscriptCollector()
         tc.add_tool_call(
             tool_call_id="tc_1",
@@ -100,8 +100,9 @@ class TestTranscriptCollector:
             latency_ms=120,
         )
         msgs = tc.get_messages()
-        assert len(msgs) == 1
-        assert len(msgs[0]["toolCalls"]) == 2
+        assert len(msgs) == 2
+        assert msgs[0]["toolCalls"][0]["toolCallId"] == "tc_1"
+        assert msgs[1]["toolCalls"][0]["toolCallId"] == "tc_2"
 
     def test_full_conversation_flow(self):
         """Simulates a realistic conversation with user, tools, and assistant turns."""
@@ -156,6 +157,37 @@ class TestTranscriptCollector:
         )
         msgs = tc.get_messages()
         assert msgs[0]["toolCalls"][0]["toolStatus"] == "error"
+
+    def test_consecutive_user_utterances_merged(self):
+        """STT fragments should be merged into a single user message."""
+        tc = TranscriptCollector()
+        tc.add_user_utterance("Do you")
+        tc.add_user_utterance("have concrete?")
+        msgs = tc.get_messages()
+        assert len(msgs) == 1
+        assert msgs[0]["content"] == "Do you have concrete?"
+
+    def test_user_utterances_not_merged_after_assistant(self):
+        tc = TranscriptCollector()
+        tc.add_user_utterance("Hello")
+        tc.add_assistant_response("Hi there")
+        tc.add_user_utterance("Thanks")
+        msgs = tc.get_messages()
+        assert len(msgs) == 3
+        assert msgs[0]["content"] == "Hello"
+        assert msgs[2]["content"] == "Thanks"
+
+    def test_latency_ms_omitted_when_zero(self):
+        tc = TranscriptCollector()
+        tc.add_tool_call(
+            tool_call_id="tc_z",
+            tool_name="get_cart",
+            tool_input={},
+            tool_output={"items": []},
+            latency_ms=0,
+        )
+        msgs = tc.get_messages()
+        assert "latencyMs" not in msgs[0]["toolCalls"][0]
 
     def test_occurred_at_is_iso_format(self):
         tc = TranscriptCollector()

@@ -9,16 +9,19 @@ class TranscriptCollector:
 
     def __init__(self) -> None:
         self._messages: list[dict] = []
-        self._pending_tool_calls: list[dict] = []
 
     def add_user_utterance(self, text: str) -> None:
         if not text.strip():
             return
-        self._messages.append({
-            "role": "user",
-            "content": text.strip(),
-            "occurredAt": datetime.now(timezone.utc).isoformat(),
-        })
+        # Merge consecutive user utterances (STT sends fragments)
+        if self._messages and self._messages[-1]["role"] == "user":
+            self._messages[-1]["content"] += " " + text.strip()
+        else:
+            self._messages.append({
+                "role": "user",
+                "content": text.strip(),
+                "occurredAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            })
 
     def add_assistant_response(self, text: str) -> None:
         if not text.strip():
@@ -29,7 +32,7 @@ class TranscriptCollector:
         self._messages.append({
             "role": "assistant",
             "content": text.strip(),
-            "occurredAt": datetime.now(timezone.utc).isoformat(),
+            "occurredAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
 
     def add_tool_call(
@@ -41,25 +44,26 @@ class TranscriptCollector:
         latency_ms: int,
         tool_status: str = "success",
     ) -> None:
-        self._pending_tool_calls.append({
+        call: dict = {
             "toolCallId": tool_call_id,
             "toolName": tool_name,
             "toolInput": tool_input,
             "toolOutput": tool_output,
-            "latencyMs": latency_ms,
             "toolStatus": tool_status,
+        }
+        if latency_ms > 0:
+            call["latencyMs"] = latency_ms
+        # Record each tool call as its own assistant message immediately
+        # (preserves correct ordering in the transcript)
+        self._messages.append({
+            "role": "assistant",
+            "toolCalls": [call],
+            "occurredAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
 
     def _flush_tool_calls(self) -> None:
-        """Write pending tool calls as an assistant message."""
-        if not self._pending_tool_calls:
-            return
-        self._messages.append({
-            "role": "assistant",
-            "toolCalls": self._pending_tool_calls,
-            "occurredAt": datetime.now(timezone.utc).isoformat(),
-        })
-        self._pending_tool_calls = []
+        """No-op — tool calls are now recorded immediately."""
+        pass
 
     def get_messages(self) -> list[dict]:
         """Return all collected messages, flushing any pending tool calls."""

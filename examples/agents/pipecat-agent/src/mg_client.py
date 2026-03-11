@@ -68,11 +68,12 @@ async def add_messages(session_id: str, messages: list[dict]) -> None:
 
 async def complete_session(
     session_id: str,
+    status: str = "completed",
     metadata: dict | None = None,
 ) -> None:
-    """Mark session as completed."""
+    """Mark session as completed or abandoned."""
     async with httpx.AsyncClient() as client:
-        body: dict = {"status": "completed"}
+        body: dict = {"status": status}
         if metadata:
             body["metadata"] = metadata
         try:
