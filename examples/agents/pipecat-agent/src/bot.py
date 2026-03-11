@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
@@ -45,7 +46,7 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call
 from transcript import TranscriptCollector
 
-VERSION = "0.18.2"
+VERSION = "0.18.3"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
@@ -86,6 +87,29 @@ class AssistantTranscriptProcessor(FrameProcessor):
         if isinstance(frame, LLMFullResponseEndFrame) and self._current_sentence.strip():
             self._transcript.add_assistant_response(self._current_sentence.strip())
             self._current_sentence = ""
+        await self.push_frame(frame, direction)
+
+
+class TurnLatencyLogger(FrameProcessor):
+    """Logs per-turn latency: user speech → first LLM text token."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._user_speech_at: float | None = None
+        self._waiting_for_response = False
+        self._turn_count = 0
+
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TranscriptionFrame) and frame.text:
+            self._user_speech_at = time.monotonic()
+            self._waiting_for_response = True
+        if isinstance(frame, TextFrame) and frame.text and self._waiting_for_response:
+            self._waiting_for_response = False
+            self._turn_count += 1
+            if self._user_speech_at:
+                latency_ms = int((time.monotonic() - self._user_speech_at) * 1000)
+                logger.info("Turn %d latency: %dms (STT→LLM first token)", self._turn_count, latency_ms)
         await self.push_frame(frame, direction)
 
 
@@ -184,9 +208,10 @@ async def main(transport: DailyTransport):
         fn_name = schema["function"]["name"]
         llm.register_function(fn_name, _on_tool_call)
 
-    # --- Transcript processors ---
+    # --- Transcript + latency processors ---
     user_transcript_proc = UserTranscriptProcessor(transcript)
     assistant_transcript_proc = AssistantTranscriptProcessor(transcript)
+    turn_latency = TurnLatencyLogger()
 
     # --- Pipeline ---
     pipeline = Pipeline(
@@ -196,6 +221,7 @@ async def main(transport: DailyTransport):
             user_transcript_proc,
             context_aggregator.user(),
             llm,
+            turn_latency,
             assistant_transcript_proc,
             tts,
             transport.output(),

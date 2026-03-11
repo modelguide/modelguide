@@ -2,6 +2,9 @@
 
 The LLM sees short tool names (e.g. `list_products`). Each maps to a
 connector-prefixed MCP tool name (e.g. `glowbox_store_list_products`).
+
+Parameter names match the MCP server's camelCase convention. Cart ID is
+tracked automatically — the LLM doesn't need to manage it.
 """
 
 import json
@@ -30,8 +33,11 @@ TOOL_NAME_MAP = {
     "send_email": "glowbox_store_send_email",
 }
 
+# Tools that need cartId injected automatically
+_CART_TOOLS = {"add_to_cart", "get_cart", "set_delivery_address", "complete_cart"}
+
 # ---------------------------------------------------------------------------
-# OpenAI function calling schemas
+# OpenAI function calling schemas (camelCase to match MCP)
 # ---------------------------------------------------------------------------
 
 TOOL_SCHEMAS = [
@@ -49,7 +55,7 @@ TOOL_SCHEMAS = [
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Max number of results to return (default: 10)",
+                        "description": "Max number of results to return (default: 20)",
                     },
                 },
                 "required": [],
@@ -64,12 +70,12 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "product_id": {
+                    "productId": {
                         "type": "string",
                         "description": "The product ID",
                     },
                 },
-                "required": ["product_id"],
+                "required": ["productId"],
             },
         },
     },
@@ -94,24 +100,20 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "add_to_cart",
-            "description": "Add a product to the shopping cart.",
+            "description": "Add a product to the shopping cart. Cart ID is managed automatically.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "product_id": {
+                    "variantId": {
                         "type": "string",
-                        "description": "Product ID to add",
-                    },
-                    "variant_id": {
-                        "type": "string",
-                        "description": "Variant ID (specific size/color)",
+                        "description": "Variant ID (specific size/color) to add",
                     },
                     "quantity": {
                         "type": "integer",
                         "description": "Number of items to add (default: 1)",
                     },
                 },
-                "required": ["product_id"],
+                "required": ["variantId", "quantity"],
             },
         },
     },
@@ -135,19 +137,18 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "address_1": {"type": "string", "description": "Street address line 1"},
+                    "firstName": {"type": "string", "description": "First name"},
+                    "lastName": {"type": "string", "description": "Last name"},
+                    "address1": {"type": "string", "description": "Street address line 1"},
                     "city": {"type": "string", "description": "City"},
-                    "province": {"type": "string", "description": "State/province code"},
-                    "postal_code": {"type": "string", "description": "Postal/ZIP code"},
-                    "country_code": {
+                    "postalCode": {"type": "string", "description": "Postal/ZIP code"},
+                    "countryCode": {
                         "type": "string",
                         "description": "Two-letter country code (e.g. 'us')",
                     },
-                    "first_name": {"type": "string", "description": "First name"},
-                    "last_name": {"type": "string", "description": "Last name"},
                     "phone": {"type": "string", "description": "Phone number"},
                 },
-                "required": ["address_1", "city", "postal_code", "country_code"],
+                "required": ["address1", "city", "postalCode", "countryCode"],
             },
         },
     },
@@ -171,9 +172,9 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "order_id": {"type": "string", "description": "The order ID"},
+                    "orderId": {"type": "string", "description": "The order ID"},
                 },
-                "required": ["order_id"],
+                "required": ["orderId"],
             },
         },
     },
@@ -218,6 +219,40 @@ TOOL_SCHEMAS = [
 # ---------------------------------------------------------------------------
 
 
+# Cart ID tracked per session (set on create_cart, injected into cart tools)
+_active_cart_id: str | None = None
+
+
+def _transform_args(tool_name: str, args: dict) -> dict:
+    """Transform LLM args to match MCP expectations."""
+    global _active_cart_id
+
+    # Inject cartId for cart operations
+    if tool_name in _CART_TOOLS and _active_cart_id:
+        args = {**args, "cartId": _active_cart_id}
+
+    # Nest address fields for set_delivery_address
+    if tool_name == "set_delivery_address":
+        address_fields = ["firstName", "lastName", "address1", "address2",
+                          "city", "postalCode", "countryCode", "phone"]
+        address = {k: args.pop(k) for k in address_fields if k in args}
+        if address:
+            args["address"] = address
+
+    return args
+
+
+def _extract_cart_id(tool_name: str, result: dict) -> None:
+    """Capture cartId from create_cart response."""
+    global _active_cart_id
+    if tool_name == "create_cart":
+        # Medusa returns cart object with id field
+        cart_id = result.get("cart", {}).get("id") or result.get("id")
+        if cart_id:
+            _active_cart_id = cart_id
+            logger.info("Cart ID captured: %s", cart_id)
+
+
 async def handle_tool_call(
     tool_name: str,
     tool_args: dict,
@@ -240,11 +275,17 @@ async def handle_tool_call(
         )
         return json.dumps({"error": error})
 
+    # Transform args to match MCP schema
+    mcp_args = _transform_args(tool_name, {**tool_args})
+
     start = time.monotonic()
     try:
-        result = await mg_client.call_tool(mcp_name, tool_args, session_id)
+        result = await mg_client.call_tool(mcp_name, mcp_args, session_id)
         latency_ms = int((time.monotonic() - start) * 1000)
         logger.info("Tool %s completed in %dms", tool_name, latency_ms)
+
+        # Capture cart ID from create_cart response
+        _extract_cart_id(tool_name, result)
 
         transcript.add_tool_call(
             tool_call_id=tool_call_id,

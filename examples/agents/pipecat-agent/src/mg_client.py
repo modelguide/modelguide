@@ -100,6 +100,24 @@ async def complete_session(
 # ---------------------------------------------------------------------------
 
 
+async def list_tools() -> list[dict]:
+    """Discover available MCP tools and their schemas. Call at startup to verify."""
+    headers = {"Authorization": f"Bearer {config.MODELGUIDE_API_KEY}"}
+
+    async with streamablehttp_client(_mcp_url(), headers=headers) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.list_tools()
+            tools = []
+            for tool in result.tools:
+                tools.append({
+                    "name": tool.name,
+                    "description": tool.description or "",
+                    "inputSchema": tool.inputSchema if hasattr(tool, "inputSchema") else {},
+                })
+            return tools
+
+
 async def call_tool(tool_name: str, args: dict, session_id: str) -> dict:
     """Execute a tool via ModelGuide's MCP endpoint.
 

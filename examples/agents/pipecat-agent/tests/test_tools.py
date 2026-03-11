@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tools import TOOL_NAME_MAP, TOOL_SCHEMAS, handle_tool_call
+from tools import TOOL_NAME_MAP, TOOL_SCHEMAS, handle_tool_call, _transform_args, _extract_cart_id
 from transcript import TranscriptCollector
+import tools
 
 
 class TestToolSchemas:
@@ -41,6 +42,71 @@ class TestToolSchemas:
             params = schema["function"]["parameters"]
             assert isinstance(params.get("required", []), list)
 
+    def test_camel_case_params(self):
+        """All parameter names should be camelCase to match MCP."""
+        snake_case_params = []
+        for schema in TOOL_SCHEMAS:
+            props = schema["function"]["parameters"].get("properties", {})
+            for key in props:
+                if "_" in key:
+                    snake_case_params.append(
+                        f"{schema['function']['name']}.{key}"
+                    )
+        assert snake_case_params == [], (
+            f"Found snake_case params (should be camelCase): {snake_case_params}"
+        )
+
+
+class TestTransformArgs:
+    def test_injects_cart_id(self):
+        tools._active_cart_id = "cart_abc"
+        result = _transform_args("add_to_cart", {"variantId": "v1", "quantity": 2})
+        assert result["cartId"] == "cart_abc"
+        tools._active_cart_id = None
+
+    def test_no_cart_id_for_non_cart_tools(self):
+        tools._active_cart_id = "cart_abc"
+        result = _transform_args("list_products", {"query": "tiles"})
+        assert "cartId" not in result
+        tools._active_cart_id = None
+
+    def test_nests_address_fields(self):
+        args = {
+            "firstName": "John",
+            "lastName": "Smith",
+            "address1": "123 Main St",
+            "city": "Columbus",
+            "postalCode": "43215",
+            "countryCode": "us",
+        }
+        tools._active_cart_id = "cart_abc"
+        result = _transform_args("set_delivery_address", args)
+        assert "address" in result
+        assert result["address"]["firstName"] == "John"
+        assert result["address"]["address1"] == "123 Main St"
+        assert result["cartId"] == "cart_abc"
+        # Address fields should not be at top level
+        assert "firstName" not in result
+        assert "address1" not in result
+        tools._active_cart_id = None
+
+    def test_extract_cart_id_from_response(self):
+        tools._active_cart_id = None
+        _extract_cart_id("create_cart", {"cart": {"id": "cart_xyz"}})
+        assert tools._active_cart_id == "cart_xyz"
+        tools._active_cart_id = None
+
+    def test_extract_cart_id_flat_response(self):
+        tools._active_cart_id = None
+        _extract_cart_id("create_cart", {"id": "cart_flat"})
+        assert tools._active_cart_id == "cart_flat"
+        tools._active_cart_id = None
+
+    def test_ignores_non_create_cart(self):
+        tools._active_cart_id = None
+        _extract_cart_id("list_products", {"id": "not_a_cart"})
+        assert tools._active_cart_id is None
+
 
 class TestHandleToolCall:
     @pytest.mark.asyncio
@@ -56,7 +122,6 @@ class TestHandleToolCall:
         parsed = json.loads(result)
         assert "error" in parsed
         assert "Unknown tool" in parsed["error"]
-        # Should record error in transcript
         msgs = transcript.get_messages()
         assert len(msgs) == 1
         assert msgs[0]["toolCalls"][0]["toolStatus"] == "error"
@@ -115,15 +180,33 @@ class TestHandleToolCall:
 
         with patch("tools.mg_client.call_tool", mock_call):
             await handle_tool_call(
-                tool_name="add_to_cart",
-                tool_args={"product_id": "p1", "quantity": 2},
+                tool_name="get_order",
+                tool_args={"orderId": "order_123"},
                 tool_call_id="tc_4",
                 session_id="sess_abc",
                 transcript=transcript,
             )
 
         mock_call.assert_called_once_with(
-            "glowbox_store_add_to_cart",
-            {"product_id": "p1", "quantity": 2},
+            "glowbox_store_get_order",
+            {"orderId": "order_123"},
             "sess_abc",
         )
+
+    @pytest.mark.asyncio
+    async def test_create_cart_captures_cart_id(self):
+        tools._active_cart_id = None
+        transcript = TranscriptCollector()
+        mock_result = {"cart": {"id": "cart_captured"}}
+
+        with patch("tools.mg_client.call_tool", new_callable=AsyncMock, return_value=mock_result):
+            await handle_tool_call(
+                tool_name="create_cart",
+                tool_args={"email": "test@example.com"},
+                tool_call_id="tc_5",
+                session_id="sess_1",
+                transcript=transcript,
+            )
+
+        assert tools._active_cart_id == "cart_captured"
+        tools._active_cart_id = None
