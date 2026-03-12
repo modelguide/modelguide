@@ -46,11 +46,35 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call
 from transcript import TranscriptCollector
 
-VERSION = "0.18.7"
+VERSION = "0.19.3"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
 logger.info("BuildPro Sam agent v%s starting", VERSION)
+
+
+# ---------------------------------------------------------------------------
+# Regional endpoint configuration — set REGION=eu for EU endpoints
+# ---------------------------------------------------------------------------
+
+REGION = os.getenv("REGION", "us").lower()
+
+_REGION_URLS = {
+    "us": {
+        "openai": None,  # default: api.openai.com
+        "deepgram": "",   # default
+        "elevenlabs": "wss://api.elevenlabs.io",
+    },
+    "eu": {
+        "openai": "https://eu.api.openai.com/v1",
+        "deepgram": "https://api.eu.deepgram.com",
+        "elevenlabs": "wss://api.eu.residency.elevenlabs.io",
+    },
+}
+
+URLS = _REGION_URLS.get(REGION, _REGION_URLS["us"])
+logger.info("Region: %s → OpenAI=%s, Deepgram=%s, ElevenLabs=%s",
+            REGION, URLS["openai"] or "default", URLS["deepgram"] or "default", URLS["elevenlabs"])
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +175,7 @@ def _create_llm():
             ),
         )
 
-    return OpenAILLMService(api_key=config.OPENAI_API_KEY, model=model)
+    return OpenAILLMService(api_key=config.OPENAI_API_KEY, model=model, base_url=URLS["openai"])
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +208,11 @@ async def main(transport: DailyTransport):
     transcript = TranscriptCollector()
 
     # --- Services ---
-    stt = DeepgramSTTService(api_key=config.DEEPGRAM_API_KEY, model="nova-3")
+    stt = DeepgramSTTService(
+        api_key=config.DEEPGRAM_API_KEY,
+        model="nova-3",
+        base_url=URLS["deepgram"],
+    )
 
     llm = _create_llm()
 
@@ -192,6 +220,7 @@ async def main(transport: DailyTransport):
         api_key=config.ELEVENLABS_API_KEY,
         voice_id=config.ELEVENLABS_VOICE_ID,
         model="eleven_flash_v2_5",
+        url=URLS["elevenlabs"],
     )
 
     # --- System prompt + context ---

@@ -2,8 +2,10 @@
 
 PROMPT = """\
 ## Ordering workflow
-1. When customer wants to order → immediately call `create_cart` \
-(pass {{userEmail}})
+1. When customer wants to order → call `create_cart` FIRST \
+(pass {{userEmail}}). WAIT for the result before calling any other tool. \
+Do NOT call `add_to_cart` in the same turn as `create_cart`. This step is \
+important.
 2. Search products with `list_products` → add with `add_to_cart`
 3. After each addition: "Got it, added. What else?" BUT if the customer \
 already said "that's it" or "that's all" or signaled they are done earlier \
