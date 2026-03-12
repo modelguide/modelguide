@@ -1,0 +1,6 @@
+agent_name = "buildpro-agent"
+image = "pawelmodelguide/buildpro-agent:0.2.0"
+secret_set = "my-secrets"
+
+[scaling]
+min_agents = 0

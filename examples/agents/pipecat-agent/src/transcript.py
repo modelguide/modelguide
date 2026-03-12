@@ -1,0 +1,71 @@
+"""In-memory transcript collector for post-call submission to ModelGuide."""
+
+from datetime import datetime, timezone
+
+
+class TranscriptCollector:
+    """Collects user utterances, assistant responses, and tool calls during a
+    voice conversation, then formats them for the ModelGuide messages API."""
+
+    def __init__(self) -> None:
+        self._messages: list[dict] = []
+
+    def add_user_utterance(self, text: str) -> None:
+        if not text.strip():
+            return
+        # Merge consecutive user utterances (STT sends fragments)
+        if self._messages and self._messages[-1]["role"] == "user":
+            self._messages[-1]["content"] += " " + text.strip()
+        else:
+            self._messages.append({
+                "role": "user",
+                "content": text.strip(),
+                "occurredAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            })
+
+    def add_assistant_response(self, text: str) -> None:
+        if not text.strip():
+            return
+        # Flush any pending tool calls into the previous assistant message
+        # or create a tool-call-only message first
+        self._flush_tool_calls()
+        self._messages.append({
+            "role": "assistant",
+            "content": text.strip(),
+            "occurredAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+    def add_tool_call(
+        self,
+        tool_call_id: str,
+        tool_name: str,
+        tool_input: dict,
+        tool_output: dict,
+        latency_ms: int,
+        tool_status: str = "success",
+    ) -> None:
+        call: dict = {
+            "toolCallId": tool_call_id,
+            "toolName": tool_name,
+            "toolInput": tool_input,
+            "toolOutput": tool_output,
+            "toolStatus": tool_status,
+        }
+        if latency_ms > 0:
+            call["latencyMs"] = latency_ms
+        # Record each tool call as its own assistant message immediately
+        # (preserves correct ordering in the transcript)
+        self._messages.append({
+            "role": "assistant",
+            "toolCalls": [call],
+            "occurredAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+    def _flush_tool_calls(self) -> None:
+        """No-op — tool calls are now recorded immediately."""
+        pass
+
+    def get_messages(self) -> list[dict]:
+        """Return all collected messages, flushing any pending tool calls."""
+        self._flush_tool_calls()
+        return list(self._messages)

@@ -1,0 +1,25 @@
+[project]
+name = "pipecat-modelguide-agent"
+version = "0.1.0"
+description = "Pipecat voice agent for ModelGuide (BuildPro Sam demo)"
+requires-python = ">=3.11"
+dependencies = [
+    "pipecat-ai[daily,openai,deepgram,elevenlabs,silero]",
+    "httpx",
+    "python-dotenv",
+    "mcp",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
