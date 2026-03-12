@@ -1,5 +1,6 @@
 /**
- * Unit tests for response trimming infrastructure and Medusa shapes.
+ * Unit tests for Medusa-specific response shapes (ORDER, PRODUCT, CART).
+ * Generic trimToShape tests live in response-trimmer.test.ts.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -11,86 +12,7 @@ import {
 } from "@features/connectors/catalog/medusa/response-shapes";
 
 // ---------------------------------------------------------------------------
-// trimToShape — generic utility
-// ---------------------------------------------------------------------------
-
-describe("trimToShape", () => {
-  test("keeps only allowlisted top-level keys", () => {
-    const result = trimToShape(
-      { id: "123", name: "Alice", secret: "x", extra: 99 },
-      { id: true, name: true },
-    );
-    expect(result).toEqual({ id: "123", name: "Alice" });
-  });
-
-  test("handles nested shape objects", () => {
-    const result = trimToShape(
-      {
-        id: "1",
-        address: { city: "NYC", zip: "10001", internal_ref: "xyz" },
-      },
-      { id: true, address: { city: true, zip: true } },
-    );
-    expect(result).toEqual({
-      id: "1",
-      address: { city: "NYC", zip: "10001" },
-    });
-  });
-
-  test("trims arrays of objects", () => {
-    const result = trimToShape(
-      {
-        items: [
-          { id: "a", title: "Item A", raw_data: {} },
-          { id: "b", title: "Item B", raw_data: {} },
-        ],
-      },
-      { items: { id: true, title: true } },
-    );
-    expect(result).toEqual({
-      items: [
-        { id: "a", title: "Item A" },
-        { id: "b", title: "Item B" },
-      ],
-    });
-  });
-
-  test("silently skips missing keys", () => {
-    const result = trimToShape(
-      { id: "1" },
-      { id: true, name: true, missing_nested: { x: true } },
-    );
-    expect(result).toEqual({ id: "1" });
-  });
-
-  test("returns null for null/undefined input", () => {
-    expect(trimToShape(null, { id: true })).toBeNull();
-    expect(trimToShape(undefined, { id: true })).toBeNull();
-  });
-
-  test("preserves primitive arrays (true spec)", () => {
-    const result = trimToShape({ tags: ["a", "b", "c"] }, { tags: true });
-    expect(result).toEqual({ tags: ["a", "b", "c"] });
-  });
-
-  test("deeply nested shapes work recursively", () => {
-    const result = trimToShape(
-      {
-        level1: {
-          level2: { keep: "yes", drop: "no" },
-          also_drop: true,
-        },
-      },
-      { level1: { level2: { keep: true } } },
-    );
-    expect(result).toEqual({
-      level1: { level2: { keep: "yes" } },
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ORDER shape applied via trimToShape
+// ORDER shape
 // ---------------------------------------------------------------------------
 
 describe("ORDER shape", () => {
