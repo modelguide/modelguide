@@ -18,6 +18,7 @@ import {
   lookUpOrderHistory,
   setDeliveryAddress,
 } from "./handlers";
+import { CART, ORDER, PRODUCT } from "./response-shapes";
 
 const tools: ConnectorToolDefinition[] = [
   {
@@ -51,6 +52,12 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: listProducts,
+    responseShape: {
+      products: PRODUCT,
+      count: true,
+      limit: true,
+      offset: true,
+    },
   },
   {
     catalog: {
@@ -71,6 +78,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: getProduct,
+    responseShape: { product: PRODUCT },
   },
   {
     catalog: {
@@ -98,6 +106,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: createCart,
+    responseShape: { cart: CART },
   },
   {
     catalog: {
@@ -125,6 +134,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: addToCart,
+    responseShape: { cart: CART },
   },
   {
     catalog: {
@@ -141,6 +151,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: getCart,
+    responseShape: { cart: CART },
   },
   {
     catalog: {
@@ -178,6 +189,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: setDeliveryAddress,
+    responseShape: { cart: CART },
   },
   {
     catalog: {
@@ -198,6 +210,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 60,
     },
     handler: completeCart,
+    responseShape: { type: true, order: ORDER, cart: CART },
   },
   {
     catalog: {
@@ -217,6 +230,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: getOrder,
+    responseShape: { order: ORDER },
   },
   {
     catalog: {
@@ -241,6 +255,7 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: lookUpOrder,
+    responseShape: ORDER,
   },
   {
     catalog: {
@@ -278,6 +293,12 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: lookUpOrderHistory,
+    responseShape: {
+      orders: ORDER,
+      count: true,
+      limit: true,
+      offset: true,
+    },
   },
 ];
 

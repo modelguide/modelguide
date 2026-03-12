@@ -4,6 +4,7 @@
  */
 
 import type { CatalogTool } from "@db/schema/core";
+import type { ResponseShape } from "./lib/response-trimmer";
 
 export interface ToolExecutionContext {
   config: Record<string, string>;
@@ -22,6 +23,8 @@ export interface ToolExecutionResult {
 export interface ConnectorToolDefinition {
   catalog: CatalogTool;
   handler: (ctx: ToolExecutionContext) => Promise<ToolExecutionResult>;
+  /** Allowlist shape applied to `result.data` after handler returns. */
+  responseShape?: ResponseShape;
 }
 
 export interface ConfigFieldSchema {

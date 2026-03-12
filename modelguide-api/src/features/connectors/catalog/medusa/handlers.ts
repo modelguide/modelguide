@@ -334,7 +334,7 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
       const url = dashboardUrl(ctx.config, `/app/orders/${match.id}`);
       return {
         success: true,
-        data: match,
+        data: match as Record<string, unknown>,
         ...(url && { url }),
       };
     }
