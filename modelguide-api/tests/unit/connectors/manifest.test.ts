@@ -12,8 +12,8 @@ describe("Medusa manifest", () => {
     expect(medusaManifest.connectorType).toBe("api");
   });
 
-  test("has 13 tools", () => {
-    expect(medusaManifest.tools).toHaveLength(13);
+  test("has 10 tools", () => {
+    expect(medusaManifest.tools).toHaveLength(10);
   });
 
   test("each tool has catalog and handler", () => {
@@ -76,8 +76,5 @@ describe("Medusa manifest", () => {
     expect(toolNames).toContain("Get Order");
     expect(toolNames).toContain("Look Up Order");
     expect(toolNames).toContain("Look Up Order History");
-    expect(toolNames).toContain("Cancel Order");
-    expect(toolNames).toContain("Request Return");
-    expect(toolNames).toContain("Get Return Status");
   });
 });

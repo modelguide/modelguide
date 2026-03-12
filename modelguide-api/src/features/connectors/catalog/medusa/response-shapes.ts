@@ -1,62 +1,20 @@
 /**
- * Response shape trimming for Medusa API responses.
+ * Medusa response shapes — allowlists of fields to keep per entity.
  *
- * Medusa returns ~1,500 lines of JSON per order with noise fields (raw_*,
- * tax breakdowns, fulfillment detail IDs) that cause LLMs to confuse details
- * between records. These shapes define an allowlist of fields to keep.
+ * These are referenced by `responseShape` in each tool definition.
+ * After a handler returns, `executeTool()` applies `trimToShape()`
+ * using the declared shape — no per-handler trim logic needed.
  *
  * See: https://github.com/modelguide/modelguide/issues/148
  */
 
-// ---------------------------------------------------------------------------
-// Shape definition types
-// ---------------------------------------------------------------------------
-
-/** A shape is a recursive allowlist of keys to keep. `true` = keep as-is. */
-type Shape = { [key: string]: true | Shape };
+import type { ResponseShape } from "../lib/response-trimmer";
 
 // ---------------------------------------------------------------------------
-// Generic trimmer
+// Shared sub-shapes
 // ---------------------------------------------------------------------------
 
-/**
- * Recursively trim `obj` to only the keys present in `shape`.
- * - `true` in the shape means keep the value as-is.
- * - A nested shape object means recurse into that key.
- * - If the value is an array, each element is trimmed with the nested shape.
- * - Missing keys in the source are silently skipped.
- */
-export function trimToShape<T extends Record<string, unknown>>(
-  obj: T | null | undefined,
-  shape: Shape,
-): Record<string, unknown> | null {
-  if (obj == null) return null;
-
-  const result: Record<string, unknown> = {};
-  for (const [key, spec] of Object.entries(shape)) {
-    if (!(key in obj)) continue;
-    const value = obj[key];
-
-    if (spec === true) {
-      result[key] = value;
-    } else if (Array.isArray(value)) {
-      result[key] = value.map((item) =>
-        item != null && typeof item === "object"
-          ? trimToShape(item as Record<string, unknown>, spec)
-          : item,
-      );
-    } else if (value != null && typeof value === "object") {
-      result[key] = trimToShape(value as Record<string, unknown>, spec);
-    }
-  }
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Entity shapes
-// ---------------------------------------------------------------------------
-
-const SHIPPING_ADDRESS_SHAPE: Shape = {
+const SHIPPING_ADDRESS: ResponseShape = {
   first_name: true,
   last_name: true,
   address_1: true,
@@ -67,7 +25,11 @@ const SHIPPING_ADDRESS_SHAPE: Shape = {
   phone: true,
 };
 
-const ORDER_ITEM_SHAPE: Shape = {
+// ---------------------------------------------------------------------------
+// Order
+// ---------------------------------------------------------------------------
+
+const ORDER_ITEM: ResponseShape = {
   id: true,
   title: true,
   subtitle: true,
@@ -96,7 +58,7 @@ const ORDER_ITEM_SHAPE: Shape = {
   variant: { id: true, title: true },
 };
 
-const ORDER_SHAPE: Shape = {
+export const ORDER: ResponseShape = {
   id: true,
   display_id: true,
   email: true,
@@ -106,11 +68,15 @@ const ORDER_SHAPE: Shape = {
   created_at: true,
   fulfillment_status: true,
   payment_status: true,
-  shipping_address: SHIPPING_ADDRESS_SHAPE,
-  items: ORDER_ITEM_SHAPE,
+  shipping_address: SHIPPING_ADDRESS,
+  items: ORDER_ITEM,
 };
 
-const VARIANT_SHAPE: Shape = {
+// ---------------------------------------------------------------------------
+// Product
+// ---------------------------------------------------------------------------
+
+const VARIANT: ResponseShape = {
   id: true,
   title: true,
   sku: true,
@@ -119,7 +85,7 @@ const VARIANT_SHAPE: Shape = {
   options: true,
 };
 
-const PRODUCT_SHAPE: Shape = {
+export const PRODUCT: ResponseShape = {
   id: true,
   title: true,
   subtitle: true,
@@ -128,11 +94,15 @@ const PRODUCT_SHAPE: Shape = {
   status: true,
   thumbnail: true,
   images: true,
-  variants: VARIANT_SHAPE,
+  variants: VARIANT,
   options: { id: true, title: true, values: true },
 };
 
-const CART_ITEM_SHAPE: Shape = {
+// ---------------------------------------------------------------------------
+// Cart
+// ---------------------------------------------------------------------------
+
+const CART_ITEM: ResponseShape = {
   id: true,
   title: true,
   subtitle: true,
@@ -148,7 +118,7 @@ const CART_ITEM_SHAPE: Shape = {
   variant: { id: true, title: true },
 };
 
-const CART_SHAPE: Shape = {
+export const CART: ResponseShape = {
   id: true,
   email: true,
   total: true,
@@ -157,59 +127,7 @@ const CART_SHAPE: Shape = {
   shipping_total: true,
   tax_total: true,
   currency_code: true,
-  items: CART_ITEM_SHAPE,
-  shipping_address: SHIPPING_ADDRESS_SHAPE,
+  items: CART_ITEM,
+  shipping_address: SHIPPING_ADDRESS,
   shipping_methods: true,
 };
-
-const RETURN_SHAPE: Shape = {
-  id: true,
-  order_id: true,
-  status: true,
-  refund_amount: true,
-  created_at: true,
-  items: {
-    id: true,
-    quantity: true,
-    reason_id: true,
-    note: true,
-    item_id: true,
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Convenience trimmers
-// ---------------------------------------------------------------------------
-
-export function trimOrder(
-  order: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  return trimToShape(order, ORDER_SHAPE);
-}
-
-export function trimProduct(
-  product: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  return trimToShape(product, PRODUCT_SHAPE);
-}
-
-export function trimProducts(
-  products: Record<string, unknown>[] | null | undefined,
-): Record<string, unknown>[] {
-  if (!products) return [];
-  return products
-    .map((p) => trimToShape(p, PRODUCT_SHAPE))
-    .filter((p): p is Record<string, unknown> => p != null);
-}
-
-export function trimCart(
-  cart: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  return trimToShape(cart, CART_SHAPE);
-}
-
-export function trimReturn(
-  ret: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  return trimToShape(ret, RETURN_SHAPE);
-}

@@ -7,13 +7,6 @@ import { type ConnectorFetcher, withConnector } from "../lib/http-client";
 import { runHealthCheck } from "../lib/run-health-check";
 import type { HealthCheckResult } from "../types";
 import { createMedusaAdminFetcher, createMedusaFetcher } from "./client";
-import {
-  trimCart,
-  trimOrder,
-  trimProduct,
-  trimProducts,
-  trimReturn,
-} from "./response-shapes";
 
 const withMedusa = withConnector(createMedusaFetcher);
 
@@ -23,26 +16,20 @@ export const listProducts = withMedusa(async (fetcher, ctx) => {
     offset?: number;
     query: string;
   };
-  const data = await fetcher<{ products?: Record<string, unknown>[] }>(
-    "/store/products",
-    {
-      params: {
-        limit: input.limit ?? 20,
-        offset: input.offset ?? 0,
-        q: input.query,
-        fields: "+variants.inventory_quantity",
-      },
+  const data = await fetcher<Record<string, unknown>>("/store/products", {
+    params: {
+      limit: input.limit ?? 20,
+      offset: input.offset ?? 0,
+      q: input.query,
+      fields: "+variants.inventory_quantity",
     },
-  );
-  return {
-    success: true,
-    data: { ...data, products: trimProducts(data.products) },
-  };
+  });
+  return { success: true, data };
 });
 
 export const getProduct = withMedusa(async (fetcher, ctx) => {
   const { productId } = ctx.input as { productId: string };
-  const data = await fetcher<{ product?: Record<string, unknown> }>(
+  const data = await fetcher<Record<string, unknown>>(
     `/store/products/${productId}`,
     {
       params: {
@@ -50,10 +37,7 @@ export const getProduct = withMedusa(async (fetcher, ctx) => {
       },
     },
   );
-  return {
-    success: true,
-    data: { ...data, product: trimProduct(data.product) },
-  };
+  return { success: true, data };
 });
 
 export const createCart = withMedusa(async (fetcher, ctx) => {
@@ -67,14 +51,11 @@ export const createCart = withMedusa(async (fetcher, ctx) => {
   if (input.currencyCode) body.currency_code = input.currencyCode;
   if (input.email) body.email = input.email;
 
-  const data = await fetcher<{ cart?: Record<string, unknown> }>(
-    "/store/carts",
-    {
-      method: "POST",
-      body,
-    },
-  );
-  return { success: true, data: { ...data, cart: trimCart(data.cart) } };
+  const data = await fetcher<Record<string, unknown>>("/store/carts", {
+    method: "POST",
+    body,
+  });
+  return { success: true, data };
 });
 
 export const addToCart = withMedusa(async (fetcher, ctx) => {
@@ -83,22 +64,20 @@ export const addToCart = withMedusa(async (fetcher, ctx) => {
     variantId: string;
     quantity: number;
   };
-  const data = await fetcher<{ cart?: Record<string, unknown> }>(
+  const data = await fetcher<Record<string, unknown>>(
     `/store/carts/${cartId}/line-items`,
     {
       method: "POST",
       body: { variant_id: variantId, quantity },
     },
   );
-  return { success: true, data: { ...data, cart: trimCart(data.cart) } };
+  return { success: true, data };
 });
 
 export const getCart = withMedusa(async (fetcher, ctx) => {
   const { cartId } = ctx.input as { cartId: string };
-  const data = await fetcher<{ cart?: Record<string, unknown> }>(
-    `/store/carts/${cartId}`,
-  );
-  return { success: true, data: { ...data, cart: trimCart(data.cart) } };
+  const data = await fetcher<Record<string, unknown>>(`/store/carts/${cartId}`);
+  return { success: true, data };
 });
 
 export const setDeliveryAddress = withMedusa(async (fetcher, ctx) => {
@@ -115,7 +94,7 @@ export const setDeliveryAddress = withMedusa(async (fetcher, ctx) => {
       phone?: string;
     };
   };
-  const data = await fetcher<{ cart?: Record<string, unknown> }>(
+  const data = await fetcher<Record<string, unknown>>(
     `/store/carts/${cartId}`,
     {
       method: "POST",
@@ -133,7 +112,7 @@ export const setDeliveryAddress = withMedusa(async (fetcher, ctx) => {
       },
     },
   );
-  return { success: true, data: { ...data, cart: trimCart(data.cart) } };
+  return { success: true, data };
 });
 
 // Auto-selects a shipping method and initiates a payment session before
@@ -232,26 +211,23 @@ export const completeCart = withMedusa(async (fetcher, ctx) => {
     { method: "POST", body: { provider_id: providerId } },
   );
 
-  // Step 7: Complete the cart (returns an order)
-  const data = await fetcher<{ order?: Record<string, unknown> }>(
+  // Step 7: Complete the cart
+  const data = await fetcher<Record<string, unknown>>(
     `/store/carts/${cartId}/complete`,
     { method: "POST" },
   );
-  return {
-    success: true,
-    data: { ...data, order: trimOrder(data.order) },
-  };
+  return { success: true, data };
 });
 
 export const getOrder = withMedusa(async (fetcher, ctx) => {
   const { orderId } = ctx.input as { orderId: string };
-  const data = await fetcher<{ order?: Record<string, unknown> }>(
+  const data = await fetcher<Record<string, unknown>>(
     `/store/orders/${orderId}`,
   );
   const url = dashboardUrl(ctx.config, `/app/orders/${orderId}`);
   return {
     success: true,
-    data: { ...data, order: trimOrder(data.order) },
+    data,
     ...(url && { url }),
   };
 });
@@ -358,7 +334,7 @@ export const lookUpOrder = withMedusaAdmin(async (fetcher, ctx) => {
       const url = dashboardUrl(ctx.config, `/app/orders/${match.id}`);
       return {
         success: true,
-        data: trimOrder(match) as Record<string, unknown>,
+        data: match as Record<string, unknown>,
         ...(url && { url }),
       };
     }
@@ -423,84 +399,10 @@ export const lookUpOrderHistory = withMedusaAdmin(async (fetcher, ctx) => {
     return { success: false, error: message };
   }
 
-  const trimmedOrders = orders
-    .map((o) => trimOrder(o as Record<string, unknown>))
-    .filter((o): o is Record<string, unknown> => o != null);
-
   const url = dashboardUrl(ctx.config, "/app/orders");
   return {
     success: true,
-    data: { orders: trimmedOrders, count, limit, offset },
-    ...(url && { url }),
-  };
-});
-
-// ---------------------------------------------------------------------------
-// Post-purchase handlers (Admin API)
-// ---------------------------------------------------------------------------
-
-export const cancelOrder = withMedusaAdmin(async (fetcher, ctx) => {
-  const { orderId } = ctx.input as { orderId: string };
-
-  const data = await fetcher<{ order?: Record<string, unknown> }>(
-    `/admin/orders/${orderId}/cancel`,
-    { method: "POST" },
-  );
-
-  const url = dashboardUrl(ctx.config, `/app/orders/${orderId}`);
-  return {
-    success: true,
-    data: { order: trimOrder(data.order) },
-    ...(url && { url }),
-  };
-});
-
-export const requestReturn = withMedusaAdmin(async (fetcher, ctx) => {
-  const { orderId, items, note } = ctx.input as {
-    orderId: string;
-    items: { itemId: string; quantity: number; reasonId?: string }[];
-    note?: string;
-  };
-
-  const body: Record<string, unknown> = {
-    order_id: orderId,
-    items: items.map((i) => ({
-      item_id: i.itemId,
-      quantity: i.quantity,
-      ...(i.reasonId && { reason_id: i.reasonId }),
-    })),
-  };
-  if (note) body.note = note;
-
-  const data = await fetcher<{ return?: Record<string, unknown> }>(
-    "/admin/returns",
-    { method: "POST", body },
-  );
-
-  const url = dashboardUrl(ctx.config, `/app/orders/${orderId}`);
-  return {
-    success: true,
-    data: { return: trimReturn(data.return) },
-    ...(url && { url }),
-  };
-});
-
-export const getReturnStatus = withMedusaAdmin(async (fetcher, ctx) => {
-  const { orderId } = ctx.input as { orderId: string };
-
-  const data = await fetcher<{ returns?: Record<string, unknown>[] }>(
-    "/admin/returns",
-    { params: { order_id: orderId } },
-  );
-
-  const returns = (data.returns ?? [])
-    .map((r) => trimReturn(r))
-    .filter((r): r is Record<string, unknown> => r != null);
-
-  const url = dashboardUrl(ctx.config, `/app/orders/${orderId}`);
-  return {
-    success: true,
-    data: { returns },
+    data: { orders, count, limit, offset },
     ...(url && { url }),
   };
 });

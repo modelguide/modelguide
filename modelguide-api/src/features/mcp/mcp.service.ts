@@ -1,6 +1,7 @@
 import { forOrg } from "@db/rls";
 import { connectorTools, connectors } from "@db/schema";
 import { listAgentConnectors } from "@features/agents/agents.service";
+import { trimToShape } from "@features/connectors/catalog/lib/response-trimmer";
 import { getConnectorManifest } from "@features/connectors/catalog/registry";
 import type { ToolExecutionResult } from "@features/connectors/catalog/types";
 import {
@@ -140,7 +141,7 @@ export async function executeTool(
 
   const ctx = { tool: catalogToolName, connector: catalogSlug };
 
-  return withTiming(
+  const result = await withTiming(
     getLogger(),
     ctx,
     "tool executed",
@@ -148,4 +149,14 @@ export async function executeTool(
     () =>
       toolDef.handler({ config, input, organizationId: orgId, connectorId }),
   );
+
+  if (toolDef.responseShape && result.success && result.data) {
+    result.data =
+      (trimToShape(result.data, toolDef.responseShape) as Record<
+        string,
+        unknown
+      >) ?? {};
+  }
+
+  return result;
 }
