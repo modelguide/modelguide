@@ -5,8 +5,10 @@ COPY pyproject.toml .
 RUN uv venv /app/.venv && \
     uv pip install --python /app/.venv/bin/python --no-cache ".[test]"
 
-# Download Silero VAD model at build time (avoids runtime download)
-RUN uv run --python /app/.venv/bin/python -c "from livekit.plugins.silero import VAD; VAD.load()"
+# Download models at build time (avoids runtime download)
+ENV HF_HOME=/app/.cache/huggingface
+RUN /app/.venv/bin/python -c "from livekit.plugins.silero import VAD; VAD.load()" && \
+    /app/.venv/bin/python -c "from livekit.plugins.turn_detector.english import _EUORunnerEn; _EUORunnerEn._download_files()"
 
 FROM python:3.13-slim-bookworm
 
@@ -14,6 +16,8 @@ RUN useradd --create-home agent
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/.cache/huggingface /home/agent/.cache/huggingface
+RUN chown -R agent:agent /home/agent/.cache
 COPY pyproject.toml .
 COPY src/ src/
 
