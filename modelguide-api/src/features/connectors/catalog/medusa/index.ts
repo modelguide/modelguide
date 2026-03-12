@@ -52,7 +52,12 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: listProducts,
-    responseShape: { products: PRODUCT },
+    responseShape: {
+      products: PRODUCT,
+      count: true,
+      limit: true,
+      offset: true,
+    },
   },
   {
     catalog: {
