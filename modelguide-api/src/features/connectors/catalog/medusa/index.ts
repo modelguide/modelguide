@@ -7,15 +7,18 @@
 import type { ConnectorManifest, ConnectorToolDefinition } from "../types";
 import {
   addToCart,
+  cancelOrder,
   completeCart,
   createCart,
   getCart,
   getOrder,
   getProduct,
+  getReturnStatus,
   healthCheck,
   listProducts,
   lookUpOrder,
   lookUpOrderHistory,
+  requestReturn,
   setDeliveryAddress,
 } from "./handlers";
 
@@ -278,6 +281,93 @@ const tools: ConnectorToolDefinition[] = [
       defaultTimeoutSeconds: 30,
     },
     handler: lookUpOrderHistory,
+  },
+  {
+    catalog: {
+      name: "Cancel Order",
+      description:
+        "Cancel an order before it has been fulfilled (requires admin API token). Always confirm with the customer first.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          orderId: {
+            type: "string",
+            description: "Order ID to cancel",
+          },
+        },
+        required: ["orderId"],
+      },
+      defaultRequiresConfirmation: true,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: cancelOrder,
+  },
+  {
+    catalog: {
+      name: "Request Return",
+      description:
+        "Request a return for items from a delivered order (requires admin API token). Always confirm with the customer first.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          orderId: {
+            type: "string",
+            description: "Order ID to return items from",
+          },
+          items: {
+            type: "array",
+            description: "Items to return",
+            items: {
+              type: "object",
+              properties: {
+                itemId: {
+                  type: "string",
+                  description: "Order line item ID",
+                },
+                quantity: {
+                  type: "integer",
+                  description: "Number of units to return",
+                  minimum: 1,
+                },
+                reasonId: {
+                  type: "string",
+                  description: "Return reason ID (optional)",
+                },
+              },
+              required: ["itemId", "quantity"],
+            },
+          },
+          note: {
+            type: "string",
+            description: "Optional note about the return",
+          },
+        },
+        required: ["orderId", "items"],
+      },
+      defaultRequiresConfirmation: true,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: requestReturn,
+  },
+  {
+    catalog: {
+      name: "Get Return Status",
+      description:
+        "Check the status of returns for an order (requires admin API token)",
+      inputSchema: {
+        type: "object",
+        properties: {
+          orderId: {
+            type: "string",
+            description: "Order ID to check returns for",
+          },
+        },
+        required: ["orderId"],
+      },
+      defaultRequiresConfirmation: false,
+      defaultTimeoutSeconds: 30,
+    },
+    handler: getReturnStatus,
   },
 ];
 
