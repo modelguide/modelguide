@@ -46,7 +46,7 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call
 from transcript import TranscriptCollector
 
-VERSION = "0.18.4"
+VERSION = "0.18.7"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
@@ -172,6 +172,14 @@ async def main(transport: DailyTransport):
         logger.exception("Failed to create ModelGuide session — running without tracking")
         session_id = "offline"
 
+    # --- Persistent MCP connection ---
+    mcp = mg_client.MCPConnection()
+    try:
+        await mcp.connect()
+    except Exception:
+        logger.exception("Failed to open persistent MCP connection — tool calls will use one-shot")
+        mcp = None
+
     # --- Transcript collector ---
     transcript = TranscriptCollector()
 
@@ -201,6 +209,7 @@ async def main(transport: DailyTransport):
             tool_call_id=params.tool_call_id,
             session_id=session_id,
             transcript=transcript,
+            mcp=mcp,
         )
         await params.result_callback(json.loads(result_str))
 
@@ -282,6 +291,13 @@ async def main(transport: DailyTransport):
         await _post_transcript(status="abandoned")
     except Exception:
         logger.exception("Failed to post transcript in cleanup for session %s", session_id)
+
+    # Close persistent MCP connection
+    if mcp:
+        try:
+            await mcp.close()
+        except Exception:
+            logger.debug("MCP close error in cleanup (expected)")
 
 
 # ---------------------------------------------------------------------------

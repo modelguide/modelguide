@@ -34,13 +34,21 @@ async def main():
     client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
     model = os.getenv("LLM_MODEL", "gpt-4.1-mini")
 
-    # Create session
+    # Create session + persistent MCP connection
     try:
         session_id = await mg_client.create_session(config.USER_EMAIL)
         print(f"[session: {session_id}]")
     except Exception as e:
         print(f"[session failed: {e}, running offline]")
         session_id = "offline"
+
+    mcp = mg_client.MCPConnection()
+    try:
+        await mcp.connect()
+        print("[mcp: connected]")
+    except Exception as e:
+        print(f"[mcp: failed ({e}), using one-shot]")
+        mcp = None
 
     system_prompt = build_system_prompt(session_id, user_email=config.USER_EMAIL)
     messages = [{"role": "system", "content": system_prompt}]
@@ -93,7 +101,10 @@ async def main():
                     mcp_args = _transform_args(tool_name, {**tool_args})
                     print(f"  [{tool_name}({json.dumps(tool_args)})]")
                     try:
-                        result = await mg_client.call_tool(mcp_name, mcp_args, session_id)
+                        if mcp:
+                            result = await mcp.call_tool(mcp_name, mcp_args, session_id)
+                        else:
+                            result = await mg_client.call_tool(mcp_name, mcp_args, session_id)
                         _extract_cart_id(tool_name, result)
                     except Exception as e:
                         result = {"error": str(e)}
@@ -106,6 +117,8 @@ async def main():
                 })
 
     # Cleanup
+    if mcp:
+        await mcp.close()
     if session_id != "offline":
         await mg_client.complete_session(session_id, status="completed")
     print("\n[done]")

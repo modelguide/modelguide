@@ -281,8 +281,10 @@ async def handle_tool_call(
     tool_call_id: str,
     session_id: str,
     transcript: TranscriptCollector,
+    mcp: "mg_client.MCPConnection | None" = None,
 ) -> str:
     """Execute a tool call via MCP and record it in the transcript."""
+    logger.info(">>> tool_call START: %s (id=%s)", tool_name, tool_call_id)
     mcp_name = TOOL_NAME_MAP.get(tool_name)
     if not mcp_name:
         error = f"Unknown tool: {tool_name}"
@@ -317,7 +319,10 @@ async def handle_tool_call(
 
     start = time.monotonic()
     try:
-        result = await mg_client.call_tool(mcp_name, mcp_args, session_id)
+        if mcp:
+            result = await mcp.call_tool(mcp_name, mcp_args, session_id)
+        else:
+            result = await mg_client.call_tool(mcp_name, mcp_args, session_id)
         latency_ms = int((time.monotonic() - start) * 1000)
         logger.info("Tool %s completed in %dms", tool_name, latency_ms)
 
