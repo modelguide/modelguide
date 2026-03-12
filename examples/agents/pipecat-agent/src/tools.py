@@ -29,7 +29,11 @@ TOOL_NAME_MAP = {
     "list_products": "glowbox_store_list_products",
     "get_product": "glowbox_store_get_product",
     "get_order": "glowbox_store_get_order",
+    "look_up_order": "glowbox_store_look_up_order",
     "look_up_order_history": "glowbox_store_look_up_order_history",
+    "cancel_order": "glowbox_store_cancel_order",
+    "request_return": "glowbox_store_request_return",
+    "get_return_status": "glowbox_store_get_return_status",
     "send_email": "glowbox_store_send_email",
 }
 
@@ -181,6 +185,27 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "look_up_order",
+            "description": "Find a specific order by customer email and order number (e.g. #1042).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "Customer email address",
+                    },
+                    "displayId": {
+                        "type": "integer",
+                        "description": "Order number (e.g. 1042)",
+                    },
+                },
+                "required": ["email", "displayId"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "look_up_order_history",
             "description": "Look up a customer's order history by email address.",
             "parameters": {
@@ -192,6 +217,79 @@ TOOL_SCHEMAS = [
                     },
                 },
                 "required": ["email"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancel_order",
+            "description": "Cancel an order before it has been fulfilled. Always confirm with the customer first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "orderId": {
+                        "type": "string",
+                        "description": "The order ID to cancel",
+                    },
+                },
+                "required": ["orderId"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_return",
+            "description": "Request a return for items from a delivered order. Always confirm items and quantities with the customer first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "orderId": {
+                        "type": "string",
+                        "description": "The order ID to return items from",
+                    },
+                    "items": {
+                        "type": "array",
+                        "description": "Items to return",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "itemId": {
+                                    "type": "string",
+                                    "description": "Order line item ID",
+                                },
+                                "quantity": {
+                                    "type": "integer",
+                                    "description": "Number of units to return",
+                                },
+                            },
+                            "required": ["itemId", "quantity"],
+                        },
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional note about the return reason",
+                    },
+                },
+                "required": ["orderId", "items"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_return_status",
+            "description": "Check the status of returns for an order.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "orderId": {
+                        "type": "string",
+                        "description": "The order ID to check returns for",
+                    },
+                },
+                "required": ["orderId"],
             },
         },
     },
