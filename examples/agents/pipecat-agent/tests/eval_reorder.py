@@ -63,18 +63,25 @@ SCENARIO = {
         },
         {
             "user": "Which one was delivered to four eight one one Greenway?",
-            "expect_tools": [],  # may call look_up_order_history if not done yet
+            "expect_tools": [],  # may call look_up_order_history and/or list_products
+            "reject_tools": ["create_cart", "add_to_cart"],  # must NOT start ordering yet
             "assertions": [
-                ("correct_date_january", lambda r: "january" in r.lower() or "jan" in r.lower()),
-                ("not_pietra_for_greenway", lambda r: "pietra" not in r.lower() and "bernini" not in r.lower()),
+                ("identifies_greenway_order", lambda r: any(w in r.lower() for w in [
+                    "january", "jan", "tenth", "greenway", "gris", "dimensions",
+                ])),
+                ("reports_stock_or_asks", lambda r: any(w in r.lower() for w in [
+                    "out of stock", "not available", "unavailable", "stock",
+                    "available", "in stock", "which", "want me",
+                ])),
             ],
         },
         {
-            "user": "Yes, set up the same order.",
-            "expect_tools": [],  # should create_cart and/or list_products
+            "user": "The twelve by twenty four, set those up.",
+            "expect_tools": [],  # should create_cart and add_to_cart
             "assertions": [
-                ("acknowledges_action", lambda r: any(w in r.lower() for w in [
-                    "got it", "on it", "sure", "setting", "cart", "adding", "order", "cases",
+                ("acknowledges_or_adds", lambda r: any(w in r.lower() for w in [
+                    "got it", "on it", "sure", "setting", "adding", "order", "cases",
+                    "added", "cart", "twelve", "stock", "available",
                 ])),
             ],
         },
@@ -289,10 +296,12 @@ async def run_eval():
 
             # Check expected tools (soft check — order doesn't matter)
             expected = set(turn.get("expect_tools", []))
+            rejected = set(turn.get("reject_tools", []))
             actual = set(tool_calls_made)
             tools_match = expected.issubset(actual)
+            no_rejected = rejected.isdisjoint(actual)
 
-            all_passed = all(assertion_results.values()) and tools_match
+            all_passed = all(assertion_results.values()) and tools_match and no_rejected
             status = "PASS" if all_passed else "FAIL"
 
             run_results.append({
@@ -300,8 +309,10 @@ async def run_eval():
                 "status": status,
                 "latency_ms": latency_ms,
                 "tools_expected": list(expected),
+                "tools_rejected": list(rejected),
                 "tools_actual": tool_calls_made,
                 "tools_match": tools_match,
+                "no_rejected": no_rejected,
                 "assertions": assertion_results,
                 "response": agent_response.strip(),
             })
@@ -320,6 +331,9 @@ async def run_eval():
                 print(f"      Tools: {', '.join(r['tools_actual'])}")
             if not r["tools_match"]:
                 print(f"      MISSING TOOLS: {set(r['tools_expected']) - set(r['tools_actual'])}")
+            if not r["no_rejected"]:
+                unwanted = set(r["tools_rejected"]) & set(r["tools_actual"])
+                print(f"      REJECTED TOOLS CALLED: {unwanted}")
             for name, passed in r["assertions"].items():
                 if not passed:
                     print(f"      FAILED: {name}")

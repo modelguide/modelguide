@@ -250,8 +250,11 @@ def _transform_args(tool_name: str, args: dict) -> dict:
     global _active_cart_id
 
     # Inject cartId for cart operations
-    if tool_name in _CART_TOOLS and _active_cart_id:
-        args = {**args, "cartId": _active_cart_id}
+    if tool_name in _CART_TOOLS:
+        if _active_cart_id:
+            args = {**args, "cartId": _active_cart_id}
+        else:
+            logger.warning("No active cart ID for %s — create_cart may not have been called", tool_name)
 
     # Nest address fields for set_delivery_address
     if tool_name == "set_delivery_address":
@@ -268,8 +271,9 @@ def _extract_cart_id(tool_name: str, result: dict) -> None:
     """Capture cartId from create_cart response."""
     global _active_cart_id
     if tool_name == "create_cart":
-        # Medusa returns cart object with id field
-        cart_id = result.get("cart", {}).get("id") or result.get("id")
+        # Response shape: {"success": true, "data": {"cart": {"id": "cart_..."}}}
+        data = result.get("data", result)
+        cart_id = data.get("cart", {}).get("id") or data.get("id") or result.get("cart", {}).get("id") or result.get("id")
         if cart_id:
             _active_cart_id = cart_id
             logger.info("Cart ID captured: %s", cart_id)
