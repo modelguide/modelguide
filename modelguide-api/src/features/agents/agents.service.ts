@@ -22,18 +22,11 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
+import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
-
-/** Convert a name to a URL-safe slug */
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 // ============================================================================
 // Helpers

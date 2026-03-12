@@ -21,20 +21,13 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
+import { slugify } from "@lib/slugify";
 import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { SopSchema, SopStep } from "./sops.types";
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/** Generate a slug from a name. */
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 /** Validate step IDs are unique within an SOP. */
 function validateUniqueStepIds(steps: SopStep[]): void {

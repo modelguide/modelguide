@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Plug,
   Settings,
+  Shield,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Avatar } from '~/components/ui/avatar'
@@ -34,6 +35,7 @@ const adminNav: NavItem[] = [
   { label: 'Agents', href: '/agents', icon: <Bot className="h-4 w-4" /> },
   { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" /> },
   { label: 'SOPs', href: '/sops', icon: <ClipboardList className="h-4 w-4" /> },
+  { label: 'Knowledge Base', href: '/knowledge-base', icon: <Shield className="h-4 w-4" /> },
   { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" />, roles: ['admin'] },
 ]
 
