@@ -37,13 +37,13 @@ No `DAILY_API_KEY` needed when using `--enable-managed-keys`.
 
 ```bash
 cd examples/agents/pipecat-agent
-echo Y | pipecat cloud docker build-push buildpro-agent -v 0.17.7 -r dockerhub -u YOUR_DOCKERHUB_USER
+echo Y | pipecat cloud docker build-push buildpro-agent -v 0.18.4 -r dockerhub -u YOUR_DOCKERHUB_USER
 ```
 
 ### 4. Deploy
 
 ```bash
-pipecat cloud deploy buildpro-agent YOUR_DOCKERHUB_USER/buildpro-agent:0.17.7 \
+pipecat cloud deploy buildpro-agent YOUR_DOCKERHUB_USER/buildpro-agent:0.18.4 \
   -s my-secrets -min 1 --enable-managed-keys -nc -f
 ```
 
@@ -103,6 +103,24 @@ Without these pins, newer versions get installed and break PCC's health check (c
 ### Important: daily-python
 
 `daily-python` is included in the build (via `pipecat-ai[daily,...]`). Do NOT uninstall it from the builder stage — PCC's runtime injection of daily-python is unreliable.
+
+## Multi-Region Deployment
+
+PCC supports multiple regions: `us-west`, `us-east`, `eu-central`, `ap-south`.
+
+To deploy to a non-default region, add `--region`:
+
+```bash
+pipecat cloud deploy buildpro-agent-eu YOUR_DOCKERHUB_USER/buildpro-agent:0.18.4 \
+  -s my-secrets-eu -min 1 -nc -f --region eu-central
+```
+
+Each region needs its own secret set (e.g. `my-secrets-eu`). Create one with `pipecat cloud secrets create my-secrets-eu`.
+
+### Known Issues
+
+- **`--enable-managed-keys` does not work in `eu-central`** (as of March 2026). The agent stays `Health: Stopped` with no logs. Deploy without it and include `DAILY_API_KEY` in your secret set instead.
+- **Rapid deploy/delete cycles** can cause PCC to stop scheduling containers with no error feedback. If an agent is stuck on "Stopped", delete it, wait 30+ seconds, then redeploy.
 
 ## Connecting to ModelGuide API
 

@@ -95,6 +95,9 @@ you're asking too much. Act immediately.
 # Guardrails
 Never make up prices or information — only use data from tools and the \
 knowledge base. This step is important.
+When a tool returns multiple records (orders, products), carefully match \
+each record's fields before speaking. Do NOT mix up items, addresses, or \
+dates between different records. This step is important.
 Never process an order without creating a cart first.
 Never finalize an order without showing the cart summary first.
 Never call `complete_cart` without the customer's explicit confirmation.
