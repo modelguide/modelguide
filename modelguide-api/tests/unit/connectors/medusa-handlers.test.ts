@@ -47,12 +47,12 @@ function mockFetchSuccess(responseData: Record<string, unknown>) {
       }),
     ),
   );
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 function mockFetchError(status: number, body: string) {
   fetchMock = mock(() => Promise.resolve(new Response(body, { status })));
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 /**
@@ -78,7 +78,7 @@ function mockFetchSequence(
       ),
     );
   });
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 afterAll(() => {
@@ -600,7 +600,7 @@ describe("Medusa handlers", () => {
 
     test("returns error on network failure", async () => {
       fetchMock = mock(() => Promise.reject(new Error("Network error")));
-      globalThis.fetch = fetchMock as typeof fetch;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       const result = await getCart(makeCtx({ cartId: "cart_abc" }));
       expect(result.success).toBe(false);
@@ -921,7 +921,7 @@ describe("lookUpOrder (Admin API)", () => {
       }
       return Promise.reject(new Error("Connection refused"));
     });
-    globalThis.fetch = fetchMock as typeof fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const result = await lookUpOrder(
       makeAdminCtx({ email: "alice@example.com", displayId: 1001 }),
@@ -1007,18 +1007,24 @@ describe("lookUpOrderHistory (Admin API)", () => {
     const result = await lookUpOrderHistory(
       makeAdminCtx({ customerId: "cus_01J_abc" }),
     );
+    const data = result.data as {
+      orders: Record<string, unknown>[];
+      count: number;
+      limit: number;
+      offset: number;
+    };
 
     expect(result.success).toBe(true);
-    expect(result.data.orders).toHaveLength(1);
-    expect(result.data.orders[0]).toMatchObject({
+    expect(data.orders).toHaveLength(1);
+    expect(data.orders[0]).toMatchObject({
       id: "order_aaa",
       display_id: 1001,
       items: [{ id: "item_1", title: "Moisturizer" }],
       shipping_address: { first_name: "Alice", city: "New York" },
     });
-    expect(result.data.count).toBe(1);
-    expect(result.data.limit).toBe(5);
-    expect(result.data.offset).toBe(0);
+    expect(data.count).toBe(1);
+    expect(data.limit).toBe(5);
+    expect(data.offset).toBe(0);
     expect(result.url).toBe("https://api.test-store.com/app/orders");
 
     // Verify correct API URL and fields
@@ -1053,10 +1059,15 @@ describe("lookUpOrderHistory (Admin API)", () => {
       makeAdminCtx({ customerId: "cus_01J_abc", limit: 10, offset: 20 }),
     );
 
+    const data2 = result.data as {
+      count: number;
+      limit: number;
+      offset: number;
+    };
     expect(result.success).toBe(true);
-    expect(result.data.count).toBe(25);
-    expect(result.data.limit).toBe(10);
-    expect(result.data.offset).toBe(20);
+    expect(data2.count).toBe(25);
+    expect(data2.limit).toBe(10);
+    expect(data2.offset).toBe(20);
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toContain("limit=10");
@@ -1093,7 +1104,7 @@ describe("lookUpOrderHistory (Admin API)", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.data.limit).toBe(50);
+    expect((result.data as { limit: number }).limit).toBe(50);
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toContain("limit=50");
@@ -1179,7 +1190,9 @@ describe("lookUpOrderHistory (Admin API)", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.data.orders[0].id).toBe("order_via_email");
+    expect(
+      (result.data as { orders: Array<{ id: string }> }).orders[0].id,
+    ).toBe("order_via_email");
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     // First call: customer lookup
