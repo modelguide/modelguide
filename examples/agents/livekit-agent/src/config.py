@@ -20,7 +20,6 @@ load_dotenv()
 REQUIRED_VARS = [
     "OPENAI_API_KEY",
     "DEEPGRAM_API_KEY",
-    "ELEVENLABS_API_KEY",
     "MODELGUIDE_API_URL",
     "MODELGUIDE_API_KEY",
     "MODELGUIDE_AGENT_ID",
@@ -40,9 +39,11 @@ def validate() -> None:
     Safe to call multiple times — only runs once.
     """
     global _validated
-    global OPENAI_API_KEY, DEEPGRAM_API_KEY, ELEVENLABS_API_KEY
+    global OPENAI_API_KEY, DEEPGRAM_API_KEY
+    global ELEVENLABS_API_KEY, CARTESIA_API_KEY
     global MODELGUIDE_API_URL, MODELGUIDE_API_KEY, MODELGUIDE_AGENT_ID
-    global ELEVENLABS_VOICE_ID, GOOGLE_API_KEY, USER_EMAIL, LLM_MODEL
+    global ELEVENLABS_VOICE_ID, CARTESIA_VOICE_ID, TTS_PROVIDER
+    global GOOGLE_API_KEY, USER_EMAIL, LLM_MODEL, REGION
 
     if _validated:
         return
@@ -53,14 +54,24 @@ def validate() -> None:
 
     OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
     DEEPGRAM_API_KEY = os.environ["DEEPGRAM_API_KEY"]
-    ELEVENLABS_API_KEY = os.environ["ELEVENLABS_API_KEY"]
+    ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+    CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY", "")
     MODELGUIDE_API_URL = os.environ["MODELGUIDE_API_URL"].rstrip("/")
     MODELGUIDE_API_KEY = os.environ["MODELGUIDE_API_KEY"]
     MODELGUIDE_AGENT_ID = os.environ["MODELGUIDE_AGENT_ID"]
     ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "iP95p4xoKVk53GoZ742B")
+    CARTESIA_VOICE_ID = os.getenv("CARTESIA_VOICE_ID", "a167e0f3-df7e-4d52-a9c3-f949145571bd")
+    TTS_PROVIDER = os.getenv("TTS_PROVIDER", "cartesia")
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
     USER_EMAIL = os.getenv("USER_EMAIL", "voice-caller")
     LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
+    REGION = os.getenv("REGION", "us")
+
+    # Validate TTS provider has its API key
+    if TTS_PROVIDER == "cartesia" and not CARTESIA_API_KEY:
+        raise ConfigError("TTS_PROVIDER=cartesia but CARTESIA_API_KEY is not set")
+    if TTS_PROVIDER == "elevenlabs" and not ELEVENLABS_API_KEY:
+        raise ConfigError("TTS_PROVIDER=elevenlabs but ELEVENLABS_API_KEY is not set")
 
     _validated = True
 
@@ -96,10 +107,14 @@ async def _validate_mcp_tools() -> None:
 OPENAI_API_KEY: str = ""
 DEEPGRAM_API_KEY: str = ""
 ELEVENLABS_API_KEY: str = ""
+CARTESIA_API_KEY: str = ""
 MODELGUIDE_API_URL: str = ""
 MODELGUIDE_API_KEY: str = ""
 MODELGUIDE_AGENT_ID: str = ""
 ELEVENLABS_VOICE_ID: str = ""
+CARTESIA_VOICE_ID: str = ""
+TTS_PROVIDER: str = "cartesia"
 GOOGLE_API_KEY: str = ""
 USER_EMAIL: str = ""
 LLM_MODEL: str = "gpt-4.1-mini"
+REGION: str = "us"

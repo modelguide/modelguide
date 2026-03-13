@@ -1,6 +1,6 @@
 [project]
 name = "livekit-modelguide-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "LiveKit voice agent for ModelGuide (BuildPro Sam demo)"
 requires-python = ">=3.11"
 dependencies = [
@@ -8,6 +8,7 @@ dependencies = [
     "livekit-plugins-openai~=1.4",
     "livekit-plugins-deepgram~=1.4",
     "livekit-plugins-elevenlabs~=1.4",
+    "livekit-plugins-cartesia~=1.4",
     "httpx",
     "python-dotenv",
     "mcp",

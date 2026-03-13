@@ -15,8 +15,8 @@ def _make_agent(session_id="sess_test", user_email="test@buildpro.com"):
 
 
 class TestToolNameMap:
-    def test_ten_tools_defined(self):
-        assert len(TOOL_NAME_MAP) == 10
+    def test_eleven_tools_defined(self):
+        assert len(TOOL_NAME_MAP) == 11
 
     def test_all_values_have_connector_prefix(self):
         for short_name, mcp_name in TOOL_NAME_MAP.items():

@@ -3,7 +3,7 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 WORKDIR /app
 COPY pyproject.toml .
 RUN uv venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python --no-cache ".[test]"
+    uv pip install --python /app/.venv/bin/python --no-cache "."
 
 # Download models at build time (avoids runtime download)
 ENV HF_HOME=/app/.cache/huggingface

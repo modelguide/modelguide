@@ -1055,11 +1055,12 @@ wheels = [
 
 [[package]]
 name = "livekit-modelguide-agent"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "livekit-agents", extra = ["silero", "turn-detector"] },
+    { name = "livekit-plugins-cartesia" },
     { name = "livekit-plugins-deepgram" },
     { name = "livekit-plugins-elevenlabs" },
     { name = "livekit-plugins-openai" },
@@ -1077,6 +1078,7 @@ test = [
 requires-dist = [
     { name = "httpx" },
     { name = "livekit-agents", extras = ["silero", "turn-detector"], specifier = "~=1.4" },
+    { name = "livekit-plugins-cartesia", specifier = "~=1.4" },
     { name = "livekit-plugins-deepgram", specifier = "~=1.4" },
     { name = "livekit-plugins-elevenlabs", specifier = "~=1.4" },
     { name = "livekit-plugins-openai", specifier = "~=1.4" },
@@ -1086,6 +1088,18 @@ requires-dist = [
     { name = "python-dotenv" },
 ]
 provides-extras = ["test"]
+
+[[package]]
+name = "livekit-plugins-cartesia"
+version = "1.4.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit-agents" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ae/bb/92e005de45a584d220e3a3bde93a1c72d2ef5948a08aad4f6c6b8c14ea75/livekit_plugins_cartesia-1.4.5.tar.gz", hash = "sha256:644807465d58774a623e308d03c1d7cb81764bb2ed0f72c8a78eb304ff56c0a2", size = 12719, upload-time = "2026-03-11T06:45:35.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/fc/5bdd154c99ef32123adf19b1baad7b68e2e61b3a770a795805862029c1cf/livekit_plugins_cartesia-1.4.5-py3-none-any.whl", hash = "sha256:12ba3a2bbe51f061c0fdfa250136f18635a0f0a83ee96694a1f3add8b4482a78", size = 15665, upload-time = "2026-03-11T06:45:34.589Z" },
+]
 
 [[package]]
 name = "livekit-plugins-deepgram"

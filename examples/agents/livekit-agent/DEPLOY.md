@@ -2,10 +2,21 @@
 
 ## Prerequisites
 
-- [lk CLI](https://docs.livekit.io/home/cli/lk/) installed
-- A [LiveKit Cloud](https://cloud.livekit.io/) account
-- Docker Desktop running
-- All required API keys
+- [lk CLI](https://docs.livekit.io/home/cli/lk/) installed and authenticated
+- A [LiveKit Cloud](https://cloud.livekit.io/) project
+- All required API keys (OpenAI, Deepgram, Cartesia, ModelGuide)
+
+## Deployment Architecture
+
+```
+EEA User ←WebRTC→ LiveKit Edge (EU) ←relay→ LiveKit Agent (eu-central)
+                                                ├── Deepgram STT (US)
+                                                ├── OpenAI LLM (US)
+                                                ├── Cartesia TTS (US)
+                                                └── ModelGuide API (Railway)
+```
+
+LiveKit's global edge network connects users to the nearest edge node via WebRTC. The edge node relays media to the agent — users never experience cross-region latency directly. All inference services (STT, LLM, TTS) and the ModelGuide API should be co-located in the same region as the agent to minimize the voice pipeline latency.
 
 ## Steps
 
@@ -15,69 +26,73 @@
 lk cloud auth login
 ```
 
-### 2. Configure secrets
-
-Set your secrets in LiveKit Cloud. The agent reads these as environment variables at runtime:
+### 2. Set secrets
 
 ```bash
-lk cloud secret set \
+lk agent update-secrets \
   OPENAI_API_KEY=sk-your-key \
+  LLM_MODEL=gpt-4.1-mini \
   DEEPGRAM_API_KEY=your-key \
-  ELEVENLABS_API_KEY=your-key \
-  ELEVENLABS_VOICE_ID=iP95p4xoKVk53GoZ742B \
-  MODELGUIDE_API_URL=https://modelguide-api-production.up.railway.app \
+  CARTESIA_API_KEY=your-key \
+  CARTESIA_VOICE_ID=your-voice-id \
+  TTS_PROVIDER=cartesia \
+  MODELGUIDE_API_URL=https://your-modelguide-api.up.railway.app \
   MODELGUIDE_API_KEY=mgk_your-agent-key \
-  MODELGUIDE_AGENT_ID=agt_xxx \
+  MODELGUIDE_AGENT_ID=your-agent-uuid \
   USER_EMAIL=delivered+admin-glowbox@resend.dev
 ```
 
 No `LIVEKIT_URL`, `LIVEKIT_API_KEY`, or `LIVEKIT_API_SECRET` needed — LiveKit Cloud injects these automatically.
 
-### 3. Build and push Docker image
+### 3. Create and deploy
+
+The `lk` CLI builds the Docker image remotely and deploys it:
 
 ```bash
 cd examples/agents/livekit-agent
-docker build -t your-registry/buildpro-livekit-agent:0.1.0 .
-docker push your-registry/buildpro-livekit-agent:0.1.0
+lk agent create --region eu-central -y
 ```
 
-### 4. Deploy
+This creates a `livekit.toml` linking your directory to the cloud agent. Subsequent deploys:
 
 ```bash
-lk cloud agent deploy \
-  --name buildpro-sam \
-  --image your-registry/buildpro-livekit-agent:0.1.0
+lk agent deploy
+```
+
+### 4. Verify
+
+```bash
+lk agent list                    # Check deployment status
+lk agent status                  # Detailed status (CPU, memory, replicas)
+lk agent logs                    # Tail startup logs
 ```
 
 ### 5. Test
 
-Create a room and dispatch an agent job:
+Create a token with agent dispatch and open the LiveKit Meet playground:
 
 ```bash
-lk room create --name test-room
-lk dispatch create --agent-name buildpro-sam --room test-room
+lk token create --room test-room --identity user --join --valid-for 1h --agent buildpro-sam --open meet
 ```
 
-Or use the [LiveKit Playground](https://playground.livekit.io/) to join the room with audio.
+This opens `meet.livekit.io` with the token pre-filled. Allow microphone access — Sam will greet you automatically.
 
-### 6. Monitor
+## Useful commands
 
 ```bash
-lk cloud agent list
-lk cloud agent logs buildpro-sam
+lk agent versions                # List deployed versions
+lk agent rollback                # Roll back to previous version
+lk agent update-secrets          # Update secrets (triggers restart)
+lk agent restart                 # Restart without redeploying
+lk agent delete                  # Remove the agent
+lk agent logs                    # Tail logs (streaming)
 ```
 
-## Dockerfile Explained
+## Dockerfile
 
-Standard multi-stage build:
+Multi-stage build:
 
-1. **Builder stage** — Uses `uv` to install Python dependencies and download the Silero VAD model
-2. **Runtime stage** — Slim Python image with a non-root `agent` user
+1. **Builder stage** — Uses `uv` to install Python dependencies, downloads Silero VAD and turn detector models into a shared HF cache
+2. **Runtime stage** — Slim Python image with a non-root `agent` user, HF model cache copied from builder
 
-No PCC base image workarounds needed (unlike the Pipecat agent) — LiveKit Cloud runs standard Docker images.
-
-## Connecting to ModelGuide API
-
-The `MODELGUIDE_API_URL` must be reachable from LiveKit Cloud infrastructure. If your ModelGuide API is on Railway, use the public URL (e.g. `https://modelguide-api-production.up.railway.app`).
-
-The agent's API key (`mgk_xxx`) must be valid and the agent must have the required connector tools assigned in the ModelGuide dashboard.
+No custom base image needed — LiveKit Cloud runs standard Docker images.

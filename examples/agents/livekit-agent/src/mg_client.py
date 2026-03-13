@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 
 import httpx
 from mcp import ClientSession
@@ -96,8 +97,79 @@ async def complete_session(
 
 
 # ---------------------------------------------------------------------------
-# Tool execution (MCP)
+# Tool execution (MCP) — persistent connection
 # ---------------------------------------------------------------------------
+
+
+class MCPConnection:
+    """Persistent MCP connection that stays open for the lifetime of a voice call.
+
+    Usage:
+        mcp = MCPConnection()
+        await mcp.connect()
+        result = await mcp.call_tool("glowbox_store_list_products", {...}, session_id)
+        ...
+        await mcp.close()
+    """
+
+    def __init__(self):
+        self._session: ClientSession | None = None
+        self._transport_ctx = None
+        self._session_ctx = None
+
+    async def connect(self):
+        """Open MCP connection and initialize. Call once at pipeline start."""
+        url = _mcp_url()
+        headers = {"Authorization": f"Bearer {config.MODELGUIDE_API_KEY}"}
+        logger.info("MCP connecting to %s", url)
+        start = time.monotonic()
+
+        self._transport_ctx = streamablehttp_client(url, headers=headers)
+        read, write, _ = await self._transport_ctx.__aenter__()
+
+        self._session_ctx = ClientSession(read, write)
+        self._session = await self._session_ctx.__aenter__()
+        await self._session.initialize()
+
+        elapsed = int((time.monotonic() - start) * 1000)
+        logger.info("MCP connected + initialized in %dms", elapsed)
+
+    async def close(self):
+        """Close MCP connection. Call at pipeline end."""
+        if self._session_ctx:
+            try:
+                await self._session_ctx.__aexit__(None, None, None)
+            except Exception:
+                logger.debug("MCP session close error (expected)")
+            self._session = None
+        if self._transport_ctx:
+            try:
+                await self._transport_ctx.__aexit__(None, None, None)
+            except Exception:
+                logger.debug("MCP transport close error (expected)")
+            self._transport_ctx = None
+        logger.info("MCP connection closed")
+
+    async def call_tool(self, tool_name: str, args: dict, session_id: str) -> dict:
+        """Execute a tool on the persistent MCP connection."""
+        if not self._session:
+            raise RuntimeError("MCP not connected — call connect() first")
+
+        args_with_session = {**args, "session_id": session_id}
+        result = await self._session.call_tool(tool_name, args_with_session)
+        return _parse_mcp_result(result)
+
+
+def _parse_mcp_result(result) -> dict:
+    """Parse MCP result content blocks into a dict."""
+    if result.content and len(result.content) > 0:
+        block = result.content[0]
+        if hasattr(block, "text"):
+            try:
+                return json.loads(block.text)
+            except (json.JSONDecodeError, TypeError):
+                return {"result": block.text}
+    return {"result": str(result.content)}
 
 
 async def list_tools() -> list[dict]:
@@ -119,12 +191,7 @@ async def list_tools() -> list[dict]:
 
 
 async def call_tool(tool_name: str, args: dict, session_id: str) -> dict:
-    """Execute a tool via ModelGuide's MCP endpoint.
-
-    NOTE: Each call opens a new MCP connection and runs initialize(). For
-    production use with many tool calls per session, consider holding a
-    persistent MCP ClientSession for the lifetime of the voice call.
-    """
+    """Execute a tool via ModelGuide's MCP endpoint (one-shot, for testing)."""
     args_with_session = {**args, "session_id": session_id}
     headers = {"Authorization": f"Bearer {config.MODELGUIDE_API_KEY}"}
 
@@ -132,12 +199,4 @@ async def call_tool(tool_name: str, args: dict, session_id: str) -> dict:
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool_name, args_with_session)
-            # MCP result.content is a list of content blocks
-            if result.content and len(result.content) > 0:
-                block = result.content[0]
-                if hasattr(block, "text"):
-                    try:
-                        return json.loads(block.text)
-                    except (json.JSONDecodeError, TypeError):
-                        return {"result": block.text}
-            return {"result": str(result.content)}
+            return _parse_mcp_result(result)
