@@ -34,7 +34,6 @@ from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.daily.transport import DailyParams, DailyTransport
@@ -46,7 +45,7 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call
 from transcript import TranscriptCollector
 
-VERSION = "0.19.4"
+VERSION = "0.20.0"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
@@ -73,8 +72,8 @@ _REGION_URLS = {
 }
 
 URLS = _REGION_URLS.get(REGION, _REGION_URLS["us"])
-logger.info("Region: %s → OpenAI=%s, Deepgram=%s, ElevenLabs=%s",
-            REGION, URLS["openai"] or "default", URLS["deepgram"] or "default", URLS["elevenlabs"])
+logger.info("Region: %s → OpenAI=%s, Deepgram=%s",
+            REGION, URLS["openai"] or "default", URLS["deepgram"] or "default")
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +178,35 @@ def _create_llm():
 
 
 # ---------------------------------------------------------------------------
+# TTS factory — switch providers via TTS_PROVIDER env var
+# ---------------------------------------------------------------------------
+
+
+def _create_tts():
+    provider = config.TTS_PROVIDER
+    logger.info("TTS provider: %s", provider)
+
+    if provider == "cartesia":
+        from pipecat.services.cartesia.tts import CartesiaTTSService
+
+        return CartesiaTTSService(
+            api_key=config.CARTESIA_API_KEY,
+            voice_id=config.CARTESIA_VOICE_ID,
+            model="sonic-3",
+        )
+
+    # Fallback: ElevenLabs
+    from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+
+    return ElevenLabsTTSService(
+        api_key=config.ELEVENLABS_API_KEY,
+        voice_id=config.ELEVENLABS_VOICE_ID,
+        model="eleven_flash_v2_5",
+        url=URLS["elevenlabs"],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Bot entry point (called by Pipecat Cloud or local runner)
 # ---------------------------------------------------------------------------
 
@@ -216,12 +244,7 @@ async def main(transport: DailyTransport):
 
     llm = _create_llm()
 
-    tts = ElevenLabsTTSService(
-        api_key=config.ELEVENLABS_API_KEY,
-        voice_id=config.ELEVENLABS_VOICE_ID,
-        model="eleven_flash_v2_5",
-        url=URLS["elevenlabs"],
-    )
+    tts = _create_tts()
 
     # --- System prompt + context ---
     system_prompt = build_system_prompt(session_id, user_email=config.USER_EMAIL)

@@ -1,4 +1,4 @@
-pipecat-ai[daily,openai,deepgram,elevenlabs,silero]
+pipecat-ai[daily,openai,deepgram,elevenlabs,cartesia,silero]
 httpx
 python-dotenv
 mcp
