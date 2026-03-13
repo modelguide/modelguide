@@ -19,8 +19,6 @@ import os
 import sys
 import time
 
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (
     EndFrame,
     LLMFullResponseEndFrame,
@@ -33,7 +31,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameProcessor
-from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.daily.transport import DailyParams, DailyTransport
@@ -45,7 +43,7 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call
 from transcript import TranscriptCollector
 
-VERSION = "0.20.0"
+VERSION = "0.21.0"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
@@ -236,10 +234,11 @@ async def main(transport: DailyTransport):
     transcript = TranscriptCollector()
 
     # --- Services ---
-    stt = DeepgramSTTService(
+    stt = DeepgramFluxSTTService(
         api_key=config.DEEPGRAM_API_KEY,
-        model="nova-3",
-        base_url=URLS["deepgram"],
+        params=DeepgramFluxSTTService.InputParams(
+            eot_threshold=0.5,
+        ),
     )
 
     llm = _create_llm()
@@ -372,7 +371,8 @@ async def bot(args):
             audio_in_enabled=True,
             audio_out_enabled=True,
             transcription_enabled=False,
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.15)),
+            vad_enabled=True,
+            vad_audio_passthrough=True,
         ),
     )
     await main(transport)
@@ -431,7 +431,8 @@ async def local_daily():
             audio_in_enabled=True,
             audio_out_enabled=True,
             transcription_enabled=False,
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.15)),
+            vad_enabled=True,
+            vad_audio_passthrough=True,
         ),
     )
     await main(transport)

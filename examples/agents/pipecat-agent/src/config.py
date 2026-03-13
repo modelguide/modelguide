@@ -61,7 +61,7 @@ def validate() -> None:
     MODELGUIDE_API_KEY = os.environ["MODELGUIDE_API_KEY"]
     MODELGUIDE_AGENT_ID = os.environ["MODELGUIDE_AGENT_ID"]
     ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "iP95p4xoKVk53GoZ742B")
-    CARTESIA_VOICE_ID = os.getenv("CARTESIA_VOICE_ID", "a167e0f3-df7e-4d52-a9c3-f949145571bd")
+    CARTESIA_VOICE_ID = os.getenv("CARTESIA_VOICE_ID", "5ee9feff-1265-424a-9d7f-8e4d431a12c7")
     TTS_PROVIDER = os.getenv("TTS_PROVIDER", "cartesia")
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
     USER_EMAIL = os.getenv("USER_EMAIL", "voice-caller")
