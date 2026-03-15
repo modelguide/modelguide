@@ -29,6 +29,7 @@ interface SessionFilters extends PaginationParams {
   agentId?: string;
   status?: string;
   channelType?: string;
+  mode?: string;
   hasFeedback?: boolean;
   startedAfter?: string;
   startedBefore?: string;
@@ -215,6 +216,8 @@ export async function createSession(
     channelType: string;
     userIdentifier: string;
     userMetadata?: Record<string, unknown>;
+    mode?: "live" | "simulation";
+    metadata?: Record<string, unknown>;
   },
 ) {
   return forOrg(orgId, async (tx) => {
@@ -237,6 +240,8 @@ export async function createSession(
           data.channelType as (typeof sessions.channelType.enumValues)[number],
         userIdentifier: data.userIdentifier,
         userMetadata: data.userMetadata ?? {},
+        mode: data.mode ?? "live",
+        metadata: data.metadata ?? {},
         status: "active",
         startedAt: new Date(),
       })
@@ -446,6 +451,14 @@ function buildFilterConditions(filters: SessionFilters) {
       eq(
         sessions.channelType,
         filters.channelType as (typeof sessions.channelType.enumValues)[number],
+      ),
+    );
+  }
+  if (filters.mode) {
+    conditions.push(
+      eq(
+        sessions.mode,
+        filters.mode as (typeof sessions.mode.enumValues)[number],
       ),
     );
   }

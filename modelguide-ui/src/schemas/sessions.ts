@@ -61,6 +61,7 @@ export const sessionListItemSchema = z.object({
   agent: z.object({ id: z.string(), name: z.string() }),
   channelType: channelTypeSchema,
   status: sessionStatusSchema,
+  mode: z.enum(['live', 'simulation']).optional().default('live'),
   userIdentifier: z.string(),
   userMetadata: z.record(z.unknown()).optional(),
   startedAt: z.string(),

@@ -52,6 +52,10 @@ export const Permissions = {
   "feedback:create": ["admin", "support"],
   "feedback:update": ["admin", "support"],
 
+  // Simulations
+  "simulations:run": ["admin"],
+  "simulations:read": ["admin", "support"],
+
   // Analytics
   "analytics:read": ["admin", "support", "viewer"],
 

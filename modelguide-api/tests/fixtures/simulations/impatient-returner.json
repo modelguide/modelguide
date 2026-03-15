@@ -1,0 +1,45 @@
+{
+  "personaId": "impatient-returner",
+  "expectedToolCalls": ["glowbox_store_get_order"],
+  "expectedTurnRange": [3, 10],
+  "expectedTraits": {
+    "polite": false,
+    "usesGreetings": false,
+    "escalates": true
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "I need a refund NOW. The product I received is nothing like the description. This is unacceptable."
+    },
+    {
+      "role": "assistant",
+      "content": "I'm sorry to hear about your experience. I'd like to help you with the refund. Could you please provide me with your order number?"
+    },
+    {
+      "role": "user",
+      "content": "It's order #12345. Can we make this quick? I've already wasted enough time."
+    },
+    {
+      "role": "tool",
+      "toolName": "glowbox_store_get_order",
+      "content": "{\"orderId\": \"12345\", \"status\": \"delivered\", \"items\": [{\"name\": \"Radiance Serum\", \"price\": 45.00}]}"
+    },
+    {
+      "role": "assistant",
+      "content": "I can see your order #12345 for the Radiance Serum ($45.00). I'll start the refund process for you right away."
+    },
+    {
+      "role": "user",
+      "content": "Finally. How long will this take? I want my money back immediately."
+    },
+    {
+      "role": "assistant",
+      "content": "The refund will be processed within 3-5 business days. You'll receive a confirmation email once it's done."
+    },
+    {
+      "role": "user",
+      "content": "3-5 days? That's too long but fine. I'm done here. Goodbye."
+    }
+  ]
+}

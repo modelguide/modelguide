@@ -59,6 +59,11 @@ export const sessionStatusEnum = pgEnum("session_status", [
 ]);
 
 /**
+ * Session mode — distinguishes live traffic from simulated conversations
+ */
+export const sessionModeEnum = pgEnum("session_mode", ["live", "simulation"]);
+
+/**
  * Channel types for session origination
  */
 export const channelTypeEnum = pgEnum("channel_type", [

@@ -52,6 +52,12 @@ const envSchema = z
     // E.g. "http://localhost:5173,https://demo.example.com"
     CORS_ORIGINS: z.string().optional(),
 
+    // Persona simulation — LLM provider for synthetic conversations
+    SIMULATION_LLM_API_KEY: z.string().optional(),
+    SIMULATION_LLM_MODEL: z.string().default("gpt-5-mini"),
+    SIMULATION_LLM_BASE_URL: z.string().url().optional(),
+    SIMULATION_MAX_TURNS: z.coerce.number().default(20),
+
     // Eval engine — LLM judge configuration (optional)
     EVAL_LLM_API_KEY: z.string().optional(),
     EVAL_LLM_BASE_URL: z.string().url().optional(),

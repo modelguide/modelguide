@@ -74,6 +74,14 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
               <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
             </InfoItem>
 
+            {session.mode === 'simulation' && (
+              <InfoItem label="Mode">
+                <Badge variant="warning" dot>
+                  Simulation
+                </Badge>
+              </InfoItem>
+            )}
+
             <InfoItem label="Duration">
               <span className="text-sm text-fg-primary">
                 {session.durationSeconds ? formatDuration(session.durationSeconds) : 'Ongoing'}

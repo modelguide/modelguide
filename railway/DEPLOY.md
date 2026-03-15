@@ -142,6 +142,9 @@ railway variables \
 Optional:
 
 - `API_EXTERNAL_ADDRESS` — public API URL for ElevenLabs/webhook sync (falls back to `APP_URL`)
+- `SIMULATION_LLM_API_KEY` — OpenAI (or compatible) API key for persona simulation
+- `SIMULATION_LLM_BASE_URL` — custom base URL for OpenAI-compatible endpoint (defaults to OpenAI). For Claude, set to `https://api.anthropic.com/v1/`
+- `SIMULATION_LLM_MODEL` — model to use for simulation (defaults to `gpt-5-mini`). For Claude, use e.g. `claude-sonnet-4-6`
 
 ## 9. Verify
 
