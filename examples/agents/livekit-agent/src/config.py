@@ -43,7 +43,8 @@ def validate() -> None:
     global ELEVENLABS_API_KEY, CARTESIA_API_KEY
     global MODELGUIDE_API_URL, MODELGUIDE_API_KEY, MODELGUIDE_AGENT_ID
     global ELEVENLABS_VOICE_ID, CARTESIA_VOICE_ID, TTS_PROVIDER
-    global GOOGLE_API_KEY, USER_EMAIL, LLM_MODEL, REGION
+    global GOOGLE_API_KEY, USER_EMAIL, LLM_MODEL, REGION, STT_MODEL
+    global LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST
 
     if _validated:
         return
@@ -66,6 +67,10 @@ def validate() -> None:
     USER_EMAIL = os.getenv("USER_EMAIL", "voice-caller")
     LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
     REGION = os.getenv("REGION", "us")
+    STT_MODEL = os.getenv("STT_MODEL", "nova-3")
+    LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+    LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 
     # Validate TTS provider has its API key
     if TTS_PROVIDER == "cartesia" and not CARTESIA_API_KEY:
@@ -118,3 +123,7 @@ GOOGLE_API_KEY: str = ""
 USER_EMAIL: str = ""
 LLM_MODEL: str = "gpt-4.1-mini"
 REGION: str = "us"
+STT_MODEL: str = "nova-3"
+LANGFUSE_PUBLIC_KEY: str = ""
+LANGFUSE_SECRET_KEY: str = ""
+LANGFUSE_HOST: str = "https://cloud.langfuse.com"

@@ -40,6 +40,12 @@ lk agent update-secrets \
   MODELGUIDE_API_KEY=mgk_your-agent-key \
   MODELGUIDE_AGENT_ID=your-agent-uuid \
   USER_EMAIL=delivered+admin-glowbox@resend.dev
+
+# Optional: Langfuse observability (omit to disable)
+lk agent update-secrets \
+  LANGFUSE_PUBLIC_KEY=pk-lf-your-key \
+  LANGFUSE_SECRET_KEY=sk-lf-your-key \
+  LANGFUSE_HOST=https://cloud.langfuse.com
 ```
 
 No `LIVEKIT_URL`, `LIVEKIT_API_KEY`, or `LIVEKIT_API_SECRET` needed — LiveKit Cloud injects these automatically.

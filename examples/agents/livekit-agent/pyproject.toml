@@ -12,6 +12,7 @@ dependencies = [
     "httpx",
     "python-dotenv",
     "mcp",
+    "langfuse>=4.0.0",
 ]
 
 [project.optional-dependencies]
