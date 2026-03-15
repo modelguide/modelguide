@@ -178,10 +178,10 @@
       "breakpoints": true
     },
     {
-      "idx": 25,
+      "idx": 28,
       "version": "7",
-      "when": 1772106193265,
-      "tag": "0025_add-session-mode",
+      "when": 1773840000000,
+      "tag": "0028_add-session-mode",
       "breakpoints": true
     }
   ]
