@@ -9,6 +9,7 @@ import type { ChannelType, SessionStatus } from '~/schemas/sessions'
 export interface SessionFilters {
   status?: SessionStatus
   channelType?: ChannelType
+  mode?: 'live' | 'simulation'
   agentId?: string
   search?: string
 }
@@ -23,6 +24,12 @@ const statusOptions: Array<{ value: SessionStatus | ''; label: string }> = [
   { value: 'active', label: 'Active' },
   { value: 'completed', label: 'Completed' },
   { value: 'abandoned', label: 'Abandoned' },
+]
+
+const modeOptions: Array<{ value: 'live' | 'simulation' | ''; label: string }> = [
+  { value: '', label: 'All Modes' },
+  { value: 'live', label: 'Live' },
+  { value: 'simulation', label: 'Simulation' },
 ]
 
 const channelOptions: Array<{ value: ChannelType | ''; label: string }> = [
@@ -91,6 +98,23 @@ export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersPro
           }
         >
           {channelOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="w-36">
+        <Select
+          value={filters.mode || ''}
+          onChange={(e) =>
+            onFiltersChange({
+              ...filters,
+              mode: e.target.value ? (e.target.value as 'live' | 'simulation') : undefined,
+            })
+          }
+        >
+          {modeOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

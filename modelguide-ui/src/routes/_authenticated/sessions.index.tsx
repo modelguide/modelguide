@@ -22,7 +22,7 @@ export const Route = createFileRoute('/_authenticated/sessions/')({
 
 function SessionsPage() {
   const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState<SessionFilters>({})
+  const [filters, setFilters] = useState<SessionFilters>({ mode: 'live' as const })
   const [autoRefresh, setAutoRefresh] = useState(
     () => localStorage.getItem(AUTO_REFRESH_KEY) === 'true',
   )
@@ -44,6 +44,7 @@ function SessionsPage() {
       if (filters.status) params.status = filters.status
       if (filters.channelType) params.channelType = filters.channelType
       if (filters.agentId) params.agentId = filters.agentId
+      if (filters.mode) params.mode = filters.mode
 
       return api
         .get('sessions', { searchParams: params })

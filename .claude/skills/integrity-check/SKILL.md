@@ -77,6 +77,8 @@ If any files in `modelguide-api/src/db/schema/` are modified:
 - If no new migration is staged, warn: "Schema changed but no migration found. Run `bunx drizzle-kit generate --name <descriptive-name>`"
 - If the change is significant (new table, new pattern, security model change), check for an ADR in `docs/decisions/`
 
+- Read `modelguide-api/drizzle/meta/_journal.json` and verify that `when` timestamps are monotonically increasing. For each entry after the first, confirm its `when` value is strictly greater than the previous entry's. If any migration has a timestamp less than or equal to the previous entry, **FAIL** with: "Migration {tag} has out-of-order timestamp (when: {value} ≤ previous: {prevValue}). Re-generate with `bunx drizzle-kit generate --name <name>` after rebasing."
+
 ## Check 7: Environment Variables
 
 If `modelguide-api/src/env.ts` is modified (variables added, renamed, or removed):
@@ -107,6 +109,14 @@ Across all changed files:
 - No hardcoded secrets, API keys, or credentials (grep for patterns like `sk_`, `mgk_`, `Bearer `, passwords)
 - No `.env` files being committed (should be gitignored)
 - Connector config fields storing secrets use `type: "secret"` in `configSchema`
+
+## Check 11: Package Manager
+
+Verify the correct package manager is used per sub-project:
+
+- **`modelguide-api/`** — uses **Bun**. If `modelguide-api/package-lock.json` appears in the changeset, **FAIL**: "API uses Bun — `package-lock.json` should not exist. Use `bun install` (produces `bun.lock`)."
+- **`modelguide-ui/`** — uses **npm**. `package-lock.json` is expected. If `modelguide-ui/bun.lock` appears in the changeset, **WARN**: "UI uses npm — unexpected `bun.lock`."
+- **Root** — if a root lockfile is added, it must be `bun.lock`. If `package-lock.json` appears at the repo root, **FAIL**: "Root uses Bun — `package-lock.json` should not exist at repo root."
 
 ## Report Format
 

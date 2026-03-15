@@ -59,6 +59,7 @@ const sessionResponseSchema = z.object({
   userIdentifier: z.string().nullable(),
   userMetadata: z.record(z.unknown()),
   status: z.enum(["active", "completed", "abandoned"]),
+  mode: z.enum(["live", "simulation"]),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   metadata: z.record(z.unknown()),
@@ -105,6 +106,7 @@ const sessionDetailSchema = z.object({
   userIdentifier: z.string().nullable(),
   userMetadata: z.record(z.unknown()),
   status: z.enum(["active", "completed", "abandoned"]),
+  mode: z.enum(["live", "simulation"]),
   startedAt: z.string(),
   endedAt: z.string().nullable(),
   metadata: z.record(z.unknown()),
@@ -195,6 +197,10 @@ const sessionFiltersSchema = paginationSchema.extend({
     ])
     .optional()
     .openapi({ description: "Filter by channel type" }),
+  mode: z
+    .enum(["live", "simulation"])
+    .optional()
+    .openapi({ description: "Filter by session mode" }),
   hasFeedback: z
     .enum(["true", "false"])
     .optional()
@@ -241,6 +247,7 @@ function formatSession(
     userIdentifier: session.userIdentifier,
     userMetadata: session.userMetadata ?? {},
     status: session.status,
+    mode: session.mode,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
     metadata: session.metadata ?? {},
@@ -269,6 +276,7 @@ function formatSessionDetail(
     userIdentifier: session.userIdentifier,
     userMetadata: session.userMetadata ?? {},
     status: session.status,
+    mode: session.mode,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
     metadata: session.metadata ?? {},
@@ -322,6 +330,7 @@ function formatCreatedSession(session: Session) {
     userIdentifier: session.userIdentifier,
     userMetadata: session.userMetadata ?? {},
     status: session.status,
+    mode: session.mode,
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
     metadata: session.metadata ?? {},

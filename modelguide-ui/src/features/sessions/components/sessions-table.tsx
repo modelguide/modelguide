@@ -176,7 +176,14 @@ function SessionRow({ session, index }: SessionRowProps) {
         <span className="text-sm text-fg-secondary">{session.userIdentifier}</span>
       </td>
       <td className="px-4 py-3">
-        <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
+          {session.mode === 'simulation' && (
+            <Badge variant="warning" dot>
+              Sim
+            </Badge>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         <span className="font-mono text-sm text-fg-secondary">

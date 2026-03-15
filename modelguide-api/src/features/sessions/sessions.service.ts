@@ -28,6 +28,7 @@ interface SessionFilters extends PaginationParams {
   agentId?: string;
   status?: string;
   channelType?: string;
+  mode?: string;
   hasFeedback?: boolean;
   startedAfter?: string;
   startedBefore?: string;
@@ -416,6 +417,14 @@ function buildFilterConditions(filters: SessionFilters) {
       eq(
         sessions.channelType,
         filters.channelType as (typeof sessions.channelType.enumValues)[number],
+      ),
+    );
+  }
+  if (filters.mode) {
+    conditions.push(
+      eq(
+        sessions.mode,
+        filters.mode as (typeof sessions.mode.enumValues)[number],
       ),
     );
   }
