@@ -8,6 +8,7 @@ import { connectorRoutes } from "@features/connectors";
 import { evalConfigRoutes } from "@features/eval-configs";
 import { evalRoutes } from "@features/evals";
 import { feedbackRoutes } from "@features/feedback";
+import { knowledgeBaseRoutes } from "@features/knowledge-base";
 import { mcpHandler } from "@features/mcp";
 import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
@@ -64,6 +65,7 @@ apiRouter.route("/sessions", sessionRoutes);
 apiRouter.route("/sops", sopRoutes);
 apiRouter.route("/eval-configs", evalConfigRoutes);
 apiRouter.route("/evals", evalRoutes);
+apiRouter.route("/knowledge-base", knowledgeBaseRoutes);
 apiRouter.route("/sessions", feedbackRoutes); // sub-resource: /:id/feedback
 apiRouter.route("/simulations", simulationRoutes);
 apiRouter.route("/users", userRoutes);

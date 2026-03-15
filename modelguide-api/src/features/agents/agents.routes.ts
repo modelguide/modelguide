@@ -46,6 +46,10 @@ const agentResponseSchema = z.object({
   agentPlatform: z.enum(["custom", "elevenlabs"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
+  secrets: z.record(z.string()).openapi({
+    description:
+      "Secret ref map: { fieldName: secretId }. No decrypted values.",
+  }),
   hasElevenLabsKey: z.boolean(),
   hasWebhookSecret: z.boolean(),
   keyPrefix: z.string().nullable(),
@@ -97,6 +101,9 @@ const createAgentSchema = z.object({
   modality: z.enum(["voice", "text"]).default("voice").optional(),
   agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
   metadata: z.record(z.unknown()).optional(),
+  secrets: z.record(z.string().uuid()).optional().openapi({
+    description: "Secret ref map: { fieldName: secretId }",
+  }),
 });
 
 const updateAgentSchema = z
@@ -105,6 +112,9 @@ const updateAgentSchema = z
     description: z.string().optional(),
     metadata: z.record(z.unknown()).optional(),
     agentPlatform: z.enum(["custom", "elevenlabs"]).optional(),
+    secrets: z.record(z.string().uuid()).optional().openapi({
+      description: "Secret ref map: { fieldName: secretId }",
+    }),
   })
   .strict()
   .refine(
@@ -112,7 +122,8 @@ const updateAgentSchema = z
       data.name !== undefined ||
       data.description !== undefined ||
       data.metadata !== undefined ||
-      data.agentPlatform !== undefined,
+      data.agentPlatform !== undefined ||
+      data.secrets !== undefined,
     {
       message: "At least one field must be provided",
     },
@@ -199,6 +210,7 @@ function formatAgent(
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
     metadata,
+    secrets: (agent.secrets ?? {}) as Record<string, string>,
     hasElevenLabsKey: agent.hasElevenLabsKey ?? false,
     hasWebhookSecret: agent.hasWebhookSecret ?? false,
     keyPrefix: agent.keyPrefix ?? null,

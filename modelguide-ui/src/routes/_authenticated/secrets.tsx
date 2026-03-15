@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { PageHeader } from '~/components/ui/page-header'
+import { Pagination } from '~/components/ui/pagination'
 import { DeleteSecretDialog } from '~/features/secrets/components/delete-secret-dialog'
 import { EditSecretDialog } from '~/features/secrets/components/edit-secret-dialog'
 import { SecretForm } from '~/features/secrets/components/secret-form'
@@ -26,10 +27,13 @@ function SecretsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [secretToEdit, setSecretToEdit] = useState<Secret | null>(null)
   const [secretToDelete, setSecretToDelete] = useState<Secret | null>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = 20
 
   const { data, isLoading } = useQuery({
-    queryKey: ['secrets'],
-    queryFn: () => api.get('secrets').json<PaginatedResponse<Secret>>(),
+    queryKey: ['secrets', page],
+    queryFn: () =>
+      api.get('secrets', { searchParams: { page, pageSize } }).json<PaginatedResponse<Secret>>(),
   })
 
   const createMutation = useMutation({
@@ -113,6 +117,15 @@ function SecretsPage() {
         secret={secretToDelete}
         isDeleting={deleteMutation.isPending}
       />
+
+      {data && (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={data.pagination.totalItems}
+          onPageChange={setPage}
+        />
+      )}
     </div>
   )
 }

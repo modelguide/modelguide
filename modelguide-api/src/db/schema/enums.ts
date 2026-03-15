@@ -31,9 +31,10 @@ export const secretTypeEnum = pgEnum("secret_type", [
 ]);
 
 /**
- * Owner types for polymorphic secret ownership
+ * Secret scope — browsing label for org vault. Not an ownership constraint.
+ * NULL = unscoped (appears in all selectors).
  */
-export const ownerTypeEnum = pgEnum("owner_type", ["connector", "agent"]);
+export const secretScopeEnum = pgEnum("secret_scope", ["connector", "agent"]);
 
 /**
  * Agent modalities
@@ -146,4 +147,15 @@ export const evalScoreResultEnum = pgEnum("eval_score_result", [
   "fail",
   "skip",
   "error",
+]);
+
+// ============================================================================
+// Knowledge Base enums
+// ============================================================================
+
+/**
+ * Knowledge base item types — discriminator for the unified KB table
+ */
+export const knowledgeBaseTypeEnum = pgEnum("knowledge_base_type", [
+  "guardrail",
 ]);

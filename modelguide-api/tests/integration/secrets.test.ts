@@ -1,6 +1,11 @@
 /**
  * Integration tests for Secrets API
  * Tests the full HTTP request/response cycle with RLS isolation
+ *
+ * Post entity-owned-secret-refs migration:
+ *   - secrets are org-scoped vault entries (no ownerType/ownerId)
+ *   - optional `scope` browsing label ("connector" | "agent", nullable)
+ *   - entities (connectors, agents) hold { fieldName: secretId } ref maps
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -45,7 +50,7 @@ afterAll(async () => {
 // ============================================================================
 
 describe("POST /api/secrets", () => {
-  test("creates secret and returns metadata without value (201)", async () => {
+  test("creates scoped secret and returns metadata without value (201)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
       headers: orgAAdminHeaders,
@@ -53,8 +58,7 @@ describe("POST /api/secrets", () => {
         name: "Test API Key",
         value: "sk_live_test_12345",
         secretType: "api_key",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
+        scope: "connector",
       }),
     });
 
@@ -64,12 +68,34 @@ describe("POST /api/secrets", () => {
     expect(body.id).toBeDefined();
     expect(body.name).toBe("Test API Key");
     expect(body.secretType).toBe("api_key");
-    expect(body.ownerType).toBe("connector");
-    expect(body.ownerId).toBe(s.orgAMedusaConnectorId);
+    expect(body.scope).toBe("connector");
     expect(body.createdAt).toBeDefined();
     // Value must NEVER be returned
     expect(body.value).toBeUndefined();
     expect(body.encryptedValue).toBeUndefined();
+    // Legacy fields must NOT be present
+    expect(body.ownerType).toBeUndefined();
+    expect(body.ownerId).toBeUndefined();
+
+    createdSecretIds.push(body.id);
+  });
+
+  test("creates unscoped secret when scope is omitted (201)", async () => {
+    const response = await request("/api/secrets", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Unscoped Credential",
+        value: "unscoped_value",
+        secretType: "credentials",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+
+    expect(body.id).toBeDefined();
+    expect(body.scope).toBeNull();
 
     createdSecretIds.push(body.id);
   });
@@ -82,8 +108,7 @@ describe("POST /api/secrets", () => {
         name: "Encryption Check",
         value: "my_plaintext_secret",
         secretType: "credentials",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
+        scope: "connector",
       }),
     });
 
@@ -104,25 +129,6 @@ describe("POST /api/secrets", () => {
     expect(parsed.iv).toBeDefined();
   });
 
-  test("rejects non-existent ownerId (404)", async () => {
-    const fakeConnectorId = "00000000-0000-0000-0000-000000000000";
-    const response = await request("/api/secrets", {
-      method: "POST",
-      headers: orgAAdminHeaders,
-      body: JSON.stringify({
-        name: "Bad Owner",
-        value: "some_value",
-        secretType: "api_key",
-        ownerType: "connector",
-        ownerId: fakeConnectorId,
-      }),
-    });
-
-    expect(response.status).toBe(404);
-    const body = await response.json();
-    expect(body.code).toBe("NOT_FOUND");
-  });
-
   test("validates required fields (422)", async () => {
     const response = await request("/api/secrets", {
       method: "POST",
@@ -141,8 +147,23 @@ describe("POST /api/secrets", () => {
         name: "",
         value: "some_value",
         secretType: "api_key",
+        scope: "connector",
+      }),
+    });
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects unknown fields via .strict() (422)", async () => {
+    const response = await request("/api/secrets", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Strict Test",
+        value: "some_value",
+        secretType: "api_key",
         ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
+        ownerId: "00000000-0000-0000-0000-000000000000",
       }),
     });
 
@@ -157,8 +178,6 @@ describe("POST /api/secrets", () => {
         name: "No Auth",
         value: "secret",
         secretType: "api_key",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
       }),
     });
 
@@ -173,8 +192,6 @@ describe("POST /api/secrets", () => {
         name: "Support Attempt",
         value: "secret",
         secretType: "api_key",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
       }),
     });
 
@@ -207,6 +224,8 @@ describe("GET /api/secrets", () => {
       expect(secret.id).toBeDefined();
       expect(secret.name).toBeDefined();
       expect(secret.secretType).toBeDefined();
+      // scope should be present (nullable)
+      expect("scope" in secret).toBe(true);
     }
   });
 
@@ -218,6 +237,48 @@ describe("GET /api/secrets", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.pagination.pageSize).toBe(5);
+  });
+
+  test("filters by scope", async () => {
+    const response = await request("/api/secrets?scope=connector", {
+      headers: orgAAdminHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    // All returned secrets should be scoped to "connector"
+    for (const secret of body.data) {
+      expect(secret.scope).toBe("connector");
+    }
+  });
+
+  test("scope filter with includeUnscoped returns both scoped and unscoped", async () => {
+    // Ensure there's an unscoped secret
+    const createRes = await request("/api/secrets", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Unscoped For Filter Test",
+        value: "unscoped_filter_test",
+        secretType: "api_key",
+      }),
+    });
+    const created = await createRes.json();
+    createdSecretIds.push(created.id);
+
+    const response = await request(
+      "/api/secrets?scope=connector&includeUnscoped=true",
+      { headers: orgAAdminHeaders },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    const scopes = body.data.map((s: { scope: string | null }) => s.scope);
+    // Should contain both connector-scoped and unscoped (null)
+    expect(scopes).toContain("connector");
+    expect(scopes).toContain(null);
   });
 
   test("rejects unauthenticated request (401)", async () => {
@@ -250,8 +311,7 @@ describe("GET /api/secrets/:id", () => {
         name: "Get Target",
         value: "get_me",
         secretType: "api_key",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
+        scope: "connector",
       }),
     });
     const body = await response.json();
@@ -270,8 +330,7 @@ describe("GET /api/secrets/:id", () => {
     expect(body.id).toBe(testSecretId);
     expect(body.name).toBe("Get Target");
     expect(body.secretType).toBe("api_key");
-    expect(body.ownerType).toBe("connector");
-    expect(body.ownerId).toBe(s.orgAMedusaConnectorId);
+    expect(body.scope).toBe("connector");
     expect(body.createdAt).toBeDefined();
     expect(body.value).toBeUndefined();
     expect(body.encryptedValue).toBeUndefined();
@@ -318,8 +377,7 @@ describe("PATCH /api/secrets/:id", () => {
         name: "Update Target",
         value: "original_value",
         secretType: "api_key",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
+        scope: "connector",
       }),
     });
     const body = await response.json();
@@ -418,8 +476,7 @@ describe("DELETE /api/secrets/:id", () => {
         name: "Delete Target",
         value: "delete_me",
         secretType: "credentials",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
+        scope: "connector",
       }),
     });
     const { id } = await createResponse.json();
@@ -466,8 +523,7 @@ describe("RLS isolation", () => {
         name: "Store API Key",
         value: "orgA_secret",
         secretType: "api_key",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
+        scope: "connector",
       }),
     });
     const body = await response.json();
@@ -516,7 +572,7 @@ describe("RLS isolation", () => {
 });
 
 // ============================================================================
-// CRUD audit — strict validation (#64)
+// Strict PATCH schema
 // ============================================================================
 
 describe("Strict PATCH schema", () => {
@@ -528,8 +584,6 @@ describe("Strict PATCH schema", () => {
         name: "Strict Test Secret",
         value: "test-value",
         secretType: "api_key",
-        ownerType: "connector",
-        ownerId: s.orgAMedusaConnectorId,
       }),
     });
     const secret = await createRes.json();

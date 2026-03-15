@@ -13,6 +13,7 @@ import {
   connectorsCatalog,
   secrets,
 } from "@db/schema";
+import type { EntitySecretsMap } from "@db/schema";
 import { generateApiKey } from "@lib/crypto";
 import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
@@ -21,18 +22,11 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
+import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
-
-/** Convert a name to a URL-safe slug */
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 // ============================================================================
 // Helpers
@@ -111,33 +105,15 @@ export async function getAgentById(orgId: string, agentId: string) {
       throw Errors.agentNotFound(agentId);
     }
 
-    const [[activeKey], [elevenLabsSecret], [webhookSecret]] =
-      await Promise.all([
-        tx
-          .select({ keyPrefix: apiKeys.keyPrefix })
-          .from(apiKeys)
-          .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true))),
-        tx
-          .select({ id: secrets.id })
-          .from(secrets)
-          .where(
-            and(
-              eq(secrets.ownerType, "agent"),
-              eq(secrets.ownerId, agentId),
-              eq(secrets.secretType, "platform_api_key"),
-            ),
-          ),
-        tx
-          .select({ id: secrets.id })
-          .from(secrets)
-          .where(
-            and(
-              eq(secrets.ownerType, "agent"),
-              eq(secrets.ownerId, agentId),
-              eq(secrets.secretType, "webhook_secret"),
-            ),
-          ),
-      ]);
+    const [activeKey] = await tx
+      .select({ keyPrefix: apiKeys.keyPrefix })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true)));
+
+    // Derive key presence from the entity secrets map
+    const secretsMap = (agent.secrets ?? {}) as EntitySecretsMap;
+    const hasElevenLabsKey = !!secretsMap.platform_api_key;
+    const hasWebhookSecretRef = !!secretsMap.webhook_secret;
 
     const metadata = agent.metadata as Record<string, unknown> | null;
     const hasLegacyHmac = !!metadata?.webhook_hmac_secret;
@@ -145,8 +121,8 @@ export async function getAgentById(orgId: string, agentId: string) {
     return {
       ...agent,
       keyPrefix: activeKey?.keyPrefix ?? null,
-      hasElevenLabsKey: !!elevenLabsSecret,
-      hasWebhookSecret: !!webhookSecret || hasLegacyHmac,
+      hasElevenLabsKey,
+      hasWebhookSecret: hasWebhookSecretRef || hasLegacyHmac,
     };
   });
 }
@@ -160,6 +136,7 @@ export async function createAgent(
     modality?: Modality;
     agentPlatform?: AgentPlatform;
     metadata?: Record<string, unknown>;
+    secrets?: EntitySecretsMap;
   },
   createdBy: string,
 ) {
@@ -176,6 +153,27 @@ export async function createAgent(
       throw Errors.alreadyExists("Agent", "slug");
     }
 
+    // Store raw API key as encrypted secret in vault; reference via agents.secrets map
+    const keyData = generateApiKey();
+    const encryptedKey = await encryptSecret(keyData.key);
+
+    const [mgKeySecret] = await tx
+      .insert(secrets)
+      .values({
+        organizationId: orgId,
+        name: "ModelGuide API Key",
+        secretType: "api_key",
+        encryptedValue: encryptedKey,
+        scope: "agent",
+      })
+      .returning({ id: secrets.id });
+
+    // Merge caller-provided secrets with the auto-created MG key ref
+    const secretsMap: EntitySecretsMap = {
+      ...data.secrets,
+      api_key: mgKeySecret.id,
+    };
+
     const [agent] = await tx
       .insert(agents)
       .values({
@@ -186,12 +184,11 @@ export async function createAgent(
         modality: data.modality ?? "voice",
         agentPlatform: data.agentPlatform ?? "custom",
         metadata: data.metadata ?? {},
+        secrets: secretsMap,
         isActive: false,
         createdBy,
       })
       .returning();
-
-    const keyData = generateApiKey();
 
     await tx.insert(apiKeys).values({
       organizationId: orgId,
@@ -201,16 +198,6 @@ export async function createAgent(
       keyPrefix: keyData.prefix,
       isActive: true,
       createdBy,
-    });
-
-    // Store raw API key as encrypted secret for MCP auth
-    await tx.insert(secrets).values({
-      organizationId: orgId,
-      name: "ModelGuide API Key",
-      secretType: "api_key",
-      encryptedValue: await encryptSecret(keyData.key),
-      ownerType: "agent",
-      ownerId: agent.id,
     });
 
     return { agent, apiKey: keyData.key };
@@ -225,6 +212,7 @@ export async function updateAgent(
     description?: string;
     metadata?: Record<string, unknown>;
     agentPlatform?: AgentPlatform;
+    secrets?: EntitySecretsMap;
   },
 ) {
   const [updated] = await forOrg(orgId, async (tx) => {
@@ -236,6 +224,16 @@ export async function updateAgent(
         .where(eq(agents.id, agentId));
       const existing = (current?.metadata ?? {}) as Record<string, unknown>;
       data.metadata = { ...existing, ...data.metadata };
+    }
+
+    // Deep-merge secrets to preserve auto-managed keys (api_key, webhook_secret)
+    if (data.secrets) {
+      const [current] = await tx
+        .select({ secrets: agents.secrets })
+        .from(agents)
+        .where(eq(agents.id, agentId));
+      const existing = (current?.secrets ?? {}) as EntitySecretsMap;
+      data.secrets = { ...existing, ...data.secrets };
     }
 
     return tx
@@ -302,7 +300,7 @@ export async function regenerateApiKey(
   createdBy: string,
 ) {
   return forOrg(orgId, async (tx) => {
-    await requireAgent(tx, agentId);
+    const agent = await requireAgent(tx, agentId);
 
     await tx
       .update(apiKeys)
@@ -310,6 +308,7 @@ export async function regenerateApiKey(
       .where(eq(apiKeys.agentId, agentId));
 
     const keyData = generateApiKey();
+    const encryptedValue = await encryptSecret(keyData.key);
 
     await tx.insert(apiKeys).values({
       organizationId: orgId,
@@ -321,34 +320,35 @@ export async function regenerateApiKey(
       createdBy,
     });
 
-    // Update or create the encrypted MG API key secret
-    const encryptedValue = await encryptSecret(keyData.key);
-    const [existing] = await tx
-      .select({ id: secrets.id })
-      .from(secrets)
-      .where(
-        and(
-          eq(secrets.ownerType, "agent"),
-          eq(secrets.ownerId, agentId),
-          eq(secrets.secretType, "api_key"),
-        ),
-      )
-      .limit(1);
+    // Update the vault secret referenced by agents.secrets["api_key"]
+    const secretsMap = (agent.secrets ?? {}) as EntitySecretsMap;
+    const existingSecretId = secretsMap.api_key;
 
-    if (existing) {
+    if (existingSecretId) {
+      // Update the existing vault entry in-place
       await tx
         .update(secrets)
         .set({ encryptedValue })
-        .where(eq(secrets.id, existing.id));
+        .where(eq(secrets.id, existingSecretId));
     } else {
-      await tx.insert(secrets).values({
-        organizationId: orgId,
-        name: "ModelGuide API Key",
-        secretType: "api_key",
-        encryptedValue,
-        ownerType: "agent",
-        ownerId: agentId,
-      });
+      // Create new vault entry and reference it
+      const [newSecret] = await tx
+        .insert(secrets)
+        .values({
+          organizationId: orgId,
+          name: "ModelGuide API Key",
+          secretType: "api_key",
+          encryptedValue,
+          scope: "agent",
+        })
+        .returning({ id: secrets.id });
+
+      await tx
+        .update(agents)
+        .set({
+          secrets: { ...secretsMap, api_key: newSecret.id },
+        })
+        .where(eq(agents.id, agentId));
     }
 
     return { apiKey: keyData.key, keyPrefix: keyData.prefix };
@@ -365,37 +365,40 @@ export async function upsertAgentPlatformKey(
   value: string,
 ) {
   return forOrg(orgId, async (tx) => {
-    await requireAgent(tx, agentId);
+    const agent = await requireAgent(tx, agentId);
 
     const encryptedValue = await encryptSecret(value);
-    const [existing] = await tx
-      .select({ id: secrets.id })
-      .from(secrets)
-      .where(
-        and(
-          eq(secrets.ownerType, "agent"),
-          eq(secrets.ownerId, agentId),
-          eq(secrets.secretType, "platform_api_key"),
-        ),
-      )
-      .limit(1);
+    const secretsMap = (agent.secrets ?? {}) as EntitySecretsMap;
+    const existingSecretId = secretsMap.platform_api_key;
 
-    if (existing) {
+    if (existingSecretId) {
+      // Update existing vault entry; keep agents.secrets ref unchanged
       await tx
         .update(secrets)
         .set({ encryptedValue })
-        .where(eq(secrets.id, existing.id));
+        .where(eq(secrets.id, existingSecretId));
       return { action: "updated" as const };
     }
 
-    await tx.insert(secrets).values({
-      organizationId: orgId,
-      name: "ElevenLabs API Key",
-      secretType: "platform_api_key",
-      encryptedValue,
-      ownerType: "agent",
-      ownerId: agentId,
-    });
+    // Create new vault entry and write ref into agents.secrets map
+    const [newSecret] = await tx
+      .insert(secrets)
+      .values({
+        organizationId: orgId,
+        name: "ElevenLabs API Key",
+        secretType: "platform_api_key",
+        encryptedValue,
+        scope: "agent",
+      })
+      .returning({ id: secrets.id });
+
+    await tx
+      .update(agents)
+      .set({
+        secrets: { ...secretsMap, platform_api_key: newSecret.id },
+      })
+      .where(eq(agents.id, agentId));
+
     return { action: "created" as const };
   });
 }

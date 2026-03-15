@@ -53,6 +53,7 @@ export const ErrorCode = {
   CONNECTOR_NOT_FOUND: "CONNECTOR_NOT_FOUND",
   CONNECTOR_NOT_CONFIGURED: "CONNECTOR_NOT_CONFIGURED",
   CONNECTOR_INACTIVE: "CONNECTOR_INACTIVE",
+  MISSING_SECRET_REF: "MISSING_SECRET_REF",
 
   // Tool errors
   TOOL_NOT_FOUND: "TOOL_NOT_FOUND",
@@ -73,6 +74,10 @@ export const ErrorCode = {
   SOP_TEMPLATE_NOT_FOUND: "SOP_TEMPLATE_NOT_FOUND",
   SOP_SLUG_EXISTS: "SOP_SLUG_EXISTS",
   SOP_INVALID_CONNECTOR_REF: "SOP_INVALID_CONNECTOR_REF",
+
+  // Knowledge Base errors
+  KNOWLEDGE_BASE_NOT_FOUND: "KNOWLEDGE_BASE_NOT_FOUND",
+  KNOWLEDGE_BASE_SLUG_EXISTS: "KNOWLEDGE_BASE_SLUG_EXISTS",
 
   // Eval errors
   EVAL_RUN_NOT_FOUND: "EVAL_RUN_NOT_FOUND",
@@ -123,6 +128,7 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.SESSION_NOT_FOUND]: 404,
   [ErrorCode.SOP_NOT_FOUND]: 404,
   [ErrorCode.SOP_TEMPLATE_NOT_FOUND]: 404,
+  [ErrorCode.KNOWLEDGE_BASE_NOT_FOUND]: 404,
   [ErrorCode.EVAL_RUN_NOT_FOUND]: 404,
   [ErrorCode.EVAL_CONFIG_NOT_FOUND]: 404,
 
@@ -132,6 +138,7 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.USER_EMAIL_EXISTS]: 409,
   [ErrorCode.SESSION_ALREADY_ENDED]: 409,
   [ErrorCode.SOP_SLUG_EXISTS]: 409,
+  [ErrorCode.KNOWLEDGE_BASE_SLUG_EXISTS]: 409,
   [ErrorCode.EVAL_ALREADY_RUNNING]: 409,
   [ErrorCode.EVAL_CONFIG_IN_USE]: 409,
 
@@ -141,6 +148,7 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.ORGANIZATION_REQUIRED]: 400,
   [ErrorCode.CONNECTOR_NOT_CONFIGURED]: 400,
   [ErrorCode.CONNECTOR_INACTIVE]: 400,
+  [ErrorCode.MISSING_SECRET_REF]: 400,
   [ErrorCode.TOOL_INACTIVE]: 400,
 
   // 404 Simulation
@@ -357,6 +365,17 @@ export const Errors = {
     );
   },
 
+  missingSecretRef(
+    fieldName: string,
+    entityType: "connector" | "agent",
+    entityId: string,
+  ) {
+    return new AppError(
+      ErrorCode.MISSING_SECRET_REF,
+      `Secret reference for field "${fieldName}" not found in org vault (${entityType}: ${entityId})`,
+    );
+  },
+
   // Tool
   toolNotFound(name?: string) {
     return new AppError(
@@ -442,6 +461,23 @@ export const Errors = {
 
   sopInvalidConnectorRef(message: string) {
     return new AppError(ErrorCode.SOP_INVALID_CONNECTOR_REF, message);
+  },
+
+  // Knowledge Base
+  knowledgeBaseNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.KNOWLEDGE_BASE_NOT_FOUND,
+      id
+        ? `Knowledge base item not found: ${id}`
+        : "Knowledge base item not found",
+    );
+  },
+
+  knowledgeBaseSlugExists(slug: string) {
+    return new AppError(
+      ErrorCode.KNOWLEDGE_BASE_SLUG_EXISTS,
+      `Knowledge base item with slug "${slug}" already exists`,
+    );
   },
 
   // Eval

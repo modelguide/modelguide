@@ -26,9 +26,10 @@ import {
   channelTypeEnum,
   connectorTypeEnum,
   feedbackSourceEnum,
+  knowledgeBaseTypeEnum,
   messageRoleEnum,
   modalityEnum,
-  ownerTypeEnum,
+  secretScopeEnum,
   secretTypeEnum,
   sessionModeEnum,
   sessionStatusEnum,
@@ -36,6 +37,12 @@ import {
   toolStatusEnum,
   userRoleEnum,
 } from "./enums";
+
+/**
+ * Flat map of { fieldName: secretId } stored on connectors and agents.
+ * Used to look up secrets by field name from the org vault.
+ */
+export type EntitySecretsMap = Record<string, string>;
 
 // ============================================================================
 // Organizations
@@ -233,6 +240,8 @@ export const connectors = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 100 }).notNull(),
     config: jsonb("config").$type<Record<string, unknown>>().default({}),
+    /** Secret ref map: { fieldName: secretId }. Resolved at tool execution time. */
+    secrets: jsonb("secrets").$type<EntitySecretsMap>().notNull().default({}),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -334,8 +343,8 @@ export const secrets = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     secretType: secretTypeEnum("secret_type").notNull(),
     encryptedValue: text("encrypted_value").notNull(),
-    ownerType: ownerTypeEnum("owner_type").notNull(),
-    ownerId: uuid("owner_id").notNull(),
+    /** Browsing label — not an ownership constraint. NULL = unscoped. */
+    scope: secretScopeEnum("scope"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -346,7 +355,7 @@ export const secrets = pgTable(
   },
   (table) => [
     index("secrets_org_idx").on(table.organizationId),
-    index("secrets_owner_idx").on(table.ownerType, table.ownerId),
+    index("secrets_scope_idx").on(table.organizationId, table.scope),
   ],
 ).enableRLS();
 
@@ -383,6 +392,8 @@ export const agents = pgTable(
       .defaultNow()
       .notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    /** Secret ref map: { fieldName: secretId }. Resolved at tool execution time. */
+    secrets: jsonb("secrets").$type<EntitySecretsMap>().notNull().default({}),
     updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
       () => new Date(),
     ),
@@ -859,3 +870,98 @@ export const agentSopsRelations = relations(agentSops, ({ one }) => ({
     references: [sops.id],
   }),
 }));
+
+// ============================================================================
+// Knowledge Base (Unified — guardrails, FAQ, etc. — RLS enabled)
+// ============================================================================
+
+export const knowledgeBase = pgTable(
+  "knowledge_base",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    type: knowledgeBaseTypeEnum("type").notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    content: text("content").notNull(),
+    description: text("description"),
+    config: jsonb("config").$type<Record<string, unknown>>().default({}),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+      () => new Date(),
+    ),
+  },
+  (table) => [
+    uniqueIndex("kb_org_type_slug_unique").on(
+      table.organizationId,
+      table.type,
+      table.slug,
+    ),
+    index("kb_org_type_active_idx").on(
+      table.organizationId,
+      table.type,
+      table.isActive,
+    ),
+  ],
+).enableRLS();
+
+export const knowledgeBaseRelations = relations(
+  knowledgeBase,
+  ({ one, many }) => ({
+    organization: one(organizations, {
+      fields: [knowledgeBase.organizationId],
+      references: [organizations.id],
+    }),
+    creator: one(users, {
+      fields: [knowledgeBase.createdBy],
+      references: [users.id],
+    }),
+    agentKnowledgeBase: many(agentKnowledgeBase),
+  }),
+);
+
+// ============================================================================
+// Agent Knowledge Base (Junction Table — no RLS, queried via RLS-protected parents)
+// ============================================================================
+
+export const agentKnowledgeBase = pgTable(
+  "agent_knowledge_base",
+  {
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    knowledgeBaseId: uuid("knowledge_base_id")
+      .notNull()
+      .references(() => knowledgeBase.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("agent_kb_unique").on(table.agentId, table.knowledgeBaseId),
+    index("agent_kb_agent_idx").on(table.agentId),
+    index("agent_kb_kb_idx").on(table.knowledgeBaseId),
+  ],
+);
+
+export const agentKnowledgeBaseRelations = relations(
+  agentKnowledgeBase,
+  ({ one }) => ({
+    agent: one(agents, {
+      fields: [agentKnowledgeBase.agentId],
+      references: [agents.id],
+    }),
+    knowledgeBaseItem: one(knowledgeBase, {
+      fields: [agentKnowledgeBase.knowledgeBaseId],
+      references: [knowledgeBase.id],
+    }),
+  }),
+);

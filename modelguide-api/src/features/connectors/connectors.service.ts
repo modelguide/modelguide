@@ -4,13 +4,9 @@
 
 import { db } from "@db/client";
 import { forOrg } from "@db/rls";
-import {
-  connectorTools,
-  connectors,
-  connectorsCatalog,
-  secrets,
-} from "@db/schema";
-import { decryptSecret } from "@lib/crypto";
+import { connectorTools, connectors, connectorsCatalog } from "@db/schema";
+import type { EntitySecretsMap } from "@db/schema";
+import { decryptSecretsByIds } from "@features/secrets";
 import { Errors, logAndThrow } from "@lib/errors";
 import { getLogger, withTiming } from "@lib/logger";
 import {
@@ -22,27 +18,6 @@ import { toolSlug } from "@lib/slugify";
 import { and, asc, count, eq, isNull } from "drizzle-orm";
 import { getConnectorManifest } from "./catalog/registry";
 import type { HealthCheckResult } from "./catalog/types";
-
-type ConfigSchema = Record<string, { type: string; required?: boolean }>;
-
-/**
- * Extract secret references from a config object using the catalog schema.
- * Returns a Map of secretId → fieldName for all "secret" type fields that
- * have a non-empty string value in the config.
- */
-function extractSecretRefs(
-  config: Record<string, unknown>,
-  configSchema: ConfigSchema,
-): Map<string, string> {
-  const refs = new Map<string, string>();
-  for (const [key, fieldSchema] of Object.entries(configSchema)) {
-    const value = config[key];
-    if (fieldSchema.type === "secret" && typeof value === "string" && value) {
-      refs.set(value, key);
-    }
-  }
-  return refs;
-}
 
 // ============================================================================
 // Catalog queries (no RLS — global table)
@@ -133,6 +108,7 @@ export async function createConnector(
     name: string;
     slug: string;
     config?: Record<string, unknown>;
+    secrets?: EntitySecretsMap;
   },
 ) {
   const [catalogEntry] = await db
@@ -167,6 +143,7 @@ export async function createConnector(
         name: data.name,
         slug: data.slug,
         config: data.config ?? {},
+        secrets: data.secrets ?? {},
       })
       .returning();
 
@@ -205,6 +182,7 @@ export async function updateConnector(
   data: {
     name?: string;
     config?: Record<string, unknown>;
+    secrets?: EntitySecretsMap;
     isActive?: boolean;
   },
 ) {
@@ -289,66 +267,53 @@ export async function updateConnectorTool(
 // ============================================================================
 
 /**
- * Resolve connector config, replacing secret references with decrypted values.
- * Accepts already-fetched connector + catalog to avoid redundant DB queries.
+ * Resolve connector config, decrypting secrets from the entity's secrets map.
+ * Reads connector.secrets map → fetches each UUID from org vault → decrypts.
+ * Non-secret config fields are passed through as strings.
+ * Missing vault entries throw MISSING_SECRET_REF (400).
  */
 export async function resolveConnectorConfig(
   orgId: string,
-  connector: { id: string; config: unknown },
+  connector: { id: string; config: unknown; secrets: unknown },
   catalogConfigSchema: unknown,
 ): Promise<{ resolved: Record<string, string>; missingFields: string[] }> {
-  const configSchema = (catalogConfigSchema ?? {}) as ConfigSchema;
+  const configSchema = (catalogConfigSchema ?? {}) as Record<
+    string,
+    { type: string; required?: boolean }
+  >;
   const rawConfig = (connector.config ?? {}) as Record<string, unknown>;
+  const secretsMap = (connector.secrets ?? {}) as EntitySecretsMap;
 
-  const connectorSecrets = await forOrg(orgId, (tx) =>
-    tx
-      .select()
-      .from(secrets)
-      .where(
-        and(
-          eq(secrets.ownerType, "connector"),
-          eq(secrets.ownerId, connector.id),
-        ),
-      ),
-  );
-  const secretById = new Map(connectorSecrets.map((s) => [s.id, s]));
+  // Batch-fetch and decrypt all referenced secrets via the secrets service
+  const secretIds = Object.values(secretsMap).filter(Boolean);
+  const decryptedById = await decryptSecretsByIds(orgId, secretIds);
 
   const resolved: Record<string, string> = {};
   const missingFields: string[] = [];
-  const secretRefs = extractSecretRefs(rawConfig, configSchema);
 
   for (const [key, fieldSchema] of Object.entries(configSchema)) {
-    const value = rawConfig[key];
-
-    if (value === undefined || value === null) {
-      if (fieldSchema.required) {
-        missingFields.push(key);
-      }
-      continue;
-    }
-
-    if (secretRefs.has(String(value)) && fieldSchema.type === "secret") {
-      const secret = secretById.get(String(value));
-      if (secret) {
-        try {
-          resolved[key] = await decryptSecret(secret.encryptedValue);
-        } catch (err) {
-          logAndThrow(
-            getLogger(),
-            err,
-            {
-              connectorId: connector.id,
-              secretId: secret.id,
-              secretName: secret.name,
-              configField: key,
-            },
-            "failed to decrypt connector secret",
-          );
+    if (fieldSchema.type === "secret") {
+      const secretId = secretsMap[key];
+      if (!secretId) {
+        if (fieldSchema.required) {
+          missingFields.push(key);
         }
-      } else if (fieldSchema.required) {
-        missingFields.push(key);
+        continue;
       }
+      const decrypted = decryptedById.get(secretId);
+      if (!decrypted) {
+        throw Errors.missingSecretRef(key, "connector", connector.id);
+      }
+      resolved[key] = decrypted;
     } else {
+      // Non-secret field from config
+      const value = rawConfig[key];
+      if (value === undefined || value === null) {
+        if (fieldSchema.required) {
+          missingFields.push(key);
+        }
+        continue;
+      }
       resolved[key] = String(value);
     }
   }

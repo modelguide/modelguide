@@ -19,6 +19,13 @@ const secretTypeLabels: Record<string, string> = {
   api_key: 'API Key',
   oauth_token: 'OAuth Token',
   credentials: 'Credentials',
+  platform_api_key: 'Platform Key',
+  webhook_secret: 'Webhook Secret',
+}
+
+const scopeLabels: Record<string, string> = {
+  connector: 'Connector',
+  agent: 'Agent',
 }
 
 export function SecretsTable({ secrets, isLoading, isAdmin, onEdit, onDelete }: SecretsTableProps) {
@@ -52,6 +59,9 @@ export function SecretsTable({ secrets, isLoading, isAdmin, onEdit, onDelete }: 
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
               Type
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              Scope
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
               Created
@@ -123,10 +133,19 @@ function SecretRow({ secret, isAdmin, onEdit, onDelete, style }: SecretRowProps)
         <Badge variant="default">{secretTypeLabels[secret.secretType] ?? secret.secretType}</Badge>
       </td>
       <td className="px-4 py-3">
+        {secret.scope ? (
+          <Badge variant="info">{scopeLabels[secret.scope] ?? secret.scope}</Badge>
+        ) : (
+          <span className="text-xs text-fg-muted">Unscoped</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
         <span className="text-xs text-fg-secondary">{formatDate(secret.createdAt)}</span>
       </td>
       <td className="px-4 py-3">
-        <span className="text-xs text-fg-secondary">{formatDate(secret.updatedAt)}</span>
+        <span className="text-xs text-fg-secondary">
+          {secret.updatedAt ? formatDate(secret.updatedAt) : '—'}
+        </span>
       </td>
       {isAdmin ? (
         <td className="px-4 py-3 text-right">

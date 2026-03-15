@@ -13,6 +13,7 @@ import postgres from "postgres";
 import * as schema from "../schema";
 import { connectorsCatalog, sopTemplates } from "../schema";
 import { connectorsCatalogSeed } from "./connectors-catalog";
+import { seedKnowledgeBase } from "./seed-knowledge-base";
 import { seedOrg } from "./seed-org";
 import { seedSopDefinitions } from "./seed-sop-defs";
 import { sopTemplatesSeed } from "./sop-templates";
@@ -65,11 +66,13 @@ async function seedAll(db: SeedDb) {
       id: medusaCatalog.id,
       slug: medusaCatalog.slug,
       tools: medusaCatalog.tools,
+      configSchema: medusaCatalog.configSchema,
     },
     zendesk: {
       id: zendeskCatalog.id,
       slug: zendeskCatalog.slug,
       tools: zendeskCatalog.tools,
+      configSchema: zendeskCatalog.configSchema,
     },
   };
 
@@ -90,10 +93,13 @@ async function seedAll(db: SeedDb) {
   // 4. Seed SOP definitions for demo org (glowbox)
   await seedSopDefinitions(db);
 
-  // 5. Verify data was actually persisted
+  // 5. Seed knowledge base guardrails (all orgs)
+  await seedKnowledgeBase(db);
+
+  // 6. Verify data was actually persisted
   const ok = await verifySeed(db);
 
-  // 6. Print summary
+  // 7. Print summary
   console.log("\n========================================");
   console.log(
     ok
@@ -124,6 +130,7 @@ const MIN_ROW_COUNTS: Record<string, number> = {
   sessions: 300, // ~300 generated per org, plus handwritten
   session_messages: 100,
   session_feedback: 50,
+  knowledge_base: 15, // 5 glowbox + 6 clearhealth + 6 steelpoint
 };
 
 async function verifySeed(db: SeedDb): Promise<boolean> {
