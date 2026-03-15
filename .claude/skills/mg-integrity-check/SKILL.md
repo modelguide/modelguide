@@ -78,6 +78,8 @@ If any files in `modelguide-api/src/db/schema/` are modified:
 - If no new migration is staged, warn: "Schema changed but no migration found. Run `bunx drizzle-kit generate --name <descriptive-name>`"
 - If the change is significant (new table, new pattern, security model change), check for an ADR in `docs/decisions/`
 
+- Read `modelguide-api/drizzle/meta/_journal.json` and verify that `when` timestamps are monotonically increasing. For each entry after the first, confirm its `when` value is strictly greater than the previous entry's. If any migration has a timestamp less than or equal to the previous entry, **FAIL** with: "Migration {tag} has out-of-order timestamp (when: {value} ≤ previous: {prevValue}). Re-generate with `bunx drizzle-kit generate --name <name>` after rebasing."
+
 ## Check 7: Environment Variables
 
 If `modelguide-api/src/env.ts` is modified (variables added, renamed, or removed):
@@ -109,7 +111,15 @@ Across all changed files:
 - No `.env` files being committed (should be gitignored)
 - Connector config fields storing secrets use `type: "secret"` in `configSchema`
 
-## Check 11: Commit Message Format
+## Check 11: Package Manager
+
+Verify the correct package manager is used per sub-project:
+
+- **`modelguide-api/`** — uses **Bun**. If `modelguide-api/package-lock.json` appears in the changeset, **FAIL**: "API uses Bun — `package-lock.json` should not exist. Use `bun install` (produces `bun.lock`)."
+- **`modelguide-ui/`** — uses **npm**. `package-lock.json` is expected. If `modelguide-ui/bun.lock` appears in the changeset, **WARN**: "UI uses npm — unexpected `bun.lock`."
+- **Root** — if a root lockfile is added, it must be `bun.lock`. If `package-lock.json` appears at the repo root, **FAIL**: "Root uses Bun — `package-lock.json` should not exist at repo root."
+
+## Check 12: Commit Message Format
 
 Skip this check if on the default branch.
 
@@ -137,7 +147,7 @@ Additional rules:
 
 **Fail** on commits that do not match the format. List each offending commit hash and subject line.
 
-## Check 12: Branch Naming
+## Check 13: Branch Naming
 
 Skip this check if on the default branch.
 
@@ -153,7 +163,7 @@ Examples: `feat/add-agent-search`, `fix/session-timeout`, `chore/update-deps`.
 
 **Fail** if the branch name does not match the pattern.
 
-## Check 13: Staging Hygiene
+## Check 14: Staging Hygiene
 
 Skip this check if nothing is staged (`git diff --cached --name-only` is empty).
 
@@ -181,9 +191,10 @@ Files checked: N
 | 2 | File location | PASS | |
 | 3 | Import aliases | FAIL | `modelguide-api/src/features/agents/foo.ts` uses relative import `../../lib/crypto` |
 | ... | ... | ... | ... |
-| 11 | Commit message format | PASS | |
-| 12 | Branch naming | PASS | |
-| 13 | Staging hygiene | PASS | |
+| 11 | Package manager | PASS | |
+| 12 | Commit message format | PASS | |
+| 13 | Branch naming | PASS | |
+| 14 | Staging hygiene | PASS | |
 
 ### Issues to Fix (N)
 - [FAIL] Check 3: ...
