@@ -16,11 +16,12 @@ import {
   organizations,
 } from "@db/schema";
 import { compile } from "@features/compiler/core/compile";
-import { toMastra } from "@features/compiler/emitters/mastra/index";
+import { toMastra } from "@features/compiler/emitters/mastra";
 import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
 import { createSop } from "@features/sops/sops.service";
 import { eq } from "drizzle-orm";
-import { emailOrderNotArrivedSop } from "../../fixtures/compiler/email-wismo-sop";
+import { sampleGuardrails } from "../../../fixtures/compiler";
+import { emailOrderNotArrivedSop } from "../../../fixtures/compiler/email-wismo-sop";
 import {
   type E2EContext,
   agentConfig,
@@ -28,10 +29,9 @@ import {
   compileAndRun,
   runEvalAndAssertAllPass,
   storeSession,
-} from "../../fixtures/compiler/eval-helpers";
-import { sampleGuardrails } from "../../fixtures/compiler/sample-guardrails";
+} from "../eval-helpers";
 
-const HAS_API_KEY = !!process.env.OPENAI_API_KEY;
+const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 // ============================================================================
 // Fixture IDs — populated in beforeAll, cleaned up in afterAll
@@ -155,7 +155,7 @@ describe("Compiler E2E: compile → run → store → eval", () => {
   it.skipIf(!HAS_API_KEY)(
     "happy path: WISMO email looks up order, does not escalate",
     async () => {
-      // Given — evals: order lookup MUST fire, escalation MUST NOT
+      // Given — evals: order lookup MUST fire, escalation MUST NOT, reply quality judged
       const lookupEval = await createEvalConfig(ctx.orgId, {
         name: "WISMO — tool_called: store_look_up_order",
         evaluatorType: "tool_called",
@@ -166,6 +166,19 @@ describe("Compiler E2E: compile → run → store → eval", () => {
         evaluatorType: "no_tool_called",
         config: { connectorToolId: ctx.createTicketToolId },
       });
+      const replyJudge = await createEvalConfig(ctx.orgId, {
+        name: "WISMO — llm_judge: reply references order and SLA",
+        evaluatorType: "llm_judge",
+        config: {
+          criterion:
+            "The agent reply references the customer's order number and mentions a delivery timeframe or SLA (e.g. working days). The tone is professional and helpful.",
+          rubric: {
+            pass: "Reply mentions order number AND delivery timeframe/SLA, tone is professional",
+            fail: "Reply is missing order reference, delivery timeframe, or has unprofessional tone",
+          },
+          skipOnFailure: true,
+        },
+      });
       const sop = await createSop(ctx.orgId, {
         name: "Compiler E2E WISMO",
         slug: "compiler-e2e-wismo",
@@ -175,6 +188,7 @@ describe("Compiler E2E: compile → run → store → eval", () => {
           steps: buildSopSteps(ctx, {
             lookupEvalId: lookupEval.id,
             escalationEvalId: noEscalateEval.id,
+            replyJudgeEvalId: replyJudge.id,
           }),
           metadata: {},
         },
@@ -200,16 +214,31 @@ describe("Compiler E2E: compile → run → store → eval", () => {
   it.skipIf(!HAS_API_KEY)(
     "unhappy path: refund request escalates via helpdesk_create_ticket",
     async () => {
-      // Given — evals: escalation MUST fire, order lookup MUST NOT
-      const noLookupEval = await createEvalConfig(ctx.orgId, {
-        name: "Escalation — no_tool_called: store_look_up_order",
-        evaluatorType: "no_tool_called",
+      // Given — evals: escalation MUST fire, reply quality judged
+      // Note: we don't assert no_tool_called on store_look_up_order — the agent
+      // may reasonably look up the order before deciding to escalate.
+      const lookupNoop = await createEvalConfig(ctx.orgId, {
+        name: "Escalation — tool_called: store_look_up_order (optional)",
+        evaluatorType: "tool_called",
         config: { connectorToolId: ctx.lookUpOrderToolId },
       });
       const escalateEval = await createEvalConfig(ctx.orgId, {
         name: "Escalation — tool_called: helpdesk_create_ticket",
         evaluatorType: "tool_called",
         config: { connectorToolId: ctx.createTicketToolId },
+      });
+      const replyJudge = await createEvalConfig(ctx.orgId, {
+        name: "Escalation — llm_judge: reply acknowledges escalation",
+        evaluatorType: "llm_judge",
+        config: {
+          criterion:
+            "The agent reply acknowledges that the request is being escalated to the support team. It includes a ticket reference or mentions that someone will follow up. The tone is professional and reassuring.",
+          rubric: {
+            pass: "Reply confirms escalation with ticket reference or follow-up mention, tone is professional",
+            fail: "Reply does not acknowledge escalation, or is missing ticket/follow-up details",
+          },
+          skipOnFailure: true,
+        },
       });
       const sop = await createSop(ctx.orgId, {
         name: "Compiler E2E Escalation",
@@ -218,8 +247,9 @@ describe("Compiler E2E: compile → run → store → eval", () => {
           schemaVersion: 1,
           trigger: { type: "manual", config: {} as Record<string, never> },
           steps: buildSopSteps(ctx, {
-            lookupEvalId: noLookupEval.id,
+            lookupEvalId: lookupNoop.id,
             escalationEvalId: escalateEval.id,
+            replyJudgeEvalId: replyJudge.id,
           }),
           metadata: {},
         },

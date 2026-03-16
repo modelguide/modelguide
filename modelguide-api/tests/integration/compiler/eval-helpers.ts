@@ -7,7 +7,7 @@
 
 import { expect } from "bun:test";
 import { compile } from "@features/compiler/core/compile";
-import { toMastra } from "@features/compiler/emitters/mastra/index";
+import { toMastra } from "@features/compiler/emitters/mastra";
 import { runEvaluation } from "@features/evals/evals.service";
 import {
   addMessage,
@@ -15,10 +15,10 @@ import {
   updateSession,
 } from "@features/sessions/sessions.service";
 import { getLogger } from "@lib/logger";
-import { emailOrderNotArrivedSop } from "./email-wismo-sop";
-import { createMockedToolsets } from "./mocked-tools";
-import { sampleGuardrails } from "./sample-guardrails";
-import { testEmails, toPrompt } from "./test-emails";
+import { emailOrderNotArrivedSop } from "../../fixtures/compiler/email-wismo-sop";
+import { createMockedToolsets } from "../../fixtures/compiler/mocked-tools";
+import { sampleGuardrails } from "../../fixtures/compiler/sample-guardrails";
+import { testEmails, toPrompt } from "../../fixtures/compiler/test-emails";
 
 const log = getLogger().child({ test: "compiler-eval-e2e" }, { level: "info" });
 
@@ -32,7 +32,7 @@ export interface E2EContext {
 export const agentConfig = {
   id: "compiler-e2e-agent",
   name: "Compiler E2E Agent",
-  model: "openai/gpt-4o-mini",
+  model: "anthropic/claude-haiku-4-5-20251001",
   description:
     "You are a customer support agent for an e-commerce store handling inbound support emails. You process one email per run and send a single reply.",
 };
@@ -114,7 +114,11 @@ export async function storeSession(
 /** SOP step definitions shared across happy/unhappy path tests. */
 export function buildSopSteps(
   ctx: E2EContext,
-  evals: { lookupEvalId: string; escalationEvalId: string },
+  evals: {
+    lookupEvalId: string;
+    escalationEvalId: string;
+    replyJudgeEvalId?: string;
+  },
 ) {
   return [
     {
@@ -136,6 +140,9 @@ export function buildSopSteps(
       order: 3,
       instruction: "Compose reply based on order lookup result.",
       required: true,
+      ...(evals.replyJudgeEvalId && {
+        evalConfigId: evals.replyJudgeEvalId,
+      }),
     },
     {
       id: "escalate-if-needed",
@@ -176,7 +183,16 @@ export async function runEvalAndAssertAllPass(
   expect(evalResult.passed).toBe(true);
 
   for (const score of evalResult.scores) {
-    expect(score.result).toBe("pass");
+    // "skip" is acceptable only when the LLM judge key is not configured;
+    // "error" always fails — a misconfigured key should not pass silently.
+    expect(
+      score.result,
+      `${score.name} (${score.evaluatorType}): ${score.reasoning}`,
+    ).not.toBe("error");
+    expect(
+      score.result,
+      `${score.name} (${score.evaluatorType}): ${score.reasoning}`,
+    ).not.toBe("fail");
   }
 
   return evalResult;

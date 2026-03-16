@@ -14,18 +14,18 @@ import type {
   KnowledgeBaseDetailResponse,
   SopDetailResponse,
 } from "@features/compiler/core/types";
-import { toMastra } from "@features/compiler/emitters/mastra/index";
-import { emailOrderNotArrivedSop } from "../../fixtures/compiler/email-wismo-sop";
-import { createMockedToolsets } from "../../fixtures/compiler/mocked-tools";
-import { sampleGuardrails } from "../../fixtures/compiler/sample-guardrails";
-import { testEmails, toPrompt } from "../../fixtures/compiler/test-emails";
+import { toMastra } from "@features/compiler/emitters/mastra";
+import { emailOrderNotArrivedSop } from "../../../fixtures/compiler/email-wismo-sop";
+import { createMockedToolsets } from "../../../fixtures/compiler/mocked-tools";
+import { sampleGuardrails } from "../../../fixtures/compiler/sample-guardrails";
+import { testEmails, toPrompt } from "../../../fixtures/compiler/test-emails";
 
-const HAS_API_KEY = !!process.env.OPENAI_API_KEY;
+const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 const agentConfig = {
   id: "wismo-compiled-agent",
   name: "WISMO Compiled Agent",
-  model: "openai/gpt-4o-mini",
+  model: "anthropic/claude-haiku-4-5-20241022",
   description:
     "You are a customer support agent for an e-commerce store handling inbound support emails. You process one email per run and send a single reply.",
 };
