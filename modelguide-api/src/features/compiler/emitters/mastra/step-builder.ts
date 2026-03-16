@@ -7,6 +7,8 @@
  * typed data pipeline.
  */
 
+import type { Agent } from "@mastra/core/agent";
+import type { Mastra } from "@mastra/core/mastra";
 import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import type { EnrichedStep } from "../../core/types";
@@ -34,6 +36,14 @@ export type StepContext = z.infer<typeof stepContextSchema>;
 // Step builders
 // ============================================================================
 
+function getAgentOrThrow(mastra: Mastra | undefined, agentId: string): Agent {
+  const agent = mastra?.getAgent(agentId);
+  if (!agent) {
+    throw new Error(`Agent "${agentId}" not found in Mastra instance`);
+  }
+  return agent;
+}
+
 /**
  * Build a Mastra step from an EnrichedStep.
  *
@@ -56,10 +66,7 @@ function buildLlmStep(step: EnrichedStep, agentId: string) {
     inputSchema: stepContextSchema,
     outputSchema: stepContextSchema,
     execute: async ({ inputData, mastra }) => {
-      const agent = mastra?.getAgent(agentId);
-      if (!agent) {
-        throw new Error(`Agent "${agentId}" not found in Mastra instance`);
-      }
+      const agent = getAgentOrThrow(mastra, agentId);
 
       const result = await agent.generate(step.scopedPrompt, {
         maxSteps: 3,
@@ -100,19 +107,7 @@ function buildToolStep(step: EnrichedStep, agentId: string) {
     inputSchema: stepContextSchema,
     outputSchema: stepContextSchema,
     execute: async ({ inputData, mastra }) => {
-      // In the workflow context, the agent handles tool calls internally
-      // during generate(). This step exists for explicit tool invocations
-      // where the workflow needs to orchestrate the call directly.
-      const agent = mastra?.getAgent(agentId);
-      if (!agent) {
-        // If no agent available, pass through — tool will be called
-        // by the agent during LLM generation via toolsets
-        return {
-          messages: inputData.messages,
-          toolResults: inputData.toolResults,
-          intent: inputData.intent,
-        };
-      }
+      const agent = getAgentOrThrow(mastra, agentId);
 
       const result = await agent.generate(step.scopedPrompt, {
         maxSteps: 3,
@@ -161,14 +156,14 @@ function extractIntent(text: string): string {
  */
 function extractToolResult(
   result: { steps: unknown[] },
-  _toolName: string,
+  toolName: string,
 ): unknown {
   // Walk through the agent's steps looking for tool results
   for (const step of result.steps as Array<{
     toolResults?: Array<{ payload?: { toolName: string; result: unknown } }>;
   }>) {
     for (const tr of step.toolResults ?? []) {
-      if (tr.payload?.toolName?.includes(_toolName)) {
+      if (tr.payload?.toolName?.includes(toolName)) {
         return tr.payload.result;
       }
     }
