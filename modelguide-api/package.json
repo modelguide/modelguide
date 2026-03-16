@@ -24,7 +24,6 @@
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.34.0",
     "@hono/zod-openapi": "^0.18.0",
-    "@mastra/core": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@scalar/hono-api-reference": "^0.5.0",
     "drizzle-orm": "^0.38.0",
@@ -36,6 +35,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
+    "@mastra/core": "^1.4.0",
     "@types/bun": "latest",
     "drizzle-kit": "^0.30.0",
     "pino-pretty": "^13.1.3",

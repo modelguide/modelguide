@@ -49,6 +49,8 @@ export function buildWorkflows(
     return { [slug]: workflow };
   }
 
+  // TODO(phase-2): Replace WISMO-specific heuristic with generic branch
+  // topology from the SOP definition (e.g. step.branchOn / step.condition).
   // Find the escalation step (last step with tool reference to create_ticket)
   const escalateStepIndex = enrichedSteps.findIndex(
     (es) =>
