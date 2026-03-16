@@ -104,12 +104,14 @@ export function buildWorkflows(
     .branch([
       [
         async ({ inputData }: { inputData: { intent?: string } }) =>
-          inputData.intent !== "out-of-scope",
+          inputData.intent === "wismo",
         wismoPath,
       ],
       [
         async ({ inputData }: { inputData: { intent?: string } }) =>
-          inputData.intent === "out-of-scope",
+          inputData.intent === "out-of-scope" ||
+          inputData.intent === "unknown" ||
+          !inputData.intent,
         escalateStep,
       ],
     ] as AnyWorkflow)

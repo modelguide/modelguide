@@ -21,9 +21,20 @@ import type { EnrichedStep } from "../../core/types";
  * Shared context flowing through all workflow steps.
  * Each step reads context, performs work, returns updated context.
  */
+const messageSchema = z.object({
+  role: z.enum(["user", "assistant", "tool"]),
+  content: z.string(),
+});
+
+type Message = z.infer<typeof messageSchema>;
+
+function msg(role: Message["role"], content: string): Message {
+  return { role, content };
+}
+
 export const stepContextSchema = z.object({
   /** Accumulated message history. */
-  messages: z.array(z.unknown()),
+  messages: z.array(messageSchema),
   /** Tool results keyed by resolvedName. */
   toolResults: z.record(z.unknown()),
   /** Intent classification (set by classify-intent, read by branch condition). */
@@ -68,23 +79,31 @@ function buildLlmStep(step: EnrichedStep, agentId: string) {
     execute: async ({ inputData, mastra }) => {
       const agent = getAgentOrThrow(mastra, agentId);
 
+      // Classify-intent step uses structured output for reliable intent extraction
+      if (step.id === "classify-intent") {
+        const result = await agent.generate(step.scopedPrompt, {
+          maxSteps: 3,
+          structuredOutput: { schema: intentClassificationSchema },
+        });
+
+        return {
+          messages: [
+            ...inputData.messages,
+            msg("assistant", result.text ?? ""),
+          ],
+          toolResults: inputData.toolResults,
+          intent: result.object?.intent ?? "unknown",
+        };
+      }
+
       const result = await agent.generate(step.scopedPrompt, {
         maxSteps: 3,
       });
 
-      // Extract intent from classify-intent step for branch routing
-      const intent =
-        step.id === "classify-intent"
-          ? extractIntent(result.text ?? "")
-          : inputData.intent;
-
       return {
-        messages: [
-          ...inputData.messages,
-          { role: "assistant" as const, content: result.text ?? "" },
-        ],
+        messages: [...inputData.messages, msg("assistant", result.text ?? "")],
         toolResults: inputData.toolResults,
-        intent,
+        intent: inputData.intent,
       };
     },
   });
@@ -117,10 +136,7 @@ function buildToolStep(step: EnrichedStep, agentId: string) {
       const toolResult = extractToolResult(result, resolvedName);
 
       return {
-        messages: [
-          ...inputData.messages,
-          { role: "assistant" as const, content: result.text ?? "" },
-        ],
+        messages: [...inputData.messages, msg("assistant", result.text ?? "")],
         toolResults: {
           ...inputData.toolResults,
           [resolvedName]: toolResult,
@@ -136,20 +152,13 @@ function buildToolStep(step: EnrichedStep, agentId: string) {
 // ============================================================================
 
 /**
- * Extract intent from the classify-intent step's output text.
- * Looks for "out-of-scope" or "wismo" keywords.
+ * Schema for structured intent classification output.
+ * Used with Mastra's structuredOutput to get a typed enum
+ * instead of parsing free-text LLM responses.
  */
-function extractIntent(text: string): string {
-  const lower = text.toLowerCase();
-  if (
-    lower.includes("out-of-scope") ||
-    lower.includes("out of scope") ||
-    lower.includes("escalat")
-  ) {
-    return "out-of-scope";
-  }
-  return "wismo";
-}
+const intentClassificationSchema = z.object({
+  intent: z.enum(["wismo", "out-of-scope", "unknown"]),
+});
 
 /**
  * Extract tool result from an agent generation result.
