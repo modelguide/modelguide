@@ -103,6 +103,7 @@ export function transform(
       definition: normalizedDefinition,
     },
     guardrails,
+    tools,
   );
 
   // Assemble enriched SOP

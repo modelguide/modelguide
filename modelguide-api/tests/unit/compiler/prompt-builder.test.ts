@@ -11,6 +11,7 @@ import {
   buildScopedPrompt,
   buildSystemPrompt,
 } from "@features/compiler/core/prompt-builder";
+import type { ResolvedTool } from "@features/compiler/core/types";
 import type { SopStep } from "@features/sops/sops.types";
 import { emailOrderNotArrivedSop } from "../../fixtures/compiler/email-wismo-sop";
 import { sampleGuardrails } from "../../fixtures/compiler/sample-guardrails";
@@ -19,11 +20,25 @@ const parsedGuardrails = parseGuardrails(sampleGuardrails);
 const agentDescription =
   "You are a customer support agent for an e-commerce store handling inbound support emails. You process one email per run and send a single reply.";
 
+const sampleTools: ResolvedTool[] = [
+  {
+    resolvedName: "store_look_up_order",
+    connectorToolId: "ct-1",
+    connectorId: "c-1",
+  },
+  {
+    resolvedName: "helpdesk_create_ticket",
+    connectorToolId: "ct-2",
+    connectorId: "c-2",
+  },
+];
+
 describe("buildSystemPrompt", () => {
   const prompt = buildSystemPrompt(
     agentDescription,
     emailOrderNotArrivedSop,
     parsedGuardrails,
+    sampleTools,
   );
 
   it("starts with agentConfig.description as preamble", () => {
@@ -31,8 +46,24 @@ describe("buildSystemPrompt", () => {
   });
 
   it("includes SOP name and description", () => {
-    expect(prompt).toContain("## SOP: Email — Order Not Arrived");
+    expect(prompt).toContain("## Workflow: Email — Order Not Arrived");
     expect(prompt).toContain("Process inbound emails about orders");
+  });
+
+  it("includes tools section with resolved names", () => {
+    expect(prompt).toContain("## Tools");
+    expect(prompt).toContain("- store_look_up_order");
+    expect(prompt).toContain("- helpdesk_create_ticket");
+  });
+
+  it("omits tools section when no tools provided", () => {
+    const noToolsPrompt = buildSystemPrompt(
+      agentDescription,
+      emailOrderNotArrivedSop,
+      parsedGuardrails,
+      [],
+    );
+    expect(noToolsPrompt).not.toContain("## Tools");
   });
 
   it("AC 10: groups guardrails by priority with critical first", () => {

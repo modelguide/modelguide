@@ -9,7 +9,7 @@
  */
 
 import type { SopStep } from "@features/sops/sops.types";
-import type { GuardrailPriority, ParsedGuardrail } from "./types";
+import type { GuardrailPriority, ParsedGuardrail, ResolvedTool } from "./types";
 
 /** Minimal SOP shape for prompt building (avoids Zod inference type conflicts). */
 interface SopForPrompt {
@@ -44,14 +44,16 @@ function capitalize(s: string): string {
  *
  * Structure:
  * 1. agentConfig.description (role context)
- * 2. ## SOP: {name} + description
- * 3. ## Guardrails grouped by priority (Critical, High, Medium, Low)
- * 4. ## Escalation Triggers as bullet list
+ * 2. ## Workflow: {name} + description
+ * 3. ## Tools — bullet list of available tool names
+ * 4. ## Guardrails grouped by priority (Critical, High, Medium, Low)
+ * 5. ## Escalation Triggers as bullet list
  */
 export function buildSystemPrompt(
   agentDescription: string,
   sop: SopForPrompt,
   guardrails: ParsedGuardrail[],
+  tools: ResolvedTool[],
 ): string {
   const sections: string[] = [];
 
@@ -59,12 +61,18 @@ export function buildSystemPrompt(
   sections.push(agentDescription);
 
   // 2. SOP context
-  sections.push(`## SOP: ${sop.name}`);
+  sections.push(`## Workflow: ${sop.name}`);
   if (sop.description) {
     sections.push(sop.description);
   }
 
-  // 3. Guardrails grouped by priority
+  // 3. Tools
+  if (tools.length > 0) {
+    sections.push("## Tools");
+    sections.push(tools.map((t) => `- ${t.resolvedName}`).join("\n"));
+  }
+
+  // 4. Guardrails grouped by priority
   const guardrailsByPriority = groupByPriority(guardrails);
   const guardrailSections: string[] = [];
 
@@ -83,7 +91,7 @@ export function buildSystemPrompt(
     sections.push(guardrailSections.join("\n\n"));
   }
 
-  // 4. Escalation triggers
+  // 5. Escalation triggers
   const triggers = sop.definition.metadata.escalationTriggers;
   if (triggers && triggers.length > 0) {
     sections.push("## Escalation Triggers");

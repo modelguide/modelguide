@@ -270,14 +270,16 @@ describe("AC 20: E2E compile email WISMO SOP → Mastra agent + workflow", () =>
     expect(prompt.startsWith(agentConfig.description)).toBe(true);
 
     // Sections in correct order
-    const sopIdx = prompt.indexOf("## SOP:");
+    const sopIdx = prompt.indexOf("## Workflow:");
+    const toolsIdx = prompt.indexOf("## Tools");
     const guardrailIdx = prompt.indexOf("## Guardrails");
     const criticalIdx = prompt.indexOf("### Critical");
     const highIdx = prompt.indexOf("### High");
     const triggerIdx = prompt.indexOf("## Escalation Triggers");
 
     expect(sopIdx).toBeGreaterThan(0);
-    expect(guardrailIdx).toBeGreaterThan(sopIdx);
+    expect(toolsIdx).toBeGreaterThan(sopIdx);
+    expect(guardrailIdx).toBeGreaterThan(toolsIdx);
     expect(criticalIdx).toBeGreaterThan(guardrailIdx);
     expect(highIdx).toBeGreaterThan(criticalIdx);
     expect(triggerIdx).toBeGreaterThan(highIdx);
