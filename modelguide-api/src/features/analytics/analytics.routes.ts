@@ -120,6 +120,8 @@ const trendMetrics = [
 
 const granularities = ["hour", "day", "week", "month"] as const;
 
+const MAX_HOURLY_RANGE_DAYS = 7;
+
 const trendsQuerySchema = z
   .object({
     metric: z.enum(trendMetrics).openapi({ description: "Metric to trend" }),
@@ -130,7 +132,19 @@ const trendsQuerySchema = z
   })
   .refine(dateOrderRefinement, {
     message: "from_date must not be after to_date",
-  });
+  })
+  .refine(
+    (data) => {
+      if (data.granularity !== "hour") return true;
+      const from = new Date(data.from_date);
+      const to = new Date(data.to_date);
+      const diffDays = (to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays < MAX_HOURLY_RANGE_DAYS;
+    },
+    {
+      message: `Hourly granularity is limited to date ranges under ${MAX_HOURLY_RANGE_DAYS} days`,
+    },
+  );
 
 const trendPointSchema = z.object({
   date: z.string(),

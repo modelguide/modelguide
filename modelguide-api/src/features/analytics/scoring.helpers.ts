@@ -34,17 +34,16 @@ export function computeRate(
 /**
  * Normalise a score from the database.
  * DB returns null when there are no matching rows (via NULLIF),
- * but also returns 0.0 when all feedback is negative.
- * We coerce truthy values to a rounded number and null/0 to null.
- *
- * NOTE: This means a genuine 0% score (all negative) is returned as null,
- * which is the current production behaviour.
+ * and returns 0.0 when all feedback is negative.
+ * A genuine 0% score is preserved as 0; null input (no data) returns null.
  */
 export function normaliseScore(
   raw: number | null,
   decimals = 4,
 ): number | null {
-  return raw ? roundTo(Number(raw), decimals) : null;
+  return raw !== null && raw !== undefined
+    ? roundTo(Number(raw), decimals)
+    : null;
 }
 
 export interface RawTrendRow {

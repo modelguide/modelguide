@@ -669,12 +669,9 @@ describe("Score edge cases", () => {
     );
     const body = await res.json();
 
-    // 0 positive / 2 total = 0 — but the service returns null when csatScore is falsy (0 is falsy)
-    // This is actually a potential issue: 0.0 score gets treated as null
-    // The service does: feedbackRow.csatScore ? roundTo(...) : null
-    // Since 0 is falsy, a perfect-negative score returns null instead of 0
-    // We test the actual behavior here
-    expect(body.csat_score).toBeNull();
+    // 0 positive / 2 total = 0.0 — a genuine 0% score is returned as 0 (not null)
+    // null is reserved for "no feedback data at all"
+    expect(body.csat_score).toBe(0);
     expect(body.feedback_count.customer).toBe(2);
   });
 

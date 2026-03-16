@@ -1,16 +1,23 @@
 import type { TrendPoint } from '~/schemas/analytics'
 
+/** Build a map key from an ISO date string at the appropriate granularity. */
+function toMapKey(isoDate: string, granularity: 'day' | 'week' | 'month' | 'hour'): string {
+  if (granularity === 'hour') {
+    // "2024-06-15T14:00:00.000Z" → "2024-06-15T14"
+    return isoDate.slice(0, 13)
+  }
+  return isoDate.split('T')[0]
+}
+
 export function fillTrendGaps(
   data: TrendPoint[],
   from: string,
   to: string,
   granularity: 'day' | 'week' | 'month' | 'hour',
 ): TrendPoint[] {
-  if (granularity === 'hour') return data
-
   const dataMap = new Map<string, number>()
   for (const point of data) {
-    const key = point.date.split('T')[0]
+    const key = toMapKey(point.date, granularity)
     dataMap.set(key, point.value)
   }
 
@@ -28,13 +35,15 @@ export function fillTrendGaps(
   }
 
   while (current <= end && result.length < maxIterations) {
-    const key = current.toISOString().split('T')[0]
+    const key = toMapKey(current.toISOString(), granularity)
     result.push({
       date: current.toISOString(),
       value: dataMap.get(key) ?? 0,
     })
 
-    if (granularity === 'day') {
+    if (granularity === 'hour') {
+      current.setUTCHours(current.getUTCHours() + 1)
+    } else if (granularity === 'day') {
       current.setUTCDate(current.getUTCDate() + 1)
     } else if (granularity === 'week') {
       current.setUTCDate(current.getUTCDate() + 7)
