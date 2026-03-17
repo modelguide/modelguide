@@ -517,11 +517,21 @@ async def entrypoint(ctx: agents.JobContext):
         """
         if ev.new_state == "listening" and ev.old_state == "speaking":
             try:
+                # ElevenLabs: mark connection non-current so next speech
+                # gets a fresh WebSocket (old one drains and closes)
                 if hasattr(tts, '_current_connection') and tts._current_connection:
                     tts._current_connection.mark_non_current()
-                    logger.debug("TTS WebSocket marked for refresh after speech")
-            except Exception:
-                pass
+                    logger.info("TTS connection cycled (speaking → listening)")
+                # Cartesia: invalidate pool connections
+                elif hasattr(tts, '_pool'):
+                    pool = tts._pool
+                    if hasattr(pool, '_available') and pool._available:
+                        for conn in list(pool._available):
+                            conn.close()
+                        pool._available.clear()
+                        logger.info("TTS pool connections cleared (speaking → listening)")
+            except Exception as e:
+                logger.warning("TTS connection cycling failed: %s", e)
 
     @session.on("metrics_collected")
     def on_metrics(ev):
