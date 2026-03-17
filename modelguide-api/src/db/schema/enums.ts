@@ -122,7 +122,11 @@ export const evaluatorTypeEnum = pgEnum("evaluator_type", [
 /**
  * Eval source types — what produced the eval (SOP, guardrail, etc.)
  */
-export const evalSourceTypeEnum = pgEnum("eval_source_type", ["sop"]);
+export const evalSourceTypeEnum = pgEnum("eval_source_type", [
+  "suite",
+  "replay_test",
+  "live",
+]);
 
 /**
  * Eval run status
@@ -143,6 +147,22 @@ export const evalScoreResultEnum = pgEnum("eval_score_result", [
   "skip",
   "error",
 ]);
+
+/**
+ * Eval suite status
+ */
+export const evalSuiteStatusEnum = pgEnum("eval_suite_status", [
+  "active",
+  "archived",
+]);
+
+/**
+ * Eval suite test case / assertion source
+ */
+export const evalSuiteTestCaseSourceEnum = pgEnum(
+  "eval_suite_test_case_source",
+  ["auto", "manual"],
+);
 
 // ============================================================================
 // Knowledge Base enums

@@ -6,15 +6,16 @@
  */
 
 import { expect } from "bun:test";
+import { forOrg } from "@db/rls";
+import { evalRunScores, evalRuns, sessionMessages } from "@db/schema";
 import { compile } from "@features/compiler/core/compile";
 import { toMastra } from "@features/compiler/emitters/mastra";
-import { runEvaluation } from "@features/evals/evals.service";
-import {
-  addMessage,
-  createSession,
-  updateSession,
-} from "@features/sessions/sessions.service";
+import { compileSopToEvalPlan } from "@features/evals/evals.compile";
+import { executeAssertions } from "@features/evals/evals.service";
+import type { ResolvedAssertion } from "@features/evals/evals.types";
+import { storeSyntheticSession } from "@features/sessions/synthetic-session.service";
 import { getLogger } from "@lib/logger";
+import { asc, eq } from "drizzle-orm";
 import { emailOrderNotArrivedSop } from "../../fixtures/compiler/email-wismo-sop";
 import { createMockedToolsets } from "../../fixtures/compiler/mocked-tools";
 import { sampleGuardrails } from "../../fixtures/compiler/sample-guardrails";
@@ -55,7 +56,11 @@ export async function compileAndRun(emailIndex: number) {
   return { ir, prompt, result };
 }
 
-/** Store agent generation result as a completed session. */
+/**
+ * Store agent generation result as a completed session.
+ *
+ * Delegates to storeSyntheticSession production service.
+ */
 export async function storeSession(
   ctx: E2EContext,
   prompt: string,
@@ -63,52 +68,14 @@ export async function storeSession(
   result: { steps: any[]; text?: string | null },
   userIdentifier: string,
 ) {
-  const session = await createSession(ctx.orgId, ctx.agentId, {
+  return storeSyntheticSession({
+    orgId: ctx.orgId,
+    agentId: ctx.agentId,
+    generationResult: result,
+    userInput: prompt,
     channelType: "email",
     userIdentifier,
   });
-
-  await addMessage(ctx.orgId, session.id, ctx.agentId, {
-    role: "user",
-    content: prompt,
-  });
-
-  // biome-ignore lint/suspicious/noExplicitAny: Mastra step types are loosely typed
-  for (const step of result.steps as any[]) {
-    const toolCalls =
-      step.toolCalls?.map(
-        (tc: {
-          payload?: { toolName?: string };
-          toolName?: string;
-          toolCallId?: string;
-          args?: Record<string, unknown>;
-          result?: unknown;
-        }) => ({
-          toolCallId: tc.toolCallId ?? crypto.randomUUID(),
-          toolName: tc.payload?.toolName ?? tc.toolName ?? "unknown",
-          toolInput: tc.args ?? {},
-          toolOutput:
-            typeof tc.result === "object" && tc.result !== null
-              ? (tc.result as Record<string, unknown>)
-              : { result: tc.result },
-          toolStatus: "success" as const,
-        }),
-      ) ?? [];
-
-    if (step.text || toolCalls.length > 0) {
-      await addMessage(ctx.orgId, session.id, ctx.agentId, {
-        role: "assistant",
-        content: step.text ?? undefined,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      });
-    }
-  }
-
-  await updateSession(ctx.orgId, session.id, ctx.agentId, {
-    status: "completed",
-  });
-
-  return session;
 }
 
 /** SOP step definitions shared across happy/unhappy path tests. */
@@ -155,20 +122,79 @@ export function buildSopSteps(
   ];
 }
 
-/** Run eval, log results, and assert all scores pass. */
+/** Compile SOP into assertions, run evaluators, persist, and assert all pass. */
 export async function runEvalAndAssertAllPass(
   ctx: E2EContext,
   sessionId: string,
   sopId: string,
 ) {
-  const evalResult = await runEvaluation(ctx.orgId, sessionId, "sop", sopId);
+  // 1. Compile SOP to eval plan
+  const plan = await compileSopToEvalPlan(ctx.orgId, sopId, sessionId);
+  const assertions: ResolvedAssertion[] = plan.steps
+    .filter((step) => step.evaluator !== null)
+    .map((step) => ({
+      order: step.order,
+      name: `step:${step.order}:${step.instruction.slice(0, 60)}`,
+      required: step.required,
+      evaluator: step.evaluator!,
+      toolNameMap: step.toolNameMap,
+    }));
+
+  // 2. Create eval run + load messages + execute assertions
+  const evalResult = await forOrg(ctx.orgId, async (tx) => {
+    const [evalRun] = await tx
+      .insert(evalRuns)
+      .values({
+        organizationId: ctx.orgId,
+        sessionId,
+        sourceType: "suite" as const,
+        sourceId: sopId,
+        status: "running",
+      })
+      .returning();
+
+    const messages = await tx
+      .select()
+      .from(sessionMessages)
+      .where(eq(sessionMessages.sessionId, sessionId))
+      .orderBy(asc(sessionMessages.occurredAt), asc(sessionMessages.createdAt));
+
+    const { scoreRows } = await executeAssertions(
+      assertions,
+      messages,
+      evalRun.id,
+      ctx.orgId,
+    );
+
+    const failedRequired = scoreRows.filter(
+      (s) => s.required && (s.result === "fail" || s.result === "error"),
+    );
+    const passed = failedRequired.length === 0;
+
+    if (scoreRows.length > 0) {
+      await tx.insert(evalRunScores).values(scoreRows);
+    }
+
+    const [completedRun] = await tx
+      .update(evalRuns)
+      .set({ status: "completed", passed, completedAt: new Date() })
+      .where(eq(evalRuns.id, evalRun.id))
+      .returning();
+
+    const scores = await tx
+      .select()
+      .from(evalRunScores)
+      .where(eq(evalRunScores.evalRunId, evalRun.id))
+      .orderBy(asc(evalRunScores.scoreOrder));
+
+    return { ...completedRun, scores };
+  });
 
   log.info(
     {
       runId: evalResult.id,
       status: evalResult.status,
       passed: evalResult.passed,
-      durationMs: evalResult.durationMs,
       scores: evalResult.scores.map((s) => ({
         result: s.result,
         evaluatorType: s.evaluatorType,

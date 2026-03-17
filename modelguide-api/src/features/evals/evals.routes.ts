@@ -1,5 +1,5 @@
 /**
- * Eval run API routes.
+ * Eval run API routes — read-only queries for evaluation runs.
  */
 
 import { createRoute, z } from "@hono/zod-openapi";
@@ -14,13 +14,12 @@ import { paginatedResponseSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
 
 import {
-  createEvalRunSchema,
   evalRunListQuerySchema,
   evalRunResponseSchema,
   evalRunSummaryResponseSchema,
 } from "./evals.schemas";
 
-import { getEvalRunById, listEvalRuns, runEvaluation } from "./evals.service";
+import { getEvalRunById, listEvalRuns } from "./evals.service";
 
 const router = createRouter();
 
@@ -112,12 +111,6 @@ function formatRunSummary(r: ServiceRunSummary) {
 // Middleware registration
 // ============================================================================
 
-router.post(
-  "/runs",
-  requireUser(),
-  requirePermission("eval_runs:create"),
-  requireOrganization(),
-);
 router.get(
   "/runs",
   requireUser(),
@@ -134,54 +127,6 @@ router.get(
 // ============================================================================
 // Routes
 // ============================================================================
-
-const createRunRoute = createRoute({
-  method: "post",
-  path: "/runs",
-  tags: ["Evals"],
-  summary: "Trigger evaluation",
-  description:
-    "Triggers an evaluation of a session against a source (SOP). Session must be in terminal status (completed or abandoned).",
-  security: [{ bearerAuth: [] }],
-  request: {
-    body: {
-      content: { "application/json": { schema: createEvalRunSchema } },
-    },
-  },
-  responses: {
-    201: {
-      description: "Eval run completed",
-      content: {
-        "application/json": { schema: evalRunResponseSchema },
-      },
-    },
-    400: errorResponse("Session not in terminal status"),
-    401: errorResponse("Not authenticated"),
-    403: errorResponse("Insufficient permissions"),
-    404: errorResponse("Session or SOP not found"),
-    409: errorResponse("Eval already running"),
-    422: errorResponse("Validation error"),
-  },
-});
-
-router.openapi(createRunRoute, async (c) => {
-  const orgId = getOrganizationId(c);
-  const body = c.req.valid("json");
-  const auth = c.get("auth");
-  const triggeredBy = auth.type === "user" ? auth.user.id : undefined;
-
-  const result = await runEvaluation(
-    orgId,
-    body.sessionId,
-    body.sourceType,
-    body.sourceId,
-    { reporter: body.reporter, triggeredBy },
-  );
-
-  // Re-fetch for consistent response shape with sourceName
-  const detail = await getEvalRunById(orgId, result.id);
-  return c.json(formatRunDetail(detail), 201);
-});
 
 const listRunsRoute = createRoute({
   method: "get",
