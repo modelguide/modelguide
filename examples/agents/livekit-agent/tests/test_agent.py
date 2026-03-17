@@ -231,6 +231,75 @@ class TestCallMcpTool:
             assert second_call_args[0][1]["cartId"] == "cart_e2e"
 
 
+class TestReorderGuardrail:
+    """Verify list_products is blocked when order history context is active."""
+
+    def test_initial_reorder_context_empty(self):
+        agent = _make_agent()
+        assert agent._reorder_product_ids == []
+
+    def test_extract_reorder_context_captures_product_ids(self):
+        agent = _make_agent()
+        result = {
+            "data": {
+                "orders": [
+                    {"items": [{"product_id": "prod_1"}, {"product_id": "prod_2"}]},
+                    {"items": [{"product_id": "prod_1"}, {"product_id": "prod_3"}]},
+                ]
+            }
+        }
+        agent._extract_reorder_context("look_up_order_history", result)
+        assert agent._reorder_product_ids == ["prod_1", "prod_2", "prod_3"]
+
+    def test_extract_reorder_context_ignores_other_tools(self):
+        agent = _make_agent()
+        agent._extract_reorder_context("list_products", {"data": {"orders": []}})
+        assert agent._reorder_product_ids == []
+
+    @pytest.mark.asyncio
+    async def test_list_products_blocked_during_reorder(self):
+        agent = _make_agent()
+        agent._reorder_product_ids = ["prod_1", "prod_2"]
+
+        result = await agent._call_mcp_tool("list_products", {"query": "MSI tile"})
+        parsed = json.loads(result)
+        assert "error" in parsed
+        assert "available_product_ids" in parsed
+        assert parsed["available_product_ids"] == ["prod_1", "prod_2"]
+
+    @pytest.mark.asyncio
+    async def test_list_products_allowed_without_reorder(self):
+        agent = _make_agent()
+        mock_result = {"products": [{"name": "Tile"}]}
+
+        with patch("agent.mg_client.call_tool", new_callable=AsyncMock, return_value=mock_result):
+            result = await agent._call_mcp_tool("list_products", {"query": "tile"})
+
+        parsed = json.loads(result)
+        assert "products" in parsed
+
+    @pytest.mark.asyncio
+    async def test_order_history_then_list_products_blocked(self):
+        """End-to-end: look_up_order_history sets context, then list_products is blocked."""
+        agent = _make_agent()
+        order_result = {
+            "data": {
+                "orders": [
+                    {"items": [{"product_id": "prod_abc"}]},
+                ]
+            }
+        }
+
+        with patch("agent.mg_client.call_tool", new_callable=AsyncMock, return_value=order_result):
+            await agent._call_mcp_tool("look_up_order_history", {"email": "test@example.com"})
+
+        # Now list_products should be blocked
+        result = await agent._call_mcp_tool("list_products", {"query": "tiles"})
+        parsed = json.loads(result)
+        assert "error" in parsed
+        assert "prod_abc" in parsed["available_product_ids"]
+
+
 class TestCamelCaseParams:
     """Verify tool methods use camelCase parameter names."""
 

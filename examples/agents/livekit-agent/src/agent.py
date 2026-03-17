@@ -88,6 +88,8 @@ class BuildProAgent(Agent):
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()  # Set once create_cart captures the ID
         self._mcp = mcp
+        # Reorder guardrail: product IDs from order history, set after look_up_order_history
+        self._reorder_product_ids: list[str] = []
 
         instructions = build_system_prompt(session_id, user_email=user_email)
         super().__init__(instructions=instructions)
@@ -186,6 +188,18 @@ class BuildProAgent(Agent):
             logger.error(error)
             raise agents.ToolError(error)
 
+        # Reorder guardrail: block list_products when order history is available
+        if short_name == "list_products" and self._reorder_product_ids:
+            logger.warning(
+                "Blocked list_products during reorder — redirecting to get_product "
+                "(available product_ids: %s)", self._reorder_product_ids
+            )
+            return json.dumps({
+                "error": "Do not search by name during a reorder. Use get_product instead.",
+                "available_product_ids": self._reorder_product_ids,
+                "hint": "Call get_product with one of these product_ids from order history.",
+            })
+
         # Stub tools that have no MCP backend yet
         if short_name in _STUBBED_TOOLS:
             result = {"success": True, "message": f"Email sent to {args.get('to', 'customer')}"}
@@ -215,6 +229,7 @@ class BuildProAgent(Agent):
             logger.info("Tool %s completed in %dms", short_name, latency_ms)
 
             self._extract_cart_id(short_name, result)
+            self._extract_reorder_context(short_name, result)
 
             self._transcript.add_tool_call(
                 tool_call_id=tool_call_id,
@@ -281,6 +296,22 @@ class BuildProAgent(Agent):
                 self._active_cart_id = cart_id
                 self._cart_ready.set()
                 logger.info("Cart ID captured: %s", cart_id)
+
+    def _extract_reorder_context(self, tool_name: str, result: dict) -> None:
+        """Capture product IDs from order history to enforce reorder workflow."""
+        if tool_name != "look_up_order_history":
+            return
+        data = result.get("data", result)
+        orders = data.get("orders", [])
+        product_ids: list[str] = []
+        for order in orders:
+            for item in order.get("items", []):
+                pid = item.get("product_id")
+                if pid and pid not in product_ids:
+                    product_ids.append(pid)
+        if product_ids:
+            self._reorder_product_ids = product_ids
+            logger.info("Reorder context: %d product IDs captured", len(product_ids))
 
 
 # ---------------------------------------------------------------------------
