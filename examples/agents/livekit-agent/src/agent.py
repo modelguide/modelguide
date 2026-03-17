@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -52,6 +53,20 @@ TOOL_NAME_MAP = {
     "send_email": "glowbox_store_send_email",
 }
 
+def _tool_span(tool_name: str, mcp_name: str):
+    """Create an OTel span for a tool call so it shows in Langfuse."""
+    if _trace_provider is None:
+        return contextlib.nullcontext()
+    try:
+        tracer = _trace_provider.get_tracer("buildpro-agent")
+        return tracer.start_as_current_span(
+            f"mcp_tool:{tool_name}",
+            attributes={"tool.name": tool_name, "tool.mcp_name": mcp_name},
+        )
+    except Exception:
+        return contextlib.nullcontext()
+
+
 # Tools stubbed locally (no MCP backend yet)
 _STUBBED_TOOLS = {"send_email"}
 
@@ -71,6 +86,7 @@ class BuildProAgent(Agent):
         self._session_id = session_id
         self._transcript = TranscriptCollector()
         self._active_cart_id: str | None = None
+        self._cart_ready = asyncio.Event()  # Set once create_cart captures the ID
         self._mcp = mcp
 
         instructions = build_system_prompt(session_id, user_email=user_email)
@@ -184,15 +200,17 @@ class BuildProAgent(Agent):
             )
             return json.dumps(result)
 
-        mcp_args = self._transform_args(short_name, {**args})
+        mcp_args = await self._transform_args(short_name, {**args})
         tool_call_id = f"tc_{uuid.uuid4().hex[:8]}"
 
         start = time.monotonic()
+        span_ctx = _tool_span(short_name, mcp_name)
         try:
-            if self._mcp:
-                result = await self._mcp.call_tool(mcp_name, mcp_args, self._session_id)
-            else:
-                result = await mg_client.call_tool(mcp_name, mcp_args, self._session_id)
+            with span_ctx:
+                if self._mcp:
+                    result = await self._mcp.call_tool(mcp_name, mcp_args, self._session_id)
+                else:
+                    result = await mg_client.call_tool(mcp_name, mcp_args, self._session_id)
             latency_ms = int((time.monotonic() - start) * 1000)
             logger.info("Tool %s completed in %dms", short_name, latency_ms)
 
@@ -221,10 +239,16 @@ class BuildProAgent(Agent):
             )
             raise agents.ToolError(f"Tool {short_name} failed: {e}") from e
 
-    def _transform_args(self, tool_name: str, args: dict) -> dict:
+    async def _transform_args(self, tool_name: str, args: dict) -> dict:
         """Transform LLM args to match MCP expectations."""
-        # Inject cartId for cart operations
+        # Inject cartId for cart operations — wait if create_cart is running in parallel
         if tool_name in _CART_TOOLS:
+            if not self._active_cart_id:
+                logger.info("Waiting for cart ID (create_cart running in parallel)…")
+                try:
+                    await asyncio.wait_for(self._cart_ready.wait(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    logger.error("Timed out waiting for cart ID for %s", tool_name)
             if self._active_cart_id:
                 args["cartId"] = self._active_cart_id
             else:
@@ -243,7 +267,7 @@ class BuildProAgent(Agent):
         return args
 
     def _extract_cart_id(self, tool_name: str, result: dict) -> None:
-        """Capture cartId from create_cart response."""
+        """Capture cartId from create_cart response and signal waiting tools."""
         if tool_name == "create_cart":
             # Response shape: {"success": true, "data": {"cart": {"id": "cart_..."}}}
             data = result.get("data", result)
@@ -255,6 +279,7 @@ class BuildProAgent(Agent):
             )
             if cart_id:
                 self._active_cart_id = cart_id
+                self._cart_ready.set()
                 logger.info("Cart ID captured: %s", cart_id)
 
 
@@ -291,13 +316,18 @@ def _create_tts():
     if provider == "cartesia":
         from livekit.plugins import cartesia
 
-        return cartesia.TTS(
+        tts = cartesia.TTS(
             voice=config.CARTESIA_VOICE_ID,
             model="sonic-3",
-            speed=1.0,
-            emotion=["Confident", "Calm"],
+            speed=1.05,
+            emotion=["Conversational", "Friendly"],
             api_key=config.CARTESIA_API_KEY,
         )
+        # Cartesia accumulates context_ids on the WebSocket server-side,
+        # degrading TTFB from 0.3s to 5s+. Cycle connections every 30s.
+        tts._pool._max_session_duration = 30
+        tts._pool._mark_refreshed_on_get = False
+        return tts
 
     # Fallback: ElevenLabs
     from livekit.plugins import elevenlabs
@@ -315,11 +345,12 @@ def _create_tts():
 
 
 _langfuse_instance = None  # prevent GC
+_trace_provider = None     # shared with _tool_span()
 
 
 def _setup_langfuse(session_metadata: dict | None = None):
     """Configure Langfuse tracing via OpenTelemetry. No-op if keys are not set."""
-    global _langfuse_instance
+    global _langfuse_instance, _trace_provider
 
     if not config.LANGFUSE_PUBLIC_KEY or not config.LANGFUSE_SECRET_KEY:
         logger.info("Langfuse keys not set — tracing disabled")
@@ -330,6 +361,7 @@ def _setup_langfuse(session_metadata: dict | None = None):
     from livekit.agents.telemetry import set_tracer_provider
 
     trace_provider = TracerProvider()
+    _trace_provider = trace_provider
     set_tracer_provider(trace_provider, metadata=session_metadata)
     _langfuse_instance = Langfuse(
         public_key=config.LANGFUSE_PUBLIC_KEY,
@@ -403,10 +435,9 @@ async def entrypoint(ctx: agents.JobContext):
         # Flux handles turn detection internally; Nova-3 needs the English turn detector
         turn_detection="stt" if use_flux else EnglishModel(),
         allow_interruptions=True,
-        min_interruption_duration=0.5,
-        min_endpointing_delay=0.3,
+        min_interruption_duration=1.0,
+        min_endpointing_delay=0.5,
     )
-
     # --- Event handlers ---
 
     @session.on("user_input_transcribed")

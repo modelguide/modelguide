@@ -60,27 +60,34 @@ class TestToolMethods:
 
 
 class TestTransformArgs:
-    def test_injects_cart_id(self):
+    @pytest.mark.asyncio
+    async def test_injects_cart_id(self):
         agent = _make_agent()
         agent._active_cart_id = "cart_abc"
-        result = agent._transform_args("add_to_cart", {"variantId": "v1", "quantity": 2})
+        agent._cart_ready.set()
+        result = await agent._transform_args("add_to_cart", {"variantId": "v1", "quantity": 2})
         assert result["cartId"] == "cart_abc"
 
-    def test_no_cart_id_when_none(self):
+    @pytest.mark.asyncio
+    async def test_no_cart_id_when_none(self):
         agent = _make_agent()
         agent._active_cart_id = None
-        result = agent._transform_args("add_to_cart", {"variantId": "v1"})
+        # Don't set _cart_ready — should timeout quickly
+        result = await agent._transform_args("list_products", {"query": "tiles"})
         assert "cartId" not in result
 
-    def test_no_cart_id_for_non_cart_tools(self):
+    @pytest.mark.asyncio
+    async def test_no_cart_id_for_non_cart_tools(self):
         agent = _make_agent()
         agent._active_cart_id = "cart_abc"
-        result = agent._transform_args("list_products", {"query": "tiles"})
+        result = await agent._transform_args("list_products", {"query": "tiles"})
         assert "cartId" not in result
 
-    def test_nests_address_fields(self):
+    @pytest.mark.asyncio
+    async def test_nests_address_fields(self):
         agent = _make_agent()
         agent._active_cart_id = "cart_abc"
+        agent._cart_ready.set()
         args = {
             "firstName": "John",
             "lastName": "Smith",
@@ -89,7 +96,7 @@ class TestTransformArgs:
             "postalCode": "43215",
             "countryCode": "us",
         }
-        result = agent._transform_args("set_delivery_address", args)
+        result = await agent._transform_args("set_delivery_address", args)
         assert "address" in result
         assert result["address"]["firstName"] == "John"
         assert result["address"]["address1"] == "123 Main St"
@@ -98,9 +105,11 @@ class TestTransformArgs:
         assert "firstName" not in result
         assert "address1" not in result
 
-    def test_nests_address_with_phone(self):
+    @pytest.mark.asyncio
+    async def test_nests_address_with_phone(self):
         agent = _make_agent()
         agent._active_cart_id = "cart_1"
+        agent._cart_ready.set()
         args = {
             "address1": "456 Oak Ave",
             "city": "Denver",
@@ -108,7 +117,7 @@ class TestTransformArgs:
             "countryCode": "us",
             "phone": "555-1234",
         }
-        result = agent._transform_args("set_delivery_address", args)
+        result = await agent._transform_args("set_delivery_address", args)
         assert result["address"]["phone"] == "555-1234"
         assert "phone" not in result
 
@@ -118,21 +127,25 @@ class TestExtractCartId:
         agent = _make_agent()
         agent._extract_cart_id("create_cart", {"cart": {"id": "cart_xyz"}})
         assert agent._active_cart_id == "cart_xyz"
+        assert agent._cart_ready.is_set()
 
     def test_captures_data_wrapped_cart_id(self):
         agent = _make_agent()
         agent._extract_cart_id("create_cart", {"data": {"cart": {"id": "cart_wrapped"}}})
         assert agent._active_cart_id == "cart_wrapped"
+        assert agent._cart_ready.is_set()
 
     def test_captures_flat_cart_id(self):
         agent = _make_agent()
         agent._extract_cart_id("create_cart", {"id": "cart_flat"})
         assert agent._active_cart_id == "cart_flat"
+        assert agent._cart_ready.is_set()
 
     def test_ignores_non_create_cart(self):
         agent = _make_agent()
         agent._extract_cart_id("list_products", {"id": "not_a_cart"})
         assert agent._active_cart_id is None
+        assert not agent._cart_ready.is_set()
 
 
 class TestCallMcpTool:
@@ -227,16 +240,20 @@ class TestCamelCaseParams:
         for key in TOOL_NAME_MAP:
             assert "_" in key or key.islower()
 
-    def test_add_to_cart_uses_camel_case(self):
+    @pytest.mark.asyncio
+    async def test_add_to_cart_uses_camel_case(self):
         agent = _make_agent()
         agent._active_cart_id = "cart_1"
-        result = agent._transform_args("add_to_cart", {"variantId": "v1", "quantity": 2})
+        agent._cart_ready.set()
+        result = await agent._transform_args("add_to_cart", {"variantId": "v1", "quantity": 2})
         assert "variantId" in result
         assert "variant_id" not in result
 
-    def test_set_delivery_address_uses_camel_case(self):
+    @pytest.mark.asyncio
+    async def test_set_delivery_address_uses_camel_case(self):
         agent = _make_agent()
-        result = agent._transform_args("set_delivery_address", {
+        agent._cart_ready.set()
+        result = await agent._transform_args("set_delivery_address", {
             "firstName": "John",
             "postalCode": "43215",
             "countryCode": "us",
