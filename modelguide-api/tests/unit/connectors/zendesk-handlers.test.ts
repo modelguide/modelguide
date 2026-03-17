@@ -48,12 +48,12 @@ function mockFetchSuccess(responseData: Record<string, unknown>) {
       }),
     ),
   );
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 function mockFetchError(status: number, body: string) {
   fetchMock = mock(() => Promise.resolve(new Response(body, { status })));
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 afterEach(() => {
@@ -363,7 +363,7 @@ describe("Zendesk handlers", () => {
 
     test("returns error on network failure", async () => {
       fetchMock = mock(() => Promise.reject(new Error("Network error")));
-      globalThis.fetch = fetchMock as typeof fetch;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       const result = await getTicket(makeCtx({ ticketId: 123 }));
       expect(result.success).toBe(false);

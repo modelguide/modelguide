@@ -22,21 +22,21 @@ function makeToolMessage(
   return {
     id: crypto.randomUUID(),
     sessionId: "sess-1",
-    organizationId: "org-1",
     role: "tool",
     content: null,
+    audioUrl: null,
+    audioDurationMs: null,
     toolCallId: `call-${toolName}`,
     toolName,
     toolInput: toolInput ?? {},
     toolOutput: { result: "ok" },
     toolStatus: "success",
+    modelUsed: null,
+    tokensUsed: null,
+    latencyMs: null,
     occurredAt: new Date(),
     createdAt: new Date(),
-    tokens: null,
-    costUsd: null,
-    durationMs: null,
-    model: null,
-  };
+  } as SessionMessage;
 }
 
 function makeContext(

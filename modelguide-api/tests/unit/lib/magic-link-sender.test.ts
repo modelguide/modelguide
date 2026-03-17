@@ -91,7 +91,10 @@ describe("ResendSender", () => {
     );
 
     expect(mockSend).toHaveBeenCalledTimes(1);
-    const call = mockSend.mock.calls[0][0] as Record<string, unknown>;
+    const call = (mockSend.mock.calls as unknown[][])[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(call.from).toBe("noreply@example.com");
     expect(call.to).toBe("user@example.com");
     expect(call.subject).toBe("Your ModelGuide login link");
@@ -107,7 +110,10 @@ describe("ResendSender", () => {
 
     await sender.send("user@example.com", "https://example.com/auth?token=abc");
 
-    const call = mockSend.mock.calls[0][0] as Record<string, unknown>;
+    const call = (mockSend.mock.calls as unknown[][])[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(call.html).toContain("Hi,");
     expect(call.html).not.toContain("Hi Alice,");
   });
@@ -124,7 +130,10 @@ describe("ResendSender", () => {
       '<script>alert("xss")</script>',
     );
 
-    const call = mockSend.mock.calls[0][0] as Record<string, unknown>;
+    const call = (mockSend.mock.calls as unknown[][])[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(call.html).not.toContain("<script>");
     expect(call.html).toContain("&lt;script&gt;");
   });
