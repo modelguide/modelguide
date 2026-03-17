@@ -13,6 +13,9 @@ import json
 import logging
 import time
 
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
+
 import mg_client
 from transcript import TranscriptCollector
 
@@ -65,202 +68,66 @@ TOOL_NAME_MAP = {
 _CART_TOOLS = {"add_to_cart", "get_cart", "set_delivery_address", "complete_cart"}
 
 # ---------------------------------------------------------------------------
-# OpenAI function calling schemas (camelCase to match MCP)
+# Tool schemas (pipecat 0.0.105+ FunctionSchema API)
 # ---------------------------------------------------------------------------
 
-TOOL_SCHEMAS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "list_products",
-            "description": "Search for products in the catalog. Returns product names, prices, and IDs.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query for products (e.g. 'concrete mix', 'drill bits')",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max number of results to return (default: 20)",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_product",
-            "description": "Get detailed information about a specific product by ID.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "productId": {
-                        "type": "string",
-                        "description": "The product ID",
-                    },
-                },
-                "required": ["productId"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_cart",
-            "description": "Create a new shopping cart for the customer.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "email": {
-                        "type": "string",
-                        "description": "Customer email address",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "add_to_cart",
-            "description": "Add a product to the shopping cart. Cart ID is managed automatically.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "variantId": {
-                        "type": "string",
-                        "description": "Variant ID (specific size/color) to add",
-                    },
-                    "quantity": {
-                        "type": "integer",
-                        "description": "Number of items to add (default: 1)",
-                    },
-                },
-                "required": ["variantId", "quantity"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_cart",
-            "description": "View the current cart contents and total.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "set_delivery_address",
-            "description": "Set the delivery address for the order.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "firstName": {"type": "string", "description": "First name"},
-                    "lastName": {"type": "string", "description": "Last name"},
-                    "address1": {"type": "string", "description": "Street address line 1"},
-                    "city": {"type": "string", "description": "City"},
-                    "postalCode": {"type": "string", "description": "Postal/ZIP code"},
-                    "countryCode": {
-                        "type": "string",
-                        "description": "Two-letter country code (e.g. 'us')",
-                    },
-                    "phone": {"type": "string", "description": "Phone number"},
-                },
-                "required": ["address1", "city", "postalCode", "countryCode"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "complete_cart",
-            "description": "Complete the order and place it. Always confirm with the customer first.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_order",
-            "description": "Get details of an existing order by order ID.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "orderId": {"type": "string", "description": "The order ID"},
-                },
-                "required": ["orderId"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "look_up_order",
-            "description": "Find a specific order by customer email and order number (e.g. #1042).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "email": {
-                        "type": "string",
-                        "description": "Customer email address",
-                    },
-                    "displayId": {
-                        "type": "integer",
-                        "description": "Order number (e.g. 1042)",
-                    },
-                },
-                "required": ["email", "displayId"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "look_up_order_history",
-            "description": "Look up a customer's order history by email address.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "email": {
-                        "type": "string",
-                        "description": "Customer email to look up orders for",
-                    },
-                },
-                "required": ["email"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "send_email",
-            "description": "Send an email to the customer (e.g. order confirmation, follow-up).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "to": {"type": "string", "description": "Recipient email address"},
-                    "subject": {"type": "string", "description": "Email subject line"},
-                    "body": {"type": "string", "description": "Email body (plain text)"},
-                },
-                "required": ["to", "subject", "body"],
-            },
-        },
-    },
+_TOOLS = [
+    FunctionSchema(name="list_products",
+                   description="Search for products in the catalog. Returns product names, prices, and IDs.",
+                   properties={"query": {"type": "string", "description": "Search query for products"},
+                               "limit": {"type": "integer", "description": "Max results (default: 20)"}},
+                   required=[]),
+    FunctionSchema(name="get_product",
+                   description="Get detailed information about a specific product by ID.",
+                   properties={"productId": {"type": "string", "description": "The product ID"}},
+                   required=["productId"]),
+    FunctionSchema(name="create_cart",
+                   description="Create a new shopping cart for the customer.",
+                   properties={"email": {"type": "string", "description": "Customer email address"}},
+                   required=[]),
+    FunctionSchema(name="add_to_cart",
+                   description="Add a product to the shopping cart. Cart ID is managed automatically.",
+                   properties={"variantId": {"type": "string", "description": "Variant ID to add"},
+                               "quantity": {"type": "integer", "description": "Number of items (default: 1)"}},
+                   required=["variantId", "quantity"]),
+    FunctionSchema(name="get_cart",
+                   description="View the current cart contents and total.",
+                   properties={}, required=[]),
+    FunctionSchema(name="set_delivery_address",
+                   description="Set the delivery address for the order.",
+                   properties={"firstName": {"type": "string", "description": "First name"},
+                               "lastName": {"type": "string", "description": "Last name"},
+                               "address1": {"type": "string", "description": "Street address line 1"},
+                               "city": {"type": "string", "description": "City"},
+                               "postalCode": {"type": "string", "description": "Postal/ZIP code"},
+                               "countryCode": {"type": "string", "description": "Two-letter country code (e.g. 'us')"},
+                               "phone": {"type": "string", "description": "Phone number"}},
+                   required=["address1", "city", "postalCode", "countryCode"]),
+    FunctionSchema(name="complete_cart",
+                   description="Complete the order and place it. Always confirm with the customer first.",
+                   properties={}, required=[]),
+    FunctionSchema(name="get_order",
+                   description="Get details of an existing order by order ID.",
+                   properties={"orderId": {"type": "string", "description": "The order ID"}},
+                   required=["orderId"]),
+    FunctionSchema(name="look_up_order",
+                   description="Find a specific order by customer email and order number (e.g. #1042).",
+                   properties={"email": {"type": "string", "description": "Customer email address"},
+                               "displayId": {"type": "integer", "description": "Order number (e.g. 1042)"}},
+                   required=["email", "displayId"]),
+    FunctionSchema(name="look_up_order_history",
+                   description="Look up a customer's order history by email address.",
+                   properties={"email": {"type": "string", "description": "Customer email"}},
+                   required=["email"]),
+    FunctionSchema(name="send_email",
+                   description="Send an email to the customer (e.g. order confirmation, follow-up).",
+                   properties={"to": {"type": "string", "description": "Recipient email"},
+                               "subject": {"type": "string", "description": "Email subject"},
+                               "body": {"type": "string", "description": "Email body (plain text)"}},
+                   required=["to", "subject", "body"]),
 ]
+
+TOOL_SCHEMAS = ToolsSchema(standard_tools=_TOOLS)
 
 
 # ---------------------------------------------------------------------------

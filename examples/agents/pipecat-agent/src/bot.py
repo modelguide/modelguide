@@ -204,7 +204,11 @@ def _create_llm():
             ),
         )
 
-    return OpenAILLMService(api_key=config.OPENAI_API_KEY, model=model, base_url=URLS["openai"])
+    return OpenAILLMService(
+        api_key=config.OPENAI_API_KEY,
+        base_url=URLS["openai"],
+        settings=OpenAILLMService.Settings(model=model),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +293,7 @@ async def main(transport: DailyTransport):
     # --- Services ---
     stt = DeepgramFluxSTTService(
         api_key=config.DEEPGRAM_API_KEY,
-        params=DeepgramFluxSTTService.InputParams(
+        settings=DeepgramFluxSTTService.Settings(
             eot_threshold=0.5,
         ),
     )
@@ -300,17 +304,16 @@ async def main(transport: DailyTransport):
 
     # --- System prompt + context ---
     system_prompt = build_system_prompt(session_id, user_email=config.USER_EMAIL)
-    tools = TOOL_SCHEMAS if not LLM_MODEL.startswith("gemini") else None
-    context = LLMContext(
-        messages=[{"role": "system", "content": system_prompt}],
-        tools=tools,
-    )
+    ctx_kwargs = {"messages": [{"role": "system", "content": system_prompt}]}
+    if not LLM_MODEL.startswith("gemini"):
+        ctx_kwargs["tools"] = TOOL_SCHEMAS
+    context = LLMContext(**ctx_kwargs)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(),
     )
 
-    # --- Register tool handlers ---
+    # --- Register catch-all tool handler (all tools route through MCP) ---
     async def _on_tool_call(params: FunctionCallParams):
         result_str = await handle_tool_call(
             tool_name=params.function_name,
@@ -322,9 +325,7 @@ async def main(transport: DailyTransport):
         )
         await params.result_callback(json.loads(result_str))
 
-    for schema in TOOL_SCHEMAS:
-        fn_name = schema["function"]["name"]
-        llm.register_function(fn_name, _on_tool_call)
+    llm.register_function(None, _on_tool_call)
 
     # --- Transcript + latency processors ---
     user_transcript_proc = UserTranscriptProcessor(transcript)
