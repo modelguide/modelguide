@@ -7,6 +7,8 @@ Parameter names match the MCP server's camelCase convention. Cart ID is
 tracked automatically — the LLM doesn't need to manage it.
 """
 
+import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -15,6 +17,31 @@ import mg_client
 from transcript import TranscriptCollector
 
 logger = logging.getLogger("tools")
+
+# ---------------------------------------------------------------------------
+# OTel tool spans → Langfuse (opt-in, set up by bot.py)
+# ---------------------------------------------------------------------------
+
+_tracer = None
+
+
+def set_tracer(tracer) -> None:
+    """Called by bot.py after tracing is configured."""
+    global _tracer
+    _tracer = tracer
+
+
+def _tool_span(tool_name: str, mcp_name: str):
+    """Create an OTel span for a tool call so it shows in Langfuse."""
+    if _tracer is None:
+        return contextlib.nullcontext()
+    try:
+        return _tracer.start_as_current_span(
+            f"mcp_tool:{tool_name}",
+            attributes={"tool.name": tool_name, "tool.mcp_name": mcp_name},
+        )
+    except Exception:
+        return contextlib.nullcontext()
 
 # ---------------------------------------------------------------------------
 # Tool name mapping: LLM short name -> MCP connector tool name
@@ -241,16 +268,30 @@ TOOL_SCHEMAS = [
 # ---------------------------------------------------------------------------
 
 
-# Cart ID tracked per session (set on create_cart, injected into cart tools)
+# Cart ID tracked per session (set on create_cart, injected into cart tools).
+# Uses asyncio.Event so add_to_cart/get_cart can wait for create_cart when
+# the LLM fires them in parallel.
 _active_cart_id: str | None = None
+_cart_ready: asyncio.Event = asyncio.Event()
 
 
-def _transform_args(tool_name: str, args: dict) -> dict:
+def reset_cart_state() -> None:
+    """Reset cart state — call once per session."""
+    global _active_cart_id, _cart_ready
+    _active_cart_id = None
+    _cart_ready = asyncio.Event()
+
+
+async def _transform_args(tool_name: str, args: dict) -> dict:
     """Transform LLM args to match MCP expectations."""
-    global _active_cart_id
-
-    # Inject cartId for cart operations
+    # Inject cartId for cart operations — wait if create_cart is running in parallel
     if tool_name in _CART_TOOLS:
+        if not _active_cart_id:
+            logger.info("Waiting for cart ID (create_cart may be running in parallel)…")
+            try:
+                await asyncio.wait_for(_cart_ready.wait(), timeout=15.0)
+            except asyncio.TimeoutError:
+                logger.error("Timed out waiting for cart ID for %s", tool_name)
         if _active_cart_id:
             args = {**args, "cartId": _active_cart_id}
         else:
@@ -268,14 +309,20 @@ def _transform_args(tool_name: str, args: dict) -> dict:
 
 
 def _extract_cart_id(tool_name: str, result: dict) -> None:
-    """Capture cartId from create_cart response."""
+    """Capture cartId from create_cart response and signal waiting tools."""
     global _active_cart_id
     if tool_name == "create_cart":
         # Response shape: {"success": true, "data": {"cart": {"id": "cart_..."}}}
         data = result.get("data", result)
-        cart_id = data.get("cart", {}).get("id") or data.get("id") or result.get("cart", {}).get("id") or result.get("id")
+        cart_id = (
+            data.get("cart", {}).get("id")
+            or data.get("id")
+            or result.get("cart", {}).get("id")
+            or result.get("id")
+        )
         if cart_id:
             _active_cart_id = cart_id
+            _cart_ready.set()
             logger.info("Cart ID captured: %s", cart_id)
 
 
@@ -318,15 +365,16 @@ async def handle_tool_call(
         )
         return json.dumps(result)
 
-    # Transform args to match MCP schema
-    mcp_args = _transform_args(tool_name, {**tool_args})
+    # Transform args to match MCP schema (async — may wait for cart ID)
+    mcp_args = await _transform_args(tool_name, {**tool_args})
 
     start = time.monotonic()
     try:
-        if mcp:
-            result = await mcp.call_tool(mcp_name, mcp_args, session_id)
-        else:
-            result = await mg_client.call_tool(mcp_name, mcp_args, session_id)
+        with _tool_span(tool_name, mcp_name):
+            if mcp:
+                result = await mcp.call_tool(mcp_name, mcp_args, session_id)
+            else:
+                result = await mg_client.call_tool(mcp_name, mcp_args, session_id)
         latency_ms = int((time.monotonic() - start) * 1000)
         logger.info("Tool %s completed in %dms", tool_name, latency_ms)
 

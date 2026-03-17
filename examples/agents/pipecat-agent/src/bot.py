@@ -22,14 +22,18 @@ import time
 from pipecat.frames.frames import (
     EndFrame,
     LLMFullResponseEndFrame,
-    LLMMessagesFrame,
+    LLMRunFrame,
     TextFrame,
     TranscriptionFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
 from pipecat.services.llm_service import FunctionCallParams
@@ -40,14 +44,42 @@ import mg_client
 import config
 from config import validate as validate_config
 from prompts import build_system_prompt
-from tools import TOOL_SCHEMAS, handle_tool_call
+from tools import TOOL_SCHEMAS, handle_tool_call, reset_cart_state, set_tracer
 from transcript import TranscriptCollector
 
-VERSION = "0.21.0"
+VERSION = "0.24.0"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
 logger.info("BuildPro Sam agent v%s starting", VERSION)
+
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry tracing → Langfuse (opt-in via ENABLE_TRACING=1)
+# ---------------------------------------------------------------------------
+
+TRACING_ENABLED = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
+
+if TRACING_ENABLED:
+    import base64
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from pipecat.utils.tracing.setup import setup_tracing
+
+    _lf_pk = os.environ["LANGFUSE_PUBLIC_KEY"]
+    _lf_sk = os.environ["LANGFUSE_SECRET_KEY"]
+    _lf_host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    _lf_auth = base64.b64encode(f"{_lf_pk}:{_lf_sk}".encode()).decode()
+
+    exporter = OTLPSpanExporter(
+        endpoint=f"{_lf_host}/api/public/otel",
+        headers={"Authorization": f"Basic {_lf_auth}"},
+    )
+    setup_tracing(service_name="buildpro-sam", exporter=exporter)
+    logger.info("OpenTelemetry tracing enabled → %s", _lf_host)
+
+    # Share a tracer with tools.py so MCP calls get individual spans
+    from opentelemetry import trace
+    set_tracer(trace.get_tracer("buildpro-sam"))
 
 
 # ---------------------------------------------------------------------------
@@ -187,19 +219,32 @@ def _create_tts():
     if provider == "cartesia":
         from pipecat.services.cartesia.tts import CartesiaTTSService
 
-        return CartesiaTTSService(
+        tts = CartesiaTTSService(
             api_key=config.CARTESIA_API_KEY,
-            voice_id=config.CARTESIA_VOICE_ID,
-            model="sonic-3",
+            settings=CartesiaTTSService.Settings(
+                voice=config.CARTESIA_VOICE_ID,
+                model="sonic-3",
+            ),
         )
+        # Cartesia accumulates context_ids on the WebSocket server-side,
+        # degrading TTFB from 0.3s to 5s+ over a session. Cycle connections
+        # every 30s to keep latency consistent.
+        try:
+            tts._pool._max_session_duration = 30
+            tts._pool._mark_refreshed_on_get = False
+        except AttributeError:
+            logger.debug("Cartesia WS pool cycling not available in this version")
+        return tts
 
     # Fallback: ElevenLabs
     from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
     return ElevenLabsTTSService(
         api_key=config.ELEVENLABS_API_KEY,
-        voice_id=config.ELEVENLABS_VOICE_ID,
-        model="eleven_flash_v2_5",
+        settings=ElevenLabsTTSService.Settings(
+            voice=config.ELEVENLABS_VOICE_ID,
+            model="eleven_flash_v2_5",
+        ),
         url=URLS["elevenlabs"],
     )
 
@@ -214,21 +259,29 @@ async def main(transport: DailyTransport):
     validate_config()
     logger.info("Config validated, setting up pipeline")
 
-    # --- Create ModelGuide session ---
-    try:
-        session_id = await mg_client.create_session(config.USER_EMAIL)
-        logger.info("ModelGuide session: %s", session_id)
-    except Exception:
-        logger.exception("Failed to create ModelGuide session — running without tracking")
-        session_id = "offline"
+    # Reset cart state for this session
+    reset_cart_state()
 
-    # --- Persistent MCP connection ---
-    mcp = mg_client.MCPConnection()
-    try:
-        await mcp.connect()
-    except Exception:
-        logger.exception("Failed to open persistent MCP connection — tool calls will use one-shot")
-        mcp = None
+    # --- Create ModelGuide session + MCP connection in parallel ---
+    async def _init_session():
+        try:
+            sid = await mg_client.create_session(config.USER_EMAIL)
+            logger.info("ModelGuide session: %s", sid)
+            return sid
+        except Exception:
+            logger.exception("Failed to create ModelGuide session — running without tracking")
+            return "offline"
+
+    async def _init_mcp():
+        conn = mg_client.MCPConnection()
+        try:
+            await conn.connect()
+            return conn
+        except Exception:
+            logger.exception("Failed to open persistent MCP connection — tool calls will use one-shot")
+            return None
+
+    session_id, mcp = await asyncio.gather(_init_session(), _init_mcp())
 
     # --- Transcript collector ---
     transcript = TranscriptCollector()
@@ -247,10 +300,15 @@ async def main(transport: DailyTransport):
 
     # --- System prompt + context ---
     system_prompt = build_system_prompt(session_id, user_email=config.USER_EMAIL)
-    messages = [{"role": "system", "content": system_prompt}]
     tools = TOOL_SCHEMAS if not LLM_MODEL.startswith("gemini") else None
-    context = OpenAILLMContext(messages=messages, tools=tools)
-    context_aggregator = llm.create_context_aggregator(context)
+    context = LLMContext(
+        messages=[{"role": "system", "content": system_prompt}],
+        tools=tools,
+    )
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(),
+    )
 
     # --- Register tool handlers ---
     async def _on_tool_call(params: FunctionCallParams):
@@ -279,15 +337,24 @@ async def main(transport: DailyTransport):
             transport.input(),
             stt,
             user_transcript_proc,
-            context_aggregator.user(),
+            user_aggregator,
             llm,
             turn_latency,
             assistant_transcript_proc,
             tts,
             transport.output(),
-            context_aggregator.assistant(),
+            assistant_aggregator,
         ]
     )
+
+    tracing_attrs = {}
+    if TRACING_ENABLED:
+        tracing_attrs = {
+            "langfuse.session.id": session_id,
+            "langfuse.user.id": config.USER_EMAIL,
+            "langfuse.trace.name": "buildpro-sam-voice",
+            "langfuse.release": VERSION,
+        }
 
     task = PipelineTask(
         pipeline,
@@ -296,6 +363,10 @@ async def main(transport: DailyTransport):
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
+        enable_tracing=TRACING_ENABLED,
+        enable_turn_tracking=TRACING_ENABLED,
+        conversation_id=session_id if TRACING_ENABLED else None,
+        additional_span_attributes=tracing_attrs if TRACING_ENABLED else None,
     )
 
     # --- Lifecycle events ---
@@ -304,9 +375,7 @@ async def main(transport: DailyTransport):
         participant_id = participant.get("id", "unknown")
         logger.info("Participant joined: %s", participant_id)
         await transport.capture_participant_transcription(participant_id)
-        await task.queue_frames(
-            [LLMMessagesFrame(messages)]
-        )
+        await task.queue_frames([LLMRunFrame()])
 
     # --- Run ---
     transcript_posted = False
@@ -360,8 +429,6 @@ is_local = bool(os.getenv("LOCAL_RUN"))
 
 async def bot(args):
     """Called by Pipecat Cloud's app.py."""
-    from pipecatcloud.agent import DailySessionArguments
-
     logger.info("BuildPro Sam agent v%s — bot() called (PCC)", VERSION)
     transport = DailyTransport(
         args.room_url,

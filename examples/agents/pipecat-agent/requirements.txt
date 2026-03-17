@@ -1,7 +1,0 @@
-pipecat-ai[daily,openai,deepgram,elevenlabs,cartesia,silero]
-httpx
-python-dotenv
-mcp
-# Pin to match PCC base image versions (our COPY overwrites these)
-starlette==0.50.0
-uvicorn==0.40.0

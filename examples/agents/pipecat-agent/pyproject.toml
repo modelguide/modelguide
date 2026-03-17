@@ -1,24 +1,26 @@
 [project]
 name = "pipecat-modelguide-agent"
-version = "0.1.0"
+version = "0.24.0"
 description = "Pipecat voice agent for ModelGuide (BuildPro Sam demo)"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
-    "pipecat-ai[daily,openai,deepgram,elevenlabs,silero]",
+    "pipecat-ai[daily,openai,deepgram,elevenlabs,cartesia,silero,tracing]>=0.0.105",
+    "pipecatcloud>=0.2.20",
+    "opentelemetry-exporter-otlp-proto-http",
     "httpx",
     "python-dotenv",
     "mcp",
 ]
 
-[project.optional-dependencies]
-test = [
+[dependency-groups]
+dev = [
     "pytest",
     "pytest-asyncio",
 ]
 
 [build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
