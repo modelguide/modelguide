@@ -347,12 +347,18 @@ def _create_tts():
     if provider == "cartesia":
         from livekit.plugins import cartesia
 
+        from livekit.agents import tokenize as _tokenize
+
         tts = cartesia.TTS(
             voice=config.CARTESIA_VOICE_ID,
             model="sonic-3",
             speed=1.05,
             emotion=["Conversational", "Friendly"],
             api_key=config.CARTESIA_API_KEY,
+            tokenizer=_tokenize.blingfire.SentenceTokenizer(
+                min_sentence_len=8,
+                stream_context_len=5,
+            ),
         )
         # Cartesia accumulates context_ids on the WebSocket server-side,
         # degrading TTFB from 0.3s to 5s+. Cycle connections every 30s.
@@ -362,12 +368,18 @@ def _create_tts():
 
     # Fallback: ElevenLabs
     from livekit.plugins import elevenlabs
+    from livekit.agents import tokenize
 
     return elevenlabs.TTS(
         voice_id=config.ELEVENLABS_VOICE_ID,
         model="eleven_flash_v2_5",
         api_key=config.ELEVENLABS_API_KEY,
         inactivity_timeout=30,
+        chunk_length_schedule=[50, 120, 200, 260],
+        word_tokenizer=tokenize.blingfire.SentenceTokenizer(
+            min_sentence_len=8,
+            stream_context_len=5,
+        ),
     )
 
 
