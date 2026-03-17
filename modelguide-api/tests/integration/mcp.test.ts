@@ -61,7 +61,7 @@ async function createMcpClient(
   const transport = new StreamableHTTPClientTransport(
     new URL(`http://localhost/mcp/${agentId}`),
     {
-      fetch: (url, init) => app.fetch(new Request(url, init)),
+      fetch: (url, init) => Promise.resolve(app.fetch(new Request(url, init))),
       requestInit: { headers: { Authorization: agentHeaders.Authorization } },
     },
   );
@@ -75,9 +75,11 @@ function parseToolResult(
   result: Awaited<ReturnType<Client["callTool"]>>,
 ): Record<string, unknown> {
   if ("content" in result) {
-    const textContent = result.content.find((c) => c.type === "text");
+    const textContent = (
+      result.content as Array<{ type: string; text?: string }>
+    ).find((c) => c.type === "text");
     if (textContent && "text" in textContent) {
-      return JSON.parse(textContent.text);
+      return JSON.parse(textContent.text!);
     }
   }
   return {};
@@ -374,6 +376,7 @@ describe("core_add_messages", () => {
 // ============================================================================
 
 describe("RLS isolation", () => {
+  // @ts-expect-error assigned but only used for its side-effect (transport pairing)
   let _orgAClient: Client;
   let orgATransport: StreamableHTTPClientTransport;
   let orgBClient: Client;

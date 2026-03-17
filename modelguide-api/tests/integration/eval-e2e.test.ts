@@ -179,7 +179,7 @@ function anthropicResponse(verdict: "pass" | "fail", reasoning: string) {
   };
 }
 
-let mockLlmServer: Server | null = null;
+let mockLlmServer: Server<unknown> | null = null;
 
 function startMockLlm(verdict: "pass" | "fail", reasoning: string) {
   mockLlmServer = Bun.serve({

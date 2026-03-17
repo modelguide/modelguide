@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @ts-nocheck — manual script, depends on external demos/ directory
 /**
  * End-to-end checkout flow test against a live Medusa v2 instance.
  *

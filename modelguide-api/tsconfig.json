@@ -18,9 +18,10 @@
       "@features/*": ["./src/features/*"],
       "@lib/*": ["./src/lib/*"],
       "@db/*": ["./src/db/*"],
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "wismo-agent/*": ["../examples/agents/mastra-wismo-email-agent/src/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]
 }

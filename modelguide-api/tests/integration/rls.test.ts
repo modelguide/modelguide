@@ -202,8 +202,7 @@ describe("Secrets RLS", () => {
           name: "Forbidden Secret",
           secretType: "api_key",
           encryptedValue: "forbidden_value",
-          ownerType: "connector",
-          ownerId: s.orgBMedusaConnectorId,
+          scope: "connector",
         });
       }),
     ).rejects.toThrow();
@@ -244,6 +243,7 @@ describe("Agents RLS", () => {
         return tx.insert(agents).values({
           organizationId: s.orgB.id,
           name: "Forbidden Agent",
+          slug: "forbidden-agent",
           modality: "voice",
         });
       }),

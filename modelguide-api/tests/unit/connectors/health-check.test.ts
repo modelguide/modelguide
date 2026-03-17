@@ -19,12 +19,12 @@ function mockFetchSuccess(responseData: Record<string, unknown>) {
       }),
     ),
   );
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 function mockFetchError(status: number, body: string) {
   fetchMock = mock(() => Promise.resolve(new Response(body, { status })));
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 function mockFetchTimeout() {
@@ -34,7 +34,7 @@ function mockFetchTimeout() {
         reject(new Error("The operation timed out")),
       ),
   );
-  globalThis.fetch = fetchMock as typeof fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 }
 
 afterEach(() => {
