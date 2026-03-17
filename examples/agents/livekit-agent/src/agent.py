@@ -367,6 +367,7 @@ def _create_tts():
         voice_id=config.ELEVENLABS_VOICE_ID,
         model="eleven_flash_v2_5",
         api_key=config.ELEVENLABS_API_KEY,
+        inactivity_timeout=30,
     )
 
 
@@ -469,6 +470,29 @@ async def entrypoint(ctx: agents.JobContext):
         min_interruption_duration=1.0,
         min_endpointing_delay=0.5,
     )
+    # --- Periodic WebSocket refresh for TTS providers ---
+    # Forces a fresh WebSocket connection every 60s to prevent server-side
+    # state accumulation that degrades TTFB over long sessions.
+    async def _cycle_tts_connection():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                if hasattr(tts, '_pool'):
+                    # Cartesia: pool handles cycling via max_session_duration
+                    pass
+                elif hasattr(tts, '_current_connection') and tts._current_connection:
+                    tts._current_connection.mark_non_current()
+                    logger.info("TTS WebSocket marked for refresh")
+            except Exception:
+                logger.debug("TTS connection cycle failed (non-critical)")
+
+    tts_cycle_task = asyncio.create_task(_cycle_tts_connection())
+
+    async def _cancel_tts_cycle():
+        tts_cycle_task.cancel()
+
+    ctx.add_shutdown_callback(_cancel_tts_cycle)
+
     # --- Event handlers ---
 
     @session.on("user_input_transcribed")
