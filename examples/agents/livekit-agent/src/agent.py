@@ -470,29 +470,6 @@ async def entrypoint(ctx: agents.JobContext):
         min_interruption_duration=1.0,
         min_endpointing_delay=0.5,
     )
-    # --- Periodic WebSocket refresh for TTS providers ---
-    # Forces a fresh WebSocket connection every 60s to prevent server-side
-    # state accumulation that degrades TTFB over long sessions.
-    async def _cycle_tts_connection():
-        while True:
-            await asyncio.sleep(60)
-            try:
-                if hasattr(tts, '_pool'):
-                    # Cartesia: pool handles cycling via max_session_duration
-                    pass
-                elif hasattr(tts, '_current_connection') and tts._current_connection:
-                    tts._current_connection.mark_non_current()
-                    logger.info("TTS WebSocket marked for refresh")
-            except Exception:
-                logger.debug("TTS connection cycle failed (non-critical)")
-
-    tts_cycle_task = asyncio.create_task(_cycle_tts_connection())
-
-    async def _cancel_tts_cycle():
-        tts_cycle_task.cancel()
-
-    ctx.add_shutdown_callback(_cancel_tts_cycle)
-
     # --- Event handlers ---
 
     @session.on("user_input_transcribed")
@@ -517,6 +494,22 @@ async def entrypoint(ctx: agents.JobContext):
                     )
             if text.strip():
                 agent._transcript.add_assistant_response(text.strip())
+
+    @session.on("agent_state_changed")
+    def on_agent_state_changed(ev):
+        """Force a fresh TTS WebSocket when agent finishes speaking.
+
+        Both Cartesia and ElevenLabs degrade TTFB within a single session
+        (0.9s → 11s over ~60s). Cycling the connection after each speech
+        keeps every request on a fresh WebSocket.
+        """
+        if ev.new_state == "listening" and ev.old_state == "speaking":
+            try:
+                if hasattr(tts, '_current_connection') and tts._current_connection:
+                    tts._current_connection.mark_non_current()
+                    logger.debug("TTS WebSocket marked for refresh after speech")
+            except Exception:
+                pass
 
     @session.on("metrics_collected")
     def on_metrics(ev):
