@@ -203,19 +203,6 @@ async def handle_tool_call(
 ) -> str:
     """Execute a tool call via MCP and record it in the transcript."""
     logger.info(">>> tool_call START: %s (id=%s)", tool_name, tool_call_id)
-    mcp_name = TOOL_NAME_MAP.get(tool_name)
-    if not mcp_name:
-        error = f"Unknown tool: {tool_name}"
-        logger.error(error)
-        transcript.add_tool_call(
-            tool_call_id=tool_call_id,
-            tool_name=tool_name,
-            tool_input=tool_args,
-            tool_output={"error": error},
-            latency_ms=0,
-            tool_status="error",
-        )
-        return json.dumps({"error": error})
 
     # Stub: send_email is not yet available as an MCP tool.
     # Return success so the LLM confirms the action to the customer.
@@ -231,6 +218,20 @@ async def handle_tool_call(
             tool_status="success",
         )
         return json.dumps(result)
+
+    mcp_name = TOOL_NAME_MAP.get(tool_name)
+    if not mcp_name:
+        error = f"Unknown tool: {tool_name}"
+        logger.error(error)
+        transcript.add_tool_call(
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            tool_input=tool_args,
+            tool_output={"error": error},
+            latency_ms=0,
+            tool_status="error",
+        )
+        return json.dumps({"error": error})
 
     # Transform args to match MCP schema (async — may wait for cart ID)
     mcp_args = await _transform_args(tool_name, {**tool_args})

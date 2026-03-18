@@ -1,5 +1,5 @@
 agent_name = "buildpro-agent"
-image = "pawelmodelguide/buildpro-agent:0.24.0"
+image = "pawelmodelguide/buildpro-agent:0.25.1"
 secret_set = "my-secrets"
 agent_profile = "agent-1x"
 

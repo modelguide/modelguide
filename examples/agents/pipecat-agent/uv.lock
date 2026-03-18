@@ -1823,7 +1823,7 @@ tracing = [
 
 [[package]]
 name = "pipecat-modelguide-agent"
-version = "0.24.0"
+version = "0.25.1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

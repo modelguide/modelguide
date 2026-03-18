@@ -34,6 +34,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
 from pipecat.services.llm_service import FunctionCallParams
@@ -47,7 +48,7 @@ from prompts import build_system_prompt
 from tools import TOOL_SCHEMAS, handle_tool_call, reset_cart_state, set_tracer
 from transcript import TranscriptCollector
 
-VERSION = "0.24.0"
+VERSION = "0.25.1"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("bot")
@@ -83,7 +84,16 @@ if TRACING_ENABLED:
 
 
 # ---------------------------------------------------------------------------
-# Regional endpoint configuration — set REGION=eu for EU endpoints
+# Regional endpoint configuration for STT / LLM / TTS services.
+#
+# NOTE: Even when deployed in EU (Pipecat Cloud eu-central), we keep REGION=us
+# because OpenAI EU endpoints require an Enterprise agreement. Deepgram and
+# ElevenLabs follow suit for simplicity. Cross-Atlantic LLM latency is
+# acceptable (~50-80ms overhead) vs. the enterprise setup cost.
+#
+# Langfuse tracing is configured separately via LANGFUSE_HOST and should
+# point to the EU instance (https://cloud.langfuse.com) since that's where
+# the bot and Daily infra operate.
 # ---------------------------------------------------------------------------
 
 REGION = os.getenv("REGION", "us").lower()
@@ -310,7 +320,9 @@ async def main(transport: DailyTransport):
     context = LLMContext(**ctx_kwargs)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(),
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(sample_rate=16000),
+        ),
     )
 
     # --- Register catch-all tool handler (all tools route through MCP) ---

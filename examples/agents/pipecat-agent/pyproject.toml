@@ -1,6 +1,6 @@
 [project]
 name = "pipecat-modelguide-agent"
-version = "0.24.0"
+version = "0.25.1"
 description = "Pipecat voice agent for ModelGuide (BuildPro Sam demo)"
 requires-python = ">=3.10"
 dependencies = [
