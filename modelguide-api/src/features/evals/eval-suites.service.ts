@@ -24,6 +24,7 @@ import {
   evalSuites,
   knowledgeBase,
   sessionMessages,
+  sessions,
   sopSteps,
   sops,
 } from "@db/schema";
@@ -704,6 +705,22 @@ export async function runEvalSuite(
     if (!agent.compiledInstructions) {
       throw Errors.validationError(
         `Agent "${suite.agentId}" has no compiled_instructions — compile the SOP first`,
+      );
+    }
+
+    // Validate session exists and is terminal
+    const [session] = await tx
+      .select({ id: sessions.id, status: sessions.status })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+
+    if (!session) {
+      throw Errors.notFound(`Session "${sessionId}" not found`);
+    }
+
+    if (session.status === "active") {
+      throw Errors.validationError(
+        `Session "${sessionId}" is still active — wait for it to complete before running evals`,
       );
     }
 
