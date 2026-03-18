@@ -360,10 +360,6 @@ def _create_tts():
                 stream_context_len=5,
             ),
         )
-        # Cartesia accumulates context_ids on the WebSocket server-side,
-        # degrading TTFB from 0.3s to 5s+. Cycle connections every 30s.
-        tts._pool._max_session_duration = 30
-        tts._pool._mark_refreshed_on_get = False
         return tts
 
     # Fallback: ElevenLabs
@@ -545,11 +541,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     @session.on("agent_state_changed")
     def on_agent_state_changed(ev):
-        """Force a fresh TTS WebSocket when agent finishes speaking.
+        """Cycle the ElevenLabs TTS WebSocket when agent finishes speaking.
 
-        Both Cartesia and ElevenLabs degrade TTFB within a single session
-        (0.9s → 11s over ~60s). Cycling the connection after each speech
-        keeps every request on a fresh WebSocket.
+        ElevenLabs degrades TTFB within a single session. Marking the
+        connection non-current forces a fresh WebSocket for the next speech.
         """
         if ev.new_state == "listening" and ev.old_state == "speaking":
             try:
@@ -558,14 +553,8 @@ async def entrypoint(ctx: agents.JobContext):
                 if hasattr(tts, '_current_connection') and tts._current_connection:
                     tts._current_connection.mark_non_current()
                     logger.info("TTS connection cycled (speaking → listening)")
-                # Cartesia: invalidate pool connections
-                elif hasattr(tts, '_pool'):
-                    pool = tts._pool
-                    if hasattr(pool, '_available') and pool._available:
-                        for conn in list(pool._available):
-                            conn.close()
-                        pool._available.clear()
-                        logger.info("TTS pool connections cleared (speaking → listening)")
+                else:
+                    logger.debug("TTS provider has no connection cycling support")
             except Exception as e:
                 logger.warning("TTS connection cycling failed: %s", e)
 
