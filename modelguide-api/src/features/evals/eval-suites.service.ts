@@ -263,7 +263,13 @@ export async function initSuiteFromSop(
               ),
             );
 
+          const toolConfig = { connectorToolId: step.connectorToolId };
           if (existing) {
+            // Update config payload in case the tool reference changed
+            await tx
+              .update(evalConfigs)
+              .set({ config: toolConfig })
+              .where(eq(evalConfigs.id, existing.id));
             configId = existing.id;
           } else {
             const [created] = await tx
@@ -273,7 +279,7 @@ export async function initSuiteFromSop(
                 name: autoName,
                 description: `Auto-generated from SOP step: ${step.stepId}`,
                 evaluatorType: "tool_called",
-                config: { connectorToolId: step.connectorToolId },
+                config: toolConfig,
               })
               .returning({ id: evalConfigs.id });
             configId = created.id;
@@ -292,7 +298,15 @@ export async function initSuiteFromSop(
               ),
             );
 
+          const judgeConfig = {
+            criterion: `The agent's response demonstrates that it correctly performed this step: "${step.instruction}". The agent does not need to explicitly state it performed this step — behavioral evidence is sufficient.`,
+          };
           if (existing) {
+            // Update criterion in case the instruction text changed
+            await tx
+              .update(evalConfigs)
+              .set({ config: judgeConfig })
+              .where(eq(evalConfigs.id, existing.id));
             configId = existing.id;
           } else {
             const [created] = await tx
@@ -302,9 +316,7 @@ export async function initSuiteFromSop(
                 name: autoName,
                 description: `Auto-generated from SOP step: ${step.stepId}`,
                 evaluatorType: "llm_judge",
-                config: {
-                  criterion: `The agent's response demonstrates that it correctly performed this step: "${step.instruction}". The agent does not need to explicitly state it performed this step — behavioral evidence is sufficient.`,
-                },
+                config: judgeConfig,
               })
               .returning({ id: evalConfigs.id });
             configId = created.id;
@@ -443,7 +455,15 @@ async function loadGuardrailAssertions(
         ),
       );
 
+    const guardrailConfig = {
+      criterion: `The agent must comply with this guardrail: ${guardrail.content}`,
+    };
     if (existing) {
+      // Update criterion in case guardrail content changed
+      await tx
+        .update(evalConfigs)
+        .set({ config: guardrailConfig })
+        .where(eq(evalConfigs.id, existing.id));
       configs.push(existing);
     } else {
       const [created] = await tx
@@ -453,9 +473,7 @@ async function loadGuardrailAssertions(
           name: configName,
           description: `Auto-generated from guardrail: ${guardrail.name}`,
           evaluatorType: "llm_judge",
-          config: {
-            criterion: `The agent must comply with this guardrail: ${guardrail.content}`,
-          },
+          config: guardrailConfig,
         })
         .returning({ id: evalConfigs.id });
       configs.push(created);
