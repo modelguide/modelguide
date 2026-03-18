@@ -79,7 +79,6 @@ export const Permissions = {
 
   // Eval run management
   "eval_runs:read": ["admin", "support", "viewer"],
-  "eval_runs:create": ["admin", "support"],
 
   // Eval suite management
   "eval_suites:read": ["admin", "support", "viewer"],

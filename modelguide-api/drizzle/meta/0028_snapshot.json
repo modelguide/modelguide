@@ -1,5 +1,5 @@
 {
-  "id": "c1cb742f-0b45-4f82-ab57-c763b781e6d1",
+  "id": "f20f1fa0-b522-4a98-ab46-4a50c78dd798",
   "prevId": "61da20a2-7e5a-44de-9d15-e6ef0774cb9c",
   "version": "7",
   "dialect": "postgresql",
@@ -3292,12 +3292,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "suite_run_id": {
-          "name": "suite_run_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "external_run_id": {
           "name": "external_run_id",
           "type": "varchar(255)",
@@ -3307,6 +3301,18 @@
         "external_run_url": {
           "name": "external_run_url",
           "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suite_run_id": {
+          "name": "suite_run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "test_case_id": {
+          "name": "test_case_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -3431,6 +3437,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "eval_runs_suite_run_idx": {
+          "name": "eval_runs_suite_run_idx",
+          "columns": [
+            {
+              "expression": "suite_run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -3485,6 +3506,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "eval_runs_test_case_id_eval_suite_test_cases_id_fk": {
+          "name": "eval_runs_test_case_id_eval_suite_test_cases_id_fk",
+          "tableFrom": "eval_runs",
+          "tableTo": "eval_suite_test_cases",
+          "columnsFrom": [
+            "test_case_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3493,8 +3527,8 @@
       "checkConstraints": {},
       "isRLSEnabled": true
     },
-    "public.eval_suite_assertions": {
-      "name": "eval_suite_assertions",
+    "public.eval_suite_evaluators": {
+      "name": "eval_suite_evaluators",
       "schema": "",
       "columns": {
         "id": {
@@ -3504,8 +3538,14 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "suite_id": {
-          "name": "suite_id",
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "test_case_id": {
+          "name": "test_case_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -3522,13 +3562,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "required": {
-          "name": "required",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
         "sop_step_id": {
           "name": "sop_step_id",
           "type": "varchar(100)",
@@ -3543,6 +3576,20 @@
           "notNull": true,
           "default": "'auto'"
         },
+        "order": {
+          "name": "order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "required": {
+          "name": "required",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3552,11 +3599,11 @@
         }
       },
       "indexes": {
-        "eval_suite_assertions_suite_idx": {
-          "name": "eval_suite_assertions_suite_idx",
+        "eval_suite_evaluators_test_case_idx": {
+          "name": "eval_suite_evaluators_test_case_idx",
           "columns": [
             {
-              "expression": "suite_id",
+              "expression": "test_case_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3567,8 +3614,8 @@
           "method": "btree",
           "with": {}
         },
-        "eval_suite_assertions_eval_config_idx": {
-          "name": "eval_suite_assertions_eval_config_idx",
+        "eval_suite_evaluators_config_idx": {
+          "name": "eval_suite_evaluators_config_idx",
           "columns": [
             {
               "expression": "eval_config_id",
@@ -3581,15 +3628,30 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "eval_suite_evaluators_org_idx": {
+          "name": "eval_suite_evaluators_org_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "eval_suite_assertions_suite_id_eval_suites_id_fk": {
-          "name": "eval_suite_assertions_suite_id_eval_suites_id_fk",
-          "tableFrom": "eval_suite_assertions",
-          "tableTo": "eval_suites",
+        "eval_suite_evaluators_organization_id_organizations_id_fk": {
+          "name": "eval_suite_evaluators_organization_id_organizations_id_fk",
+          "tableFrom": "eval_suite_evaluators",
+          "tableTo": "organizations",
           "columnsFrom": [
-            "suite_id"
+            "organization_id"
           ],
           "columnsTo": [
             "id"
@@ -3597,9 +3659,22 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "eval_suite_assertions_eval_config_id_eval_configs_id_fk": {
-          "name": "eval_suite_assertions_eval_config_id_eval_configs_id_fk",
-          "tableFrom": "eval_suite_assertions",
+        "eval_suite_evaluators_test_case_id_eval_suite_test_cases_id_fk": {
+          "name": "eval_suite_evaluators_test_case_id_eval_suite_test_cases_id_fk",
+          "tableFrom": "eval_suite_evaluators",
+          "tableTo": "eval_suite_test_cases",
+          "columnsFrom": [
+            "test_case_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "eval_suite_evaluators_eval_config_id_eval_configs_id_fk": {
+          "name": "eval_suite_evaluators_eval_config_id_eval_configs_id_fk",
+          "tableFrom": "eval_suite_evaluators",
           "tableTo": "eval_configs",
           "columnsFrom": [
             "eval_config_id"
@@ -3615,7 +3690,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.eval_suite_runs": {
       "name": "eval_suite_runs",
@@ -3628,17 +3703,25 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "suite_id": {
           "name": "suite_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
+        "status": {
+          "name": "status",
+          "type": "eval_suite_run_status",
+          "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'running'"
         },
         "prompt_source": {
           "name": "prompt_source",
@@ -3646,9 +3729,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "passed": {
-          "name": "passed",
-          "type": "boolean",
+        "triggered_by": {
+          "name": "triggered_by",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -3670,6 +3753,12 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3688,11 +3777,11 @@
           "method": "btree",
           "with": {}
         },
-        "eval_suite_runs_agent_idx": {
-          "name": "eval_suite_runs_agent_idx",
+        "eval_suite_runs_org_idx": {
+          "name": "eval_suite_runs_org_idx",
           "columns": [
             {
-              "expression": "agent_id",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3705,6 +3794,19 @@
         }
       },
       "foreignKeys": {
+        "eval_suite_runs_organization_id_organizations_id_fk": {
+          "name": "eval_suite_runs_organization_id_organizations_id_fk",
+          "tableFrom": "eval_suite_runs",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "eval_suite_runs_suite_id_eval_suites_id_fk": {
           "name": "eval_suite_runs_suite_id_eval_suites_id_fk",
           "tableFrom": "eval_suite_runs",
@@ -3718,17 +3820,17 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "eval_suite_runs_agent_id_agents_id_fk": {
-          "name": "eval_suite_runs_agent_id_agents_id_fk",
+        "eval_suite_runs_triggered_by_users_id_fk": {
+          "name": "eval_suite_runs_triggered_by_users_id_fk",
           "tableFrom": "eval_suite_runs",
-          "tableTo": "agents",
+          "tableTo": "users",
           "columnsFrom": [
-            "agent_id"
+            "triggered_by"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -3736,7 +3838,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.eval_suite_test_cases": {
       "name": "eval_suite_test_cases",
@@ -3748,6 +3850,12 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
         },
         "suite_id": {
           "name": "suite_id",
@@ -3761,38 +3869,17 @@
           "primaryKey": false,
           "notNull": true
         },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "category": {
           "name": "category",
           "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
-        },
-        "input": {
-          "name": "input",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mock_tool_responses": {
-          "name": "mock_tool_responses",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
-        },
-        "expected_tool_calls": {
-          "name": "expected_tool_calls",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'"
-        },
-        "unexpected_tool_calls": {
-          "name": "unexpected_tool_calls",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'"
         },
         "source": {
           "name": "source",
@@ -3802,12 +3889,44 @@
           "notNull": true,
           "default": "'auto'"
         },
+        "input": {
+          "name": "input",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_behavior": {
+          "name": "expected_behavior",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mock_tool_responses": {
+          "name": "mock_tool_responses",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'::jsonb"
+        },
+        "order": {
+          "name": "order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3826,11 +3945,11 @@
           "method": "btree",
           "with": {}
         },
-        "eval_suite_test_cases_source_idx": {
-          "name": "eval_suite_test_cases_source_idx",
+        "eval_suite_test_cases_org_idx": {
+          "name": "eval_suite_test_cases_org_idx",
           "columns": [
             {
-              "expression": "source",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3843,6 +3962,19 @@
         }
       },
       "foreignKeys": {
+        "eval_suite_test_cases_organization_id_organizations_id_fk": {
+          "name": "eval_suite_test_cases_organization_id_organizations_id_fk",
+          "tableFrom": "eval_suite_test_cases",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "eval_suite_test_cases_suite_id_eval_suites_id_fk": {
           "name": "eval_suite_test_cases_suite_id_eval_suites_id_fk",
           "tableFrom": "eval_suite_test_cases",
@@ -3861,7 +3993,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.eval_suites": {
       "name": "eval_suites",
@@ -3890,13 +4022,19 @@
           "name": "sop_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "name": {
           "name": "name",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -3923,11 +4061,31 @@
           "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {
+        "eval_suites_agent_sop_idx": {
+          "name": "eval_suites_agent_sop_idx",
+          "columns": [
+            {
+              "expression": "agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sop_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "eval_suites_org_idx": {
           "name": "eval_suites_org_idx",
           "columns": [
@@ -4082,7 +4240,9 @@
       "name": "eval_source_type",
       "schema": "public",
       "values": [
-        "sop"
+        "suite",
+        "replay_test",
+        "live"
       ]
     },
     "public.eval_status": {
@@ -4092,6 +4252,16 @@
         "pending",
         "running",
         "completed",
+        "failed"
+      ]
+    },
+    "public.eval_suite_run_status": {
+      "name": "eval_suite_run_status",
+      "schema": "public",
+      "values": [
+        "running",
+        "completed",
+        "completed_with_errors",
         "failed"
       ]
     },
