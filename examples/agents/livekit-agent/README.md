@@ -114,7 +114,7 @@ src/
 
 ## Known Issues
 
-**Langfuse `debug=True` causes severe latency.** The Langfuse SDK's debug mode adds synchronous logging on every span export, compounding the already-blocking `OTLPSpanExporter`. On LiveKit Cloud a second `BatchSpanProcessor` is also added automatically for LiveKit's own observability. With `debug=True` removed, Langfuse tracing adds negligible overhead. Tracing is opt-in (set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`).
+**Never set `debug=True` on the Langfuse SDK.** Confirmed via A/B testing on LiveKit Cloud: `debug=True` adds ~2-3s latency per voice turn. The debug flag enables synchronous console logging on every span export, which compounds the already-blocking `OTLPSpanExporter` and LiveKit Cloud's own `BatchSpanProcessor`. With `debug=False` (the default), Langfuse tracing adds negligible overhead. Tracing is opt-in (set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`).
 
 ## LiveKit Cloud Deployment
 
