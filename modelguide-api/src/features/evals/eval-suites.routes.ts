@@ -14,7 +14,7 @@ import { paginatedResponseSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
 
 import {
-  createAssertionSchema,
+  createEvaluatorSchema,
   createSuiteSchema,
   createTestCaseSchema,
   evalSuiteListQuerySchema,
@@ -26,7 +26,7 @@ import {
   runEvalSuiteSchema,
 } from "./eval-suites.schemas";
 import {
-  createAssertion,
+  createEvaluator,
   createSuite,
   createTestCase,
   deleteEvalSuite,
@@ -65,8 +65,8 @@ const testCaseParams = z.object({
 type SuiteDetail = Awaited<ReturnType<typeof getEvalSuiteById>>;
 type SuiteRunDetail = Awaited<ReturnType<typeof getEvalSuiteRunById>>;
 
-function formatAssertion(
-  a: SuiteDetail["testCases"][number]["assertions"][number],
+function formatEvaluator(
+  a: SuiteDetail["testCases"][number]["evaluators"][number],
 ) {
   return {
     id: a.id,
@@ -91,7 +91,7 @@ function formatTestCase(tc: SuiteDetail["testCases"][number]) {
     input: tc.input as Record<string, unknown> | null,
     expectedBehavior: tc.expectedBehavior,
     order: tc.order,
-    assertions: tc.assertions.map(formatAssertion),
+    evaluators: tc.evaluators.map(formatEvaluator),
     createdAt: tc.createdAt.toISOString(),
     updatedAt: tc.updatedAt?.toISOString() ?? null,
   };
@@ -249,7 +249,7 @@ router.post(
   requireOrganization(),
 );
 router.post(
-  "/:suiteId/test-cases/:testCaseId/assertions",
+  "/:suiteId/test-cases/:testCaseId/evaluators",
   requireUser(),
   requirePermission("eval_suites:create"),
   requireOrganization(),
@@ -307,7 +307,7 @@ const createSuiteRoute = createRoute({
   tags: ["Eval Suites"],
   summary: "Create eval suite",
   description:
-    "Creates an empty eval suite. User adds test cases and assertions via CRUD endpoints.",
+    "Creates an empty eval suite. User adds test cases and evaluators via CRUD endpoints.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -381,7 +381,7 @@ const getSuiteRoute = createRoute({
   path: "/{suiteId}",
   tags: ["Eval Suites"],
   summary: "Get eval suite",
-  description: "Returns a single eval suite with test cases and assertions.",
+  description: "Returns a single eval suite with test cases and evaluators.",
   security: [{ bearerAuth: [] }],
   request: { params: suiteIdParams },
   responses: {
@@ -409,7 +409,7 @@ const deleteSuiteRoute = createRoute({
   path: "/{suiteId}",
   tags: ["Eval Suites"],
   summary: "Delete eval suite",
-  description: "Deletes an eval suite and all its test cases and assertions.",
+  description: "Deletes an eval suite and all its test cases and evaluators.",
   security: [{ bearerAuth: [] }],
   request: { params: suiteIdParams },
   responses: {
@@ -601,24 +601,24 @@ router.openapi(createTestCaseRoute, async (c) => {
   );
 });
 
-// POST /:suiteId/test-cases/:testCaseId/assertions — create manual assertion
-const createAssertionRoute = createRoute({
+// POST /:suiteId/test-cases/:testCaseId/evaluators — create manual evaluator
+const createEvaluatorRoute = createRoute({
   method: "post",
-  path: "/{suiteId}/test-cases/{testCaseId}/assertions",
+  path: "/{suiteId}/test-cases/{testCaseId}/evaluators",
   tags: ["Eval Suites"],
-  summary: "Create manual assertion",
+  summary: "Create manual evaluator",
   description:
-    "Creates a manual assertion for an existing test case. Links to an eval_config.",
+    "Creates a manual evaluator for an existing test case. Links to an eval_config.",
   security: [{ bearerAuth: [] }],
   request: {
     params: testCaseParams,
     body: {
-      content: { "application/json": { schema: createAssertionSchema } },
+      content: { "application/json": { schema: createEvaluatorSchema } },
     },
   },
   responses: {
     201: {
-      description: "Assertion created",
+      description: "Evaluator created",
       content: {
         "application/json": {
           schema: z.object({
@@ -640,23 +640,23 @@ const createAssertionRoute = createRoute({
   },
 });
 
-router.openapi(createAssertionRoute, async (c) => {
+router.openapi(createEvaluatorRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { suiteId, testCaseId } = c.req.valid("param");
   const body = c.req.valid("json");
 
-  const assertion = await createAssertion(orgId, suiteId, testCaseId, body);
+  const evaluator = await createEvaluator(orgId, suiteId, testCaseId, body);
 
   return c.json(
     {
-      id: assertion.id,
-      testCaseId: assertion.testCaseId,
-      evalConfigId: assertion.evalConfigId,
-      name: assertion.name,
-      source: assertion.source,
-      order: assertion.order,
-      required: assertion.required,
-      createdAt: assertion.createdAt.toISOString(),
+      id: evaluator.id,
+      testCaseId: evaluator.testCaseId,
+      evalConfigId: evaluator.evalConfigId,
+      name: evaluator.name,
+      source: evaluator.source,
+      order: evaluator.order,
+      required: evaluator.required,
+      createdAt: evaluator.createdAt.toISOString(),
     },
     201,
   );

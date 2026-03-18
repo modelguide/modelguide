@@ -32,7 +32,7 @@ export const createTestCaseSchema = z.object({
   expectedBehavior: z.string().optional(),
 });
 
-export const createAssertionSchema = z.object({
+export const createEvaluatorSchema = z.object({
   evalConfigId: z.string().uuid(),
   name: z.string().min(1).max(255),
   required: z.boolean().optional(),
@@ -54,7 +54,7 @@ export const evalSuiteRunsQuerySchema = z.object({
 // Response schemas
 // ============================================================================
 
-const evalSuiteAssertionResponseSchema = z.object({
+const evalSuiteEvaluatorResponseSchema = z.object({
   id: z.string().uuid(),
   testCaseId: z.string().uuid(),
   evalConfigId: z.string().uuid(),
@@ -75,7 +75,7 @@ const evalSuiteTestCaseResponseSchema = z.object({
   input: z.record(z.string(), z.unknown()).nullable(),
   expectedBehavior: z.string().nullable(),
   order: z.number(),
-  assertions: z.array(evalSuiteAssertionResponseSchema),
+  evaluators: z.array(evalSuiteEvaluatorResponseSchema),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });

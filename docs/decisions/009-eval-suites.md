@@ -9,7 +9,7 @@ ADR-007 established the evaluation engine — eval_configs, eval_runs, evaluator
 The Agent Quality System architecture (v8) defines an EvalSuite as a first-class entity — the quality bar for an agent. It starts auto-generated from an SOP and grows through human curation as failures are found. Phase 2 delivers the suite infrastructure; Phase 3 adds simulation runner, replay tests, and async execution.
 
 Key requirements:
-- Auto-generate suites from SOPs (derive test cases and assertions from steps + guardrails)
+- Auto-generate suites from SOPs (derive test cases and evaluators from steps + guardrails)
 - Support manual suites for hand-written agents without SOPs
 - Assertions must be per-test-case, not per-suite (branching SOPs have different paths)
 - Suite scores existing sessions — it's a scorer, not a simulator
@@ -29,7 +29,7 @@ eval_suites                              eval_configs (ADR-007)
 │   │   edge_case | guardrail            └──────┬───────┘
 │   ├── source: auto | manual                   │ FK (NO cascade)
 │   │                                           │
-│   └── eval_suite_assertions ──────────────────┘
+│   └── eval_suite_evaluators ──────────────────┘
 │       ├── required: boolean
 │       ├── sop_step_id (traces origin)
 │       └── source: auto | manual
@@ -83,17 +83,17 @@ EvalSuite: "Eval: Email — Order Not Arrived"
     └── assertion: step:5:tool_called (helpdesk_create_ticket) — required: false
 ```
 
-Steps 1-4 appear on happy/edge paths. Step 5 (optional escalation) appears only on the guardrail path. Guardrail KB assertions (if any) are added to all test cases.
+Steps 1-4 appear on happy/edge paths. Step 5 (optional escalation) appears only on the guardrail path. Guardrail KB evaluators (if any) are added to all test cases.
 
-### Assertions belong to test cases, not suites
+### Evaluators belong to test cases, not suites
 
-Different test cases exercise different SOP paths. The happy path should check `tool_called(store_look_up_order)` but not `tool_called(helpdesk_create_ticket)`. The guardrail path checks the opposite. Suite-level assertions would force every test case through the same checks, producing false failures on branching SOPs.
+Different test cases exercise different SOP paths. The happy path should check `tool_called(store_look_up_order)` but not `tool_called(helpdesk_create_ticket)`. The guardrail path checks the opposite. Suite-level evaluators would force every test case through the same checks, producing false failures on branching SOPs.
 
 ### Two creation paths
 
 1. **`initSuiteFromSop(orgId, agentId, sopId)`** — SOP-based. Derives 3 path-based test cases (happy/edge/guardrail) and auto-creates eval_configs from SOP steps (`tool_called` for tool steps, `llm_judge` for instruction steps) and guardrails. Supports re-initialization: deletes auto-generated test cases, preserves manual ones. `sopId` is required.
 
-2. **`createSuite(orgId, { agentId, name, sopId? })`** — Manual. Creates an empty suite. User populates via CRUD endpoints. `sopId` is optional metadata — no derivation.
+2. **`createSuite(orgId, { agentId, name, sopId? })`** — Manual. Creates an empty suite. User populates test cases and evaluators via CRUD endpoints. `sopId` is optional metadata — no derivation.
 
 These are separate service functions and API routes. They don't share implementation because they solve different problems.
 
@@ -112,13 +112,13 @@ This separation means the suite can score any session regardless of origin.
 POST /api/eval-suites/:suiteId/run  { sessionId, promptSource }
 │
 ├── Validate: suite exists, not archived, agent has compiled_instructions
-├── Validate: suite has test cases, each test case has assertions
+├── Validate: suite has test cases, each test case has evaluators
 │
 ├── Create eval_suite_runs row
 │
 ├── For each test case:
 │   ├── resolveAssertions(testCaseId)
-│   │   ├── Load eval_suite_assertions → eval_configs
+│   │   ├── Load eval_suite_evaluators → eval_configs
 │   │   ├── Extract connectorToolIds from configs
 │   │   └── Resolve tool names at scoring time (connector_tools ⋈ connectors)
 │   │
@@ -159,7 +159,7 @@ Assertions reference eval_configs which store `connectorToolId` (UUID). `resolve
 
 ## Alternatives Considered
 
-- **Suite-level assertions** — rejected: forces every test case through the same checks. Wrong for branching SOPs where different paths exercise different tools. Per-test-case assertions are more work to implement but correctly model SOP path divergence.
+- **Suite-level evaluators** — rejected: forces every test case through the same checks. Wrong for branching SOPs where different paths exercise different tools. Per-test-case evaluators are more work to implement but correctly model SOP path divergence.
 
 - **Single creation path with optional `sopId`** — rejected: SOP-based and manual suites have fundamentally different semantics. A single function with `if (sopId)` branching creates confusion about what's required and what's derived. Two functions with clear contracts are easier to reason about.
 
@@ -169,16 +169,16 @@ Assertions reference eval_configs which store `connectorToolId` (UUID). `resolve
 
 - **Literal LLM judge criteria ("The agent followed this instruction: ...")** — rejected after E2E testing showed false negatives. The LLM judge interprets "followed" literally and expects the agent to narrate its reasoning. Behavior-focused criteria ("demonstrates correct performance") evaluate actions, not narration.
 
-- **`expectedToolCalls` / `unexpectedToolCalls` columns on test cases** — rejected: duplicates what assertions already express. A `tool_called` assertion on a test case IS the expected tool call. Two parallel mechanisms for the same thing creates confusion about which is authoritative. Assertions are the single source of truth.
+- **`expectedToolCalls` / `unexpectedToolCalls` columns on test cases** — rejected: duplicates what evaluators already express. A `tool_called` evaluator on a test case IS the expected tool call. Two parallel mechanisms for the same thing creates confusion about which is authoritative. Evaluators are the single source of truth.
 
-- **Keep legacy SOP eval path alongside suites** — rejected: two eval entry points with overlapping functionality. The suite IS the SOP-derived eval, but better — it supports manual assertions, path-based test cases, and re-initialization. One path is simpler than two.
+- **Keep legacy SOP eval path alongside suites** — rejected: two eval entry points with overlapping functionality. The suite IS the SOP-derived eval, but better — it supports manual evaluators, path-based test cases, and re-initialization. One path is simpler than two.
 
 ## Consequences
 
 - Suites are the single eval entry point — no more ad-hoc SOP evaluation
 - Manual suites support hand-written agents without SOPs
 - Path-based test cases correctly handle branching SOPs (escalation paths, conditional tools)
-- Re-initialization preserves human curation work (manual test cases + assertions survive SOP changes)
+- Re-initialization preserves human curation work (manual test cases + evaluators survive SOP changes)
 - Async execution (Phase 3) will require changing `runEvalSuite` to return immediately and process in background — the current inline execution is acceptable for Phase 2 volume
 - The `storeSyntheticSession` production service bridges agent runners and the eval scorer — any code that runs an agent can produce a scoreable session
 - `eval_configs` accumulate over time (auto-created, never deleted) — orphaned configs are harmless but may need cleanup tooling eventually

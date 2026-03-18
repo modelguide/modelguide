@@ -197,15 +197,15 @@ describe("Compiler E2E: compile → run → store → eval", () => {
         },
       });
 
-      // Step 1: initSuiteFromSop — auto-generates test cases with assertions
+      // Step 1: initSuiteFromSop — auto-generates test cases with evaluators
       const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sop.id);
 
-      // Assertions are now per test case, not at suite level
+      // Evaluators are now per test case, not at suite level
       expect(suite.testCases.length).toBeGreaterThanOrEqual(1);
-      const allAssertions = suite.testCases.flatMap(
-        (tc: { assertions: unknown[] }) => tc.assertions,
+      const allEvaluators = suite.testCases.flatMap(
+        (tc: { evaluators: unknown[] }) => tc.evaluators,
       );
-      expect(allAssertions.length).toBeGreaterThanOrEqual(1);
+      expect(allEvaluators.length).toBeGreaterThanOrEqual(1);
 
       // Step 2: compileAgent — persists compiled instructions
       const compileResult = await compileAgent({

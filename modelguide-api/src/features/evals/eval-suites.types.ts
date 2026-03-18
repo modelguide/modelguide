@@ -44,7 +44,7 @@ export interface CreateTestCaseInput {
   expectedBehavior?: string;
 }
 
-export interface CreateAssertionInput {
+export interface CreateEvaluatorInput {
   evalConfigId: string;
   name: string;
   required?: boolean;

@@ -31,7 +31,7 @@ import type {
 import type { evalConfigs } from "./eval-configs";
 import type { evalRunScores, evalRuns } from "./eval-runs";
 import type {
-  evalSuiteAssertions,
+  evalSuiteEvaluators,
   evalSuiteTestCases,
   evalSuites,
 } from "./eval-suites";
@@ -112,4 +112,4 @@ export type NewAgentKnowledgeBase = InferInsertModel<typeof agentKnowledgeBase>;
 
 export type EvalSuite = InferSelectModel<typeof evalSuites>;
 export type EvalSuiteTestCase = InferSelectModel<typeof evalSuiteTestCases>;
-export type EvalSuiteAssertion = InferSelectModel<typeof evalSuiteAssertions>;
+export type EvalSuiteEvaluator = InferSelectModel<typeof evalSuiteEvaluators>;

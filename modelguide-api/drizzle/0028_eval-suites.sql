@@ -1,7 +1,7 @@
 -- Eval Suites Infrastructure (Phase 2)
--- Tables: eval_suites, eval_suite_test_cases, eval_suite_assertions, eval_suite_runs
+-- Tables: eval_suites, eval_suite_test_cases, eval_suite_evaluators, eval_suite_runs
 -- All tables have organization_id + RLS enabled.
--- Assertions FK to eval_configs with NO ACTION (no cascade).
+-- Evaluators FK to eval_configs with NO ACTION (no cascade).
 -- eval_runs gains suite_run_id + test_case_id columns for suite linkage.
 
 -- ============================================================================
@@ -85,10 +85,10 @@ CREATE POLICY "eval_suite_test_cases_org_insert" ON "eval_suite_test_cases"
   FOR INSERT WITH CHECK ("organization_id" = current_setting('app.organization_id')::uuid);
 
 -- ============================================================================
--- Eval Suite Assertions (FK to test_case_id, NOT suite_id)
+-- Eval Suite Evaluators (FK to test_case_id, NOT suite_id)
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS "eval_suite_assertions" (
+CREATE TABLE IF NOT EXISTS "eval_suite_evaluators" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "organization_id" uuid NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
   "test_case_id" uuid NOT NULL REFERENCES "eval_suite_test_cases"("id") ON DELETE CASCADE,
@@ -101,16 +101,16 @@ CREATE TABLE IF NOT EXISTS "eval_suite_assertions" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 
-ALTER TABLE "eval_suite_assertions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "eval_suite_evaluators" ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX IF NOT EXISTS "eval_suite_assertions_test_case_idx" ON "eval_suite_assertions" ("test_case_id");
-CREATE INDEX IF NOT EXISTS "eval_suite_assertions_config_idx" ON "eval_suite_assertions" ("eval_config_id");
-CREATE INDEX IF NOT EXISTS "eval_suite_assertions_org_idx" ON "eval_suite_assertions" ("organization_id");
+CREATE INDEX IF NOT EXISTS "eval_suite_evaluators_test_case_idx" ON "eval_suite_evaluators" ("test_case_id");
+CREATE INDEX IF NOT EXISTS "eval_suite_evaluators_config_idx" ON "eval_suite_evaluators" ("eval_config_id");
+CREATE INDEX IF NOT EXISTS "eval_suite_evaluators_org_idx" ON "eval_suite_evaluators" ("organization_id");
 
 -- RLS policies
-CREATE POLICY "eval_suite_assertions_org_isolation" ON "eval_suite_assertions"
+CREATE POLICY "eval_suite_evaluators_org_isolation" ON "eval_suite_evaluators"
   USING ("organization_id" = current_setting('app.organization_id')::uuid);
-CREATE POLICY "eval_suite_assertions_org_insert" ON "eval_suite_assertions"
+CREATE POLICY "eval_suite_evaluators_org_insert" ON "eval_suite_evaluators"
   FOR INSERT WITH CHECK ("organization_id" = current_setting('app.organization_id')::uuid);
 
 -- ============================================================================

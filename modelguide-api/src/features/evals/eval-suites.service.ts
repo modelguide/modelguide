@@ -1,15 +1,15 @@
 /**
  * Eval suite service — init, run, and query operations for evaluation suites.
  *
- * Assertions belong to test cases, not suites. Each test case carries
- * only the assertions relevant to the SOP path it exercises.
+ * Evaluators belong to test cases, not suites. Each test case carries
+ * only the evaluators relevant to the SOP path it exercises.
  */
 
 import { type Transaction, forOrg } from "@db/rls";
 import {
   type EvalRunScore,
   type EvalSuite,
-  type EvalSuiteAssertion,
+  type EvalSuiteEvaluator,
   type EvalSuiteTestCase,
   agentKnowledgeBase,
   agents,
@@ -18,7 +18,7 @@ import {
   evalConfigs,
   evalRunScores,
   evalRuns,
-  evalSuiteAssertions,
+  evalSuiteEvaluators,
   evalSuiteRuns,
   evalSuiteTestCases,
   evalSuites,
@@ -37,7 +37,7 @@ import {
 import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import type {
-  CreateAssertionInput,
+  CreateEvaluatorInput,
   CreateSuiteInput,
   CreateTestCaseInput,
   InitEvalSuiteOpts,
@@ -63,8 +63,8 @@ const log = getLogger();
  * Initialize (or re-initialize) an eval suite for an agent+SOP pair.
  *
  * - Derives test cases from SOP steps
- * - Creates assertions per test case from step eval configs
- * - Loads agent guardrails and creates llm_judge assertions for all test cases
+ * - Creates evaluators per test case from step eval configs
+ * - Loads agent guardrails and creates llm_judge evaluators for all test cases
  * - On re-init: preserves manual test cases, replaces auto-generated ones
  */
 export async function initSuiteFromSop(
@@ -74,7 +74,7 @@ export async function initSuiteFromSop(
   opts?: InitEvalSuiteOpts,
 ): Promise<
   EvalSuite & {
-    testCases: Awaited<ReturnType<typeof loadTestCasesWithAssertions>>;
+    testCases: Awaited<ReturnType<typeof loadTestCasesWithEvaluators>>;
   }
 > {
   return forOrg(orgId, async (tx) => {
@@ -129,7 +129,7 @@ export async function initSuiteFromSop(
     }
 
     // 3. Load guardrails for this agent
-    const guardrailAssertionConfigs = await loadGuardrailAssertions(
+    const guardrailEvaluatorConfigs = await loadGuardrailEvaluators(
       tx,
       orgId,
       agentId,
@@ -240,7 +240,7 @@ export async function initSuiteFromSop(
 
       testCases.push(testCase);
 
-      // Create step-specific assertions for this path's steps
+      // Create step-specific evaluators for this path's steps
       for (const step of path.steps) {
         let configId = step.evalConfigId;
         let evaluatorType: string | undefined;
@@ -328,10 +328,10 @@ export async function initSuiteFromSop(
         }
 
         const isOptional = !step.required;
-        const assertionRequired =
+        const evaluatorRequired =
           evaluatorType === "tool_called" && isOptional ? false : step.required;
 
-        await tx.insert(evalSuiteAssertions).values({
+        await tx.insert(evalSuiteEvaluators).values({
           organizationId: orgId,
           testCaseId: testCase.id,
           evalConfigId: configId!,
@@ -339,14 +339,14 @@ export async function initSuiteFromSop(
           sopStepId: step.stepId,
           source: "auto",
           order: step.order,
-          required: assertionRequired,
+          required: evaluatorRequired,
         });
       }
 
-      // Add guardrail KB assertions to every test case
-      for (let gi = 0; gi < guardrailAssertionConfigs.length; gi++) {
-        const guardConfig = guardrailAssertionConfigs[gi];
-        await tx.insert(evalSuiteAssertions).values({
+      // Add guardrail KB evaluators to every test case
+      for (let gi = 0; gi < guardrailEvaluatorConfigs.length; gi++) {
+        const guardConfig = guardrailEvaluatorConfigs[gi];
+        await tx.insert(evalSuiteEvaluators).values({
           organizationId: orgId,
           testCaseId: testCase.id,
           evalConfigId: guardConfig.id,
@@ -366,7 +366,7 @@ export async function initSuiteFromSop(
 
     return {
       ...suite,
-      testCases: await loadTestCasesWithAssertions(tx, suiteId),
+      testCases: await loadTestCasesWithEvaluators(tx, suiteId),
     };
   });
 }
@@ -377,7 +377,7 @@ export async function initSuiteFromSop(
 
 /**
  * Create an empty eval suite. No SOP derivation — user populates test cases
- * and assertions via the CRUD endpoints.
+ * and evaluators via the CRUD endpoints.
  */
 export async function createSuite(
   orgId: string,
@@ -410,9 +410,9 @@ export async function createSuite(
 
 /**
  * Load guardrails assigned to an agent and create eval_configs for them.
- * Returns eval_config rows (IDs) for guardrail-based llm_judge assertions.
+ * Returns eval_config rows (IDs) for guardrail-based llm_judge evaluators.
  */
-async function loadGuardrailAssertions(
+async function loadGuardrailEvaluators(
   tx: Transaction,
   orgId: string,
   agentId: string,
@@ -483,8 +483,8 @@ async function loadGuardrailAssertions(
   return configs;
 }
 
-/** Load test cases for a suite with their assertions. */
-async function loadTestCasesWithAssertions(tx: Transaction, suiteId: string) {
+/** Load test cases for a suite with their evaluators. */
+async function loadTestCasesWithEvaluators(tx: Transaction, suiteId: string) {
   const cases = await tx
     .select()
     .from(evalSuiteTestCases)
@@ -494,31 +494,31 @@ async function loadTestCasesWithAssertions(tx: Transaction, suiteId: string) {
   if (cases.length === 0) return [];
 
   const caseIds = cases.map((c) => c.id);
-  const assertions = await tx
+  const evaluators = await tx
     .select()
-    .from(evalSuiteAssertions)
-    .where(inArray(evalSuiteAssertions.testCaseId, caseIds))
-    .orderBy(asc(evalSuiteAssertions.order));
+    .from(evalSuiteEvaluators)
+    .where(inArray(evalSuiteEvaluators.testCaseId, caseIds))
+    .orderBy(asc(evalSuiteEvaluators.order));
 
-  const assertionsByCase = new Map<string, EvalSuiteAssertion[]>();
-  for (const a of assertions) {
-    const list = assertionsByCase.get(a.testCaseId) ?? [];
+  const evaluatorsByCase = new Map<string, EvalSuiteEvaluator[]>();
+  for (const a of evaluators) {
+    const list = evaluatorsByCase.get(a.testCaseId) ?? [];
     list.push(a);
-    assertionsByCase.set(a.testCaseId, list);
+    evaluatorsByCase.set(a.testCaseId, list);
   }
 
   return cases.map((c) => ({
     ...c,
-    assertions: assertionsByCase.get(c.id) ?? [],
+    evaluators: evaluatorsByCase.get(c.id) ?? [],
   }));
 }
 
 // ============================================================================
-// Resolve assertions for execution
+// Resolve evaluators for execution
 // ============================================================================
 
 /**
- * Resolve assertions for a specific test case into ready-to-execute form.
+ * Resolve evaluators for a specific test case into ready-to-execute form.
  * Loads eval_configs and resolves connector tool names.
  */
 export async function resolveAssertions(
@@ -528,9 +528,9 @@ export async function resolveAssertions(
   // Load assertions for this test case
   const assertions = await tx
     .select()
-    .from(evalSuiteAssertions)
-    .where(eq(evalSuiteAssertions.testCaseId, testCaseId))
-    .orderBy(asc(evalSuiteAssertions.order));
+    .from(evalSuiteEvaluators)
+    .where(eq(evalSuiteEvaluators.testCaseId, testCaseId))
+    .orderBy(asc(evalSuiteEvaluators.order));
 
   if (assertions.length === 0) return [];
 
@@ -683,22 +683,22 @@ export async function runEvalSuite(
     }
 
     const testCaseIds = testCases.map((tc) => tc.id);
-    const assertionCounts = await tx
+    const evaluatorCounts = await tx
       .select({
-        testCaseId: evalSuiteAssertions.testCaseId,
+        testCaseId: evalSuiteEvaluators.testCaseId,
         count: count(),
       })
-      .from(evalSuiteAssertions)
-      .where(inArray(evalSuiteAssertions.testCaseId, testCaseIds))
-      .groupBy(evalSuiteAssertions.testCaseId);
+      .from(evalSuiteEvaluators)
+      .where(inArray(evalSuiteEvaluators.testCaseId, testCaseIds))
+      .groupBy(evalSuiteEvaluators.testCaseId);
 
-    const assertionCountMap = new Map(
-      assertionCounts.map((a) => [a.testCaseId, a.count]),
+    const evaluatorCountMap = new Map(
+      evaluatorCounts.map((a) => [a.testCaseId, a.count]),
     );
     for (const tc of testCases) {
-      if (!assertionCountMap.has(tc.id) || assertionCountMap.get(tc.id) === 0) {
+      if (!evaluatorCountMap.has(tc.id) || evaluatorCountMap.get(tc.id) === 0) {
         throw Errors.validationError(
-          `Test case "${tc.name}" has no assertions`,
+          `Test case "${tc.name}" has no evaluators`,
         );
       }
     }
@@ -846,13 +846,13 @@ async function runTestCaseEval(
 // Queries
 // ============================================================================
 
-/** Get a single eval suite by ID, including test cases and assertions. */
+/** Get a single eval suite by ID, including test cases and evaluators. */
 export async function getEvalSuiteById(
   orgId: string,
   suiteId: string,
 ): Promise<
   EvalSuite & {
-    testCases: Awaited<ReturnType<typeof loadTestCasesWithAssertions>>;
+    testCases: Awaited<ReturnType<typeof loadTestCasesWithEvaluators>>;
   }
 > {
   return forOrg(orgId, async (tx) => {
@@ -863,7 +863,7 @@ export async function getEvalSuiteById(
 
     if (!suite) throw Errors.evalSuiteNotFound(suiteId);
 
-    const testCases = await loadTestCasesWithAssertions(tx, suiteId);
+    const testCases = await loadTestCasesWithEvaluators(tx, suiteId);
 
     return { ...suite, testCases };
   });
@@ -905,7 +905,7 @@ export async function listEvalSuites(
   });
 }
 
-/** Delete an eval suite and all its test cases, assertions, and runs. */
+/** Delete an eval suite and all its test cases, evaluators, and runs. */
 export async function deleteEvalSuite(
   orgId: string,
   suiteId: string,
@@ -923,7 +923,7 @@ export async function deleteEvalSuite(
 }
 
 // ============================================================================
-// Manual Test Case & Assertion CRUD
+// Manual Test Case & Evaluator CRUD
 // ============================================================================
 
 /** Create a manual test case for an existing suite. */
@@ -969,13 +969,13 @@ export async function createTestCase(
   });
 }
 
-/** Create a manual assertion for an existing test case. */
-export async function createAssertion(
+/** Create a manual evaluator for an existing test case. */
+export async function createEvaluator(
   orgId: string,
   suiteId: string,
   testCaseId: string,
-  data: CreateAssertionInput,
-): Promise<EvalSuiteAssertion> {
+  data: CreateEvaluatorInput,
+): Promise<EvalSuiteEvaluator> {
   return forOrg(orgId, async (tx) => {
     // Validate suite exists
     const [suite] = await tx
@@ -1014,16 +1014,16 @@ export async function createAssertion(
 
     // Determine next order
     const existing = await tx
-      .select({ order: evalSuiteAssertions.order })
-      .from(evalSuiteAssertions)
-      .where(eq(evalSuiteAssertions.testCaseId, testCaseId))
-      .orderBy(desc(evalSuiteAssertions.order))
+      .select({ order: evalSuiteEvaluators.order })
+      .from(evalSuiteEvaluators)
+      .where(eq(evalSuiteEvaluators.testCaseId, testCaseId))
+      .orderBy(desc(evalSuiteEvaluators.order))
       .limit(1);
 
     const nextOrder = existing.length > 0 ? existing[0].order + 1 : 0;
 
     const [assertion] = await tx
-      .insert(evalSuiteAssertions)
+      .insert(evalSuiteEvaluators)
       .values({
         organizationId: orgId,
         testCaseId,

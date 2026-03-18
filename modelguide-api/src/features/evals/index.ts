@@ -18,7 +18,7 @@ export {
   runEvalSuite,
 } from "./eval-suites.service";
 export type {
-  CreateAssertionInput,
+  CreateEvaluatorInput,
   CreateSuiteInput,
   CreateTestCaseInput,
   InitEvalSuiteOpts,

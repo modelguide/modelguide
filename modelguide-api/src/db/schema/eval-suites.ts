@@ -4,11 +4,11 @@
  * Tables:
  *  - eval_suites:             suite metadata (agent + SOP pair)
  *  - eval_suite_test_cases:   individual test cases per suite
- *  - eval_suite_assertions:   assertions per test case (FK to eval_configs)
+ *  - eval_suite_evaluators:   evaluators per test case (FK to eval_configs)
  *  - eval_suite_runs:         thin aggregator for a full suite execution
  *
  * All tables have organization_id + RLS enabled.
- * Assertions FK to eval_configs with NO ACTION (no cascade).
+ * Evaluators FK to eval_configs with NO ACTION (no cascade).
  */
 
 import { relations } from "drizzle-orm";
@@ -138,16 +138,16 @@ export const evalSuiteTestCasesRelations = relations(
       fields: [evalSuiteTestCases.suiteId],
       references: [evalSuites.id],
     }),
-    assertions: many(evalSuiteAssertions),
+    evaluators: many(evalSuiteEvaluators),
   }),
 );
 
 // ============================================================================
-// Eval Suite Assertions (per test case, FK to eval_configs — NO CASCADE)
+// Eval Suite Evaluators (per test case, FK to eval_configs — NO CASCADE)
 // ============================================================================
 
-export const evalSuiteAssertions = pgTable(
-  "eval_suite_assertions",
+export const evalSuiteEvaluators = pgTable(
+  "eval_suite_evaluators",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     organizationId: uuid("organization_id")
@@ -169,25 +169,25 @@ export const evalSuiteAssertions = pgTable(
       .notNull(),
   },
   (table) => [
-    index("eval_suite_assertions_test_case_idx").on(table.testCaseId),
-    index("eval_suite_assertions_config_idx").on(table.evalConfigId),
-    index("eval_suite_assertions_org_idx").on(table.organizationId),
+    index("eval_suite_evaluators_test_case_idx").on(table.testCaseId),
+    index("eval_suite_evaluators_config_idx").on(table.evalConfigId),
+    index("eval_suite_evaluators_org_idx").on(table.organizationId),
   ],
 ).enableRLS();
 
-export const evalSuiteAssertionsRelations = relations(
-  evalSuiteAssertions,
+export const evalSuiteEvaluatorsRelations = relations(
+  evalSuiteEvaluators,
   ({ one }) => ({
     organization: one(organizations, {
-      fields: [evalSuiteAssertions.organizationId],
+      fields: [evalSuiteEvaluators.organizationId],
       references: [organizations.id],
     }),
     testCase: one(evalSuiteTestCases, {
-      fields: [evalSuiteAssertions.testCaseId],
+      fields: [evalSuiteEvaluators.testCaseId],
       references: [evalSuiteTestCases.id],
     }),
     evalConfig: one(evalConfigs, {
-      fields: [evalSuiteAssertions.evalConfigId],
+      fields: [evalSuiteEvaluators.evalConfigId],
       references: [evalConfigs.id],
     }),
   }),

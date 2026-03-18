@@ -160,16 +160,16 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
         },
       });
 
-      // Step 1: initSuiteFromSop — auto-generates test cases with per-case assertions
+      // Step 1: initSuiteFromSop — auto-generates test cases with per-case evaluators
       const suite = await initSuiteFromSop(orgId, agentId, sop.id);
 
-      // Assertions are now per test case
+      // Evaluators are now per test case
       expect(suite.testCases.length).toBe(5); // one test case per step
-      const allAssertions = suite.testCases.flatMap(
-        (tc: { assertions: unknown[] }) => tc.assertions,
+      const allEvaluators = suite.testCases.flatMap(
+        (tc: { evaluators: unknown[] }) => tc.evaluators,
       );
-      // Each step with an eval config gets an assertion on its test case
-      expect(allAssertions.length).toBeGreaterThanOrEqual(1);
+      // Each step with an eval config gets an evaluator on its test case
+      expect(allEvaluators.length).toBeGreaterThanOrEqual(1);
 
       // Step 2: compileAgent
       const compileResult = await compileAgent({
