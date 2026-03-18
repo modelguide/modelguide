@@ -20,34 +20,78 @@ Key requirements:
 ### Table relationships
 
 ```
-eval_suites
-├── agent_id FK → agents (cascade)
-├── sop_id FK → sops (cascade, nullable — null for manual suites)
+eval_suites                              eval_configs (ADR-007)
+├── agent_id FK → agents (cascade)       ┌──────────────┐
+├── sop_id FK → sops (nullable)          │ eval_configs  │
+│                                        │ (reusable)    │
+├── eval_suite_test_cases                │ evaluator_type│
+│   ├── category: happy_path |           │ config: JSONB │
+│   │   edge_case | guardrail            └──────┬───────┘
+│   ├── source: auto | manual                   │ FK (NO cascade)
+│   │                                           │
+│   └── eval_suite_assertions ──────────────────┘
+│       ├── required: boolean
+│       ├── sop_step_id (traces origin)
+│       └── source: auto | manual
 │
-├── eval_suite_test_cases (cascade delete)
-│   ├── eval_suite_assertions (cascade delete)
-│   │   └── eval_config_id FK → eval_configs (NO cascade — configs are shared)
-│   └── source: auto | manual
-│
-└── eval_suite_runs (thin aggregator, no cached counters)
-    └── eval_runs.suite_run_id FK (set null on delete)
-        └── eval_run_scores (unchanged from ADR-007)
+└── eval_suite_runs
+    │   prompt_source: compiled | hand_written | edited
+    │   started_at, completed_at, duration_ms
+    │   (NO cached pass/fail — aggregated at query time)
+    │
+    └──► eval_runs (ADR-007)
+         ├── suite_run_id FK (set null on delete)
+         ├── test_case_id FK
+         ├── source_type: "suite"
+         └── eval_run_scores (unchanged)
 ```
 
-All tables are org-scoped with RLS enabled (`organization_id` FK + policies).
+All new tables are org-scoped with RLS enabled (`organization_id` FK + SELECT/INSERT policies).
+
+### Practical example: WISMO SOP → EvalSuite
+
+Given a WISMO SOP with 5 steps:
+
+| # | Step | Required | Tool |
+|---|------|----------|------|
+| 1 | Classify intent | true | — |
+| 2 | Extract order number | true | — |
+| 3 | Look up order | true | `store_look_up_order` |
+| 4 | Compose reply | true | — |
+| 5 | Escalate if needed | false | `helpdesk_create_ticket` |
+
+`initSuiteFromSop` produces:
+
+```
+EvalSuite: "Eval: Email — Order Not Arrived"
+│
+├── TestCase: "Happy path" (category: happy_path)
+│   ├── assertion: step:1:llm_judge (classify) — required: true
+│   ├── assertion: step:2:llm_judge (extract)  — required: true
+│   ├── assertion: step:3:tool_called (store_look_up_order) — required: true
+│   └── assertion: step:4:llm_judge (compose)  — required: true
+│
+├── TestCase: "Edge case" (category: edge_case)
+│   ├── assertion: step:1:llm_judge (classify) — required: true
+│   ├── assertion: step:2:llm_judge (extract)  — required: true
+│   ├── assertion: step:3:tool_called (store_look_up_order) — required: true
+│   └── assertion: step:4:llm_judge (compose)  — required: true
+│
+└── TestCase: "Guardrail path" (category: guardrail)
+    ├── assertion: step:1:llm_judge (classify) — required: true
+    ├── assertion: step:2:llm_judge (extract)  — required: true
+    └── assertion: step:5:tool_called (helpdesk_create_ticket) — required: false
+```
+
+Steps 1-4 appear on happy/edge paths. Step 5 (optional escalation) appears only on the guardrail path. Guardrail KB assertions (if any) are added to all test cases.
 
 ### Assertions belong to test cases, not suites
 
-Different test cases exercise different SOP paths. For a WISMO SOP with an escalation branch:
-
-- **Happy path** test case checks: classify (llm_judge), lookup order (tool_called), compose reply (llm_judge)
-- **Guardrail** test case checks: classify (llm_judge), create ticket (tool_called)
-
-Suite-level assertions would force both test cases through the same checks, producing false failures on branching SOPs. Each test case carries only the assertions relevant to its path.
+Different test cases exercise different SOP paths. The happy path should check `tool_called(store_look_up_order)` but not `tool_called(helpdesk_create_ticket)`. The guardrail path checks the opposite. Suite-level assertions would force every test case through the same checks, producing false failures on branching SOPs.
 
 ### Two creation paths
 
-1. **`initSuiteFromSop(orgId, agentId, sopId)`** — SOP-based. Derives 3 path-based test cases (happy/edge/guardrail) and auto-creates eval_configs from SOP steps (tool_called for tool steps, llm_judge for instruction steps) and guardrails. Supports re-initialization: deletes auto-generated test cases, preserves manual ones. `sopId` is required.
+1. **`initSuiteFromSop(orgId, agentId, sopId)`** — SOP-based. Derives 3 path-based test cases (happy/edge/guardrail) and auto-creates eval_configs from SOP steps (`tool_called` for tool steps, `llm_judge` for instruction steps) and guardrails. Supports re-initialization: deletes auto-generated test cases, preserves manual ones. `sopId` is required.
 
 2. **`createSuite(orgId, { agentId, name, sopId? })`** — Manual. Creates an empty suite. User populates via CRUD endpoints. `sopId` is optional metadata — no derivation.
 
@@ -61,6 +105,30 @@ These are separate service functions and API routes. They don't share implementa
 - Simulation runner (Phase 3 — generates sessions, then calls `runEvalSuite`)
 
 This separation means the suite can score any session regardless of origin.
+
+### Execution flow
+
+```
+POST /api/eval-suites/:suiteId/run  { sessionId, promptSource }
+│
+├── Validate: suite exists, not archived, agent has compiled_instructions
+├── Validate: suite has test cases, each test case has assertions
+│
+├── Create eval_suite_runs row
+│
+├── For each test case:
+│   ├── resolveAssertions(testCaseId)
+│   │   ├── Load eval_suite_assertions → eval_configs
+│   │   ├── Extract connectorToolIds from configs
+│   │   └── Resolve tool names at scoring time (connector_tools ⋈ connectors)
+│   │
+│   ├── Create eval_runs row (sourceType: "suite", sourceId: suite.id)
+│   ├── Load session_messages for sessionId
+│   ├── executeAssertions(resolved, messages) → eval_run_scores
+│   └── Update eval_runs (passed, durationMs, completedAt)
+│
+└── Update eval_suite_runs (completedAt, durationMs)
+```
 
 ### Legacy SOP eval path removed
 
@@ -89,6 +157,22 @@ No cached `passed` column or `summary` counters. Pass/fail is computed at query 
 
 Assertions reference eval_configs which store `connectorToolId` (UUID). `resolveAssertions()` resolves to runtime names (`{connectorSlug}_{toolSlug}`) at scoring time by joining `connector_tools` + `connectors`. This prevents stale mappings if connectors are reconfigured after suite creation.
 
+## Alternatives Considered
+
+- **Suite-level assertions** — rejected: forces every test case through the same checks. Wrong for branching SOPs where different paths exercise different tools. Per-test-case assertions are more work to implement but correctly model SOP path divergence.
+
+- **Single creation path with optional `sopId`** — rejected: SOP-based and manual suites have fundamentally different semantics. A single function with `if (sopId)` branching creates confusion about what's required and what's derived. Two functions with clear contracts are easier to reason about.
+
+- **Suite generates sessions (build agent + run + store)** — rejected: couples the scorer to agent execution. The simulation runner (Phase 3) is the right place for transcript generation. The suite should score any session regardless of how it was created — production, test, simulated, replayed.
+
+- **Cached pass/fail counters on eval_suite_runs** — rejected: cached counters rot. One missed update and the counter disagrees with `eval_run_scores`. For the expected volume (3-15 test cases), query-time aggregation is negligible.
+
+- **Literal LLM judge criteria ("The agent followed this instruction: ...")** — rejected after E2E testing showed false negatives. The LLM judge interprets "followed" literally and expects the agent to narrate its reasoning. Behavior-focused criteria ("demonstrates correct performance") evaluate actions, not narration.
+
+- **`expectedToolCalls` / `unexpectedToolCalls` columns on test cases** — rejected: duplicates what assertions already express. A `tool_called` assertion on a test case IS the expected tool call. Two parallel mechanisms for the same thing creates confusion about which is authoritative. Assertions are the single source of truth.
+
+- **Keep legacy SOP eval path alongside suites** — rejected: two eval entry points with overlapping functionality. The suite IS the SOP-derived eval, but better — it supports manual assertions, path-based test cases, and re-initialization. One path is simpler than two.
+
 ## Consequences
 
 - Suites are the single eval entry point — no more ad-hoc SOP evaluation
@@ -98,3 +182,4 @@ Assertions reference eval_configs which store `connectorToolId` (UUID). `resolve
 - Async execution (Phase 3) will require changing `runEvalSuite` to return immediately and process in background — the current inline execution is acceptable for Phase 2 volume
 - The `storeSyntheticSession` production service bridges agent runners and the eval scorer — any code that runs an agent can produce a scoreable session
 - `eval_configs` accumulate over time (auto-created, never deleted) — orphaned configs are harmless but may need cleanup tooling eventually
+- Removing the legacy eval path is a breaking change for any code that called `POST /api/evals/runs` — acceptable since it was only used in tests, not by external consumers
