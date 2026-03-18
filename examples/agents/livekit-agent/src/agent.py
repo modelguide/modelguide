@@ -21,7 +21,7 @@ import time
 import uuid
 
 from livekit import agents
-from livekit.agents import AgentSession, Agent, RunContext, function_tool, metrics
+from livekit.agents import AgentSession, Agent, RunContext, function_tool
 from livekit.plugins import openai, deepgram, silero
 from livekit.plugins.turn_detector.english import EnglishModel
 
@@ -491,6 +491,7 @@ async def entrypoint(ctx: agents.JobContext):
     # --- Auto-hangup: agent signs off → user says bye → agent replies once → disconnect ---
     _signed_off = False
     _hanging_up = False
+    _shutdown_scheduled = False
 
     @session.on("user_input_transcribed")
     def on_user_speech(ev):
@@ -509,7 +510,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     @session.on("conversation_item_added")
     def on_conversation_item(ev):
-        nonlocal _signed_off
+        nonlocal _signed_off, _shutdown_scheduled
         # ChatMessage with role="assistant" — capture agent responses
         item = ev.item
         if hasattr(item, "role") and item.role == "assistant":
@@ -531,7 +532,8 @@ async def entrypoint(ctx: agents.JobContext):
                     _signed_off = True
                     logger.info("Agent signed off — will auto-hangup on user goodbye")
                 # Agent replied after user said bye — let TTS play, then disconnect
-                elif _hanging_up:
+                elif _hanging_up and not _shutdown_scheduled:
+                    _shutdown_scheduled = True
                     logger.info("Agent said final goodbye — shutting down after TTS")
 
                     async def _hangup_after_speech():

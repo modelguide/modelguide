@@ -12,7 +12,7 @@ A WebRTC voice agent powered by [LiveKit Agents](https://github.com/livekit/agen
 | STT | Deepgram Nova-3 |
 | LLM | OpenAI GPT-4.1-mini (function calling) |
 | TTS | ElevenLabs Flash v2.5 |
-| Tools | ModelGuide MCP (10 tools) |
+| Tools | ModelGuide MCP (11 tools) |
 
 ## Prerequisites
 
@@ -95,7 +95,7 @@ ModelGuide API
 
 ```
 src/
-  agent.py        # Entrypoint + BuildProAgent class + 10 @function_tool methods
+  agent.py        # Entrypoint + BuildProAgent class + 11 @function_tool methods
   config.py       # Environment variable loading and validation
   mg_client.py    # ModelGuide REST + MCP client
   transcript.py   # In-memory transcript collector
@@ -115,6 +115,10 @@ src/
 ## Known Issues
 
 **Never set `debug=True` on the Langfuse SDK.** Confirmed via A/B testing on LiveKit Cloud: `debug=True` adds ~2-3s latency per voice turn. The debug flag enables synchronous console logging on every span export, which compounds the already-blocking `OTLPSpanExporter` and LiveKit Cloud's own `BatchSpanProcessor`. With `debug=False` (the default), Langfuse tracing adds negligible overhead. Tracing is opt-in (set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`).
+
+## Future Improvements
+
+- **`EndCallTool`** — LiveKit agents ships a built-in [`EndCallTool`](https://docs.livekit.io/agents/build/end-call-tool/) (`livekit.agents.beta.tools.end_call`) that lets the LLM decide when to hang up via tool calling instead of the current event-based state machine. Worth evaluating once it graduates from beta.
 
 ## LiveKit Cloud Deployment
 

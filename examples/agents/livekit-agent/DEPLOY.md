@@ -9,14 +9,35 @@
 ## Deployment Architecture
 
 ```
-EEA User ←WebRTC→ LiveKit Edge (EU) ←relay→ LiveKit Agent (eu-central)
+User ←WebRTC→ LiveKit Edge (nearest) ←relay→ LiveKit Agent (eu-central)
                                                 ├── Deepgram STT (US)
                                                 ├── OpenAI LLM (US)
-                                                ├── Cartesia TTS (US)
+                                                ├── ElevenLabs / Cartesia TTS (US)
                                                 └── ModelGuide API (Railway)
 ```
 
 LiveKit's global edge network connects users to the nearest edge node via WebRTC. The edge node relays media to the agent — users never experience cross-region latency directly. All inference services (STT, LLM, TTS) and the ModelGuide API should be co-located in the same region as the agent to minimize the voice pipeline latency.
+
+### Region planning
+
+The agent is currently deployed to `eu-central`. Without Enterprise plans, all inference providers route through US endpoints, so the agent makes cross-Atlantic calls on every STT→LLM→TTS hop.
+
+**Recommended next steps:**
+
+1. **Move agent to `us-east`** — co-locate with inference providers to eliminate cross-Atlantic latency. LiveKit's edge network still serves EU users with low WebRTC latency.
+2. **Move ModelGuide API to US** — co-locate with the agent (e.g. Railway `us-east`).
+3. Region should be a deployment parameter, not hardcoded — pick based on where your inference providers live.
+
+### Provider EU data residency
+
+| Provider | EU available | Requirement |
+|----------|-------------|-------------|
+| OpenAI | Yes | Enterprise plan |
+| ElevenLabs | Yes | Enterprise plan |
+| Deepgram | Yes | None (`api-eu.deepgram.com`) |
+| Cartesia | No | US-only |
+
+Without Enterprise plans for OpenAI and ElevenLabs, an EU-hosted agent still sends inference traffic to US — adding ~100ms per provider hop compared to a US-hosted agent.
 
 ## Steps
 
@@ -28,20 +49,42 @@ lk cloud auth login
 
 ### 2. Set secrets
 
+Core secrets (required):
+
 ```bash
 lk agent update-secrets \
   OPENAI_API_KEY=sk-your-key \
   LLM_MODEL=gpt-4.1-mini \
   DEEPGRAM_API_KEY=your-key \
-  CARTESIA_API_KEY=your-key \
-  CARTESIA_VOICE_ID=your-voice-id \
-  TTS_PROVIDER=cartesia \
   MODELGUIDE_API_URL=https://your-modelguide-api.up.railway.app \
   MODELGUIDE_API_KEY=mgk_your-agent-key \
   MODELGUIDE_AGENT_ID=your-agent-uuid \
   USER_EMAIL=delivered+admin-glowbox@resend.dev
+```
 
-# Optional: Langfuse observability (omit to disable)
+TTS provider — pick **one** of the two options:
+
+**Option A: ElevenLabs (default)**
+
+```bash
+lk agent update-secrets \
+  TTS_PROVIDER=elevenlabs \
+  ELEVENLABS_API_KEY=your-key \
+  ELEVENLABS_VOICE_ID=your-voice-id
+```
+
+**Option B: Cartesia**
+
+```bash
+lk agent update-secrets \
+  TTS_PROVIDER=cartesia \
+  CARTESIA_API_KEY=your-key \
+  CARTESIA_VOICE_ID=your-voice-id
+```
+
+Optional — Langfuse observability (omit to disable):
+
+```bash
 # NOTE: Never set debug=True in the Langfuse SDK — it causes ~2s+ latency
 # per turn due to synchronous logging on every span export. With debug off,
 # tracing adds negligible overhead.
