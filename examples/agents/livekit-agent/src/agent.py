@@ -375,7 +375,8 @@ def _create_tts():
         model="eleven_flash_v2_5",
         api_key=config.ELEVENLABS_API_KEY,
         inactivity_timeout=30,
-        chunk_length_schedule=[50, 120, 200, 260],
+        # Emit text to TTS sooner: default min_sentence_len=20 adds ~1s
+        # of buffering at slow LLM token rates (5 tokens/s after tool calls)
         word_tokenizer=tokenize.blingfire.SentenceTokenizer(
             min_sentence_len=8,
             stream_context_len=5,
@@ -393,7 +394,11 @@ _trace_provider = None     # shared with _tool_span()
 
 
 def _setup_langfuse(session_metadata: dict | None = None):
-    """Configure Langfuse tracing via OpenTelemetry. No-op if keys are not set."""
+    """Configure Langfuse tracing via OpenTelemetry. No-op if keys are not set.
+
+    NOTE: Never pass debug=True to Langfuse() — it adds synchronous logging
+    on every span export, causing ~2s+ latency per voice turn.
+    """
     global _langfuse_instance, _trace_provider
 
     if not config.LANGFUSE_PUBLIC_KEY or not config.LANGFUSE_SECRET_KEY:
@@ -413,7 +418,6 @@ def _setup_langfuse(session_metadata: dict | None = None):
         base_url=config.LANGFUSE_HOST,
         tracer_provider=trace_provider,
         should_export_span=lambda span: True,  # Export ALL spans (STT, TTS, LLM, tools)
-        debug=True,
     )
     logger.info("Langfuse tracing enabled → %s", config.LANGFUSE_HOST)
     return trace_provider
@@ -484,13 +488,28 @@ async def entrypoint(ctx: agents.JobContext):
     )
     # --- Event handlers ---
 
+    # --- Auto-hangup: agent signs off → user says bye → agent replies once → disconnect ---
+    _signed_off = False
+    _hanging_up = False
+
     @session.on("user_input_transcribed")
     def on_user_speech(ev):
+        nonlocal _hanging_up
         if ev.is_final:
             agent._transcript.add_user_utterance(ev.transcript)
+            if _signed_off and not _hanging_up:
+                text = ev.transcript.strip().lower()
+                goodbye_phrases = {"bye", "goodbye", "good bye", "thanks bye",
+                                   "thank you bye", "thank you goodbye", "cheers",
+                                   "thanks", "thank you", "later", "see ya",
+                                   "take care", "have a good one"}
+                if any(p in text for p in goodbye_phrases):
+                    _hanging_up = True
+                    logger.info("User confirmed goodbye — waiting for agent reply then hangup")
 
     @session.on("conversation_item_added")
     def on_conversation_item(ev):
+        nonlocal _signed_off
         # ChatMessage with role="assistant" — capture agent responses
         item = ev.item
         if hasattr(item, "role") and item.role == "assistant":
@@ -506,6 +525,21 @@ async def entrypoint(ctx: agents.JobContext):
                     )
             if text.strip():
                 agent._transcript.add_assistant_response(text.strip())
+                lower = text.strip().lower()
+                # Detect agent sign-off ("good luck on the job")
+                if not _signed_off and ("good luck" in lower or "take care" in lower):
+                    _signed_off = True
+                    logger.info("Agent signed off — will auto-hangup on user goodbye")
+                # Agent replied after user said bye — let TTS play, then disconnect
+                elif _hanging_up:
+                    logger.info("Agent said final goodbye — shutting down after TTS")
+
+                    async def _hangup_after_speech():
+                        # Wait for TTS to finish playing the reply
+                        await asyncio.sleep(3.0)
+                        session.shutdown()
+
+                    asyncio.create_task(_hangup_after_speech())
 
     @session.on("agent_state_changed")
     def on_agent_state_changed(ev):

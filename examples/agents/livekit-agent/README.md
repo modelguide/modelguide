@@ -86,6 +86,7 @@ ModelGuide API
 **Session lifecycle:**
 - On connect: Creates a ModelGuide session via `POST /api/sessions`
 - During call: LLM tool calls execute via ModelGuide's MCP endpoint (`POST /mcp/:agentId`)
+- On goodbye: Agent signs off → user confirms → agent replies once → auto-disconnect after 3s
 - On close: Posts the full transcript to ModelGuide, then marks the session as completed
 
 **Tool mapping:** The LLM uses short tool names (`list_products`, `add_to_cart`). These are mapped to connector-prefixed MCP names (`glowbox_store_list_products`, `glowbox_store_add_to_cart`) in the `BuildProAgent._call_mcp_tool()` method.
@@ -110,6 +111,10 @@ src/
 | Transport | Daily.co WebRTC | LiveKit Cloud WebRTC |
 | Cart tracking | Module-level global | Instance attribute on Agent |
 | Turn detection | Silero VAD only (stop_secs) | EnglishModel (context-aware end-of-utterance) |
+
+## Known Issues
+
+**Langfuse `debug=True` causes severe latency.** The Langfuse SDK's debug mode adds synchronous logging on every span export, compounding the already-blocking `OTLPSpanExporter`. On LiveKit Cloud a second `BatchSpanProcessor` is also added automatically for LiveKit's own observability. With `debug=True` removed, Langfuse tracing adds negligible overhead. Tracing is opt-in (set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`).
 
 ## LiveKit Cloud Deployment
 

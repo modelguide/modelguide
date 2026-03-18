@@ -4,7 +4,7 @@
 
 - [lk CLI](https://docs.livekit.io/home/cli/lk/) installed and authenticated
 - A [LiveKit Cloud](https://cloud.livekit.io/) project
-- All required API keys (OpenAI, Deepgram, Cartesia, ModelGuide)
+- All required API keys (OpenAI, Deepgram, ElevenLabs or Cartesia, ModelGuide)
 
 ## Deployment Architecture
 
@@ -42,6 +42,9 @@ lk agent update-secrets \
   USER_EMAIL=delivered+admin-glowbox@resend.dev
 
 # Optional: Langfuse observability (omit to disable)
+# NOTE: Never set debug=True in the Langfuse SDK — it causes ~2s+ latency
+# per turn due to synchronous logging on every span export. With debug off,
+# tracing adds negligible overhead.
 lk agent update-secrets \
   LANGFUSE_PUBLIC_KEY=pk-lf-your-key \
   LANGFUSE_SECRET_KEY=sk-lf-your-key \
