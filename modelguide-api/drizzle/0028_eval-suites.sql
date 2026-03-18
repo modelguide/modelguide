@@ -150,8 +150,8 @@ CREATE POLICY "eval_suite_runs_org_insert" ON "eval_suite_runs"
 -- Extend eval_runs with suite linkage columns
 -- ============================================================================
 
-ALTER TABLE "eval_runs" ADD COLUMN IF NOT EXISTS "suite_run_id" uuid;
-ALTER TABLE "eval_runs" ADD COLUMN IF NOT EXISTS "test_case_id" uuid;
+ALTER TABLE "eval_runs" ADD COLUMN IF NOT EXISTS "suite_run_id" uuid REFERENCES "eval_suite_runs"("id") ON DELETE SET NULL;
+ALTER TABLE "eval_runs" ADD COLUMN IF NOT EXISTS "test_case_id" uuid REFERENCES "eval_suite_test_cases"("id") ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS "eval_runs_suite_run_idx" ON "eval_runs" ("suite_run_id");
 
