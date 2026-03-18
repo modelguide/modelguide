@@ -18,6 +18,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
+DO $$ BEGIN
+  CREATE TYPE "eval_suite_run_status" AS ENUM ('running', 'completed', 'completed_with_errors', 'failed');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
 -- Add new values to eval_source_type enum (existing enum from eval_runs)
 ALTER TYPE "eval_source_type" ADD VALUE IF NOT EXISTS 'suite';
 ALTER TYPE "eval_source_type" ADD VALUE IF NOT EXISTS 'replay_test';
@@ -121,6 +126,7 @@ CREATE TABLE IF NOT EXISTS "eval_suite_runs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "organization_id" uuid NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
   "suite_id" uuid NOT NULL REFERENCES "eval_suites"("id") ON DELETE CASCADE,
+  "status" eval_suite_run_status NOT NULL DEFAULT 'running',
   "prompt_source" varchar(50) NOT NULL,
   "triggered_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
   "started_at" timestamp with time zone DEFAULT now() NOT NULL,

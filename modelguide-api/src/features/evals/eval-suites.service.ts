@@ -802,18 +802,25 @@ export async function runEvalSuite(
     }
   }
 
-  // 4. Mark suite run as completed
+  // 4. Determine suite run status and mark completed
   const durationMs = elapsedMs(startTime);
+  const erroredCount = results.filter((r) => r.passed === null).length;
+  const runStatus =
+    erroredCount === results.length
+      ? ("failed" as const)
+      : erroredCount > 0
+        ? ("completed_with_errors" as const)
+        : ("completed" as const);
 
   await forOrg(orgId, (tx) =>
     tx
       .update(evalSuiteRuns)
-      .set({ completedAt: new Date(), durationMs })
+      .set({ status: runStatus, completedAt: new Date(), durationMs })
       .where(eq(evalSuiteRuns.id, suiteRun.id)),
   );
 
   return {
-    suiteRun: { ...suiteRun, completedAt: new Date() },
+    suiteRun: { ...suiteRun, status: runStatus, completedAt: new Date() },
     results,
     durationMs,
   };

@@ -25,7 +25,11 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { agents, organizations, sops, users } from "./core";
-import { evalSuiteStatusEnum, evalSuiteTestCaseSourceEnum } from "./enums";
+import {
+  evalSuiteRunStatusEnum,
+  evalSuiteStatusEnum,
+  evalSuiteTestCaseSourceEnum,
+} from "./enums";
 import { evalConfigs } from "./eval-configs";
 
 // ============================================================================
@@ -207,6 +211,7 @@ export const evalSuiteRuns = pgTable(
     suiteId: uuid("suite_id")
       .notNull()
       .references(() => evalSuites.id, { onDelete: "cascade" }),
+    status: evalSuiteRunStatusEnum("status").notNull().default("running"),
     /** Prompt source strategy used for this run. */
     promptSource: varchar("prompt_source", { length: 50 }).notNull(),
     triggeredBy: uuid("triggered_by").references(() => users.id, {

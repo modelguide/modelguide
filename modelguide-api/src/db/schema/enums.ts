@@ -157,6 +157,16 @@ export const evalSuiteStatusEnum = pgEnum("eval_suite_status", [
 ]);
 
 /**
+ * Eval suite run status
+ */
+export const evalSuiteRunStatusEnum = pgEnum("eval_suite_run_status", [
+  "running",
+  "completed",
+  "completed_with_errors",
+  "failed",
+]);
+
+/**
  * Eval suite test case / assertion source
  */
 export const evalSuiteTestCaseSourceEnum = pgEnum(
