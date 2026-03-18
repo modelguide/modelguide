@@ -248,15 +248,6 @@ describe("Compiler E2E: compile → run → store → eval", () => {
         expect(result.scores.length).toBeGreaterThan(0);
       }
 
-      // Log detailed results for debugging
-      for (const result of suiteResult.results) {
-        console.log(`\nTest case: ${result.testCaseName}`);
-        console.log(`  passed: ${result.passed}`);
-        for (const score of result.scores) {
-          console.log(`  ${score.name}: ${score.result} — ${score.reasoning}`);
-        }
-      }
-
       // Verify the eval pipeline executed end-to-end:
       // - Every test case got an eval run (not skipped)
       // - Every test case produced scores (assertions were resolved and executed)

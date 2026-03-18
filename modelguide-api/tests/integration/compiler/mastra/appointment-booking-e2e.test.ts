@@ -19,8 +19,12 @@ import {
   initSuiteFromSop,
   runEvalSuite,
 } from "@features/evals/eval-suites.service";
+import { storeSyntheticSession } from "@features/sessions/synthetic-session.service";
 import { createSop } from "@features/sops/sops.service";
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
 const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY;
 
@@ -160,16 +164,14 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
         },
       });
 
-      // Step 1: initSuiteFromSop — auto-generates test cases with per-case evaluators
+      // Step 1: initSuiteFromSop — auto-generates path-based test cases
       const suite = await initSuiteFromSop(orgId, agentId, sop.id);
 
-      // Evaluators are now per test case
-      expect(suite.testCases.length).toBe(5); // one test case per step
+      expect(suite.testCases.length).toBe(3); // happy_path, edge_case, guardrail
       const allEvaluators = suite.testCases.flatMap(
         (tc: { evaluators: unknown[] }) => tc.evaluators,
       );
-      // Each step with an eval config gets an evaluator on its test case
-      expect(allEvaluators.length).toBeGreaterThanOrEqual(1);
+      expect(allEvaluators.length).toBeGreaterThanOrEqual(3);
 
       // Step 2: compileAgent
       const compileResult = await compileAgent({
@@ -187,23 +189,86 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
         "scheduling_book_appointment",
       ]);
 
-      // Step 3: runEvalSuite
-      // Use a placeholder session ID — real session creation is a future phase
-      const placeholderSessionId = "00000000-0000-0000-0000-000000000001";
+      // Step 3: Run agent with mocked tools and store session
+      const mockTools = {
+        scheduling_check_availability: createTool({
+          id: "scheduling_check_availability",
+          description: "Check calendar availability",
+          inputSchema: z.object({
+            date: z.string().optional(),
+            time: z.string().optional(),
+          }),
+          outputSchema: z.record(z.unknown()),
+          execute: async () => ({
+            available: true,
+            slots: ["10:00 AM", "2:00 PM", "4:30 PM"],
+            date: "2026-03-25",
+          }),
+        }),
+        scheduling_book_appointment: createTool({
+          id: "scheduling_book_appointment",
+          description: "Book an appointment",
+          inputSchema: z.object({
+            date: z.string().optional(),
+            time: z.string().optional(),
+            type: z.string().optional(),
+            name: z.string().optional(),
+          }),
+          outputSchema: z.record(z.unknown()),
+          execute: async () => ({
+            confirmed: true,
+            appointmentId: "APT-2026-001",
+            date: "2026-03-25",
+            time: "10:00 AM",
+          }),
+        }),
+      };
+
+      const agent = new Agent({
+        id: "appt-booking-test",
+        name: "appt-booking-test",
+        instructions: compileResult.agent.compiledInstructions!,
+        model: "anthropic/claude-haiku-4-5-20251001",
+        tools: mockTools,
+      });
+
+      const prompt =
+        "Hi, I'd like to book a dental checkup appointment for next Tuesday morning if possible.";
+      const result = await agent.generate(prompt, { maxSteps: 5 });
+
+      const session = await storeSyntheticSession({
+        orgId,
+        agentId,
+        generationResult: result,
+        userInput: prompt,
+        channelType: "voice",
+        userIdentifier: "appt-test@example.com",
+      });
+
+      // Step 4: runEvalSuite against the real session
       const suiteResult = await runEvalSuite(
         orgId,
         suite.id,
-        placeholderSessionId,
+        session.id,
         "compiled",
       );
 
-      // Verify
+      // Verify suite run completed
       expect(suiteResult.suiteRun.id).toBeTruthy();
+      expect(suiteResult.suiteRun.status).toBe("completed");
       expect(suiteResult.results.length).toBe(suite.testCases.length);
 
+      // Verify each test case was actually evaluated
       for (const result of suiteResult.results) {
-        expect(result.testCaseId).toBeTruthy();
+        expect(result.evalRunId).toBeTruthy();
+        expect(result.passed).not.toBeNull();
+        expect(result.scores.length).toBeGreaterThan(0);
       }
+
+      // Verify at least some scores pass
+      const allScores = suiteResult.results.flatMap((r) => r.scores);
+      const passingScores = allScores.filter((s) => s.result === "pass");
+      expect(passingScores.length).toBeGreaterThan(0);
     },
     180_000,
   );
