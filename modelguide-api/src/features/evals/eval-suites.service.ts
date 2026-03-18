@@ -100,19 +100,39 @@ export async function initSuiteFromSop(
       .where(and(eq(evalSuites.agentId, agentId), eq(evalSuites.sopId, sopId)));
 
     let suiteId: string;
+    // Map of category → existing auto test case ID (for in-place update on re-init)
+    const existingAutoTestCases = new Map<string, string>();
 
     if (existingSuite) {
       suiteId = existingSuite.id;
 
-      // Delete auto-generated test cases (cascade deletes their assertions)
-      await tx
-        .delete(evalSuiteTestCases)
+      // Load existing auto test cases
+      const autoTestCases = await tx
+        .select({
+          id: evalSuiteTestCases.id,
+          category: evalSuiteTestCases.category,
+        })
+        .from(evalSuiteTestCases)
         .where(
           and(
             eq(evalSuiteTestCases.suiteId, suiteId),
             eq(evalSuiteTestCases.source, "auto"),
           ),
         );
+
+      for (const tc of autoTestCases) {
+        if (tc.category) existingAutoTestCases.set(tc.category, tc.id);
+
+        // Delete only auto evaluators on this test case — manual evaluators survive
+        await tx
+          .delete(evalSuiteEvaluators)
+          .where(
+            and(
+              eq(evalSuiteEvaluators.testCaseId, tc.id),
+              eq(evalSuiteEvaluators.source, "auto"),
+            ),
+          );
+      }
     } else {
       // Create new suite
       const [newSuite] = await tx
@@ -224,19 +244,36 @@ export async function initSuiteFromSop(
     for (let pi = 0; pi < paths.length; pi++) {
       const path = paths[pi];
 
-      // Create path-based test case
-      const [testCase] = await tx
-        .insert(evalSuiteTestCases)
-        .values({
-          organizationId: orgId,
-          suiteId,
-          name: `${path.name}: ${sop.name}`,
-          description: path.description,
-          category: path.category,
-          source: "auto",
-          order: pi,
-        })
-        .returning();
+      // Upsert test case — update in place on re-init, create on first init
+      const existingTcId = existingAutoTestCases.get(path.category);
+      let testCase: EvalSuiteTestCase;
+
+      if (existingTcId) {
+        const [updated] = await tx
+          .update(evalSuiteTestCases)
+          .set({
+            name: `${path.name}: ${sop.name}`,
+            description: path.description,
+            order: pi,
+          })
+          .where(eq(evalSuiteTestCases.id, existingTcId))
+          .returning();
+        testCase = updated;
+      } else {
+        const [created] = await tx
+          .insert(evalSuiteTestCases)
+          .values({
+            organizationId: orgId,
+            suiteId,
+            name: `${path.name}: ${sop.name}`,
+            description: path.description,
+            category: path.category,
+            source: "auto",
+            order: pi,
+          })
+          .returning();
+        testCase = created;
+      }
 
       testCases.push(testCase);
 
