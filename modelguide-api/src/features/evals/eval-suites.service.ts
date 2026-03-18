@@ -1205,13 +1205,16 @@ export async function getEvalSuiteRuns(
 /** Get a single suite run by ID with per-test-case results and scores. */
 export async function getEvalSuiteRunById(
   orgId: string,
+  suiteId: string,
   runId: string,
 ): Promise<SuiteRunDetail> {
   return forOrg(orgId, async (tx) => {
     const [run] = await tx
       .select()
       .from(evalSuiteRuns)
-      .where(eq(evalSuiteRuns.id, runId));
+      .where(
+        and(eq(evalSuiteRuns.id, runId), eq(evalSuiteRuns.suiteId, suiteId)),
+      );
 
     if (!run) throw Errors.evalSuiteRunNotFound(runId);
 

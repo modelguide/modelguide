@@ -470,7 +470,7 @@ router.openapi(runSuiteRoute, async (c) => {
     { triggeredBy },
   );
 
-  const detail = await getEvalSuiteRunById(orgId, result.suiteRun.id);
+  const detail = await getEvalSuiteRunById(orgId, suiteId, result.suiteRun.id);
   return c.json(formatSuiteRun(detail), 201);
 });
 
@@ -538,8 +538,8 @@ const getRunRoute = createRoute({
 
 router.openapi(getRunRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const { runId } = c.req.valid("param");
-  const detail = await getEvalSuiteRunById(orgId, runId);
+  const { suiteId, runId } = c.req.valid("param");
+  const detail = await getEvalSuiteRunById(orgId, suiteId, runId);
   return c.json(formatSuiteRun(detail), 200);
 });
 
