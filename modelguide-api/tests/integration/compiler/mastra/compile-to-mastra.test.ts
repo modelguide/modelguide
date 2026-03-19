@@ -25,7 +25,7 @@ const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY;
 const agentConfig = {
   id: "wismo-compiled-agent",
   name: "WISMO Compiled Agent",
-  model: "anthropic/claude-haiku-4-5-20241022",
+  model: "anthropic/claude-haiku-4-5-20251001",
   description:
     "You are a customer support agent for an e-commerce store handling inbound support emails. You process one email per run and send a single reply.",
 };
