@@ -18,7 +18,18 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, asc, count, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  isNull,
+  lte,
+  sql,
+} from "drizzle-orm";
 import { extractLinks } from "./link-extraction";
 
 // ============================================================================
@@ -30,6 +41,7 @@ interface SessionFilters extends PaginationParams {
   status?: string;
   channelType?: string;
   hasFeedback?: boolean;
+  sopSlug?: string;
   startedAfter?: string;
   startedBefore?: string;
   sortBy?: "started_at" | "ended_at" | "status";
@@ -448,6 +460,28 @@ function buildFilterConditions(filters: SessionFilters) {
         filters.channelType as (typeof sessions.channelType.enumValues)[number],
       ),
     );
+  }
+  if (filters.sopSlug) {
+    if (filters.sopSlug === "__none__") {
+      // Unclassified: no sop_classification key in metadata
+      conditions.push(isNull(sql`${sessions.metadata}->'sop_classification'`));
+    } else if (filters.sopSlug === "__unknown__") {
+      // Unknown: sop_classification exists with sop_slug = '__unknown__'
+      conditions.push(
+        eq(
+          sql`${sessions.metadata}->'sop_classification'->>'sop_slug'`,
+          "__unknown__",
+        ),
+      );
+    } else {
+      // Specific SOP slug
+      conditions.push(
+        eq(
+          sql`${sessions.metadata}->'sop_classification'->>'sop_slug'`,
+          filters.sopSlug,
+        ),
+      );
+    }
   }
   if (filters.startedAfter) {
     conditions.push(gte(sessions.startedAt, new Date(filters.startedAfter)));

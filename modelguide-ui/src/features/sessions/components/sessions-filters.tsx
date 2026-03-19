@@ -3,13 +3,16 @@ import { Search } from 'lucide-react'
 import { Input } from '~/components/ui/input'
 import { Select } from '~/components/ui/select'
 import { api } from '~/lib/api'
+import type { PaginatedResponse } from '~/lib/pagination'
 import type { AgentListResponse } from '~/schemas/agents'
 import type { ChannelType, SessionStatus } from '~/schemas/sessions'
+import type { SopSummary } from '~/schemas/sops'
 
 export interface SessionFilters {
   status?: SessionStatus
   channelType?: ChannelType
   agentId?: string
+  sopSlug?: string
   search?: string
 }
 
@@ -43,9 +46,24 @@ export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersPro
     queryFn: () => api.get('agents').json<AgentListResponse>(),
   })
 
+  const { data: sopsData } = useQuery({
+    queryKey: ['sops', 'active'],
+    queryFn: () =>
+      api
+        .get('sops', { searchParams: { status: 'active', pageSize: 100 } })
+        .json<PaginatedResponse<SopSummary>>(),
+  })
+
   const agentOptions = [
     { value: '', label: 'All Agents' },
     ...(agentsData?.data.map((agent) => ({ value: agent.id, label: agent.name })) || []),
+  ]
+
+  const sopOptions = [
+    { value: '', label: 'All SOPs' },
+    { value: '__none__', label: 'Unclassified' },
+    { value: '__unknown__', label: 'Unknown SOP' },
+    ...(sopsData?.data.map((sop) => ({ value: sop.slug, label: sop.name })) || []),
   ]
 
   return (
@@ -108,6 +126,23 @@ export function SessionsFilters({ filters, onFiltersChange }: SessionsFiltersPro
           }
         >
           {agentOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="w-44">
+        <Select
+          value={filters.sopSlug || ''}
+          onChange={(e) =>
+            onFiltersChange({
+              ...filters,
+              sopSlug: e.target.value || undefined,
+            })
+          }
+        >
+          {sopOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

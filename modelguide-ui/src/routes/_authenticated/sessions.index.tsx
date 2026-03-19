@@ -44,6 +44,7 @@ function SessionsPage() {
       if (filters.status) params.status = filters.status
       if (filters.channelType) params.channelType = filters.channelType
       if (filters.agentId) params.agentId = filters.agentId
+      if (filters.sopSlug) params.sopSlug = filters.sopSlug
 
       return api
         .get('sessions', { searchParams: params })

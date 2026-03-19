@@ -1,4 +1,12 @@
-import { ExternalLink, Link, type LucideIcon, Package, Ticket } from 'lucide-react'
+import {
+  ExternalLink,
+  FileCheck,
+  HelpCircle,
+  Link,
+  type LucideIcon,
+  Package,
+  Ticket,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -10,6 +18,7 @@ import type {
   SessionDetail as SessionDetailType,
   SessionLink,
   SessionStatus,
+  SopClassification,
 } from '~/schemas/sessions'
 import { Transcript } from './transcript'
 
@@ -170,6 +179,9 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
         </CardContent>
       </Card>
 
+      {/* SOP Classification */}
+      <SopClassificationCard classification={session.sopClassification} />
+
       {/* External Resources */}
       {session.links && session.links.length > 0 && (
         <Card>
@@ -264,5 +276,69 @@ function InfoItem({ label, children }: { label: string; children: ReactNode }) {
       <p className="text-xs font-medium text-fg-muted">{label}</p>
       <div className="mt-1">{children}</div>
     </div>
+  )
+}
+
+function SopClassificationCard({ classification }: { classification: SopClassification }) {
+  if (!classification) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-3 pt-6">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-subtle">
+            <FileCheck className="h-4 w-4 text-fg-muted" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-fg-secondary">SOP Classification</p>
+            <p className="text-xs text-fg-muted">No SOP was classified for this session</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (classification.sopSlug === '__unknown__') {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-3 pt-6">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
+            <HelpCircle className="h-4 w-4 text-warning" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-fg-secondary">SOP Classification</p>
+            <p className="text-xs text-warning">
+              Unknown SOP -- the agent could not match this session to a known procedure
+            </p>
+          </div>
+          {classification.confidence != null && (
+            <Badge variant="warning" className="ml-auto">
+              {Math.round(classification.confidence * 100)}% confidence
+            </Badge>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 pt-6">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/10">
+          <FileCheck className="h-4 w-4 text-brand-500" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-fg-primary">
+            {classification.sopName ?? classification.sopSlug}
+          </p>
+          <p className="text-xs text-fg-muted">
+            SOP: <span className="font-mono">{classification.sopSlug}</span>
+          </p>
+        </div>
+        {classification.confidence != null && (
+          <Badge variant="brand" className="ml-auto">
+            {Math.round(classification.confidence * 100)}% confidence
+          </Badge>
+        )}
+      </CardContent>
+    </Card>
   )
 }

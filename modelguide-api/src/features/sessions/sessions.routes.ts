@@ -51,6 +51,14 @@ const feedbackSummarySchema = z.object({
   supportRating: z.number().nullable(),
 });
 
+const sopClassificationSchema = z
+  .object({
+    sopSlug: z.string(),
+    sopName: z.string().optional(),
+    confidence: z.number().optional(),
+  })
+  .nullable();
+
 const sessionResponseSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -69,6 +77,7 @@ const sessionResponseSchema = z.object({
   totalTokens: z.number().nullable(),
   costUsd: z.number().nullable(),
   feedbackSummary: feedbackSummarySchema,
+  sopClassification: sopClassificationSchema,
 });
 
 const messageResponseSchema = z.object({
@@ -113,6 +122,7 @@ const sessionDetailSchema = z.object({
   metadata: z.record(z.unknown()),
   agent: agentSummarySchema,
   durationSeconds: z.number().nullable(),
+  sopClassification: sopClassificationSchema,
   messages: z.array(messageResponseSchema),
   feedback: z.array(feedbackResponseSchema),
   links: z.array(sessionLinkSchema),
@@ -224,6 +234,10 @@ const sessionFiltersSchema = paginationSchema.extend({
   startedBefore: z.string().datetime().optional().openapi({
     description: "Sessions started before this ISO timestamp",
   }),
+  sopSlug: z.string().optional().openapi({
+    description:
+      "Filter by SOP classification slug. Use '__unknown__' for unknown, '__none__' for unclassified.",
+  }),
   sortBy: z
     .enum(["started_at", "ended_at", "status"])
     .optional()
@@ -237,6 +251,21 @@ const sessionFiltersSchema = paginationSchema.extend({
 // ============================================================================
 // Helpers
 // ============================================================================
+
+function extractSopClassification(
+  metadata: Record<string, unknown> | null | undefined,
+): { sopSlug: string; sopName?: string; confidence?: number } | null {
+  if (!metadata) return null;
+  const raw = metadata.sop_classification;
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.sop_slug !== "string") return null;
+  return {
+    sopSlug: obj.sop_slug,
+    sopName: typeof obj.sop_name === "string" ? obj.sop_name : undefined,
+    confidence: typeof obj.confidence === "number" ? obj.confidence : undefined,
+  };
+}
 
 function formatSession(
   session: Session & {
@@ -270,6 +299,7 @@ function formatSession(
     totalTokens: session.totalTokens,
     costUsd: session.costUsd,
     feedbackSummary: session.feedbackSummary,
+    sopClassification: extractSopClassification(session.metadata),
   };
 }
 
@@ -296,6 +326,7 @@ function formatSessionDetail(
     metadata: session.metadata ?? {},
     agent: session.agent,
     durationSeconds: session.durationSeconds,
+    sopClassification: extractSopClassification(session.metadata),
     messages: session.messages.map(formatMessage),
     feedback: session.feedback.map(formatFeedback),
     links: session.links.map(formatLink),
@@ -471,6 +502,7 @@ const createSessionRoute = createRoute({
             totalTokens: true,
             costUsd: true,
             feedbackSummary: true,
+            sopClassification: true,
           }),
         },
       },
@@ -520,6 +552,7 @@ const updateSessionRoute = createRoute({
             totalTokens: true,
             costUsd: true,
             feedbackSummary: true,
+            sopClassification: true,
           }),
         },
       },

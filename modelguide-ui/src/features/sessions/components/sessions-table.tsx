@@ -5,7 +5,7 @@ import { RatingBadge } from '~/components/ui/rating-badge'
 import { Tooltip } from '~/components/ui/tooltip'
 import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
-import type { SessionListItem, SessionStatus } from '~/schemas/sessions'
+import type { SessionListItem, SessionStatus, SopClassification } from '~/schemas/sessions'
 
 function formatCost(costUsd?: number | null, totalTokens?: number | null): string {
   if (costUsd != null) return `$${costUsd.toFixed(4)}`
@@ -88,10 +88,13 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
               <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[9%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                SOP
+              </th>
+              <th className="w-[9%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Duration
               </th>
               <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
@@ -188,6 +191,9 @@ function SessionRow({ session, index }: SessionRowProps) {
         <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
       </td>
       <td className="px-4 py-3">
+        <SopBadge classification={session.sopClassification} />
+      </td>
+      <td className="px-4 py-3">
         <span className="font-mono text-sm text-fg-secondary">
           {session.durationSeconds ? formatDuration(session.durationSeconds) : '\u2014'}
         </span>
@@ -207,5 +213,29 @@ function SessionRow({ session, index }: SessionRowProps) {
         <RatingBadge rating={session.feedbackSummary.supportRating ?? undefined} size="xs" />
       </td>
     </tr>
+  )
+}
+
+function SopBadge({ classification }: { classification: SopClassification }) {
+  if (!classification) {
+    return <span className="text-xs text-fg-muted">{'\u2014'}</span>
+  }
+
+  if (classification.sopSlug === '__unknown__') {
+    return (
+      <Badge variant="warning" dot>
+        Unknown
+      </Badge>
+    )
+  }
+
+  return (
+    <Tooltip
+      content={`Slug: ${classification.sopSlug}${classification.confidence != null ? ` | Confidence: ${Math.round(classification.confidence * 100)}%` : ''}`}
+    >
+      <Badge variant="brand" dot>
+        {classification.sopName ?? classification.sopSlug}
+      </Badge>
+    </Tooltip>
   )
 }
