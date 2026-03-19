@@ -163,6 +163,7 @@ describe("Eval security & auth", () => {
       headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Security test SOP",
+        slug: "security-test-sop",
         definition: {
           schemaVersion: 1,
           trigger: { type: "manual", config: {} },

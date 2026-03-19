@@ -185,6 +185,7 @@ describe("Scenario 4: evalConfigId lifecycle", () => {
 
     const sopRes = await post("/api/sops", adminHeaders, {
       name: "S4: Lifecycle SOP",
+      slug: "s4-lifecycle-sop",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },
@@ -300,6 +301,7 @@ describe("Scenario 6: list and filter runs", () => {
   test("6-setup. create SOP and eval runs via DB insert", async () => {
     const sopRes = await post("/api/sops", adminHeaders, {
       name: "S6: Filter Test SOP",
+      slug: "s6-filter-test-sop",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },

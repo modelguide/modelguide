@@ -158,7 +158,7 @@ describe("POST /api/sops", () => {
     createdSopIds.push(body.id);
   });
 
-  test("auto-generates slug from name (201)", async () => {
+  test("rejects missing slug (422)", async () => {
     const res = await request("/api/sops", {
       method: "POST",
       headers: orgAAdminHeaders,
@@ -167,10 +167,7 @@ describe("POST /api/sops", () => {
         definition: validDefinition,
       }),
     });
-    expect(res.status).toBe(201);
-    const body = await res.json();
-    expect(body.slug).toBe("auto-slug-test");
-    createdSopIds.push(body.id);
+    expect(res.status).toBe(422);
   });
 
   test("rejects duplicate slug (409)", async () => {
@@ -192,6 +189,7 @@ describe("POST /api/sops", () => {
       headers: orgASupportHeaders,
       body: JSON.stringify({
         name: "Blocked",
+        slug: "blocked",
         definition: validDefinition,
       }),
     });
@@ -1007,6 +1005,7 @@ describe("Viewer role access", () => {
       headers: viewerHeaders,
       body: JSON.stringify({
         name: "Viewer Attempt",
+        slug: "viewer-attempt",
         definition: validDefinition,
       }),
     });

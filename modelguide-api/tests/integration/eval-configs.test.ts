@@ -393,6 +393,7 @@ describe("DELETE /api/eval-configs/:configId", () => {
       headers: orgAAdminHeaders,
       body: JSON.stringify({
         name: "Test SOP for eval delete guard",
+        slug: "test-sop-eval-delete-guard",
         definition: {
           schemaVersion: 1,
           trigger: { type: "manual", config: {} },
