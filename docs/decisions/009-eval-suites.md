@@ -173,6 +173,10 @@ Two future paths for KB-based evaluation:
 
 Both paths reuse the existing `eval_configs` + `eval_suite_evaluators` infrastructure. No new tables or evaluator types needed — `llm_judge` with KB-derived criteria handles all cases.
 
+## Open Considerations
+
+- **"Guardrail" terminology overload** — The term "guardrail" is used for two different concepts: (1) KB guardrail entries (behavioral constraints like "never call customer by surname"), and (2) the former "guardrail path" test case category (testing that the agent handles disallowed scenarios). The 3-path model has been replaced by a single test case with `required` flags, but if we reintroduce scenario categories in the future, we should use "unhappy scenario" or "boundary case" instead of "guardrail path" to avoid confusion with KB guardrails. (ref: PR #153 review comment from @pekunicki)
+
 ## Consequences
 
 - Suites are the single eval entry point — no more ad-hoc SOP evaluation
