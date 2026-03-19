@@ -2,15 +2,11 @@
  * Core MCP tools — platform tools registered on every MCP server instance.
  */
 
-import {
-  addMessages,
-  updateSession,
-  validateActiveSession,
-} from "@features/sessions";
+import { addMessages } from "@features/sessions";
 import { enrichLogger, getLogger } from "@lib/logger";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { resolveAgentSops } from "./mcp.service";
+import { classifySop } from "./mcp.service";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
 export const CORE_TOOL_COUNT = 2;
@@ -127,46 +123,29 @@ export function registerCoreTools(
     async ({ session_id, sop_slug, confidence }) => {
       try {
         enrichLogger({ sessionId: session_id });
-        const log = getLogger();
 
-        // 1. Validate session is active and belongs to this agent
-        await validateActiveSession(orgId, session_id, agentId);
+        const result = await classifySop(
+          orgId,
+          agentId,
+          session_id,
+          sop_slug,
+          confidence,
+        );
 
-        // 2. If sop_slug provided, verify it's in agent's active SOPs
-        if (sop_slug) {
-          const agentSopList = await resolveAgentSops(orgId, agentId);
-          const match = agentSopList.find((s) => s.slug === sop_slug);
-
-          if (!match) {
-            const available = agentSopList.map((s) => s.slug).join(", ");
-            return mcpErrorResponse(
-              null,
-              `SOP slug "${sop_slug}" is not assigned to this agent. Available slugs: ${available || "(none)"}`,
-            );
-          }
+        if ("error" in result) {
+          return mcpErrorResponse(null, result.error);
         }
 
-        // 3. Build classification object
-        const sopClassification = {
-          sop_slug: sop_slug ?? null,
-          confidence,
-          unknown: !sop_slug,
-        };
-
-        // 4. Merge into session metadata
-        await updateSession(orgId, session_id, agentId, {
-          metadata: { sop_classification: sopClassification },
-        });
-
-        log.info(
-          { sopSlug: sop_slug, confidence, unknown: !sop_slug },
+        getLogger().info(
+          {
+            sopSlug: sop_slug,
+            confidence,
+            unknown: !sop_slug,
+          },
           "SOP classification recorded",
         );
 
-        return mcpResponse({
-          session_id,
-          sop_classification: sopClassification,
-        });
+        return mcpResponse(result);
       } catch (err) {
         getLogger().warn(
           { err, tool: "core_classify_sop" },

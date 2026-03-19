@@ -9,6 +9,10 @@ import {
   getConnectorById,
   resolveConnectorConfig,
 } from "@features/connectors/connectors.service";
+import {
+  updateSession,
+  validateActiveSession,
+} from "@features/sessions/sessions.service";
 import { Errors } from "@lib/errors";
 import { getLogger, withTiming } from "@lib/logger";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -182,4 +186,63 @@ export async function resolveAgentSops(
 
     return rows;
   });
+}
+
+// ============================================================================
+// SOP classification
+// ============================================================================
+
+export interface SopClassification {
+  sop_slug: string | null;
+  confidence: number;
+  unknown: boolean;
+}
+
+export type ClassifySopResult = {
+  session_id: string;
+  sop_classification: SopClassification;
+};
+
+export type ClassifySopError = {
+  error: string;
+};
+
+/**
+ * Classify a session's SOP — validates the slug against the agent's active SOPs,
+ * builds the classification object, and merges it into session metadata.
+ *
+ * Used by core_classify_sop MCP tool and integration tests.
+ */
+export async function classifySop(
+  orgId: string,
+  agentId: string,
+  sessionId: string,
+  sopSlug: string | null | undefined,
+  confidence: number,
+): Promise<ClassifySopResult | ClassifySopError> {
+  await validateActiveSession(orgId, sessionId, agentId);
+
+  if (sopSlug) {
+    const agentSopList = await resolveAgentSops(orgId, agentId);
+    const match = agentSopList.find((s) => s.slug === sopSlug);
+
+    if (!match) {
+      const available = agentSopList.map((s) => s.slug).join(", ");
+      return {
+        error: `SOP slug "${sopSlug}" is not assigned to this agent. Available slugs: ${available || "(none)"}`,
+      };
+    }
+  }
+
+  const sopClassification: SopClassification = {
+    sop_slug: sopSlug ?? null,
+    confidence,
+    unknown: !sopSlug,
+  };
+
+  await updateSession(orgId, sessionId, agentId, {
+    metadata: { sop_classification: sopClassification },
+  });
+
+  return { session_id: sessionId, sop_classification: sopClassification };
 }

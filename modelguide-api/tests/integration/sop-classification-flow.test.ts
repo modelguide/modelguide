@@ -18,11 +18,7 @@ import { compileAgent } from "@features/compiler/compiler.service";
 import { compile } from "@features/compiler/core/compile";
 import type { CompilerInput } from "@features/compiler/core/types";
 import { toMastra } from "@features/compiler/emitters/mastra";
-import { resolveAgentSops } from "@features/mcp/mcp.service";
-import {
-  updateSession,
-  validateActiveSession,
-} from "@features/sessions/sessions.service";
+import { classifySop } from "@features/mcp/mcp.service";
 import { createTool } from "@mastra/core/tools";
 import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -183,39 +179,14 @@ describe("SOP classification full flow", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mastra tool execute types
       execute: async (params: any) => {
         const input = params.context ?? params;
-        const sid = input.session_id ?? sessionId;
-        const slug = input.sop_slug ?? null;
-        const conf = input.confidence ?? 0;
-
-        // Real service calls — same as core-tools.ts handler
-        await validateActiveSession(orgId, sid, agentId);
-
-        if (slug) {
-          const agentSopList = await resolveAgentSops(orgId, agentId);
-          const match = agentSopList.find(
-            (s: { slug: string }) => s.slug === slug,
-          );
-          if (!match) {
-            const available = agentSopList
-              .map((s: { slug: string }) => s.slug)
-              .join(", ");
-            return {
-              error: `SOP slug "${slug}" is not assigned to this agent. Available: ${available}`,
-            };
-          }
-        }
-
-        const sopClassification = {
-          sop_slug: slug,
-          confidence: conf,
-          unknown: !slug,
-        };
-
-        await updateSession(orgId, sid, agentId, {
-          metadata: { sop_classification: sopClassification },
-        });
-
-        return { session_id: sid, sop_classification: sopClassification };
+        // Same code path as the MCP tool handler in core-tools.ts
+        return classifySop(
+          orgId,
+          agentId,
+          input.session_id ?? sessionId,
+          input.sop_slug ?? null,
+          input.confidence ?? 0,
+        ) as Promise<Record<string, unknown>>;
       },
     });
 
