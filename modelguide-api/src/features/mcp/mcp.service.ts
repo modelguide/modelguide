@@ -1,5 +1,5 @@
 import { forOrg } from "@db/rls";
-import { connectorTools, connectors } from "@db/schema";
+import { agentSops, connectorTools, connectors, sops } from "@db/schema";
 import { listAgentConnectors } from "@features/agents/agents.service";
 import { trimToShape } from "@features/connectors/catalog/lib/response-trimmer";
 import { getConnectorManifest } from "@features/connectors/catalog/registry";
@@ -11,7 +11,7 @@ import {
 } from "@features/connectors/connectors.service";
 import { Errors } from "@lib/errors";
 import { getLogger, withTiming } from "@lib/logger";
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { ResolvedTool } from "./mcp.types";
 
 /**
@@ -159,4 +159,27 @@ export async function executeTool(
   }
 
   return result;
+}
+
+/**
+ * Resolve all active SOPs assigned to an agent.
+ * Returns slug, name, description for each active SOP.
+ */
+export async function resolveAgentSops(
+  orgId: string,
+  agentId: string,
+): Promise<{ slug: string; name: string; description: string | null }[]> {
+  return forOrg(orgId, async (tx) => {
+    const rows = await tx
+      .select({
+        slug: sops.slug,
+        name: sops.name,
+        description: sops.description,
+      })
+      .from(agentSops)
+      .innerJoin(sops, eq(agentSops.sopId, sops.id))
+      .where(and(eq(agentSops.agentId, agentId), eq(sops.status, "active")));
+
+    return rows;
+  });
 }
