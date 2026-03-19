@@ -9,3 +9,8 @@ export {
   validateActiveSession,
 } from "./sessions.service";
 export type { MessageData } from "./sessions.service";
+export { storeSyntheticSession } from "./synthetic-session.service";
+export type {
+  GenerationResult,
+  StoreSyntheticSessionOptions,
+} from "./synthetic-session.service";

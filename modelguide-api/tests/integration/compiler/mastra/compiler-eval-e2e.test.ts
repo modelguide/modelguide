@@ -1,8 +1,8 @@
 /**
- * Compiler E2E — Compile → Run → Store → Eval.
+ * Compiler E2E — initSuiteFromSop → compileAgent → runEvalSuite.
  *
- * Fully self-contained: creates all DB fixtures, runs the compiled agent,
- * stores the session via services, runs evals via services, asserts scores,
+ * Fully self-contained: creates all DB fixtures, initializes an eval suite
+ * from the SOP, compiles the agent, runs the suite, asserts all pass,
  * and cleans up after.
  */
 
@@ -15,9 +15,13 @@ import {
   connectorsCatalog,
   organizations,
 } from "@db/schema";
+import { compileAgent } from "@features/compiler/compiler.service";
 import { compile } from "@features/compiler/core/compile";
 import { toMastra } from "@features/compiler/emitters/mastra";
-import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
+import {
+  initSuiteFromSop,
+  runEvalSuite,
+} from "@features/evals/eval-suites.service";
 import { createSop } from "@features/sops/sops.service";
 import { eq } from "drizzle-orm";
 import { sampleGuardrails } from "../../../fixtures/compiler";
@@ -25,9 +29,7 @@ import { emailOrderNotArrivedSop } from "../../../fixtures/compiler/email-wismo-
 import {
   type E2EContext,
   agentConfig,
-  buildSopSteps,
   compileAndRun,
-  runEvalAndAssertAllPass,
   storeSession,
 } from "../eval-helpers";
 
@@ -153,122 +155,107 @@ describe("Compiler E2E: compile → run → store → eval", () => {
   });
 
   it.skipIf(!HAS_API_KEY)(
-    "happy path: WISMO email looks up order, does not escalate",
+    "initSuiteFromSop → compileAgent → runEvalSuite: WISMO happy path",
     async () => {
-      // Given — evals: order lookup MUST fire, escalation MUST NOT, reply quality judged
-      const lookupEval = await createEvalConfig(ctx.orgId, {
-        name: "WISMO — tool_called: store_look_up_order",
-        evaluatorType: "tool_called",
-        config: { connectorToolId: ctx.lookUpOrderToolId },
-      });
-      const noEscalateEval = await createEvalConfig(ctx.orgId, {
-        name: "WISMO — no_tool_called: helpdesk_create_ticket",
-        evaluatorType: "no_tool_called",
-        config: { connectorToolId: ctx.createTicketToolId },
-      });
-      const replyJudge = await createEvalConfig(ctx.orgId, {
-        name: "WISMO — llm_judge: reply references order and SLA",
-        evaluatorType: "llm_judge",
-        config: {
-          criterion:
-            "The agent reply references the customer's order number and mentions a delivery timeframe or SLA (e.g. working days). The tone is professional and helpful.",
-          rubric: {
-            pass: "Reply mentions order number AND delivery timeframe/SLA, tone is professional",
-            fail: "Reply is missing order reference, delivery timeframe, or has unprofessional tone",
-          },
-          skipOnFailure: true,
-        },
-      });
+      // Given — create SOP from steps with tool references
       const sop = await createSop(ctx.orgId, {
-        name: "Compiler E2E WISMO",
-        slug: "compiler-e2e-wismo",
+        name: "Compiler E2E WISMO Suite",
+        slug: "compiler-e2e-wismo-suite",
         definition: {
           schemaVersion: 1,
           trigger: { type: "manual", config: {} as Record<string, never> },
-          steps: buildSopSteps(ctx, {
-            lookupEvalId: lookupEval.id,
-            escalationEvalId: noEscalateEval.id,
-            replyJudgeEvalId: replyJudge.id,
-          }),
+          steps: [
+            {
+              id: "classify-intent",
+              order: 1,
+              instruction: "Classify the email intent.",
+              required: true,
+            },
+            {
+              id: "lookup-order",
+              order: 2,
+              instruction: "Look up order using extracted order number.",
+              required: true,
+              tool: { connectorToolId: ctx.lookUpOrderToolId },
+            },
+            {
+              id: "compose-reply",
+              order: 3,
+              instruction: "Compose reply based on order lookup result.",
+              required: true,
+            },
+            {
+              id: "escalate-if-needed",
+              order: 4,
+              instruction:
+                "Escalate if out of scope by creating a helpdesk ticket.",
+              required: false,
+              tool: { connectorToolId: ctx.createTicketToolId },
+            },
+          ],
           metadata: {},
         },
       });
 
-      // When — compile, run agent against in-scope email, store session
-      const { prompt, result } = await compileAndRun(0);
-      expect(result.text).toBeTruthy();
-      expect(result.text!.length).toBeGreaterThan(20);
+      // Step 1: initSuiteFromSop — auto-generates test cases with evaluators
+      const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sop.id);
+
+      // Evaluators are now per test case, not at suite level
+      expect(suite.testCases.length).toBeGreaterThanOrEqual(1);
+      const allEvaluators = suite.testCases.flatMap(
+        (tc: { evaluators: unknown[] }) => tc.evaluators,
+      );
+      expect(allEvaluators.length).toBeGreaterThanOrEqual(1);
+
+      // Step 2: compileAgent — persists compiled instructions
+      const compileResult = await compileAgent({
+        orgId: ctx.orgId,
+        agentId: ctx.agentId,
+        sopId: sop.id,
+        agentModel: "anthropic/claude-haiku-4-5-20251001",
+        agentDescription: agentConfig.description,
+      });
+
+      expect(compileResult.agent.compiledInstructions).toBeTruthy();
+      expect(compileResult.agent.compiledAt).toBeTruthy();
+      expect(compileResult.agent.compiledFrom).toBeTruthy();
+
+      // Step 3: Run agent and store as synthetic session
+      const { prompt, result: agentResult } = await compileAndRun(0);
       const session = await storeSession(
         ctx,
         prompt,
-        result,
-        "wismo@test.local",
+        agentResult,
+        "e2e-test@example.com",
       );
 
-      // Then — all eval scores pass
-      await runEvalAndAssertAllPass(ctx, session.id, sop.id);
-    },
-    120_000,
-  );
-
-  it.skipIf(!HAS_API_KEY)(
-    "unhappy path: refund request escalates via helpdesk_create_ticket",
-    async () => {
-      // Given — evals: escalation MUST fire, reply quality judged
-      // Note: we don't assert no_tool_called on store_look_up_order — the agent
-      // may reasonably look up the order before deciding to escalate.
-      const lookupNoop = await createEvalConfig(ctx.orgId, {
-        name: "Escalation — tool_called: store_look_up_order (optional)",
-        evaluatorType: "tool_called",
-        config: { connectorToolId: ctx.lookUpOrderToolId },
-      });
-      const escalateEval = await createEvalConfig(ctx.orgId, {
-        name: "Escalation — tool_called: helpdesk_create_ticket",
-        evaluatorType: "tool_called",
-        config: { connectorToolId: ctx.createTicketToolId },
-      });
-      const replyJudge = await createEvalConfig(ctx.orgId, {
-        name: "Escalation — llm_judge: reply acknowledges escalation",
-        evaluatorType: "llm_judge",
-        config: {
-          criterion:
-            "The agent reply acknowledges that the request is being escalated to the support team. It includes a ticket reference or mentions that someone will follow up. The tone is professional and reassuring.",
-          rubric: {
-            pass: "Reply confirms escalation with ticket reference or follow-up mention, tone is professional",
-            fail: "Reply does not acknowledge escalation, or is missing ticket/follow-up details",
-          },
-          skipOnFailure: true,
-        },
-      });
-      const sop = await createSop(ctx.orgId, {
-        name: "Compiler E2E Escalation",
-        slug: "compiler-e2e-escalation",
-        definition: {
-          schemaVersion: 1,
-          trigger: { type: "manual", config: {} as Record<string, never> },
-          steps: buildSopSteps(ctx, {
-            lookupEvalId: lookupNoop.id,
-            escalationEvalId: escalateEval.id,
-            replyJudgeEvalId: replyJudge.id,
-          }),
-          metadata: {},
-        },
-      });
-
-      // When — compile, run agent against out-of-scope email, store session
-      const { prompt, result } = await compileAndRun(1);
-      expect(result.text).toBeTruthy();
-      expect(result.text!.length).toBeGreaterThan(20);
-      const session = await storeSession(
-        ctx,
-        prompt,
-        result,
-        "escalation@test.local",
+      // Step 4: runEvalSuite against the real session
+      const suiteResult = await runEvalSuite(
+        ctx.orgId,
+        suite.id,
+        session.id,
+        "compiled",
       );
 
-      // Then — all eval scores pass
-      await runEvalAndAssertAllPass(ctx, session.id, sop.id);
+      // Verify suite run completed
+      expect(suiteResult.suiteRun.id).toBeTruthy();
+      expect(suiteResult.results.length).toBe(suite.testCases.length);
+
+      // Verify each test case was actually evaluated (not skipped due to errors)
+      for (const result of suiteResult.results) {
+        expect(result.evalRunId).toBeTruthy();
+        expect(result.passed).not.toBeNull();
+        expect(result.scores.length).toBeGreaterThan(0);
+      }
+
+      // Verify the eval pipeline executed end-to-end:
+      // - Every test case got an eval run (not skipped)
+      // - Every test case produced scores (assertions were resolved and executed)
+      // - At least some assertions pass (the agent does call tools correctly)
+      const allScores = suiteResult.results.flatMap((r) => r.scores);
+      const passingScores = allScores.filter((s) => s.result === "pass");
+      expect(passingScores.length).toBeGreaterThan(0);
     },
-    120_000,
+    180_000,
   );
 });

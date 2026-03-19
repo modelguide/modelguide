@@ -80,6 +80,8 @@ export const ErrorCode = {
   EVAL_SESSION_NOT_TERMINAL: "EVAL_SESSION_NOT_TERMINAL",
   EVAL_ALREADY_RUNNING: "EVAL_ALREADY_RUNNING",
   EVAL_CONFIG_IN_USE: "EVAL_CONFIG_IN_USE",
+  EVAL_SUITE_NOT_FOUND: "EVAL_SUITE_NOT_FOUND",
+  EVAL_SUITE_RUN_NOT_FOUND: "EVAL_SUITE_RUN_NOT_FOUND",
 
   // Server errors
   INTERNAL_ERROR: "INTERNAL_ERROR",
@@ -126,6 +128,8 @@ const statusCodeMap: Record<ErrorCode, number> = {
   [ErrorCode.KNOWLEDGE_BASE_NOT_FOUND]: 404,
   [ErrorCode.EVAL_RUN_NOT_FOUND]: 404,
   [ErrorCode.EVAL_CONFIG_NOT_FOUND]: 404,
+  [ErrorCode.EVAL_SUITE_NOT_FOUND]: 404,
+  [ErrorCode.EVAL_SUITE_RUN_NOT_FOUND]: 404,
 
   // 409 Conflict
   [ErrorCode.CONFLICT]: 409,
@@ -474,6 +478,20 @@ export const Errors = {
     return new AppError(
       ErrorCode.EVAL_ALREADY_RUNNING,
       `An evaluation is already running for session "${sessionId}" and source "${sourceId}"`,
+    );
+  },
+
+  evalSuiteNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.EVAL_SUITE_NOT_FOUND,
+      id ? `Eval suite not found: ${id}` : "Eval suite not found",
+    );
+  },
+
+  evalSuiteRunNotFound(id?: string) {
+    return new AppError(
+      ErrorCode.EVAL_SUITE_RUN_NOT_FOUND,
+      id ? `Eval suite run not found: ${id}` : "Eval suite run not found",
     );
   },
 

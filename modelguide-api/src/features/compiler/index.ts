@@ -8,6 +8,8 @@
 
 export { compile } from "./core/compile";
 export { toMastra } from "./emitters/mastra/index";
+export { compileAgent } from "./compiler.service";
+export { default as compilerRoutes } from "./compiler.routes";
 export type {
   CompilerInput,
   CompilerIR,

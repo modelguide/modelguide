@@ -79,7 +79,13 @@ export const Permissions = {
 
   // Eval run management
   "eval_runs:read": ["admin", "support", "viewer"],
-  "eval_runs:create": ["admin", "support"],
+
+  // Eval suite management
+  "eval_suites:read": ["admin", "support", "viewer"],
+  "eval_suites:create": ["admin"],
+  "eval_suites:update": ["admin"],
+  "eval_suites:delete": ["admin"],
+  "eval_suites:run": ["admin", "support"],
 } as const;
 
 export type Permission = keyof typeof Permissions;
