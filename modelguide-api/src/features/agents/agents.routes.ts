@@ -37,15 +37,7 @@ const router = createRouter();
 // Schemas
 // ============================================================================
 
-const compiledFromSchema = z
-  .object({
-    sopId: z.string().uuid(),
-    sopName: z.string(),
-    guardrailIds: z.array(z.string().uuid()),
-    toolCount: z.number(),
-    stepCount: z.number(),
-  })
-  .nullable();
+const compiledFromSchema = z.record(z.unknown()).nullable();
 
 const agentResponseSchema = z.object({
   id: z.string().uuid(),
