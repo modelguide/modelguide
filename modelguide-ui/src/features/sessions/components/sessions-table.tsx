@@ -221,7 +221,7 @@ function SopBadge({ classification }: { classification: SopClassification }) {
     return <span className="text-xs text-fg-muted">{'\u2014'}</span>
   }
 
-  if (classification.sopSlug === '__unknown__') {
+  if (classification.unknown || !classification.sopSlug) {
     return (
       <Badge variant="warning" dot>
         Unknown

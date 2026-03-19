@@ -907,6 +907,7 @@ function generateSopClassification(
       sop_slug: mapped.sop_slug,
       sop_name: mapped.sop_name,
       confidence: 0.85 + Math.random() * 0.15, // 0.85–1.0
+      unknown: false,
     };
   }
 
@@ -914,9 +915,9 @@ function generateSopClassification(
   // ~30% get classified as unknown, ~70% remain unclassified
   if (Math.random() < 0.3) {
     return {
-      sop_slug: "__unknown__",
-      sop_name: "Unknown",
+      sop_slug: null,
       confidence: 0.3 + Math.random() * 0.4, // 0.3–0.7
+      unknown: true,
     };
   }
 

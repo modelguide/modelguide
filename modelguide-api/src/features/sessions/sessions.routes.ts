@@ -53,9 +53,10 @@ const feedbackSummarySchema = z.object({
 
 const sopClassificationSchema = z
   .object({
-    sopSlug: z.string(),
+    sopSlug: z.string().nullable(),
     sopName: z.string().optional(),
     confidence: z.number().optional(),
+    unknown: z.boolean().optional(),
   })
   .nullable();
 
@@ -254,16 +255,23 @@ const sessionFiltersSchema = paginationSchema.extend({
 
 function extractSopClassification(
   metadata: Record<string, unknown> | null | undefined,
-): { sopSlug: string; sopName?: string; confidence?: number } | null {
+): {
+  sopSlug: string | null;
+  sopName?: string;
+  confidence?: number;
+  unknown?: boolean;
+} | null {
   if (!metadata) return null;
   const raw = metadata.sop_classification;
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
-  if (typeof obj.sop_slug !== "string") return null;
+  // sop_slug can be a string (classified) or null (unknown)
+  if (obj.sop_slug === undefined) return null;
   return {
-    sopSlug: obj.sop_slug,
+    sopSlug: typeof obj.sop_slug === "string" ? obj.sop_slug : null,
     sopName: typeof obj.sop_name === "string" ? obj.sop_name : undefined,
     confidence: typeof obj.confidence === "number" ? obj.confidence : undefined,
+    unknown: obj.unknown === true ? true : undefined,
   };
 }
 

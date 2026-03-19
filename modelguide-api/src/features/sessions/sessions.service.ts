@@ -466,12 +466,12 @@ function buildFilterConditions(filters: SessionFilters) {
       // Unclassified: no sop_classification key in metadata
       conditions.push(isNull(sql`${sessions.metadata}->'sop_classification'`));
     } else if (filters.sopSlug === "__unknown__") {
-      // Unknown: sop_classification exists with sop_slug = '__unknown__'
+      // Unknown: sop_classification exists with unknown = true
+      // Covers both real classifications (sop_slug: null, unknown: true)
+      // and seed data (sop_slug: "__unknown__")
       conditions.push(
-        eq(
-          sql`${sessions.metadata}->'sop_classification'->>'sop_slug'`,
-          "__unknown__",
-        ),
+        sql`(${sessions.metadata}->'sop_classification'->>'unknown' = 'true'
+          OR ${sessions.metadata}->'sop_classification'->>'sop_slug' = '__unknown__')`,
       );
     } else {
       // Specific SOP slug

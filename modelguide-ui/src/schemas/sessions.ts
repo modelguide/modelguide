@@ -56,9 +56,10 @@ export type SessionFeedback = z.infer<typeof sessionFeedbackSchema>
 
 export const sopClassificationSchema = z
   .object({
-    sopSlug: z.string(),
+    sopSlug: z.string().nullable(),
     sopName: z.string().optional(),
     confidence: z.number().optional(),
+    unknown: z.boolean().optional(),
   })
   .nullable()
   .optional()

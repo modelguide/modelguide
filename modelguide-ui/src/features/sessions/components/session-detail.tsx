@@ -255,7 +255,7 @@ function SopInline({ classification }: { classification: SopClassification }) {
     return <span className="text-sm text-fg-muted">{'\u2014'}</span>
   }
 
-  if (classification.sopSlug === '__unknown__') {
+  if (classification.unknown || !classification.sopSlug) {
     return (
       <div className="flex items-center gap-2">
         <Badge variant="warning">Unknown</Badge>
