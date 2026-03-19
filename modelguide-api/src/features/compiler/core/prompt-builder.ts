@@ -189,31 +189,26 @@ export function buildIntentClassificationSection(
 ): string | null {
   if (!agentSops || agentSops.length === 0) return null;
 
-  const lines: string[] = [];
-  lines.push("## Intent Classification (Step 0)");
-  lines.push("");
-  lines.push(
-    "Before executing any workflow steps, classify the customer's intent by calling `core_classify_sop`.",
-  );
-  lines.push("");
-  lines.push("Available SOPs:");
-  for (const sop of agentSops) {
-    const desc = sop.description ? `: ${sop.description}` : "";
-    lines.push(`- \`${sop.slug}\` — ${sop.name}${desc}`);
-  }
-  lines.push("");
-  lines.push("Call `core_classify_sop` with:");
-  lines.push(
-    "- `sop_slug`: the matching SOP slug from the list above (or null if no match)",
-  );
-  lines.push("- `confidence`: your confidence in the classification (0.0–1.0)");
-  lines.push("- `session_id`: the current session ID");
-  lines.push("");
-  lines.push(
-    "Do not wait for the response before proceeding with the conversation.",
-  );
+  const sopList = agentSops
+    .map((sop) => {
+      const desc = sop.description ? `: ${sop.description}` : "";
+      return `- \`${sop.slug}\` — ${sop.name}${desc}`;
+    })
+    .join("\n");
 
-  return lines.join("\n");
+  return `## Intent Classification (Step 0)
+
+Before executing any workflow steps, classify the customer's intent by calling \`core_classify_sop\`.
+
+Available SOPs:
+${sopList}
+
+Call \`core_classify_sop\` with:
+- \`sop_slug\`: the matching SOP slug from the list above (or null if no match)
+- \`confidence\`: your confidence in the classification (0.0–1.0)
+- \`session_id\`: the current session ID
+
+Do not wait for the response before proceeding with the conversation.`;
 }
 
 // ============================================================================
