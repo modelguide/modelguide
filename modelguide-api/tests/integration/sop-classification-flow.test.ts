@@ -12,13 +12,17 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "@/app";
-import { forApp, forOrg } from "@db/rls";
+import { forApp } from "@db/rls";
 import { agentSops, agents, sessionMessages, sessions, sops } from "@db/schema";
 import { compileAgent } from "@features/compiler/compiler.service";
 import { compile } from "@features/compiler/core/compile";
 import type { CompilerInput } from "@features/compiler/core/types";
 import { toMastra } from "@features/compiler/emitters/mastra";
-import { storeSyntheticSession } from "@features/sessions/synthetic-session.service";
+import { resolveAgentSops } from "@features/mcp/mcp.service";
+import {
+  updateSession,
+  validateActiveSession,
+} from "@features/sessions/sessions.service";
 import { createTool } from "@mastra/core/tools";
 import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -132,7 +136,7 @@ describe("SOP classification full flow", () => {
     });
 
     // Verify the compiled instructions include the intent classification section
-    const [agent] = await forOrg(s.orgA.id, (tx) =>
+    const [agent] = await forApp((tx) =>
       tx
         .select({ compiledInstructions: agents.compiledInstructions })
         .from(agents)
@@ -147,8 +151,26 @@ describe("SOP classification full flow", () => {
     expect(agent.compiledInstructions).toContain(sopSlug);
   });
 
-  test("3. run agent on WISMO email — classifies intent and stores in session metadata", async () => {
-    // Build a core_classify_sop Mastra tool that calls through to our app
+  test("3. run agent on WISMO email — core_classify_sop writes to session via real service", async () => {
+    // Create a real session first so core_classify_sop can write to it
+    const createRes = await req("/api/sessions", {
+      method: "POST",
+      headers: { ...agentHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channelType: "email",
+        userIdentifier: "jane@example.com",
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const sessionData = await createRes.json();
+    const sessionId = sessionData.id as string;
+    cleanupSessionIds.push(sessionId);
+
+    // Build core_classify_sop as a Mastra tool that calls the REAL service
+    // — same code path as registerCoreTools in core-tools.ts
+    const orgId = s.orgA.id;
+    const agentId = s.orgAAgentId;
+
     const coreClassifySop = createTool({
       id: "core_classify_sop",
       description: "Classify the customer's intent by matching it to an SOP",
@@ -161,23 +183,48 @@ describe("SOP classification full flow", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mastra tool execute types
       execute: async (params: any) => {
         const input = params.context ?? params;
-        return {
-          session_id: input.session_id,
-          sop_classification: {
-            sop_slug: input.sop_slug ?? null,
-            confidence: input.confidence,
-            unknown: !input.sop_slug,
-          },
+        const sid = input.session_id ?? sessionId;
+        const slug = input.sop_slug ?? null;
+        const conf = input.confidence ?? 0;
+
+        // Real service calls — same as core-tools.ts handler
+        await validateActiveSession(orgId, sid, agentId);
+
+        if (slug) {
+          const agentSopList = await resolveAgentSops(orgId, agentId);
+          const match = agentSopList.find(
+            (s: { slug: string }) => s.slug === slug,
+          );
+          if (!match) {
+            const available = agentSopList
+              .map((s: { slug: string }) => s.slug)
+              .join(", ");
+            return {
+              error: `SOP slug "${slug}" is not assigned to this agent. Available: ${available}`,
+            };
+          }
+        }
+
+        const sopClassification = {
+          sop_slug: slug,
+          confidence: conf,
+          unknown: !slug,
         };
+
+        await updateSession(orgId, sid, agentId, {
+          metadata: { sop_classification: sopClassification },
+        });
+
+        return { session_id: sid, sop_classification: sopClassification };
       },
     });
 
-    // Compile using the fixture SOP with agent SOPs for classification
+    // Compile with agent SOPs for intent classification
     const compilerInput: CompilerInput = {
       sops: [emailOrderNotArrivedSop],
       guardrails: sampleGuardrails,
       agentConfig: {
-        id: s.orgAAgentId,
+        id: agentId,
         name: "Classification Flow Test Agent",
         model: "anthropic/claude-haiku-4-5-20251001",
         description:
@@ -194,17 +241,14 @@ describe("SOP classification full flow", () => {
     };
 
     const ir = compile(compilerInput);
-
-    // Verify the compiled prompt has the classification section
     expect(ir.systemPrompt).toContain("## Intent Classification (Step 0)");
     expect(ir.systemPrompt).toContain(sopSlug);
 
-    // Build the Mastra agent
     const { agent } = toMastra(ir);
 
-    // Run against the WISMO email
-    const prompt =
-      "From: jane@example.com\nSubject: Order still not here\n\nHi, it's been over a week and my order #1042 still hasn't shown up. Can you look into this?";
+    // Run against the WISMO email — agent should call core_classify_sop
+    // which writes sop_classification to session metadata via real service
+    const prompt = `From: jane@example.com\nSubject: Order still not here\n\nHi, it's been over a week and my order #1042 still hasn't shown up. Can you look into this?\n\n(session_id: ${sessionId})`;
 
     const result = await agent.generate(prompt, {
       toolsets: {
@@ -249,86 +293,31 @@ describe("SOP classification full flow", () => {
       maxSteps: 8,
     });
 
-    // The agent should have called core_classify_sop
-    // biome-ignore lint/suspicious/noExplicitAny: Mastra step types are loosely typed
-    const allToolCalls = (result.steps as any[])
-      .flatMap(
-        (step) =>
-          step.toolCalls?.map(
-            (tc: {
-              payload?: { toolName?: string; args?: Record<string, unknown> };
-              toolName?: string;
-              args?: Record<string, unknown>;
-            }) => ({
-              name: tc.payload?.toolName ?? tc.toolName ?? "",
-              args: tc.payload?.args ?? tc.args ?? {},
-            }),
-          ) ?? [],
-      )
-      .filter((tc: { name: string }) => tc.name);
+    // Agent should have produced a text reply
+    expect(result.text).toBeTruthy();
 
-    const classifyCall = allToolCalls.find(
-      (tc: { name: string }) => tc.name === "core_classify_sop",
-    );
-    expect(classifyCall).toBeDefined();
-
-    const classifyInput = classifyCall!.args as Record<string, unknown>;
-
-    // The agent should have classified this as WISMO
-    expect(classifyInput.sop_slug).toBe(sopSlug);
-    expect(typeof classifyInput.confidence).toBe("number");
-    expect(classifyInput.confidence as number).toBeGreaterThanOrEqual(0.5);
-
-    // Now store the session and write classification via the real API
-    const session = await storeSyntheticSession({
-      orgId: s.orgA.id,
-      agentId: s.orgAAgentId,
-      generationResult: result,
-      userInput: prompt,
-      channelType: "email",
-      userIdentifier: "jane@example.com",
-    });
-    cleanupSessionIds.push(session.id);
-
-    // Write the classification via REST API (simulating what the MCP tool does)
-    const patchRes = await req(`/api/sessions/${session.id}`, {
-      method: "PATCH",
-      headers: { ...agentHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        metadata: {
-          sop_classification: {
-            sop_slug: classifyInput.sop_slug,
-            confidence: classifyInput.confidence,
-            unknown: false,
-          },
-        },
-      }),
-    });
-    expect(patchRes.status).toBe(200);
-
-    // 4. Verify the session has sop_classification in metadata
-    const getRes = await req(`/api/sessions/${session.id}`, {
+    // Verify sop_classification was written to session metadata by the real service
+    const getRes = await req(`/api/sessions/${sessionId}`, {
       headers: adminHeaders,
     });
     expect(getRes.status).toBe(200);
 
-    const sessionData = await getRes.json();
-    const classification = sessionData.metadata?.sop_classification;
+    const detail = await getRes.json();
+    const classification = detail.metadata?.sop_classification;
 
     expect(classification).toBeDefined();
     expect(classification.sop_slug).toBe(sopSlug);
+    expect(typeof classification.confidence).toBe("number");
     expect(classification.confidence).toBeGreaterThanOrEqual(0.5);
     expect(classification.unknown).toBe(false);
 
-    // Also verify the session appears in filtered list
+    // Verify session appears in sopSlug-filtered list
     const listRes = await req(`/api/sessions?sopSlug=${sopSlug}`, {
       headers: adminHeaders,
     });
     expect(listRes.status).toBe(200);
     const listData = await listRes.json();
-    const found = listData.data.find(
-      (s: { id: string }) => s.id === session.id,
-    );
+    const found = listData.data.find((s: { id: string }) => s.id === sessionId);
     expect(found).toBeDefined();
-  });
+  }, 120_000);
 });
