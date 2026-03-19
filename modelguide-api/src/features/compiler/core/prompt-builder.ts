@@ -9,7 +9,12 @@
  */
 
 import type { SopStep } from "@features/sops/sops.types";
-import type { GuardrailPriority, ParsedGuardrail, ResolvedTool } from "./types";
+import type {
+  AgentSopInfo,
+  GuardrailPriority,
+  ParsedGuardrail,
+  ResolvedTool,
+} from "./types";
 
 /** Minimal SOP shape for prompt building (avoids Zod inference type conflicts). */
 interface SopForPrompt {
@@ -59,11 +64,18 @@ export function buildSystemPrompt(
   sop: SopForPrompt,
   guardrails: ParsedGuardrail[],
   tools: ResolvedTool[],
+  agentSops?: AgentSopInfo[],
 ): string {
   const sections: string[] = [];
 
   // 1. Agent description (preamble)
   sections.push(agentDescription);
+
+  // 1.5. Intent Classification (Step 0) — before workflow
+  const classificationSection = buildIntentClassificationSection(agentSops);
+  if (classificationSection) {
+    sections.push(classificationSection);
+  }
 
   // 2. SOP context
   sections.push(`## Workflow: ${sop.name}`);
@@ -162,6 +174,46 @@ export function buildScopedPrompt(
   }
 
   return sections.join("\n\n");
+}
+
+// ============================================================================
+// Intent classification
+// ============================================================================
+
+/**
+ * Build the "## Intent Classification (Step 0)" section.
+ * Returns null if no agent SOPs are available.
+ */
+export function buildIntentClassificationSection(
+  agentSops?: AgentSopInfo[],
+): string | null {
+  if (!agentSops || agentSops.length === 0) return null;
+
+  const lines: string[] = [];
+  lines.push("## Intent Classification (Step 0)");
+  lines.push("");
+  lines.push(
+    "Before executing any workflow steps, classify the customer's intent by calling `core_classify_sop`.",
+  );
+  lines.push("");
+  lines.push("Available SOPs:");
+  for (const sop of agentSops) {
+    const desc = sop.description ? `: ${sop.description}` : "";
+    lines.push(`- \`${sop.slug}\` — ${sop.name}${desc}`);
+  }
+  lines.push("");
+  lines.push("Call `core_classify_sop` with:");
+  lines.push(
+    "- `sop_slug`: the matching SOP slug from the list above (or null if no match)",
+  );
+  lines.push("- `confidence`: your confidence in the classification (0.0–1.0)");
+  lines.push("- `session_id`: the current session ID");
+  lines.push("");
+  lines.push(
+    "Do not wait for the response before proceeding with the conversation.",
+  );
+
+  return lines.join("\n");
 }
 
 // ============================================================================
