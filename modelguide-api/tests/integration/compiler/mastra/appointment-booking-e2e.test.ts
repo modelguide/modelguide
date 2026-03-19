@@ -183,7 +183,7 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
           "You are a friendly receptionist handling appointment bookings over the phone.",
       });
 
-      expect(compileResult.agent.compiledInstructions).toBeTruthy();
+      expect(compileResult.agent!.compiledInstructions).toBeTruthy();
       expect(compileResult.ir.tools.map((t) => t.resolvedName)).toEqual([
         "scheduling_check_availability",
         "scheduling_book_appointment",
@@ -227,7 +227,7 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
       const agent = new Agent({
         id: "appt-booking-test",
         name: "appt-booking-test",
-        instructions: compileResult.agent.compiledInstructions!,
+        instructions: compileResult.agent!.compiledInstructions!,
         model: "anthropic/claude-haiku-4-5-20251001",
         tools: mockTools,
       });

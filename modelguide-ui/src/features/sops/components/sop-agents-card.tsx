@@ -1,20 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Bot, ExternalLink, Users } from 'lucide-react'
+import { Bot, ExternalLink, FileCode, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
+import { Tooltip } from '~/components/ui/tooltip'
+import { CompileDialog } from '~/features/prompt-compiler/components/compile-dialog'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
+import type { Agent } from '~/schemas/agents'
 import type { AssignedAgent } from '~/schemas/sops'
-
-interface Agent {
-  id: string
-  name: string
-  modality: string
-}
 
 interface SopAgentsCardProps {
   sopId: string
@@ -24,6 +21,17 @@ interface SopAgentsCardProps {
 
 export function SopAgentsCard({ sopId, agents, canMutate }: SopAgentsCardProps) {
   const [showDialog, setShowDialog] = useState(false)
+  const [compileTarget, setCompileTarget] = useState<{
+    agentId: string
+    compiledInstructions: string | null
+  } | null>(null)
+
+  // Lazy-fetch agent detail when compile dialog opens (to get currentPrompt for diff)
+  const { data: compileTargetAgent } = useQuery({
+    queryKey: ['agents', compileTarget?.agentId],
+    queryFn: () => api.get(`agents/${compileTarget?.agentId}`).json<Agent>(),
+    enabled: !!compileTarget,
+  })
 
   return (
     <Card>
@@ -47,22 +55,39 @@ export function SopAgentsCard({ sopId, agents, canMutate }: SopAgentsCardProps) 
           <ul className="space-y-2">
             {agents.map((agent) => (
               <li key={agent.id}>
-                <Link
-                  to="/agents/$id"
-                  params={{ id: agent.id }}
-                  className="flex items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-base p-2.5 transition-colors hover:bg-bg-subtle/50 group"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-subtle">
-                    <Bot className="h-4 w-4 text-fg-muted" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-fg-primary group-hover:text-brand-400 transition-colors truncate">
-                      {agent.name}
-                    </p>
-                  </div>
-                  <Badge variant="default">{agent.modality}</Badge>
-                  <ExternalLink className="h-3.5 w-3.5 text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
+                <div className="flex items-center gap-2 rounded-lg border border-fg-subtle/10 bg-bg-base p-2.5 transition-colors hover:bg-bg-subtle/50 group">
+                  <Link
+                    to="/agents/$id"
+                    params={{ id: agent.id }}
+                    className="flex flex-1 items-center gap-3 min-w-0"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-subtle shrink-0">
+                      <Bot className="h-4 w-4 text-fg-muted" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-fg-primary group-hover:text-brand-400 transition-colors truncate">
+                        {agent.name}
+                      </p>
+                    </div>
+                    <Badge variant="default">{agent.modality}</Badge>
+                    <ExternalLink className="h-3.5 w-3.5 text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </Link>
+                  {canMutate ? (
+                    <Tooltip content="Compile prompt for this agent">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setCompileTarget({ agentId: agent.id, compiledInstructions: null })
+                        }}
+                        className="shrink-0 rounded-lg p-1.5 text-fg-muted hover:bg-bg-subtle hover:text-brand-400 transition-colors"
+                        aria-label={`Compile prompt for ${agent.name}`}
+                      >
+                        <FileCode className="h-3.5 w-3.5" />
+                      </button>
+                    </Tooltip>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
@@ -74,6 +99,16 @@ export function SopAgentsCard({ sopId, agents, canMutate }: SopAgentsCardProps) 
           sopId={sopId}
           currentAgentIds={agents.map((a) => a.id)}
           onClose={() => setShowDialog(false)}
+        />
+      ) : null}
+
+      {compileTarget ? (
+        <CompileDialog
+          open
+          onClose={() => setCompileTarget(null)}
+          agentId={compileTarget.agentId}
+          currentPrompt={compileTargetAgent?.compiledInstructions ?? null}
+          preselectedSopId={sopId}
         />
       ) : null}
     </Card>

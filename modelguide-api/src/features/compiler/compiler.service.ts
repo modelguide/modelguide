@@ -25,6 +25,7 @@ interface CompileAgentInput {
   sopId: string;
   agentModel?: string;
   agentDescription?: string;
+  dryRun?: boolean;
 }
 
 // ============================================================================
@@ -40,7 +41,7 @@ interface CompileAgentInput {
  * 4. Persists compiled_instructions, compiled_at, compiled_from
  */
 export async function compileAgent(input: CompileAgentInput) {
-  const { orgId, agentId, sopId, agentModel, agentDescription } = input;
+  const { orgId, agentId, sopId, agentModel, agentDescription, dryRun } = input;
 
   // 1. Load agent
   const agent = await forOrg(orgId, async (tx) => {
@@ -150,7 +151,7 @@ export async function compileAgent(input: CompileAgentInput) {
 
   const ir = compile(compilerInput);
 
-  // 6. Persist compiled instructions
+  // 6. Build provenance metadata
   const compiledFrom = {
     sopId,
     sopName: sopDetail.name,
@@ -159,6 +160,28 @@ export async function compileAgent(input: CompileAgentInput) {
     stepCount: ir.sop.steps.length,
   };
 
+  // 7. Dry-run: return result without persisting
+  if (dryRun) {
+    log.info(
+      {
+        agentId,
+        sopId,
+        promptLength: ir.systemPrompt.length,
+        toolCount: ir.tools.length,
+        guardrailCount: guardrails.length,
+        dryRun: true,
+      },
+      "agent compiled (dry run)",
+    );
+
+    return {
+      agent: null,
+      compiledFrom,
+      ir,
+    };
+  }
+
+  // 8. Persist compiled instructions
   const updatedAgent = await forOrg(orgId, async (tx) => {
     const [row] = await tx
       .update(agents)
@@ -185,6 +208,7 @@ export async function compileAgent(input: CompileAgentInput) {
 
   return {
     agent: updatedAgent,
+    compiledFrom,
     ir,
   };
 }
