@@ -140,6 +140,39 @@ function StructuredView({ content }: { content: string }) {
                 }
               }
 
+              // Workflow steps: "1. instruction → `tool_name`"
+              if (section.type === 'workflow') {
+                const stepMatch = line.match(/^(\d+)\.\s+(.+)/)
+                if (stepMatch) {
+                  const stepNum = stepMatch[1]
+                  const rest = stepMatch[2]
+                  const toolMatch = rest.match(/^(.+?)\s*→\s*`(.+?)`$/)
+                  const instruction = toolMatch ? toolMatch[1] : rest
+                  const tool = toolMatch ? toolMatch[2] : null
+
+                  return (
+                    <div
+                      key={`${section.heading}-step-${j}`}
+                      className="flex items-start gap-3 py-1"
+                    >
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-[10px] font-semibold text-violet-400">
+                        {stepNum}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm text-fg-secondary leading-relaxed">{instruction}</p>
+                        {tool ? (
+                          <span className="mt-1 inline-flex items-center rounded-md bg-violet-500/[0.08] px-2 py-0.5 font-mono text-[11px] text-violet-400 ring-1 ring-violet-500/15">
+                            {tool}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                }
+                // Skip "### Steps" subheading — the numbered list is self-explanatory
+                if (line.match(/^###\s+Steps/)) return null
+              }
+
               // Escalation triggers
               if (section.type === 'escalation' && line.match(/^- /)) {
                 return (

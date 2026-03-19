@@ -262,7 +262,7 @@ describe('CompileDialog', () => {
       expect(screen.queryByText('Changes')).not.toBeInTheDocument()
     })
 
-    it('hides Changes tab when prompt is identical (no actual changes)', async () => {
+    it('shows "No changes" message when prompt is identical', async () => {
       mockCompileResponse = makeCompileResponse({ compiledPrompt: 'Same content' })
 
       render(
@@ -280,7 +280,12 @@ describe('CompileDialog', () => {
         expect(screen.getByText('WISMO Email Flow')).toBeInTheDocument()
       })
 
-      expect(screen.queryByText('Changes')).not.toBeInTheDocument()
+      // Changes tab is still visible (it's a recompile) but shows no-changes state
+      fireEvent.click(screen.getByText('Changes'))
+      expect(screen.getByText('No changes')).toBeInTheDocument()
+      expect(
+        screen.getByText('The compiled prompt is identical to the current one.'),
+      ).toBeInTheDocument()
     })
   })
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle } from 'lucide-react'
-import { useState } from 'react'
+import { diffLines } from 'diff'
+import { AlertCircle, CheckCircle } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '~/components/ui/button'
 import { Dialog } from '~/components/ui/dialog'
@@ -40,6 +41,7 @@ export function CompileDialog({
     queryKey: ['sops'],
     queryFn: () => api.get('sops').json<PaginatedResponse<SopSummary>>(),
     enabled: open,
+    staleTime: 0,
   })
 
   const agentSops =
@@ -94,7 +96,23 @@ export function CompileDialog({
     currentPrompt !== null &&
     previewResult !== null &&
     currentPrompt !== previewResult.compiledPrompt
+  const isRecompile = currentPrompt !== null && previewResult !== null
   const noSopsAvailable = !sopsLoading && agentSops.length === 0
+
+  // Compute diff stats for the Changes tab label (same counting as PromptDiffViewer)
+  const diffStats = useMemo(() => {
+    if (!hasChanges || !currentPrompt || !previewResult) return null
+    const changes = diffLines(currentPrompt, previewResult.compiledPrompt)
+    let added = 0
+    let removed = 0
+    for (const c of changes) {
+      const raw = c.value.endsWith('\n') ? c.value.slice(0, -1) : c.value
+      const lineCount = raw.split('\n').length
+      if (c.added) added += lineCount
+      else if (c.removed) removed += lineCount
+    }
+    return { added, removed }
+  }, [hasChanges, currentPrompt, previewResult])
 
   return (
     <Dialog
@@ -190,8 +208,8 @@ export function CompileDialog({
               className="shrink-0"
             />
 
-            {/* Tab bar */}
-            {hasChanges ? (
+            {/* Tab bar — show when recompiling (has existing prompt) */}
+            {isRecompile ? (
               <div className="flex gap-1 rounded-xl bg-bg-subtle p-1 shrink-0">
                 <button
                   type="button"
@@ -216,6 +234,12 @@ export function CompileDialog({
                   )}
                 >
                   Changes
+                  {diffStats ? (
+                    <span className="ml-1.5 text-[10px] text-fg-muted">
+                      <span className="text-success">+{diffStats.added}</span>{' '}
+                      <span className="text-error">-{diffStats.removed}</span>
+                    </span>
+                  ) : null}
                 </button>
               </div>
             ) : null}
@@ -224,11 +248,19 @@ export function CompileDialog({
             <div className="overflow-y-auto min-h-0 -mx-1 px-1">
               {activeTab === 'prompt' ? (
                 <PromptViewer content={previewResult.compiledPrompt} />
-              ) : (
+              ) : hasChanges ? (
                 <PromptDiffViewer
                   oldContent={currentPrompt ?? ''}
                   newContent={previewResult.compiledPrompt}
                 />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                  <CheckCircle className="h-8 w-8 text-success/60" />
+                  <p className="text-sm font-medium text-fg-primary">No changes</p>
+                  <p className="text-xs text-fg-muted">
+                    The compiled prompt is identical to the current one.
+                  </p>
+                </div>
               )}
             </div>
           </div>

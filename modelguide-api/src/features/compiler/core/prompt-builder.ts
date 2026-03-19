@@ -16,6 +16,11 @@ interface SopForPrompt {
   name: string;
   description: string | null;
   definition: {
+    steps: Array<{
+      order: number;
+      instruction: string;
+      tool?: { resolvedName?: string };
+    }>;
     metadata: {
       escalationTriggers?: string[];
     };
@@ -64,6 +69,21 @@ export function buildSystemPrompt(
   sections.push(`## Workflow: ${sop.name}`);
   if (sop.description) {
     sections.push(sop.description);
+  }
+
+  // 2b. Steps
+  const steps = sop.definition.steps;
+  if (steps.length > 0) {
+    const stepLines = steps
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((s) => {
+        const toolSuffix = s.tool?.resolvedName
+          ? ` → \`${s.tool.resolvedName}\``
+          : "";
+        return `${s.order}. ${s.instruction}${toolSuffix}`;
+      });
+    sections.push(`### Steps\n${stepLines.join("\n")}`);
   }
 
   // 3. Tools

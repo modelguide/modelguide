@@ -31,11 +31,11 @@ describe('PromptViewer', () => {
     it('renders tool names as pills, stripping markdown list prefix and descriptions', () => {
       render(<PromptViewer content={SAMPLE_PROMPT} />)
 
-      // Plain tool names
-      expect(screen.getByText('glowbox_store_lookup_order')).toBeInTheDocument()
+      // Tool names appear in the Tools section (and possibly in Steps too)
+      expect(screen.getAllByText('glowbox_store_lookup_order').length).toBeGreaterThanOrEqual(1)
       expect(screen.getByText('glowbox_store_track_shipment')).toBeInTheDocument()
       // Tool with description after em-dash — should show only the name
-      expect(screen.getByText('helpdesk_create_ticket')).toBeInTheDocument()
+      expect(screen.getAllByText('helpdesk_create_ticket').length).toBeGreaterThanOrEqual(1)
       expect(screen.queryByText(/Create a support ticket/)).not.toBeInTheDocument()
     })
 
@@ -52,6 +52,23 @@ describe('PromptViewer', () => {
 
       expect(screen.getByText('Never share PII')).toBeInTheDocument()
       expect(screen.getByText('Verify identity')).toBeInTheDocument()
+    })
+
+    it('renders workflow steps with numbered badges', () => {
+      render(<PromptViewer content={SAMPLE_PROMPT} />)
+
+      expect(screen.getByText('Greet the customer')).toBeInTheDocument()
+      expect(screen.getByText('Ask for their order number')).toBeInTheDocument()
+      expect(screen.getByText('Provide status update')).toBeInTheDocument()
+    })
+
+    it('renders tool names on steps that reference tools', () => {
+      render(<PromptViewer content={SAMPLE_PROMPT} />)
+
+      // Step 3 has a tool reference: "Look up the order → `glowbox_store_lookup_order`"
+      expect(screen.getByText('Look up the order')).toBeInTheDocument()
+      // Tool name appears both in the step pill and the tools section
+      expect(screen.getAllByText('glowbox_store_lookup_order').length).toBeGreaterThanOrEqual(2)
     })
 
     it('renders escalation triggers as list items', () => {
