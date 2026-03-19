@@ -24,6 +24,13 @@ const compileAgentParams = z.object({
   agentId: z.string().uuid().openapi({ description: "Agent ID" }),
 });
 
+const compileAgentQuerySchema = z.object({
+  dryRun: z.coerce.boolean().optional().openapi({
+    description:
+      "When true, runs the full pipeline but skips persisting. Useful for preview/diff.",
+  }),
+});
+
 const compileAgentBodySchema = z.object({
   sopId: z.string().uuid().openapi({ description: "SOP ID to compile from" }),
   model: z
@@ -72,6 +79,7 @@ const compileRoute = createRoute({
   security: [{ bearerAuth: [] }],
   request: {
     params: compileAgentParams,
+    query: compileAgentQuerySchema,
     body: {
       content: { "application/json": { schema: compileAgentBodySchema } },
     },
@@ -91,6 +99,7 @@ const compileRoute = createRoute({
 router.openapi(compileRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { agentId } = c.req.valid("param");
+  const { dryRun } = c.req.valid("query");
   const body = c.req.valid("json");
 
   const result = await compileAgent({
@@ -99,13 +108,24 @@ router.openapi(compileRoute, async (c) => {
     sopId: body.sopId,
     agentModel: body.model,
     agentDescription: body.description,
+    dryRun: dryRun === true,
   });
+
+  if (!dryRun && !result.agent) {
+    throw new Error("Compilation succeeded but agent update failed");
+  }
+
+  const compiledFrom = dryRun
+    ? (result.compiledFrom as Record<string, unknown>)
+    : (result.agent!.compiledFrom as Record<string, unknown>);
 
   return c.json(
     {
-      agentId: result.agent.id,
-      compiledAt: result.agent.compiledAt!.toISOString(),
-      compiledFrom: result.agent.compiledFrom as Record<string, unknown>,
+      agentId,
+      compiledAt: dryRun
+        ? new Date().toISOString()
+        : result.agent!.compiledAt!.toISOString(),
+      compiledFrom,
       compiledPrompt: result.ir.systemPrompt,
       promptLength: result.ir.systemPrompt.length,
       toolCount: result.ir.tools.length,

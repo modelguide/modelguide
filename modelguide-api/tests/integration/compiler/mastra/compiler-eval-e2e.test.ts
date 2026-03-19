@@ -216,9 +216,9 @@ describe("Compiler E2E: compile → run → store → eval", () => {
         agentDescription: agentConfig.description,
       });
 
-      expect(compileResult.agent.compiledInstructions).toBeTruthy();
-      expect(compileResult.agent.compiledAt).toBeTruthy();
-      expect(compileResult.agent.compiledFrom).toBeTruthy();
+      expect(compileResult.agent!.compiledInstructions).toBeTruthy();
+      expect(compileResult.agent!.compiledAt).toBeTruthy();
+      expect(compileResult.agent!.compiledFrom).toBeTruthy();
 
       // Step 3: Run agent and store as synthetic session
       const { prompt, result: agentResult } = await compileAndRun(0);

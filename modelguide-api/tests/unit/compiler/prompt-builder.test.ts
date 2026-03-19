@@ -50,6 +50,19 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Process inbound emails about orders");
   });
 
+  it("includes steps subsection with numbered instructions", () => {
+    expect(prompt).toContain("### Steps");
+    expect(prompt).toContain("1. Determine if this email is about an order");
+    expect(prompt).toContain("3. Look up the order");
+  });
+
+  it("appends tool name to steps that have tools", () => {
+    expect(prompt).toContain("→ `store_look_up_order`");
+    expect(prompt).toContain("→ `helpdesk_create_ticket`");
+    // Steps without tools should not have arrows
+    expect(prompt).toMatch(/1\. Determine if this email.*(?<!→)/);
+  });
+
   it("includes tools section with resolved names", () => {
     expect(prompt).toContain("## Tools");
     expect(prompt).toContain("- store_look_up_order");

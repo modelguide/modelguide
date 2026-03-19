@@ -59,7 +59,7 @@ if (env.NODE_ENV !== "test") {
   apiRouter.use("/auth/*", rateLimit({ limit: 10, windowSeconds: 60 }));
 }
 apiRouter.route("/auth", authRoutes);
-apiRouter.route("/compiler", compilerRoutes);
+apiRouter.route("/", compilerRoutes);
 apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
 apiRouter.route("/secrets", secretsRoutes);
