@@ -31,25 +31,8 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
     <div className="space-y-6">
       {/* Session Info — compact panel */}
       <Card>
-        <CardContent className="pt-5 pb-4">
+        <CardContent className="pt-5 pb-3">
           <div className="grid gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
-            <InfoItem label="Time">
-              <Tooltip
-                content={
-                  <div className="text-center">
-                    <div>{formatDate(session.startedAt, { format: 'date' })}</div>
-                    <div className="text-fg-muted">
-                      {formatDate(session.startedAt, { format: 'time' })}
-                    </div>
-                  </div>
-                }
-              >
-                <span className="cursor-default text-sm text-fg-primary">
-                  {formatDate(session.startedAt, { format: 'relative' })}
-                </span>
-              </Tooltip>
-            </InfoItem>
-
             <InfoItem label="Agent">
               <span className="text-sm font-medium text-fg-primary">{session.agent.name}</span>
             </InfoItem>
@@ -68,17 +51,6 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
             <InfoItem label="Duration">
               <span className="text-sm text-fg-primary">
                 {session.durationSeconds ? formatDuration(session.durationSeconds) : 'Ongoing'}
-              </span>
-            </InfoItem>
-
-            <InfoItem label="Cost">
-              <span className="text-sm text-fg-primary">
-                {(() => {
-                  const meta = (session.metadata ?? {}) as Record<string, unknown>
-                  if (meta.cost_usd != null) return `$${Number(meta.cost_usd).toFixed(4)}`
-                  if (meta.cost_credits != null) return `${String(meta.cost_credits)} credits`
-                  return '\u2014'
-                })()}
               </span>
             </InfoItem>
 
@@ -107,9 +79,26 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                 <RatingBadge size="sm" />
               )}
             </InfoItem>
+
+            <InfoItem label="Time">
+              <span className="text-sm text-fg-primary">
+                {formatDate(session.startedAt, { format: 'relative' })}
+              </span>
+            </InfoItem>
+
+            <InfoItem label="Cost">
+              <span className="text-sm text-fg-primary">
+                {(() => {
+                  const meta = (session.metadata ?? {}) as Record<string, unknown>
+                  if (meta.cost_usd != null) return `$${Number(meta.cost_usd).toFixed(4)}`
+                  if (meta.cost_credits != null) return `${String(meta.cost_credits)} credits`
+                  return '\u2014'
+                })()}
+              </span>
+            </InfoItem>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-fg-subtle/10 pt-3 text-xs text-fg-muted">
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-fg-subtle/10 pt-2 text-xs text-fg-muted">
             <span>Started: {formatDate(session.startedAt)}</span>
             {session.endedAt && <span>Ended: {formatDate(session.endedAt)}</span>}
             {session.externalId && <span>External ID: {session.externalId}</span>}
@@ -291,7 +280,7 @@ function SopInline({ classification }: { classification: SopClassification }) {
   return (
     <div className="flex items-center gap-2">
       <Link to="/sops" className="transition-colors hover:text-brand-500">
-        <Badge variant="default" className="cursor-pointer hover:bg-brand-500/20">
+        <Badge variant="brand" className="cursor-pointer hover:bg-brand-500/20">
           {classification.sopName ?? classification.sopSlug}
         </Badge>
       </Link>
