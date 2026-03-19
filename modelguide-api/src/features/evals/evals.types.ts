@@ -78,9 +78,27 @@ export interface EvalPlan {
 }
 
 // ============================================================================
+// Resolved assertion — shared input for the scoring engine.
+// Both the SOP plan path and the eval suite path produce these.
+// ============================================================================
+
+export interface ResolvedAssertion {
+  /** Order in which this assertion is scored. */
+  order: number;
+  /** Human-readable score name. */
+  name: string;
+  /** Is failure of this assertion a run-level failure? */
+  required: boolean;
+  /** Evaluator to execute. */
+  evaluator: ResolvedEvaluator;
+  /** Connector tool ID -> runtime tool name for this assertion. */
+  toolNameMap: Record<string, string>;
+}
+
+// ============================================================================
 // Eval source types (extensible for guardrails, FAQ, etc.)
 // ============================================================================
 
-export type EvalSourceType = "sop";
+export type EvalSourceType = "suite" | "replay_test" | "live";
 export type EvalStatus = "pending" | "running" | "completed" | "failed";
 export type EvalScoreResult = "pass" | "fail" | "skip" | "error";

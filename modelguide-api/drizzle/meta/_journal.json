@@ -204,6 +204,13 @@
       "when": 1773840000000,
       "tag": "0028_add-session-mode",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1773912456844,
+      "tag": "0029_eval-suites",
+      "breakpoints": true
     }
   ]
 }

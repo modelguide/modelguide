@@ -4,9 +4,10 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { env } from "@/env";
 import { agentRoutes } from "@features/agents";
 import { analyticsRoutes } from "@features/analytics";
+import { compilerRoutes } from "@features/compiler";
 import { connectorRoutes } from "@features/connectors";
 import { evalConfigRoutes } from "@features/eval-configs";
-import { evalRoutes } from "@features/evals";
+import { evalRoutes, evalSuiteRoutes } from "@features/evals";
 import { feedbackRoutes } from "@features/feedback";
 import { knowledgeBaseRoutes } from "@features/knowledge-base";
 import { mcpHandler } from "@features/mcp";
@@ -58,6 +59,7 @@ if (env.NODE_ENV !== "test") {
   apiRouter.use("/auth/*", rateLimit({ limit: 10, windowSeconds: 60 }));
 }
 apiRouter.route("/auth", authRoutes);
+apiRouter.route("/compiler", compilerRoutes);
 apiRouter.route("/connectors", connectorRoutes);
 apiRouter.route("/organizations", organizationRoutes);
 apiRouter.route("/secrets", secretsRoutes);
@@ -65,6 +67,7 @@ apiRouter.route("/sessions", sessionRoutes);
 apiRouter.route("/sops", sopRoutes);
 apiRouter.route("/eval-configs", evalConfigRoutes);
 apiRouter.route("/evals", evalRoutes);
+apiRouter.route("/eval-suites", evalSuiteRoutes);
 apiRouter.route("/knowledge-base", knowledgeBaseRoutes);
 apiRouter.route("/sessions", feedbackRoutes); // sub-resource: /:id/feedback
 apiRouter.route("/simulations", simulationRoutes);

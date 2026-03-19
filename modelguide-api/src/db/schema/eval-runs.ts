@@ -27,6 +27,7 @@ import {
   evaluatorTypeEnum,
 } from "./enums";
 import { evalConfigs } from "./eval-configs";
+import { evalSuiteRuns, evalSuiteTestCases } from "./eval-suites";
 
 // ============================================================================
 // Eval Runs
@@ -52,6 +53,14 @@ export const evalRuns = pgTable(
     }),
     externalRunId: varchar("external_run_id", { length: 255 }),
     externalRunUrl: varchar("external_run_url", { length: 500 }),
+    /** Links this eval run to a suite run (null for standalone evals). */
+    suiteRunId: uuid("suite_run_id").references(() => evalSuiteRuns.id, {
+      onDelete: "set null",
+    }),
+    /** Test case this eval run belongs to (null for standalone evals). */
+    testCaseId: uuid("test_case_id").references(() => evalSuiteTestCases.id, {
+      onDelete: "set null",
+    }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -71,6 +80,7 @@ export const evalRuns = pgTable(
     index("eval_runs_source_idx").on(table.sourceType, table.sourceId),
     index("eval_runs_created_idx").on(table.createdAt),
     index("eval_runs_org_idx").on(table.organizationId),
+    index("eval_runs_suite_run_idx").on(table.suiteRunId),
   ],
 ).enableRLS();
 
