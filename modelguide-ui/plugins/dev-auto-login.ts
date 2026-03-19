@@ -44,6 +44,7 @@ export function devAutoLogin(email: string): Plugin {
     // databaseUrl is guaranteed non-null by validation above
     const sql = postgres(databaseUrl as string)
     try {
+      await sql`SELECT set_config('app.bypass_rls', 'on', false)`
       const [user] = await sql`
         SELECT id, email, name, role, organization_id
         FROM users
