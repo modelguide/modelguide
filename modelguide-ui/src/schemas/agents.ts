@@ -5,6 +5,18 @@ import type { PaginatedResponse } from '~/lib/pagination'
 export const agentPlatforms = ['custom', 'elevenlabs'] as const
 export type AgentPlatform = (typeof agentPlatforms)[number]
 
+export const compiledFromSchema = z
+  .object({
+    sopId: z.string().uuid(),
+    sopName: z.string(),
+    guardrailIds: z.array(z.string().uuid()),
+    toolCount: z.number(),
+    stepCount: z.number(),
+  })
+  .nullable()
+
+export type CompiledFrom = z.infer<typeof compiledFromSchema>
+
 export const agentSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -24,6 +36,9 @@ export const agentSchema = z.object({
       postCallWebhook: z.string(),
     })
     .optional(),
+  compiledInstructions: z.string().nullable().optional(),
+  compiledAt: z.string().nullable().optional(),
+  compiledFrom: compiledFromSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

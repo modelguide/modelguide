@@ -37,6 +37,16 @@ const router = createRouter();
 // Schemas
 // ============================================================================
 
+const compiledFromSchema = z
+  .object({
+    sopId: z.string().uuid(),
+    sopName: z.string(),
+    guardrailIds: z.array(z.string().uuid()),
+    toolCount: z.number(),
+    stepCount: z.number(),
+  })
+  .nullable();
+
 const agentResponseSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -61,6 +71,9 @@ const agentResponseSchema = z.object({
       conversationInitWebhook: z.string(),
     })
     .optional(),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  compiledFrom: compiledFromSchema,
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });
@@ -220,6 +233,9 @@ function formatAgent(
       postCallWebhook: `${externalBase}/webhooks/elevenlabs/${agent.id}/post-call`,
       conversationInitWebhook: `${externalBase}/webhooks/elevenlabs/${agent.id}/conversation-init`,
     },
+    compiledInstructions: agent.compiledInstructions ?? null,
+    compiledAt: agent.compiledAt?.toISOString() ?? null,
+    compiledFrom: (agent.compiledFrom as Record<string, unknown>) ?? null,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
   };

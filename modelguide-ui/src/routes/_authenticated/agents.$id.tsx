@@ -24,6 +24,7 @@ import { Toggle } from '~/components/ui/toggle'
 import { AddConnectorDialog } from '~/features/agents/components/add-connector-dialog'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { ElevenLabsCard } from '~/features/agents/components/elevenlabs-card'
+import { CompiledPromptCard } from '~/features/prompt-compiler/components/compiled-prompt-card'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
 import type {
@@ -413,6 +414,9 @@ function AgentDetailPage() {
             connectorsError={connectorsError}
             isAdmin={isAdmin}
           />
+
+          {/* Compiled Prompt */}
+          <CompiledPromptCard agent={agent} canMutate={isAdmin} />
 
           {/* Eval Suites */}
           <AgentEvalSuitesCard agentId={id} />
