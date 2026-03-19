@@ -25,10 +25,8 @@ eval_suites                              eval_configs (ADR-007)
 ├── sop_id FK → sops (nullable)          │ eval_configs  │
 │                                        │ (reusable)    │
 ├── eval_suite_test_cases                │ evaluator_type│
-│   ├── category: happy_path |           │ config: JSONB │
-│   │   edge_case | guardrail            └──────┬───────┘
-│   ├── source: auto | manual                   │ FK (NO cascade)
-│   │                                           │
+│   ├── source: auto | manual            │ config: JSONB │
+│   │                                    └──────┬───────┘
 │   └── eval_suite_evaluators ──────────────────┘
 │       ├── required: boolean
 │       ├── sop_step_id (traces origin)
@@ -60,38 +58,28 @@ Given a WISMO SOP with 5 steps:
 | 4 | Compose reply | true | — |
 | 5 | Escalate if needed | false | `helpdesk_create_ticket` |
 
-`initSuiteFromSop` produces:
+`initSuiteFromSop` produces a single test case with evaluators for ALL steps:
 
 ```
 EvalSuite: "Eval: Email — Order Not Arrived"
 │
-├── TestCase: "Happy path" (category: happy_path)
-│   ├── assertion: step:1:llm_judge (classify) — required: true
-│   ├── assertion: step:2:llm_judge (extract)  — required: true
-│   ├── assertion: step:3:tool_called (store_look_up_order) — required: true
-│   └── assertion: step:4:llm_judge (compose)  — required: true
-│
-├── TestCase: "Edge case" (category: edge_case)
-│   ├── assertion: step:1:llm_judge (classify) — required: true
-│   ├── assertion: step:2:llm_judge (extract)  — required: true
-│   ├── assertion: step:3:tool_called (store_look_up_order) — required: true
-│   └── assertion: step:4:llm_judge (compose)  — required: true
-│
-└── TestCase: "Guardrail path" (category: guardrail)
+└── TestCase: "Eval: Email — Order Not Arrived" (source: auto)
     ├── assertion: step:1:llm_judge (classify) — required: true
     ├── assertion: step:2:llm_judge (extract)  — required: true
+    ├── assertion: step:3:tool_called (store_look_up_order) — required: true
+    ├── assertion: step:4:llm_judge (compose)  — required: true
     └── assertion: step:5:tool_called (helpdesk_create_ticket) — required: false
 ```
 
-Steps 1-4 appear on happy/edge paths. Step 5 (optional escalation) appears only on the guardrail path. Guardrail KB evaluators (if any) are added to all test cases.
+Required steps get `required: true` evaluators; optional steps get `required: false` evaluators. Guardrail KB evaluators (if any) are also added with `required: true`.
 
 ### Evaluators belong to test cases, not suites
 
-Different test cases exercise different SOP paths. The happy path should check `tool_called(store_look_up_order)` but not `tool_called(helpdesk_create_ticket)`. The guardrail path checks the opposite. Suite-level evaluators would force every test case through the same checks, producing false failures on branching SOPs.
+Evaluators are scoped to test cases rather than suites. The auto-generated test case includes all evaluators (required and optional), but manual test cases can have their own evaluator sets. Suite-level evaluators would force every test case through the same checks, which is wrong when manual test cases target specific scenarios.
 
 ### Two creation paths
 
-1. **`initSuiteFromSop(orgId, agentId, sopId)`** — SOP-based. Derives 3 path-based test cases (happy/edge/guardrail) and auto-creates eval_configs from SOP steps (`tool_called` for tool steps, `llm_judge` for instruction steps) and guardrails. Supports re-initialization: deletes auto-generated test cases, preserves manual ones. `sopId` is required.
+1. **`initSuiteFromSop(orgId, agentId, sopId)`** — SOP-based. Creates a single auto-generated test case with evaluators for ALL SOP steps (`tool_called` for tool steps, `llm_judge` for instruction steps). Required steps get `required: true` evaluators; optional steps get `required: false`. Guardrail KB evaluators are also added. Supports re-initialization: deletes auto-generated test cases, preserves manual ones. `sopId` is required.
 
 2. **`createSuite(orgId, { agentId, name, sopId? })`** — Manual. Creates an empty suite. User populates test cases and evaluators via CRUD endpoints. `sopId` is optional metadata — no derivation.
 
@@ -173,13 +161,26 @@ Assertions reference eval_configs which store `connectorToolId` (UUID). `resolve
 
 - **Keep legacy SOP eval path alongside suites** — rejected: two eval entry points with overlapping functionality. The suite IS the SOP-derived eval, but better — it supports manual evaluators, path-based test cases, and re-initialization. One path is simpler than two.
 
+## Future Direction: Knowledge Base Testing
+
+Currently only guardrails (KB type `guardrail`) are auto-derived into evaluators by `initSuiteFromSop`. Other KB content types — FAQ, personalization, company profile — are not covered by auto-generation.
+
+Two future paths for KB-based evaluation:
+
+1. **KB-derived suites** — `initSuiteFromKnowledgeBase(agentId, kbId)` creates a standalone suite with evaluators derived from KB entries. Each FAQ entry becomes an `llm_judge` evaluator ("agent answer is consistent with: {faq_content}"). Personality rules become tone/style evaluators. No SOP required.
+
+2. **Pin KB evaluators to SOP suites** — extend `initSuiteFromSop` to derive evaluators from additional KB types beyond guardrails. FAQ and personality evaluators would be pinned to all test cases, same pattern as guardrails today. Every SOP eval run also checks KB compliance.
+
+Both paths reuse the existing `eval_configs` + `eval_suite_evaluators` infrastructure. No new tables or evaluator types needed — `llm_judge` with KB-derived criteria handles all cases.
+
 ## Consequences
 
 - Suites are the single eval entry point — no more ad-hoc SOP evaluation
 - Manual suites support hand-written agents without SOPs
-- Path-based test cases correctly handle branching SOPs (escalation paths, conditional tools)
-- Re-initialization preserves human curation work (manual test cases + evaluators survive SOP changes)
+- Single auto-generated test case per SOP with required/optional evaluators matching step requirements
+- Re-initialization preserves human curation work (manual test cases survive SOP changes)
 - Async execution (Phase 3) will require changing `runEvalSuite` to return immediately and process in background — the current inline execution is acceptable for Phase 2 volume
 - The `storeSyntheticSession` production service bridges agent runners and the eval scorer — any code that runs an agent can produce a scoreable session
 - `eval_configs` accumulate over time (auto-created, never deleted) — orphaned configs are harmless but may need cleanup tooling eventually
 - Removing the legacy eval path is a breaking change for any code that called `POST /api/evals/runs` — acceptable since it was only used in tests, not by external consumers
+- Naming inconsistency: `eval_suite_evaluators` (what to check) produces results in `eval_run_scores` (what happened). `eval_run_results` would be more natural, but `eval_run_scores` is pre-existing from ADR-007. Consider renaming in a future cleanup

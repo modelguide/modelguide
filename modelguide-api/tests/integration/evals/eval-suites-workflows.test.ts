@@ -188,86 +188,41 @@ afterAll(async () => {
 // ============================================================================
 
 describe("Workflow 1: Re-init preserves manual evaluators", () => {
-  it("preserves manual evaluators across re-init while refreshing auto evaluators", async () => {
+  it("re-init replaces auto test case and preserves manual test cases", async () => {
     // 1. Init suite from SOP
     const suite1 = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
-    expect(suite1.testCases.length).toBe(3);
+    expect(suite1.testCases.length).toBe(1);
 
-    // Save original test case IDs and auto evaluator IDs
-    const originalTcIds = suite1.testCases.map((tc) => tc.id);
-    const happyPathTc = suite1.testCases.find(
-      (tc) => tc.category === "happy_path",
-    );
-    expect(happyPathTc).toBeDefined();
-
-    const originalAutoEvalIds = happyPathTc!.evaluators
-      .filter((e) => e.source === "auto")
-      .map((e) => e.id);
-    const autoEvalCount = originalAutoEvalIds.length;
+    const autoTc = suite1.testCases[0];
+    const autoEvalCount = autoTc.evaluators.length;
     expect(autoEvalCount).toBeGreaterThan(0);
 
-    // 2. Create a tool_called eval config for the manual evaluator
-    const [manualConfig] = await forOrg(ctx.orgId, (tx) =>
-      tx
-        .insert(evalConfigs)
-        .values({
-          organizationId: ctx.orgId,
-          name: "wf1-manual-check",
-          evaluatorType: "tool_called",
-          config: { connectorToolId: ctx.lookUpOrderToolId },
-        })
-        .returning(),
-    );
+    // 2. Create a manual test case (simulating user-added test)
+    const manualTc = await createTestCase(ctx.orgId, suite1.id, {
+      name: "Manual regression test",
+    });
+    expect(manualTc.source).toBe("manual");
 
-    // 3. Add a manual evaluator to the happy path test case
-    const manualEval = await createEvaluator(
-      ctx.orgId,
-      suite1.id,
-      happyPathTc!.id,
-      {
-        evalConfigId: manualConfig.id,
-        name: "manual-check",
-        required: true,
-      },
-    );
-    expect(manualEval.source).toBe("manual");
-
-    // 4. Verify happy path has auto + manual evaluators
+    // 3. Verify suite has 1 auto + 1 manual test case
     const suiteBeforeReinit = await getEvalSuiteById(ctx.orgId, suite1.id);
-    const hpBefore = suiteBeforeReinit.testCases.find(
-      (tc) => tc.category === "happy_path",
-    )!;
-    const manualBefore = hpBefore.evaluators.filter(
-      (e) => e.source === "manual",
-    );
-    const autoBefore = hpBefore.evaluators.filter((e) => e.source === "auto");
-    expect(manualBefore.length).toBe(1);
-    expect(autoBefore.length).toBe(autoEvalCount);
+    expect(suiteBeforeReinit.testCases.length).toBe(2);
 
-    // 5. Re-init suite from SOP
+    // 4. Re-init suite from SOP
     const suite2 = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
 
-    // 6. Verify structure
-    expect(suite2.testCases.length).toBe(3);
-    // Same test case IDs (upsert, not recreate)
-    const reinitTcIds = suite2.testCases.map((tc) => tc.id);
-    expect(reinitTcIds).toEqual(originalTcIds);
-
-    // Happy path still has the manual evaluator
-    const hpAfter = suite2.testCases.find(
-      (tc) => tc.category === "happy_path",
-    )!;
-    const manualAfter = hpAfter.evaluators.filter((e) => e.source === "manual");
+    // 5. Verify: auto test case was replaced (new ID), manual test case preserved
+    expect(suite2.testCases.length).toBe(2); // 1 new auto + 1 manual
+    const autoAfter = suite2.testCases.filter((tc) => tc.source === "auto");
+    const manualAfter = suite2.testCases.filter((tc) => tc.source === "manual");
+    expect(autoAfter.length).toBe(1);
     expect(manualAfter.length).toBe(1);
-    expect(manualAfter[0].id).toBe(manualEval.id);
+    expect(manualAfter[0].id).toBe(manualTc.id);
 
-    // Auto evaluators were refreshed (new IDs)
-    const autoAfter = hpAfter.evaluators.filter((e) => e.source === "auto");
-    expect(autoAfter.length).toBe(autoEvalCount);
-    const newAutoIds = autoAfter.map((e) => e.id);
-    for (const oldId of originalAutoEvalIds) {
-      expect(newAutoIds).not.toContain(oldId);
-    }
+    // Auto test case has new ID (replaced, not updated)
+    expect(autoAfter[0].id).not.toBe(autoTc.id);
+
+    // Auto evaluators were recreated
+    expect(autoAfter[0].evaluators.length).toBe(autoEvalCount);
 
     // Cleanup
     await deleteEvalSuite(ctx.orgId, suite2.id);
@@ -291,7 +246,6 @@ describe("Workflow 2: Manual suite lifecycle", () => {
     // 2. Create first test case
     const tc1 = await createTestCase(ctx.orgId, suite.id, {
       name: "Order lookup test",
-      category: "happy_path",
     });
     expect(tc1.source).toBe("manual");
     expect(tc1.suiteId).toBe(suite.id);
@@ -325,7 +279,6 @@ describe("Workflow 2: Manual suite lifecycle", () => {
     // 6. Create second test case
     const tc2 = await createTestCase(ctx.orgId, suite.id, {
       name: "Escalation test",
-      category: "guardrail",
     });
     expect(tc2.name).toBe("Escalation test");
 
@@ -348,7 +301,7 @@ describe("Workflow 3: Archive prevents execution", () => {
     async () => {
       // 1. Init suite
       const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
-      expect(suite.testCases.length).toBe(3);
+      expect(suite.testCases.length).toBe(1);
 
       // 2. Compile agent
       await compileAgent({
@@ -634,7 +587,7 @@ describe("Workflow 6: Technical failure → completed_with_errors", () => {
     async () => {
       // 1. Init suite
       const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
-      expect(suite.testCases.length).toBe(3);
+      expect(suite.testCases.length).toBe(1);
 
       // 2. Compile + run agent + store session
       await compileAgent({
@@ -653,14 +606,11 @@ describe("Workflow 6: Technical failure → completed_with_errors", () => {
         "wf6@example.com",
       );
 
-      // 3. Pick the guardrail test case, find one of its auto evaluators
-      const guardrailTc = suite.testCases.find(
-        (tc) => tc.category === "guardrail",
-      )!;
-      expect(guardrailTc).toBeDefined();
-      expect(guardrailTc.evaluators.length).toBeGreaterThan(0);
+      // 3. Pick the auto test case, find one of its evaluators
+      const autoTc = suite.testCases[0];
+      expect(autoTc.evaluators.length).toBeGreaterThan(0);
 
-      const targetEvaluator = guardrailTc.evaluators[0];
+      const targetEvaluator = autoTc.evaluators[0];
 
       // 4. Delete that evaluator's eval_config directly from DB (sabotage)
       //    First, remove FK references (evaluators pointing to this config)

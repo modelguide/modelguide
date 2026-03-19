@@ -39,7 +39,6 @@ export interface RunEvalSuiteOpts {
 export interface CreateTestCaseInput {
   name: string;
   description?: string;
-  category?: string;
   input?: Record<string, unknown>;
   expectedBehavior?: string;
 }

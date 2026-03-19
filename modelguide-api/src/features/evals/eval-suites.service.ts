@@ -101,18 +101,13 @@ export async function initSuiteFromSop(
       .where(and(eq(evalSuites.agentId, agentId), eq(evalSuites.sopId, sopId)));
 
     let suiteId: string;
-    // Map of category → existing auto test case ID (for in-place update on re-init)
-    const existingAutoTestCases = new Map<string, string>();
 
     if (existingSuite) {
       suiteId = existingSuite.id;
 
       // Load existing auto test cases
       const autoTestCases = await tx
-        .select({
-          id: evalSuiteTestCases.id,
-          category: evalSuiteTestCases.category,
-        })
+        .select({ id: evalSuiteTestCases.id })
         .from(evalSuiteTestCases)
         .where(
           and(
@@ -121,18 +116,11 @@ export async function initSuiteFromSop(
           ),
         );
 
+      // Delete auto test cases (cascade deletes their evaluators)
       for (const tc of autoTestCases) {
-        if (tc.category) existingAutoTestCases.set(tc.category, tc.id);
-
-        // Delete only auto evaluators on this test case — manual evaluators survive
         await tx
-          .delete(evalSuiteEvaluators)
-          .where(
-            and(
-              eq(evalSuiteEvaluators.testCaseId, tc.id),
-              eq(evalSuiteEvaluators.source, "auto"),
-            ),
-          );
+          .delete(evalSuiteTestCases)
+          .where(eq(evalSuiteTestCases.id, tc.id));
       }
     } else {
       // Create new suite
@@ -189,211 +177,128 @@ export async function initSuiteFromSop(
 
     const evalConfigMap = new Map(evalConfigRows.map((c) => [c.id, c]));
 
-    // 6. Build path-based test cases
-    //
-    // Classify steps:
-    //   - requiredSteps: steps with required: true
-    //   - optionalToolSteps: steps with required: false AND a connectorToolId (escalation branch)
-    //   - requiredInstructionSteps: required steps without a connectorToolId
-    //
-    // Test case paths:
-    //   - happy_path:  assertions for all required steps
-    //   - edge_case:   same assertions, different category (for varied inputs)
-    //   - guardrail:   required instruction steps + optional tool steps (escalation path)
-
-    const requiredSteps = stepRows.filter((s) => s.required);
-    const optionalToolSteps = stepRows.filter(
-      (s) => !s.required && s.connectorToolId,
-    );
-    const requiredInstructionSteps = requiredSteps.filter(
-      (s) => !s.connectorToolId,
-    );
-
-    type SopStepRow = (typeof stepRows)[number];
-
-    const paths: Array<{
-      name: string;
-      category: string;
-      description: string;
-      steps: SopStepRow[];
-    }> = [
-      {
-        name: "Happy path",
-        category: "happy_path",
+    // 6. Build single test case with evaluators for ALL steps
+    const [testCase] = await tx
+      .insert(evalSuiteTestCases)
+      .values({
+        organizationId: orgId,
+        suiteId,
+        name: `Eval: ${sop.name}`,
         description:
-          "All required steps execute successfully in the expected order.",
-        steps: requiredSteps,
-      },
-      {
-        name: "Edge case",
-        category: "edge_case",
-        description:
-          "Same required steps but with unusual or boundary-condition inputs.",
-        steps: requiredSteps,
-      },
-      {
-        name: "Guardrail path",
-        category: "guardrail",
-        description:
-          "Required instruction steps plus optional escalation/tool steps.",
-        steps: [...requiredInstructionSteps, ...optionalToolSteps],
-      },
-    ];
+          "Auto-generated test case covering all SOP steps. Required steps have required evaluators; optional steps have optional evaluators.",
+        source: "auto",
+        order: 0,
+      })
+      .returning();
 
-    const testCases: Array<EvalSuiteTestCase> = [];
+    // Create step-specific evaluators for ALL steps
+    for (const step of stepRows) {
+      let configId = step.evalConfigId;
+      let evaluatorType: string | undefined;
 
-    for (let pi = 0; pi < paths.length; pi++) {
-      const path = paths[pi];
+      if (configId) {
+        // Step already has an eval config — use it
+        const cfg = evalConfigMap.get(configId);
+        if (!cfg) continue;
+        evaluatorType = cfg.evaluatorType;
+      } else if (step.connectorToolId) {
+        // Auto-create tool_called eval config
+        const autoName = `auto:tool_called:${step.stepId}`;
+        const [existing] = await tx
+          .select({ id: evalConfigs.id })
+          .from(evalConfigs)
+          .where(
+            and(
+              eq(evalConfigs.name, autoName),
+              eq(evalConfigs.evaluatorType, "tool_called"),
+            ),
+          );
 
-      // Upsert test case — update in place on re-init, create on first init
-      const existingTcId = existingAutoTestCases.get(path.category);
-      let testCase: EvalSuiteTestCase;
-
-      if (existingTcId) {
-        const [updated] = await tx
-          .update(evalSuiteTestCases)
-          .set({
-            name: `${path.name}: ${sop.name}`,
-            description: path.description,
-            order: pi,
-          })
-          .where(eq(evalSuiteTestCases.id, existingTcId))
-          .returning();
-        testCase = updated;
-      } else {
-        const [created] = await tx
-          .insert(evalSuiteTestCases)
-          .values({
-            organizationId: orgId,
-            suiteId,
-            name: `${path.name}: ${sop.name}`,
-            description: path.description,
-            category: path.category,
-            source: "auto",
-            order: pi,
-          })
-          .returning();
-        testCase = created;
-      }
-
-      testCases.push(testCase);
-
-      // Create step-specific evaluators for this path's steps
-      for (const step of path.steps) {
-        let configId = step.evalConfigId;
-        let evaluatorType: string | undefined;
-
-        if (configId) {
-          // Step already has an eval config — use it
-          const cfg = evalConfigMap.get(configId);
-          if (!cfg) continue;
-          evaluatorType = cfg.evaluatorType;
-        } else if (step.connectorToolId) {
-          // Auto-create tool_called eval config
-          const autoName = `auto:tool_called:${step.stepId}`;
-          const [existing] = await tx
-            .select({ id: evalConfigs.id })
-            .from(evalConfigs)
-            .where(
-              and(
-                eq(evalConfigs.name, autoName),
-                eq(evalConfigs.evaluatorType, "tool_called"),
-              ),
-            );
-
-          const toolConfig = { connectorToolId: step.connectorToolId };
-          if (existing) {
-            // Update config payload in case the tool reference changed
-            await tx
-              .update(evalConfigs)
-              .set({ config: toolConfig })
-              .where(eq(evalConfigs.id, existing.id));
-            configId = existing.id;
-          } else {
-            const [created] = await tx
-              .insert(evalConfigs)
-              .values({
-                organizationId: orgId,
-                name: autoName,
-                description: `Auto-generated from SOP step: ${step.stepId}`,
-                evaluatorType: "tool_called",
-                config: toolConfig,
-              })
-              .returning({ id: evalConfigs.id });
-            configId = created.id;
-          }
-          evaluatorType = "tool_called";
-        } else if (step.instruction && step.required) {
-          // Auto-create llm_judge eval config for required instruction steps
-          const autoName = `auto:llm_judge:${step.stepId}`;
-          const [existing] = await tx
-            .select({ id: evalConfigs.id })
-            .from(evalConfigs)
-            .where(
-              and(
-                eq(evalConfigs.name, autoName),
-                eq(evalConfigs.evaluatorType, "llm_judge"),
-              ),
-            );
-
-          const judgeConfig = {
-            criterion: `The agent's response demonstrates that it correctly performed this step: "${step.instruction}". The agent does not need to explicitly state it performed this step — behavioral evidence is sufficient.`,
-          };
-          if (existing) {
-            // Update criterion in case the instruction text changed
-            await tx
-              .update(evalConfigs)
-              .set({ config: judgeConfig })
-              .where(eq(evalConfigs.id, existing.id));
-            configId = existing.id;
-          } else {
-            const [created] = await tx
-              .insert(evalConfigs)
-              .values({
-                organizationId: orgId,
-                name: autoName,
-                description: `Auto-generated from SOP step: ${step.stepId}`,
-                evaluatorType: "llm_judge",
-                config: judgeConfig,
-              })
-              .returning({ id: evalConfigs.id });
-            configId = created.id;
-          }
-          evaluatorType = "llm_judge";
+        const toolConfig = { connectorToolId: step.connectorToolId };
+        if (existing) {
+          await tx
+            .update(evalConfigs)
+            .set({ config: toolConfig })
+            .where(eq(evalConfigs.id, existing.id));
+          configId = existing.id;
         } else {
-          // Optional instruction-only step with no tool — skip
-          continue;
+          const [created] = await tx
+            .insert(evalConfigs)
+            .values({
+              organizationId: orgId,
+              name: autoName,
+              description: `Auto-generated from SOP step: ${step.stepId}`,
+              evaluatorType: "tool_called",
+              config: toolConfig,
+            })
+            .returning({ id: evalConfigs.id });
+          configId = created.id;
         }
+        evaluatorType = "tool_called";
+      } else if (step.instruction) {
+        // Auto-create llm_judge eval config for instruction steps
+        const autoName = `auto:llm_judge:${step.stepId}`;
+        const [existing] = await tx
+          .select({ id: evalConfigs.id })
+          .from(evalConfigs)
+          .where(
+            and(
+              eq(evalConfigs.name, autoName),
+              eq(evalConfigs.evaluatorType, "llm_judge"),
+            ),
+          );
 
-        const isOptional = !step.required;
-        const evaluatorRequired =
-          evaluatorType === "tool_called" && isOptional ? false : step.required;
-
-        await tx.insert(evalSuiteEvaluators).values({
-          organizationId: orgId,
-          testCaseId: testCase.id,
-          evalConfigId: configId!,
-          name: `step:${step.order}:${evaluatorType}`,
-          sopStepId: step.stepId,
-          source: "auto",
-          order: step.order,
-          required: evaluatorRequired,
-        });
+        const judgeConfig = {
+          criterion: `The agent's response demonstrates that it correctly performed this step: "${step.instruction}". The agent does not need to explicitly state it performed this step — behavioral evidence is sufficient.`,
+        };
+        if (existing) {
+          await tx
+            .update(evalConfigs)
+            .set({ config: judgeConfig })
+            .where(eq(evalConfigs.id, existing.id));
+          configId = existing.id;
+        } else {
+          const [created] = await tx
+            .insert(evalConfigs)
+            .values({
+              organizationId: orgId,
+              name: autoName,
+              description: `Auto-generated from SOP step: ${step.stepId}`,
+              evaluatorType: "llm_judge",
+              config: judgeConfig,
+            })
+            .returning({ id: evalConfigs.id });
+          configId = created.id;
+        }
+        evaluatorType = "llm_judge";
+      } else {
+        continue;
       }
 
-      // Add guardrail KB evaluators to every test case
-      for (let gi = 0; gi < guardrailEvaluatorConfigs.length; gi++) {
-        const guardConfig = guardrailEvaluatorConfigs[gi];
-        await tx.insert(evalSuiteEvaluators).values({
-          organizationId: orgId,
-          testCaseId: testCase.id,
-          evalConfigId: guardConfig.id,
-          name: `guardrail:${gi}`,
-          source: "auto",
-          order: 1000 + gi,
-          required: true,
-        });
-      }
+      await tx.insert(evalSuiteEvaluators).values({
+        organizationId: orgId,
+        testCaseId: testCase.id,
+        evalConfigId: configId!,
+        name: `step:${step.order}:${evaluatorType}`,
+        sopStepId: step.stepId,
+        source: "auto",
+        order: step.order,
+        required: step.required,
+      });
+    }
+
+    // Add guardrail KB evaluators
+    for (let gi = 0; gi < guardrailEvaluatorConfigs.length; gi++) {
+      const guardConfig = guardrailEvaluatorConfigs[gi];
+      await tx.insert(evalSuiteEvaluators).values({
+        organizationId: orgId,
+        testCaseId: testCase.id,
+        evalConfigId: guardConfig.id,
+        name: `guardrail:${gi}`,
+        source: "auto",
+        order: 1000 + gi,
+        required: true,
+      });
     }
 
     // Return the suite with test cases
@@ -1018,7 +923,6 @@ export async function createTestCase(
         suiteId,
         name: data.name,
         description: data.description ?? null,
-        category: data.category ?? null,
         source: "manual",
         input: data.input ?? null,
         expectedBehavior: data.expectedBehavior ?? null,

@@ -252,11 +252,6 @@ describe("Compiler E2E: compile → run → store → eval", () => {
       // - Every test case got an eval run (not skipped)
       // - Every test case produced scores (assertions were resolved and executed)
       // - At least some assertions pass (the agent does call tools correctly)
-      //
-      // Note: not all test cases will pass because:
-      // - All 3 test cases evaluate the same session (a happy-path WISMO email)
-      // - The guardrail path expects escalation behavior that won't happen on a WISMO email
-      // - The llm_judge for "classify intent" is strict — agent handles intent without explicit classification
       const allScores = suiteResult.results.flatMap((r) => r.scores);
       const passingScores = allScores.filter((s) => s.result === "pass");
       expect(passingScores.length).toBeGreaterThan(0);

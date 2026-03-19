@@ -35,7 +35,6 @@ CREATE TABLE "eval_suite_test_cases" (
 	"suite_id" uuid NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"description" text,
-	"category" varchar(100),
 	"source" "eval_suite_test_case_source" DEFAULT 'auto' NOT NULL,
 	"input" jsonb,
 	"expected_behavior" text,

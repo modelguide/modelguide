@@ -164,10 +164,10 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
         },
       });
 
-      // Step 1: initSuiteFromSop — auto-generates path-based test cases
+      // Step 1: initSuiteFromSop — auto-generates single test case with all evaluators
       const suite = await initSuiteFromSop(orgId, agentId, sop.id);
 
-      expect(suite.testCases.length).toBe(3); // happy_path, edge_case, guardrail
+      expect(suite.testCases.length).toBe(1);
       const allEvaluators = suite.testCases.flatMap(
         (tc: { evaluators: unknown[] }) => tc.evaluators,
       );

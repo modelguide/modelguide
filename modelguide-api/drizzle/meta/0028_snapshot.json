@@ -1,5 +1,5 @@
 {
-  "id": "f20f1fa0-b522-4a98-ab46-4a50c78dd798",
+  "id": "11e44e6c-b758-447e-9c44-438a18f87194",
   "prevId": "61da20a2-7e5a-44de-9d15-e6ef0774cb9c",
   "version": "7",
   "dialect": "postgresql",
@@ -3872,12 +3872,6 @@
         "description": {
           "name": "description",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "category": {
-          "name": "category",
-          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },

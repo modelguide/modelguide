@@ -27,7 +27,6 @@ export const runEvalSuiteSchema = z.object({
 export const createTestCaseSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
-  category: z.string().max(100).optional(),
   input: z.record(z.string(), z.unknown()).optional(),
   expectedBehavior: z.string().optional(),
 });

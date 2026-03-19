@@ -106,7 +106,6 @@ export const evalSuiteTestCases = pgTable(
       .references(() => evalSuites.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    category: varchar("category", { length: 100 }),
     /** Whether this test case was auto-generated or manually created. */
     source: evalSuiteTestCaseSourceEnum("source").notNull().default("auto"),
     /** Input scenario for the test (e.g., customer message). */
