@@ -2,12 +2,19 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
+import { Badge } from '~/components/ui/badge'
 import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Spinner } from '~/components/ui/spinner'
 import { SessionDetail } from '~/features/sessions/components/session-detail'
 import { api } from '~/lib/api'
 import { useCanMutate } from '~/lib/permissions'
-import type { SessionDetail as SessionDetailType } from '~/schemas/sessions'
+import type { SessionDetail as SessionDetailType, SessionStatus } from '~/schemas/sessions'
+
+const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
+  active: 'active',
+  completed: 'completed',
+  abandoned: 'abandoned',
+}
 
 export const Route = createFileRoute('/_authenticated/sessions/$id')({
   component: SessionDetailPage,
@@ -42,8 +49,11 @@ function SessionDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-fg-primary">Session Detail</h1>
-          <p className="mt-1 font-mono text-xs text-fg-muted">{id}</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-fg-primary">Session Detail</h1>
+            {session && <Badge variant={statusVariants[session.status]}>{session.status}</Badge>}
+          </div>
+          <p className="mt-0.5 font-mono text-xs text-fg-muted">{id}</p>
         </div>
       </div>
 

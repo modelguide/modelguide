@@ -1,12 +1,5 @@
-import {
-  ExternalLink,
-  FileCheck,
-  HelpCircle,
-  Link,
-  type LucideIcon,
-  Package,
-  Ticket,
-} from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { ExternalLink, Link as LinkIcon, type LucideIcon, Package, Ticket } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -17,16 +10,9 @@ import { formatDate, formatDuration } from '~/lib/utils'
 import type {
   SessionDetail as SessionDetailType,
   SessionLink,
-  SessionStatus,
   SopClassification,
 } from '~/schemas/sessions'
 import { Transcript } from './transcript'
-
-const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
-  active: 'active',
-  completed: 'completed',
-  abandoned: 'abandoned',
-}
 
 export interface SessionDetailProps {
   session: SessionDetailType
@@ -43,10 +29,10 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
 
   return (
     <div className="space-y-6">
-      {/* Session Info - Matching sessions list columns */}
+      {/* Session Info — compact panel */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="pt-5 pb-4">
+          <div className="grid gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
             <InfoItem label="Time">
               <Tooltip
                 content={
@@ -79,10 +65,6 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
               <span className="text-sm text-fg-primary">{session.userIdentifier}</span>
             </InfoItem>
 
-            <InfoItem label="Status">
-              <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
-            </InfoItem>
-
             <InfoItem label="Duration">
               <span className="text-sm text-fg-primary">
                 {session.durationSeconds ? formatDuration(session.durationSeconds) : 'Ongoing'}
@@ -98,6 +80,10 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                   return '\u2014'
                 })()}
               </span>
+            </InfoItem>
+
+            <InfoItem label="SOP">
+              <SopInline classification={session.sopClassification} />
             </InfoItem>
 
             <InfoItem label="User Rating">
@@ -123,7 +109,7 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
             </InfoItem>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-fg-subtle/10 pt-4 text-xs text-fg-muted">
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-fg-subtle/10 pt-3 text-xs text-fg-muted">
             <span>Started: {formatDate(session.startedAt)}</span>
             {session.endedAt && <span>Ended: {formatDate(session.endedAt)}</span>}
             {session.externalId && <span>External ID: {session.externalId}</span>}
@@ -135,13 +121,13 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
             (() => {
               const meta = session.metadata as Record<string, unknown>
               return (
-                <div className="mt-4 border-t border-fg-subtle/10 pt-4">
+                <div className="mt-3 border-t border-fg-subtle/10 pt-3">
                   {meta.transcript_summary ? (
-                    <p className="mb-3 text-sm italic text-fg-secondary">
+                    <p className="mb-2 text-sm italic text-fg-secondary">
                       {String(meta.transcript_summary)}
                     </p>
                   ) : null}
-                  <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-fg-muted">
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-fg-muted">
                     {meta.llm_model ? (
                       <span>
                         Model:{' '}
@@ -159,7 +145,6 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                         </span>
                       </span>
                     ) : null}
-                    {/* Cost is shown in the header summary above */}
                     {meta.call_successful ? (
                       <span>
                         Result:{' '}
@@ -178,9 +163,6 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
             })()}
         </CardContent>
       </Card>
-
-      {/* SOP Classification */}
-      <SopClassificationCard classification={session.sopClassification} />
 
       {/* External Resources */}
       {session.links && session.links.length > 0 && (
@@ -252,7 +234,7 @@ const resourceIcons: Record<string, LucideIcon> = {
 }
 
 function ExternalLinkRow({ link }: { link: SessionLink }) {
-  const Icon = resourceIcons[link.resourceType ?? ''] ?? Link
+  const Icon = resourceIcons[link.resourceType ?? ''] ?? LinkIcon
   return (
     <a
       href={link.url}
@@ -279,66 +261,45 @@ function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function SopClassificationCard({ classification }: { classification: SopClassification }) {
+function SopInline({ classification }: { classification: SopClassification }) {
   if (!classification) {
-    return (
-      <Card>
-        <CardContent className="flex items-center gap-3 pt-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-subtle">
-            <FileCheck className="h-4 w-4 text-fg-muted" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-fg-secondary">SOP Classification</p>
-            <p className="text-xs text-fg-muted">No SOP was classified for this session</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
+    return <span className="text-sm text-fg-muted">{'\u2014'}</span>
   }
 
   if (classification.sopSlug === '__unknown__') {
     return (
-      <Card>
-        <CardContent className="flex items-center gap-3 pt-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
-            <HelpCircle className="h-4 w-4 text-warning" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-fg-secondary">SOP Classification</p>
-            <p className="text-xs text-warning">
-              Unknown SOP -- the agent could not match this session to a known procedure
-            </p>
-          </div>
-          {classification.confidence != null && (
-            <Badge variant="warning" className="ml-auto">
-              {Math.round(classification.confidence * 100)}% confidence
-            </Badge>
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex items-center gap-2">
+        <Badge variant="warning">Unknown</Badge>
+        {classification.confidence != null && (
+          <span className="text-xs text-fg-muted">
+            {Math.round(classification.confidence * 100)}%
+          </span>
+        )}
+      </div>
     )
   }
 
+  const confidenceColor =
+    classification.confidence != null
+      ? classification.confidence >= 0.8
+        ? 'text-success'
+        : classification.confidence >= 0.5
+          ? 'text-warning'
+          : 'text-error'
+      : 'text-fg-muted'
+
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 pt-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/10">
-          <FileCheck className="h-4 w-4 text-brand-500" />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-fg-primary">
-            {classification.sopName ?? classification.sopSlug}
-          </p>
-          <p className="text-xs text-fg-muted">
-            SOP: <span className="font-mono">{classification.sopSlug}</span>
-          </p>
-        </div>
-        {classification.confidence != null && (
-          <Badge variant="brand" className="ml-auto">
-            {Math.round(classification.confidence * 100)}% confidence
-          </Badge>
-        )}
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-2">
+      <Link to="/sops" className="transition-colors hover:text-brand-500">
+        <Badge variant="default" className="cursor-pointer hover:bg-brand-500/20">
+          {classification.sopName ?? classification.sopSlug}
+        </Badge>
+      </Link>
+      {classification.confidence != null && (
+        <span className={`text-xs ${confidenceColor}`}>
+          {Math.round(classification.confidence * 100)}%
+        </span>
+      )}
+    </div>
   )
 }
