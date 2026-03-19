@@ -111,6 +111,10 @@ router.openapi(compileRoute, async (c) => {
     dryRun: dryRun === true,
   });
 
+  if (!dryRun && !result.agent) {
+    throw new Error("Compilation succeeded but agent update failed");
+  }
+
   const compiledFrom = dryRun
     ? (result.compiledFrom as Record<string, unknown>)
     : (result.agent!.compiledFrom as Record<string, unknown>);

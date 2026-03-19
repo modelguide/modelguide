@@ -227,7 +227,10 @@ function formatAgent(
     },
     compiledInstructions: agent.compiledInstructions ?? null,
     compiledAt: agent.compiledAt?.toISOString() ?? null,
-    compiledFrom: (agent.compiledFrom as Record<string, unknown>) ?? null,
+    compiledFrom: (agent.compiledFrom ?? null) as Record<
+      string,
+      unknown
+    > | null,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
   };

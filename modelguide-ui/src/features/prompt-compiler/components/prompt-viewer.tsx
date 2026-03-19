@@ -86,12 +86,8 @@ function StructuredView({ content }: { content: string }) {
             'animate-fade-up',
             section.type !== 'preamble' && 'border-l-2 pl-4',
             sectionColors[section.type],
-            i === 0 && 'stagger-1',
-            i === 1 && 'stagger-2',
-            i === 2 && 'stagger-3',
-            i === 3 && 'stagger-4',
-            i === 4 && 'stagger-5',
           )}
+          style={{ animationDelay: `${i * 50}ms` }}
         >
           {section.heading ? (
             <h3 className="font-display text-sm font-semibold text-fg-primary mb-2">
@@ -104,7 +100,10 @@ function StructuredView({ content }: { content: string }) {
 
               // Tool references
               if (section.type === 'tools' && line.match(/^- /)) {
-                const toolName = line.replace(/^- /, '').trim()
+                const toolName = line
+                  .replace(/^- /, '')
+                  .split(/\s[—–-]\s/)[0]
+                  .trim()
                 return (
                   <span
                     key={`${section.heading}-tool-${j}`}

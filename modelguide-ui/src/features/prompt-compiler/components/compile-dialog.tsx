@@ -90,7 +90,10 @@ export function CompileDialog({
     applyMutation.mutate(selectedSopId)
   }
 
-  const hasChanges = currentPrompt !== null && previewResult !== null
+  const hasChanges =
+    currentPrompt !== null &&
+    previewResult !== null &&
+    currentPrompt !== previewResult.compiledPrompt
   const noSopsAvailable = !sopsLoading && agentSops.length === 0
 
   return (
