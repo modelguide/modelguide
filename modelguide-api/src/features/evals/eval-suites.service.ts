@@ -12,6 +12,7 @@ import {
   type EvalSuiteEvaluator,
   type EvalSuiteTestCase,
   agentKnowledgeBase,
+  agentSops,
   agents,
   connectorTools,
   connectors,
@@ -93,6 +94,17 @@ export async function initSuiteFromSop(
       .from(sops)
       .where(eq(sops.id, sopId));
     if (!sop) throw Errors.sopNotFound(sopId);
+
+    // 1c. Validate SOP is assigned to agent
+    const [assignment] = await tx
+      .select({ agentId: agentSops.agentId })
+      .from(agentSops)
+      .where(and(eq(agentSops.agentId, agentId), eq(agentSops.sopId, sopId)));
+    if (!assignment) {
+      throw Errors.validationError(
+        `SOP "${sop.name}" is not assigned to agent "${agent.name}"`,
+      );
+    }
 
     // 2. Check for existing suite (re-initialization)
     const [existingSuite] = await tx
@@ -275,11 +287,15 @@ export async function initSuiteFromSop(
         continue;
       }
 
+      const stepLabel = step.instruction
+        ? truncate(step.instruction, 80)
+        : `step ${step.order}`;
+
       await tx.insert(evalSuiteEvaluators).values({
         organizationId: orgId,
         testCaseId: testCase.id,
         evalConfigId: configId!,
-        name: `step:${step.order}:${evaluatorType}`,
+        name: `${stepLabel} (${evaluatorType})`,
         sopStepId: step.stepId,
         source: "auto",
         order: step.order,
@@ -294,7 +310,7 @@ export async function initSuiteFromSop(
         organizationId: orgId,
         testCaseId: testCase.id,
         evalConfigId: guardConfig.id,
-        name: `guardrail:${gi}`,
+        name: `${guardConfig.guardrailName} (guardrail)`,
         source: "auto",
         order: 1000 + gi,
         required: true,
@@ -359,7 +375,7 @@ async function loadGuardrailEvaluators(
   tx: Transaction,
   orgId: string,
   agentId: string,
-): Promise<Array<{ id: string }>> {
+): Promise<Array<{ id: string; guardrailName: string }>> {
   // Find guardrails assigned to this agent
   const kbAssignments = await tx
     .select({ knowledgeBaseId: agentKnowledgeBase.knowledgeBaseId })
@@ -384,7 +400,7 @@ async function loadGuardrailEvaluators(
   if (guardrails.length === 0) return [];
 
   // Create or find eval_configs for each guardrail
-  const configs: Array<{ id: string }> = [];
+  const configs: Array<{ id: string; guardrailName: string }> = [];
   for (const guardrail of guardrails) {
     // Check if a guardrail eval config already exists
     const configName = `guardrail:${guardrail.slug}`;
@@ -407,7 +423,7 @@ async function loadGuardrailEvaluators(
         .update(evalConfigs)
         .set({ config: guardrailConfig })
         .where(eq(evalConfigs.id, existing.id));
-      configs.push(existing);
+      configs.push({ ...existing, guardrailName: guardrail.name });
     } else {
       const [created] = await tx
         .insert(evalConfigs)
@@ -419,7 +435,7 @@ async function loadGuardrailEvaluators(
           config: guardrailConfig,
         })
         .returning({ id: evalConfigs.id });
-      configs.push(created);
+      configs.push({ ...created, guardrailName: guardrail.name });
     }
   }
 
@@ -524,7 +540,7 @@ export async function resolveAssertions(
     if (!cfg) {
       return {
         order: a.order,
-        name: `assertion:${a.order}:unknown`,
+        name: a.name || `assertion:${a.order}:unknown`,
         required: a.required,
         evaluator: {
           configId: a.evalConfigId,
@@ -546,7 +562,7 @@ export async function resolveAssertions(
 
     return {
       order: a.order,
-      name: `assertion:${a.order}:${truncate(cfg.evaluatorType, 40)}`,
+      name: a.name || `${truncate(cfg.evaluatorType, 40)}`,
       required: a.required,
       evaluator: {
         configId: cfg.id,
@@ -780,7 +796,9 @@ async function runTestCaseEval(
     const failedRequired = scoreRows.filter(
       (s) => s.required && (s.result === "fail" || s.result === "error"),
     );
-    const passed = failedRequired.length === 0;
+    const allSkipped = scoreRows.every((s) => s.result === "skip");
+    // If all evaluators were skipped, the result is inconclusive (null)
+    const passed = allSkipped ? null : failedRequired.length === 0;
     const durationMs = elapsedMs(evalStartTime);
 
     // Persist scores and update eval run
@@ -1043,6 +1061,13 @@ export async function getEvalSuiteRuns(
         .where(eq(evalSuiteRuns.suiteId, suiteId)),
     ]);
 
+    // Load test case names for this suite
+    const testCaseRows = await tx
+      .select({ id: evalSuiteTestCases.id, name: evalSuiteTestCases.name })
+      .from(evalSuiteTestCases)
+      .where(eq(evalSuiteTestCases.suiteId, suiteId));
+    const testCaseNameMap = new Map(testCaseRows.map((tc) => [tc.id, tc.name]));
+
     // For each run, load per-test-case eval results
     const enrichedRuns = await Promise.all(
       runs.map(async (run) => {
@@ -1076,6 +1101,9 @@ export async function getEvalSuiteRuns(
         const testCaseResults: TestCaseRunDetail[] = linkedEvalRuns.map(
           (er) => ({
             testCaseId: er.testCaseId,
+            testCaseName: er.testCaseId
+              ? (testCaseNameMap.get(er.testCaseId) ?? null)
+              : null,
             evalRunId: er.id,
             passed: er.passed,
             status: er.status,
@@ -1083,17 +1111,23 @@ export async function getEvalSuiteRuns(
           }),
         );
 
-        // Aggregate pass/fail at query time
+        // Aggregate pass/fail at query time (three-state: true/false/null)
         const completedRuns = linkedEvalRuns.filter(
           (r) => r.status === "completed",
         );
-        const allPassed =
+        const anyFailed = completedRuns.some((r) => r.passed === false);
+        const allInconclusive =
           completedRuns.length > 0 &&
-          completedRuns.every((r) => r.passed === true);
+          completedRuns.every((r) => r.passed == null);
+        const passed =
+          completedRuns.length === 0 || allInconclusive ? null : !anyFailed;
+
+        const sessionId = linkedEvalRuns[0]?.sessionId ?? null;
 
         return {
           ...run,
-          passed: completedRuns.length > 0 ? allPassed : null,
+          sessionId,
+          passed,
           testCaseResults,
         };
       }),
@@ -1122,6 +1156,13 @@ export async function getEvalSuiteRunById(
 
     if (!run) throw Errors.evalSuiteRunNotFound(runId);
 
+    // Load test case names
+    const testCaseRows = await tx
+      .select({ id: evalSuiteTestCases.id, name: evalSuiteTestCases.name })
+      .from(evalSuiteTestCases)
+      .where(eq(evalSuiteTestCases.suiteId, suiteId));
+    const testCaseNameMap = new Map(testCaseRows.map((tc) => [tc.id, tc.name]));
+
     // Load per-test-case results with scores
     const linkedEvalRuns = await tx
       .select()
@@ -1148,6 +1189,9 @@ export async function getEvalSuiteRunById(
 
     const testCaseResults: TestCaseRunDetail[] = linkedEvalRuns.map((er) => ({
       testCaseId: er.testCaseId,
+      testCaseName: er.testCaseId
+        ? (testCaseNameMap.get(er.testCaseId) ?? null)
+        : null,
       evalRunId: er.id,
       passed: er.passed,
       status: er.status,
@@ -1157,12 +1201,19 @@ export async function getEvalSuiteRunById(
     const completedRuns = linkedEvalRuns.filter(
       (r) => r.status === "completed",
     );
-    const allPassed =
-      completedRuns.length > 0 && completedRuns.every((r) => r.passed === true);
+    const anyFailed = completedRuns.some((r) => r.passed === false);
+    const allInconclusive =
+      completedRuns.length > 0 && completedRuns.every((r) => r.passed == null);
+    const passed =
+      completedRuns.length === 0 || allInconclusive ? null : !anyFailed;
+
+    // Derive sessionId from linked eval runs (all share the same session)
+    const sessionId = linkedEvalRuns[0]?.sessionId ?? null;
 
     return {
       ...run,
-      passed: completedRuns.length > 0 ? allPassed : null,
+      sessionId,
+      passed,
       testCaseResults,
     };
   });

@@ -150,6 +150,7 @@ function formatSuiteRun(r: SuiteRunDetail) {
   return {
     id: r.id,
     suiteId: r.suiteId,
+    sessionId: r.sessionId ?? null,
     promptSource: r.promptSource,
     passed: r.passed,
     triggeredBy: r.triggeredBy,
@@ -159,6 +160,7 @@ function formatSuiteRun(r: SuiteRunDetail) {
     metadata: r.metadata as Record<string, unknown> | null,
     testCaseResults: r.testCaseResults.map((tc) => ({
       testCaseId: tc.testCaseId,
+      testCaseName: tc.testCaseName ?? null,
       evalRunId: tc.evalRunId,
       passed: tc.passed,
       status: tc.status,
@@ -173,6 +175,7 @@ function formatSuiteRunSummary(
   return {
     id: r.id,
     suiteId: r.suiteId,
+    sessionId: r.sessionId ?? null,
     promptSource: r.promptSource,
     passed: r.passed,
     triggeredBy: r.triggeredBy,
@@ -182,6 +185,7 @@ function formatSuiteRunSummary(
     metadata: r.metadata as Record<string, unknown> | null,
     testCaseResults: r.testCaseResults.map((tc) => ({
       testCaseId: tc.testCaseId,
+      testCaseName: tc.testCaseName ?? null,
       evalRunId: tc.evalRunId,
       passed: tc.passed,
       status: tc.status,

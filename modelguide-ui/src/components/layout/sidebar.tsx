@@ -3,6 +3,7 @@ import {
   Activity,
   Bot,
   ClipboardList,
+  FlaskConical,
   Key,
   LayoutDashboard,
   MessageSquare,
@@ -36,6 +37,7 @@ const adminNav: NavItem[] = [
   { label: 'Connectors', href: '/connectors', icon: <Plug className="h-4 w-4" /> },
   { label: 'SOPs', href: '/sops', icon: <ClipboardList className="h-4 w-4" /> },
   { label: 'Knowledge Base', href: '/knowledge-base', icon: <Shield className="h-4 w-4" /> },
+  { label: 'Eval Suites', href: '/evals', icon: <FlaskConical className="h-4 w-4" /> },
   { label: 'Secrets', href: '/secrets', icon: <Key className="h-4 w-4" />, roles: ['admin'] },
 ]
 

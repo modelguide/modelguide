@@ -73,6 +73,7 @@ export interface SuiteRunResult {
 
 export interface TestCaseRunDetail {
   testCaseId: string | null;
+  testCaseName: string | null;
   evalRunId: string;
   passed: boolean | null;
   status: string;
@@ -80,6 +81,7 @@ export interface TestCaseRunDetail {
 }
 
 export type SuiteRunDetail = EvalSuiteRunRow & {
+  sessionId: string | null;
   passed: boolean | null;
   testCaseResults: TestCaseRunDetail[];
 };
