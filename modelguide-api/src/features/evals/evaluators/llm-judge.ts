@@ -116,9 +116,8 @@ export const llmJudgeEvaluator: Evaluator = {
       };
     }
 
-    const baseUrl = env.EVAL_LLM_BASE_URL ?? "https://api.anthropic.com";
-    const model =
-      config.model ?? env.EVAL_LLM_MODEL ?? "claude-haiku-4-5-20251001";
+    const baseUrl = env.EVAL_LLM_BASE_URL ?? "https://api.openai.com/v1";
+    const model = config.model ?? env.EVAL_LLM_MODEL ?? "o4-mini";
     const boundary = `eval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const transcript = formatTranscript(ctx.messages);

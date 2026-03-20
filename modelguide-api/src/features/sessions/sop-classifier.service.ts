@@ -133,8 +133,8 @@ export async function classifySessionSop(
   );
 
   // 6. Call LLM
-  const baseUrl = env.EVAL_LLM_BASE_URL ?? "https://api.anthropic.com";
-  const model = env.EVAL_LLM_MODEL ?? "claude-haiku-4-5-20251001";
+  const baseUrl = env.EVAL_LLM_BASE_URL ?? "https://api.openai.com/v1";
+  const model = env.EVAL_LLM_MODEL ?? "o4-mini";
 
   const result = await callLlmApi({
     baseUrl,

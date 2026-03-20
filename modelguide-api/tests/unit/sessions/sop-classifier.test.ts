@@ -68,29 +68,48 @@ function makeMessages(count = 2): SessionMessage[] {
   return msgs;
 }
 
-/** Build a mock Anthropic tool_use response. */
-function anthropicToolResponse(input: Record<string, unknown>) {
+/** Build a mock OpenAI tool call response (default provider for localhost). */
+function openaiToolResponse(input: Record<string, unknown>) {
   return {
-    id: "msg_mock",
-    type: "message",
-    role: "assistant",
-    content: [{ type: "tool_use", id: "call_1", name: "classify_sop", input }],
-    model: "mock-model",
-    stop_reason: "tool_use",
-    usage: { input_tokens: 100, output_tokens: 50 },
+    id: "chatcmpl-mock",
+    object: "chat.completion",
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "classify_sop",
+                arguments: JSON.stringify(input),
+              },
+            },
+          ],
+        },
+        finish_reason: "tool_calls",
+      },
+    ],
+    usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
   };
 }
 
-/** Build a mock Anthropic text response (no tool use). */
-function anthropicTextResponse(text: string) {
+/** Build a mock OpenAI text response (no tool use). */
+function openaiTextResponse(text: string) {
   return {
-    id: "msg_mock",
-    type: "message",
-    role: "assistant",
-    content: [{ type: "text", text }],
-    model: "mock-model",
-    stop_reason: "end_turn",
-    usage: { input_tokens: 100, output_tokens: 50 },
+    id: "chatcmpl-mock",
+    object: "chat.completion",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: text },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
   };
 }
 
@@ -163,7 +182,7 @@ describe("classifySessionSop", () => {
       Promise.resolve(
         new Response(
           JSON.stringify(
-            anthropicToolResponse({
+            openaiToolResponse({
               sop_slug: "order-lookup",
               confidence: 0.92,
               reasoning: "Customer asking about order status",
@@ -197,7 +216,7 @@ describe("classifySessionSop", () => {
       Promise.resolve(
         new Response(
           JSON.stringify(
-            anthropicToolResponse({
+            openaiToolResponse({
               sop_slug: null,
               confidence: 0.3,
               reasoning: "No matching SOP",
@@ -229,7 +248,7 @@ describe("classifySessionSop", () => {
       Promise.resolve(
         new Response(
           JSON.stringify(
-            anthropicToolResponse({
+            openaiToolResponse({
               sop_slug: "nonexistent-sop",
               confidence: 0.7,
               reasoning: "Guessing",
@@ -277,7 +296,7 @@ describe("classifySessionSop", () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(
         new Response(
-          JSON.stringify(anthropicTextResponse("I think it's order-lookup")),
+          JSON.stringify(openaiTextResponse("I think it's order-lookup")),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       ),

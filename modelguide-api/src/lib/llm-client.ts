@@ -1,7 +1,9 @@
 /**
- * Shared LLM API client for Anthropic Messages API.
+ * Shared LLM API client supporting Anthropic and OpenAI-compatible APIs.
  *
- * Extracted from llm-judge.ts for reuse across evaluators and classifiers.
+ * Provider is auto-detected from baseUrl:
+ *   - Contains "anthropic" → Anthropic Messages API
+ *   - Everything else      → OpenAI Chat Completions API
  */
 
 import type { SessionMessage } from "@db/schema";
@@ -64,38 +66,176 @@ export type LlmApiResult =
   | { ok: true; toolInput: Record<string, unknown> }
   | { ok: false; kind: "transient" | "permanent"; reasoning: string };
 
+type LlmProvider = "anthropic" | "openai";
+
+/** Detect provider from base URL. Anthropic if URL contains "anthropic", else OpenAI. */
+export function detectProvider(baseUrl: string): LlmProvider {
+  return baseUrl.includes("anthropic") ? "anthropic" : "openai";
+}
+
+// ── Anthropic helpers ─────────────────────────────────────────────────
+
+function buildAnthropicRequest(req: LlmApiRequest) {
+  const body: Record<string, unknown> = {
+    model: req.model,
+    max_tokens: req.maxTokens ?? 512,
+    system: req.system,
+    messages: [{ role: "user", content: req.user }],
+  };
+  if (req.tools?.length) {
+    body.tools = req.tools;
+  }
+  if (req.tool_choice) {
+    body.tool_choice = req.tool_choice;
+  }
+  return {
+    url: `${req.baseUrl}/v1/messages`,
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": req.apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body,
+  };
+}
+
+function parseAnthropicResponse(
+  data: Record<string, unknown>,
+  hasTools: boolean,
+): LlmApiResult {
+  const content = data.content as
+    | Array<{ type: string; text?: string; input?: Record<string, unknown> }>
+    | undefined;
+
+  if (hasTools) {
+    const toolUse = content?.find((c) => c.type === "tool_use");
+    if (toolUse?.input) {
+      return { ok: true, toolInput: toolUse.input };
+    }
+  }
+  const text = content?.find((c) => c.type === "text")?.text;
+  if (!text) {
+    return {
+      ok: false,
+      kind: "permanent",
+      reasoning: "LLM returned empty response",
+    };
+  }
+  return { ok: true, text };
+}
+
+// ── OpenAI helpers ────────────────────────────────────────────────────
+
+function buildOpenAIRequest(req: LlmApiRequest) {
+  const body: Record<string, unknown> = {
+    model: req.model,
+    max_completion_tokens: req.maxTokens ?? 512,
+    messages: [
+      { role: "system", content: req.system },
+      { role: "user", content: req.user },
+    ],
+  };
+  if (req.tools?.length) {
+    body.tools = req.tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.input_schema,
+      },
+    }));
+  }
+  if (req.tool_choice) {
+    body.tool_choice = {
+      type: "function",
+      function: { name: req.tool_choice.name },
+    };
+  }
+
+  const base = req.baseUrl.replace(/\/+$/, "");
+  return {
+    url: `${base}/chat/completions`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${req.apiKey}`,
+    },
+    body,
+  };
+}
+
+function parseOpenAIResponse(
+  data: Record<string, unknown>,
+  hasTools: boolean,
+): LlmApiResult {
+  const choices = data.choices as
+    | Array<{
+        message?: {
+          content?: string | null;
+          tool_calls?: Array<{
+            function?: { arguments?: string };
+          }>;
+        };
+      }>
+    | undefined;
+
+  const message = choices?.[0]?.message;
+  if (!message) {
+    return {
+      ok: false,
+      kind: "permanent",
+      reasoning: "LLM returned empty response",
+    };
+  }
+
+  if (hasTools && message.tool_calls?.length) {
+    const args = message.tool_calls[0].function?.arguments;
+    if (args) {
+      try {
+        return { ok: true, toolInput: JSON.parse(args) };
+      } catch {
+        return {
+          ok: false,
+          kind: "permanent",
+          reasoning: `Failed to parse tool call arguments: ${args.slice(0, 200)}`,
+        };
+      }
+    }
+  }
+
+  const text = message.content;
+  if (!text) {
+    return {
+      ok: false,
+      kind: "permanent",
+      reasoning: "LLM returned empty response",
+    };
+  }
+  return { ok: true, text };
+}
+
+// ── Main entry point ──────────────────────────────────────────────────
+
 /**
- * Call the Anthropic Messages API with timeout and transient error handling.
+ * Call an LLM API with timeout and transient error handling.
+ * Supports Anthropic Messages API and OpenAI Chat Completions API.
  *
- * When `tools` is provided, extracts `tool_use` content block and returns
- * `{ ok: true, toolInput }`. Otherwise falls back to text extraction.
+ * When `tools` is provided, extracts tool call and returns
+ * `{ ok: true, toolInput }`. Otherwise returns text.
  */
 export async function callLlmApi(req: LlmApiRequest): Promise<LlmApiResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+  const provider = detectProvider(req.baseUrl);
 
   try {
-    const body: Record<string, unknown> = {
-      model: req.model,
-      max_tokens: req.maxTokens ?? 512,
-      system: req.system,
-      messages: [{ role: "user", content: req.user }],
-    };
+    const { url, headers, body } =
+      provider === "anthropic"
+        ? buildAnthropicRequest(req)
+        : buildOpenAIRequest(req);
 
-    if (req.tools?.length) {
-      body.tools = req.tools;
-    }
-    if (req.tool_choice) {
-      body.tool_choice = req.tool_choice;
-    }
-
-    const response = await fetch(`${req.baseUrl}/v1/messages`, {
+    const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": req.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
+      headers,
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -112,15 +252,9 @@ export async function callLlmApi(req: LlmApiRequest): Promise<LlmApiResult> {
       };
     }
 
-    let data: {
-      content?: Array<{
-        type: string;
-        text?: string;
-        input?: Record<string, unknown>;
-      }>;
-    };
+    let data: Record<string, unknown>;
     try {
-      data = (await response.json()) as typeof data;
+      data = (await response.json()) as Record<string, unknown>;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Malformed LLM JSON response";
@@ -131,25 +265,10 @@ export async function callLlmApi(req: LlmApiRequest): Promise<LlmApiResult> {
       };
     }
 
-    // When tools were requested, look for tool_use content block first
-    if (req.tools?.length) {
-      const toolUse = data.content?.find((c) => c.type === "tool_use");
-      if (toolUse?.input) {
-        return { ok: true, toolInput: toolUse.input };
-      }
-      // Fall through to text extraction if no tool_use block
-    }
-
-    const text = data.content?.find((c) => c.type === "text")?.text;
-    if (!text) {
-      return {
-        ok: false,
-        kind: "permanent",
-        reasoning: "LLM returned empty response",
-      };
-    }
-
-    return { ok: true, text };
+    const hasTools = !!req.tools?.length;
+    return provider === "anthropic"
+      ? parseAnthropicResponse(data, hasTools)
+      : parseOpenAIResponse(data, hasTools);
   } catch (err) {
     clearTimeout(timeout);
     const message = err instanceof Error ? err.message : "Unknown LLM error";
