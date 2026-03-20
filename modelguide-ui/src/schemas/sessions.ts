@@ -60,6 +60,7 @@ export const sopClassificationSchema = z
     sopName: z.string().optional(),
     confidence: z.number().optional(),
     unknown: z.boolean().optional(),
+    source: z.enum(['agent', 'server']).optional(),
   })
   .nullable()
   .optional()

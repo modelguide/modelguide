@@ -1,5 +1,13 @@
 import { Link } from '@tanstack/react-router'
-import { ExternalLink, Link as LinkIcon, type LucideIcon, Package, Ticket } from 'lucide-react'
+import {
+  ExternalLink,
+  Link as LinkIcon,
+  Loader2,
+  type LucideIcon,
+  Package,
+  Sparkles,
+  Ticket,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -17,9 +25,11 @@ import { Transcript } from './transcript'
 export interface SessionDetailProps {
   session: SessionDetailType
   onRate?: () => void
+  onClassify?: () => void
+  isClassifying?: boolean
 }
 
-export function SessionDetail({ session, onRate }: SessionDetailProps) {
+export function SessionDetail({ session, onRate, onClassify, isClassifying }: SessionDetailProps) {
   const latestSupport = [...(session.feedback ?? [])]
     .reverse()
     .find((f) => f.feedbackSource === 'support')
@@ -55,7 +65,11 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
             </InfoItem>
 
             <InfoItem label="SOP">
-              <SopInline classification={session.sopClassification} />
+              <SopInline
+                classification={session.sopClassification}
+                onClassify={onClassify}
+                isClassifying={isClassifying}
+              />
             </InfoItem>
 
             <InfoItem label="User Rating">
@@ -250,8 +264,29 @@ function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function SopInline({ classification }: { classification: SopClassification }) {
+function SopInline({
+  classification,
+  onClassify,
+  isClassifying,
+}: { classification: SopClassification; onClassify?: () => void; isClassifying?: boolean }) {
   if (!classification) {
+    if (onClassify) {
+      return (
+        <button
+          type="button"
+          onClick={onClassify}
+          disabled={isClassifying}
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-fg-secondary transition-colors hover:bg-bg-subtle hover:text-fg-primary disabled:opacity-50"
+        >
+          {isClassifying ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          {isClassifying ? 'Classifying…' : 'Classify'}
+        </button>
+      )
+    }
     return <span className="text-sm text-fg-muted">{'\u2014'}</span>
   }
 
@@ -263,6 +298,13 @@ function SopInline({ classification }: { classification: SopClassification }) {
           <span className="text-xs text-fg-muted">
             {Math.round(classification.confidence * 100)}%
           </span>
+        )}
+        {classification.source === 'server' && (
+          <Tooltip content="Classified by ModelGuide" side="top">
+            <Badge variant="info" className="px-1.5 py-0 text-[10px]">
+              Auto
+            </Badge>
+          </Tooltip>
         )}
       </div>
     )
@@ -288,6 +330,13 @@ function SopInline({ classification }: { classification: SopClassification }) {
         <span className={`text-xs ${confidenceColor}`}>
           {Math.round(classification.confidence * 100)}%
         </span>
+      )}
+      {classification.source === 'server' && (
+        <Tooltip content="Classified by ModelGuide" side="top">
+          <Badge variant="info" className="px-1.5 py-0 text-[10px]">
+            Auto
+          </Badge>
+        </Tooltip>
       )}
     </div>
   )

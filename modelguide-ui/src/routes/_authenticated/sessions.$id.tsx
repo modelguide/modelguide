@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Badge } from '~/components/ui/badge'
 import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Spinner } from '~/components/ui/spinner'
@@ -23,7 +24,19 @@ export const Route = createFileRoute('/_authenticated/sessions/$id')({
 function SessionDetailPage() {
   const { id } = Route.useParams()
   const canMutate = useCanMutate()
+  const queryClient = useQueryClient()
   const [ratingOpen, setRatingOpen] = useState(false)
+
+  const classifyMutation = useMutation({
+    mutationFn: () => api.post(`sessions/${id}/classify`).json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions', id] })
+      toast.success('Session classified')
+    },
+    onError: () => {
+      toast.error('Classification failed')
+    },
+  })
 
   const {
     data: session,
@@ -70,6 +83,10 @@ function SessionDetailPage() {
           <SessionDetail
             session={session}
             onRate={canMutate ? () => setRatingOpen(true) : undefined}
+            onClassify={
+              canMutate && !session.sopClassification ? () => classifyMutation.mutate() : undefined
+            }
+            isClassifying={classifyMutation.isPending}
           />
           <RatingDialog
             sessionId={id}

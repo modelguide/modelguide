@@ -7,7 +7,7 @@
  */
 
 import { env } from "@/env";
-import type { SessionMessage } from "@db/schema";
+import { callLlmApi, formatTranscript } from "@lib/llm-client";
 import { elapsedMs } from "../evals.time";
 import type { StepEvaluatorConfig } from "../evals.types";
 import type {
@@ -15,38 +15,6 @@ import type {
   Evaluator,
   EvaluatorResult,
 } from "./evaluator.types";
-
-/** Timeout for LLM API calls in milliseconds. */
-const LLM_TIMEOUT_MS = 30_000;
-
-/** Max characters for tool input/output in transcript to control prompt size. */
-const MAX_TOOL_FIELD_CHARS = 500;
-
-/** Truncate a string to maxLen, appending "…(truncated)" if shortened. */
-function truncateField(value: unknown, maxLen: number): string {
-  const str = JSON.stringify(value) ?? String(value);
-  if (str.length <= maxLen) return str;
-  return `${str.slice(0, maxLen)}…(truncated)`;
-}
-
-/** HTTP status codes that indicate transient failures worth retrying. */
-const TRANSIENT_STATUS_CODES = new Set([429, 502, 503, 504]);
-
-/**
- * Format session messages into a readable transcript for the LLM judge.
- */
-function formatTranscript(messages: SessionMessage[]): string {
-  return messages
-    .map((msg) => {
-      if (msg.role === "tool") {
-        const input = truncateField(msg.toolInput, MAX_TOOL_FIELD_CHARS);
-        const output = truncateField(msg.toolOutput, MAX_TOOL_FIELD_CHARS);
-        return `[tool:${msg.toolName ?? "unknown"}] input=${input} output=${output} status=${msg.toolStatus ?? "unknown"}`;
-      }
-      return `[${msg.role}] ${msg.content ?? "(no content)"}`;
-    })
-    .join("\n");
-}
 
 /**
  * Build the LLM judge prompt with injection mitigation.
@@ -79,103 +47,6 @@ ${transcript}
 Evaluate whether the agent's behavior in the transcript satisfies the criterion. Respond with JSON only.`;
 
   return { system, user };
-}
-
-// ============================================================================
-// LLM API transport
-// ============================================================================
-
-interface LlmApiRequest {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  system: string;
-  user: string;
-}
-
-type LlmApiResult =
-  | { ok: true; text: string }
-  | { ok: false; kind: "transient" | "permanent"; reasoning: string };
-
-/**
- * Call the LLM API with timeout and transient error handling.
- *
- * Returns a transient/permanent failure kind so the evaluator can apply the
- * configured policy (e.g. `skipOnFailure`).
- */
-async function callLlmApi(req: LlmApiRequest): Promise<LlmApiResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(`${req.baseUrl}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": req.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: req.model,
-        max_tokens: 512,
-        system: req.system,
-        messages: [{ role: "user", content: req.user }],
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const body = await response.text();
-      const isTransient = TRANSIENT_STATUS_CODES.has(response.status);
-      return {
-        ok: false,
-        kind: isTransient ? "transient" : "permanent",
-        reasoning: `LLM API returned ${response.status}: ${body.slice(0, 200)}`,
-      };
-    }
-
-    let data: {
-      content?: Array<{ type: string; text?: string }>;
-    };
-    try {
-      data = (await response.json()) as {
-        content?: Array<{ type: string; text?: string }>;
-      };
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Malformed LLM JSON response";
-      return {
-        ok: false,
-        kind: "permanent",
-        reasoning: `LLM API JSON parse error: ${message}`,
-      };
-    }
-
-    const text = data.content?.find((c) => c.type === "text")?.text;
-    if (!text) {
-      return {
-        ok: false,
-        kind: "permanent",
-        reasoning: "LLM returned empty response",
-      };
-    }
-
-    return { ok: true, text };
-  } catch (err) {
-    clearTimeout(timeout);
-    const message = err instanceof Error ? err.message : "Unknown LLM error";
-    const isTimeout = err instanceof Error && err.name === "AbortError";
-
-    return {
-      ok: false,
-      kind: "transient",
-      reasoning: isTimeout
-        ? `LLM judge timed out after ${LLM_TIMEOUT_MS}ms`
-        : `LLM judge error: ${message}`,
-    };
-  }
 }
 
 /** Parse model text into a strict pass/fail verdict payload. */
@@ -274,6 +145,14 @@ export const llmJudgeEvaluator: Evaluator = {
         reasoning: shouldSkip
           ? `LLM transient failure skipped by policy: ${llmResult.reasoning}`
           : llmResult.reasoning,
+        durationMs: elapsedMs(start),
+      };
+    }
+
+    if (!("text" in llmResult)) {
+      return {
+        result: "error",
+        reasoning: "LLM returned unexpected response format",
         durationMs: elapsedMs(start),
       };
     }

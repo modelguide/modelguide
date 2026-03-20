@@ -4,24 +4,15 @@
  */
 
 import { forOrg } from "@db/rls";
-import {
-  agentKnowledgeBase,
-  agentSops,
-  agents,
-  knowledgeBase,
-  sops,
-} from "@db/schema";
+import { agentKnowledgeBase, agents, knowledgeBase } from "@db/schema";
 import { Errors } from "@lib/errors";
 import { getLogger } from "@lib/logger";
 import { and, eq } from "drizzle-orm";
 
+import { resolveAgentSops } from "@features/mcp/mcp.service";
 import { getSopById } from "@features/sops/sops.service";
 import { compile } from "./core/compile";
-import type {
-  AgentSopInfo,
-  CompilerInput,
-  KnowledgeBaseDetailResponse,
-} from "./core/types";
+import type { CompilerInput, KnowledgeBaseDetailResponse } from "./core/types";
 
 const log = getLogger();
 
@@ -126,18 +117,7 @@ export async function compileAgent(input: CompileAgentInput) {
   );
 
   // 4. Load all active SOPs assigned to the agent (for intent classification)
-  const agentSopRows: AgentSopInfo[] = await forOrg(orgId, async (tx) => {
-    const rows = await tx
-      .select({
-        slug: sops.slug,
-        name: sops.name,
-        description: sops.description,
-      })
-      .from(agentSops)
-      .innerJoin(sops, eq(agentSops.sopId, sops.id))
-      .where(and(eq(agentSops.agentId, agentId), eq(sops.status, "active")));
-    return rows;
-  });
+  const agentSopRows = await resolveAgentSops(orgId, agentId);
 
   // 5. Convert SOP DB result to SopDetailResponse shape
   const sopResponse = {

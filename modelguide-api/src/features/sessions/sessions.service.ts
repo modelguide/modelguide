@@ -515,6 +515,55 @@ function computeDuration(startedAt: Date, endedAt: Date | null): number | null {
   return Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
 }
 
+/**
+ * Fetch only the messages for a session (lightweight — no joins, no feedback/links).
+ */
+export async function getSessionMessages(orgId: string, sessionId: string) {
+  return forOrg(orgId, (tx) =>
+    tx
+      .select()
+      .from(sessionMessages)
+      .where(eq(sessionMessages.sessionId, sessionId))
+      .orderBy(asc(sessionMessages.occurredAt), asc(sessionMessages.createdAt)),
+  );
+}
+
+/**
+ * Merge metadata into a session without checking terminal status.
+ *
+ * Used for post-close writes like server-side SOP classification,
+ * where the session is already ended.
+ *
+ * @note Caller must verify session ownership before calling.
+ */
+export async function mergeSessionMetadata(
+  orgId: string,
+  sessionId: string,
+  metadata: Record<string, unknown>,
+) {
+  return forOrg(orgId, async (tx) => {
+    const [existing] = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+
+    if (!existing) {
+      throw Errors.sessionNotFound(sessionId);
+    }
+
+    const [updated] = await tx
+      .update(sessions)
+      .set({
+        metadata:
+          sql`coalesce(${sessions.metadata}, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb` as unknown as typeof sessions.$inferInsert.metadata,
+      })
+      .where(eq(sessions.id, sessionId))
+      .returning();
+
+    return updated;
+  });
+}
+
 // ============================================================================
 // Session validation (for MCP connector tools)
 // ============================================================================

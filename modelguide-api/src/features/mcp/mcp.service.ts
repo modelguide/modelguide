@@ -194,8 +194,10 @@ export async function resolveAgentSops(
 
 export interface SopClassification {
   sop_slug: string | null;
+  sop_name?: string;
   confidence: number;
   unknown: boolean;
+  source?: "agent" | "server";
 }
 
 export type ClassifySopResult = {
@@ -222,6 +224,8 @@ export async function classifySop(
 ): Promise<ClassifySopResult | ClassifySopError> {
   await validateActiveSession(orgId, sessionId, agentId);
 
+  let matchedName: string | undefined;
+
   if (sopSlug) {
     const agentSopList = await resolveAgentSops(orgId, agentId);
     const match = agentSopList.find((s) => s.slug === sopSlug);
@@ -232,12 +236,16 @@ export async function classifySop(
         error: `SOP slug "${sopSlug}" is not assigned to this agent. Available slugs: ${available || "(none)"}`,
       };
     }
+
+    matchedName = match.name;
   }
 
   const sopClassification: SopClassification = {
     sop_slug: sopSlug ?? null,
+    ...(matchedName && { sop_name: matchedName }),
     confidence,
     unknown: !sopSlug,
+    source: "agent",
   };
 
   await updateSession(orgId, sessionId, agentId, {

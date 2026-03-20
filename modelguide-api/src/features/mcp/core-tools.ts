@@ -111,6 +111,7 @@ export function registerCoreTools(
       session_id: z.string().describe("The current session ID"),
       sop_slug: z
         .string()
+        .min(1)
         .nullable()
         .optional()
         .describe("The slug of the matched SOP, or null/omitted if no match"),
