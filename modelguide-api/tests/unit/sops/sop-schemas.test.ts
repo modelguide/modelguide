@@ -317,6 +317,7 @@ describe("createSopSchema", () => {
   test("parses valid create request", () => {
     const result = createSopSchema.safeParse({
       name: "Order Lookup",
+      slug: "order-lookup",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },
@@ -327,7 +328,7 @@ describe("createSopSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  test("auto-generates slug when omitted", () => {
+  test("rejects create request without slug", () => {
     const result = createSopSchema.safeParse({
       name: "Order Lookup",
       definition: {
@@ -337,8 +338,7 @@ describe("createSopSchema", () => {
         metadata: {},
       },
     });
-    expect(result.success).toBe(true);
-    expect(result.data?.slug).toBeUndefined(); // slug is optional, service generates it
+    expect(result.success).toBe(false);
   });
 
   test("rejects invalid slug format", () => {
@@ -358,6 +358,7 @@ describe("createSopSchema", () => {
   test("allows agentIds", () => {
     const result = createSopSchema.safeParse({
       name: "Test",
+      slug: "test",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },
@@ -372,6 +373,7 @@ describe("createSopSchema", () => {
   test("accepts connectorToolId in write schema", () => {
     const result = createSopSchema.safeParse({
       name: "Tool Step SOP",
+      slug: "tool-step-sop",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },
@@ -396,6 +398,7 @@ describe("createSopSchema", () => {
     // Write schema is strict: only connectorToolId allowed, no toolSlug alone
     const result = createSopSchema.safeParse({
       name: "Tool Step SOP",
+      slug: "tool-step-sop-2",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },
@@ -417,6 +420,7 @@ describe("createSopSchema", () => {
   test("rejects template catalogSlug in SOP create definition", () => {
     const result = createSopSchema.safeParse({
       name: "Template Style Ref",
+      slug: "template-style-ref",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },

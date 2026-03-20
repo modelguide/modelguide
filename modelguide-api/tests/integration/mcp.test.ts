@@ -207,7 +207,8 @@ describe("Tool discovery", () => {
       .map((t) => t.name);
 
     expect(coreToolNames).toContain("core_add_messages");
-    expect(coreToolNames.length).toBe(1);
+    expect(coreToolNames).toContain("core_classify_sop");
+    expect(coreToolNames.length).toBe(2);
   });
 
   test("core_add_messages is hidden when enableCoreAddMessages is not set", async () => {

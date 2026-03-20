@@ -1,4 +1,13 @@
-import { ExternalLink, Link, type LucideIcon, Package, Ticket } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import {
+  ExternalLink,
+  Link as LinkIcon,
+  Loader2,
+  type LucideIcon,
+  Package,
+  Sparkles,
+  Ticket,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -9,22 +18,18 @@ import { formatDate, formatDuration } from '~/lib/utils'
 import type {
   SessionDetail as SessionDetailType,
   SessionLink,
-  SessionStatus,
+  SopClassification,
 } from '~/schemas/sessions'
 import { Transcript } from './transcript'
-
-const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
-  active: 'active',
-  completed: 'completed',
-  abandoned: 'abandoned',
-}
 
 export interface SessionDetailProps {
   session: SessionDetailType
   onRate?: () => void
+  onClassify?: () => void
+  isClassifying?: boolean
 }
 
-export function SessionDetail({ session, onRate }: SessionDetailProps) {
+export function SessionDetail({ session, onRate, onClassify, isClassifying }: SessionDetailProps) {
   const latestSupport = [...(session.feedback ?? [])]
     .reverse()
     .find((f) => f.feedbackSource === 'support')
@@ -34,27 +39,10 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
 
   return (
     <div className="space-y-6">
-      {/* Session Info - Matching sessions list columns */}
+      {/* Session Info — compact panel */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <InfoItem label="Time">
-              <Tooltip
-                content={
-                  <div className="text-center">
-                    <div>{formatDate(session.startedAt, { format: 'date' })}</div>
-                    <div className="text-fg-muted">
-                      {formatDate(session.startedAt, { format: 'time' })}
-                    </div>
-                  </div>
-                }
-              >
-                <span className="cursor-default text-sm text-fg-primary">
-                  {formatDate(session.startedAt, { format: 'relative' })}
-                </span>
-              </Tooltip>
-            </InfoItem>
-
+        <CardContent className="pt-5 pb-3">
+          <div className="grid gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
             <InfoItem label="Agent">
               <span className="text-sm font-medium text-fg-primary">{session.agent.name}</span>
             </InfoItem>
@@ -88,15 +76,12 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
               </span>
             </InfoItem>
 
-            <InfoItem label="Cost">
-              <span className="text-sm text-fg-primary">
-                {(() => {
-                  const meta = (session.metadata ?? {}) as Record<string, unknown>
-                  if (meta.cost_usd != null) return `$${Number(meta.cost_usd).toFixed(4)}`
-                  if (meta.cost_credits != null) return `${String(meta.cost_credits)} credits`
-                  return '\u2014'
-                })()}
-              </span>
+            <InfoItem label="SOP">
+              <SopInline
+                classification={session.sopClassification}
+                onClassify={onClassify}
+                isClassifying={isClassifying}
+              />
             </InfoItem>
 
             <InfoItem label="User Rating">
@@ -120,9 +105,26 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                 <RatingBadge size="sm" />
               )}
             </InfoItem>
+
+            <InfoItem label="Time">
+              <span className="text-sm text-fg-primary">
+                {formatDate(session.startedAt, { format: 'relative' })}
+              </span>
+            </InfoItem>
+
+            <InfoItem label="Cost">
+              <span className="text-sm text-fg-primary">
+                {(() => {
+                  const meta = (session.metadata ?? {}) as Record<string, unknown>
+                  if (meta.cost_usd != null) return `$${Number(meta.cost_usd).toFixed(4)}`
+                  if (meta.cost_credits != null) return `${String(meta.cost_credits)} credits`
+                  return '\u2014'
+                })()}
+              </span>
+            </InfoItem>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-fg-subtle/10 pt-4 text-xs text-fg-muted">
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-fg-subtle/10 pt-2 text-xs text-fg-muted">
             <span>Started: {formatDate(session.startedAt)}</span>
             {session.endedAt && <span>Ended: {formatDate(session.endedAt)}</span>}
             {session.externalId && <span>External ID: {session.externalId}</span>}
@@ -134,13 +136,13 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
             (() => {
               const meta = session.metadata as Record<string, unknown>
               return (
-                <div className="mt-4 border-t border-fg-subtle/10 pt-4">
+                <div className="mt-3 border-t border-fg-subtle/10 pt-3">
                   {meta.transcript_summary ? (
-                    <p className="mb-3 text-sm italic text-fg-secondary">
+                    <p className="mb-2 text-sm italic text-fg-secondary">
                       {String(meta.transcript_summary)}
                     </p>
                   ) : null}
-                  <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-fg-muted">
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-fg-muted">
                     {meta.llm_model ? (
                       <span>
                         Model:{' '}
@@ -158,7 +160,6 @@ export function SessionDetail({ session, onRate }: SessionDetailProps) {
                         </span>
                       </span>
                     ) : null}
-                    {/* Cost is shown in the header summary above */}
                     {meta.call_successful ? (
                       <span>
                         Result:{' '}
@@ -248,7 +249,7 @@ const resourceIcons: Record<string, LucideIcon> = {
 }
 
 function ExternalLinkRow({ link }: { link: SessionLink }) {
-  const Icon = resourceIcons[link.resourceType ?? ''] ?? Link
+  const Icon = resourceIcons[link.resourceType ?? ''] ?? LinkIcon
   return (
     <a
       href={link.url}
@@ -271,6 +272,84 @@ function InfoItem({ label, children }: { label: string; children: ReactNode }) {
     <div>
       <p className="text-xs font-medium text-fg-muted">{label}</p>
       <div className="mt-1">{children}</div>
+    </div>
+  )
+}
+
+function SopInline({
+  classification,
+  onClassify,
+  isClassifying,
+}: { classification: SopClassification; onClassify?: () => void; isClassifying?: boolean }) {
+  if (!classification) {
+    if (onClassify) {
+      return (
+        <button
+          type="button"
+          onClick={onClassify}
+          disabled={isClassifying}
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-fg-secondary transition-colors hover:bg-bg-subtle hover:text-fg-primary disabled:opacity-50"
+        >
+          {isClassifying ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          {isClassifying ? 'Classifying…' : 'Classify'}
+        </button>
+      )
+    }
+    return <span className="text-sm text-fg-muted">{'\u2014'}</span>
+  }
+
+  if (classification.unknown || !classification.sopSlug) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant="warning">Unknown</Badge>
+        {classification.confidence != null && (
+          <span className="text-xs text-fg-muted">
+            {Math.round(classification.confidence * 100)}%
+          </span>
+        )}
+        {classification.source === 'server' && (
+          <Tooltip content="Classified by ModelGuide" side="top">
+            <Badge variant="info" className="px-1.5 py-0 text-[10px]">
+              Auto
+            </Badge>
+          </Tooltip>
+        )}
+      </div>
+    )
+  }
+
+  const confidenceColor =
+    classification.confidence != null
+      ? classification.confidence >= 0.8
+        ? 'text-success'
+        : classification.confidence >= 0.5
+          ? 'text-warning'
+          : 'text-error'
+      : 'text-fg-muted'
+
+  return (
+    <div className="flex items-center gap-2">
+      <Link to="/sops" className="transition-colors hover:text-brand-500">
+        <Badge variant="brand" className="cursor-pointer hover:bg-brand-500/20">
+          {classification.sopName ?? classification.sopSlug}
+        </Badge>
+      </Link>
+      {classification.confidence != null && (
+        <span className={`text-xs ${confidenceColor}`}>
+          {Math.round(classification.confidence * 100)}%
+        </span>
+      )}
+      {classification.source === 'server' && (
+        <Tooltip content="Classified by ModelGuide" side="top">
+          <Badge variant="info" className="px-1.5 py-0 text-[10px]">
+            Auto
+          </Badge>
+        </Tooltip>
+      )}
     </div>
   )
 }

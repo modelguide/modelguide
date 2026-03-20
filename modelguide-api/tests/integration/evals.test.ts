@@ -157,6 +157,7 @@ beforeAll(async () => {
     headers: orgAAdminHeaders,
     body: JSON.stringify({
       name: "Eval Test SOP - Order Lookup",
+      slug: "eval-test-sop-order-lookup",
       definition: {
         schemaVersion: 1,
         trigger: { type: "manual", config: {} },

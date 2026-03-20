@@ -54,6 +54,19 @@ export const sessionFeedbackSchema = z.object({
 
 export type SessionFeedback = z.infer<typeof sessionFeedbackSchema>
 
+export const sopClassificationSchema = z
+  .object({
+    sopSlug: z.string().nullable(),
+    sopName: z.string().optional(),
+    confidence: z.number().optional(),
+    unknown: z.boolean().optional(),
+    source: z.enum(['agent', 'server']).optional(),
+  })
+  .nullable()
+  .optional()
+
+export type SopClassification = z.infer<typeof sopClassificationSchema>
+
 // List endpoint item — no inline messages/feedback arrays
 export const sessionListItemSchema = z.object({
   id: z.string(),
@@ -76,6 +89,7 @@ export const sessionListItemSchema = z.object({
     customerRating: z.number().nullable(),
     supportRating: z.number().nullable(),
   }),
+  sopClassification: sopClassificationSchema,
 })
 
 export type SessionListItem = z.infer<typeof sessionListItemSchema>

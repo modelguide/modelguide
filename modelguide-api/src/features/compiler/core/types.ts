@@ -57,6 +57,13 @@ export interface ParsedGuardrail {
   config: GuardrailConfig;
 }
 
+/** Minimal SOP info for intent classification. */
+export interface AgentSopInfo {
+  slug: string;
+  name: string;
+  description: string | null;
+}
+
 /** Input to the compiler pipeline. */
 export interface CompilerInput {
   sops: SopDetailResponse[];
@@ -68,6 +75,8 @@ export interface CompilerInput {
     /** Role context, e.g. "You are a customer support agent..." */
     description: string;
   };
+  /** All active SOPs assigned to the agent (for intent classification). */
+  agentSops?: AgentSopInfo[];
 }
 
 /** A tool referenced by at least one SOP step. */

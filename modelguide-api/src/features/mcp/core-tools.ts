@@ -6,9 +6,10 @@ import { addMessages } from "@features/sessions";
 import { enrichLogger, getLogger } from "@lib/logger";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { classifySop } from "./mcp.service";
 import { mcpErrorResponse, mcpResponse } from "./mcp.types";
 
-export const CORE_TOOL_COUNT = 1;
+export const CORE_TOOL_COUNT = 2;
 
 export function registerCoreTools(
   server: McpServer,
@@ -98,6 +99,60 @@ export function registerCoreTools(
           "tool call rejected",
         );
         return mcpErrorResponse(err, "Failed to add messages");
+      }
+    },
+  );
+
+  // ── core_classify_sop ──────────────────────────────────────────────
+  server.tool(
+    "core_classify_sop",
+    "Classify the customer's intent by matching it to an SOP",
+    {
+      session_id: z.string().describe("The current session ID"),
+      sop_slug: z
+        .string()
+        .min(1)
+        .nullable()
+        .optional()
+        .describe("The slug of the matched SOP, or null/omitted if no match"),
+      confidence: z
+        .number()
+        .min(0)
+        .max(1)
+        .describe("Confidence in the classification (0.0–1.0)"),
+    },
+    async ({ session_id, sop_slug, confidence }) => {
+      try {
+        enrichLogger({ sessionId: session_id });
+
+        const result = await classifySop(
+          orgId,
+          agentId,
+          session_id,
+          sop_slug,
+          confidence,
+        );
+
+        if ("error" in result) {
+          return mcpErrorResponse(null, result.error);
+        }
+
+        getLogger().info(
+          {
+            sopSlug: sop_slug,
+            confidence,
+            unknown: !sop_slug,
+          },
+          "SOP classification recorded",
+        );
+
+        return mcpResponse(result);
+      } catch (err) {
+        getLogger().warn(
+          { err, tool: "core_classify_sop" },
+          "tool call rejected",
+        );
+        return mcpErrorResponse(err, "Failed to classify SOP");
       }
     },
   );

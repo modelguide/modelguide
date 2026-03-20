@@ -15,7 +15,8 @@ import {
 } from "@features/feedback";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
-import { enrichLogger } from "@lib/logger";
+import { Errors } from "@lib/errors";
+import { enrichLogger, getLogger } from "@lib/logger";
 import {
   getCurrentAgent,
   getOrganizationId,
@@ -30,9 +31,12 @@ import {
   addMessage,
   createSession,
   getSessionById,
+  getSessionMessages,
   listSessions,
+  mergeSessionMetadata,
   updateSession,
 } from "./sessions.service";
+import { classifySessionSop } from "./sop-classifier.service";
 
 const router = createRouter();
 
@@ -50,6 +54,16 @@ const feedbackSummarySchema = z.object({
   customerRating: z.number().nullable(),
   supportRating: z.number().nullable(),
 });
+
+const sopClassificationSchema = z
+  .object({
+    sopSlug: z.string().nullable(),
+    sopName: z.string().optional(),
+    confidence: z.number().optional(),
+    unknown: z.boolean().optional(),
+    source: z.enum(["agent", "server"]).optional(),
+  })
+  .nullable();
 
 const sessionResponseSchema = z.object({
   id: z.string().uuid(),
@@ -70,6 +84,7 @@ const sessionResponseSchema = z.object({
   totalTokens: z.number().nullable(),
   costUsd: z.number().nullable(),
   feedbackSummary: feedbackSummarySchema,
+  sopClassification: sopClassificationSchema,
 });
 
 const messageResponseSchema = z.object({
@@ -115,6 +130,7 @@ const sessionDetailSchema = z.object({
   metadata: z.record(z.unknown()),
   agent: agentSummarySchema,
   durationSeconds: z.number().nullable(),
+  sopClassification: sopClassificationSchema,
   messages: z.array(messageResponseSchema),
   feedback: z.array(feedbackResponseSchema),
   links: z.array(sessionLinkSchema),
@@ -230,6 +246,10 @@ const sessionFiltersSchema = paginationSchema.extend({
   startedBefore: z.string().datetime().optional().openapi({
     description: "Sessions started before this ISO timestamp",
   }),
+  sopSlug: z.string().optional().openapi({
+    description:
+      "Filter by SOP classification slug. Use '__unknown__' for unknown, '__none__' for unclassified.",
+  }),
   sortBy: z
     .enum(["started_at", "ended_at", "status"])
     .optional()
@@ -243,6 +263,33 @@ const sessionFiltersSchema = paginationSchema.extend({
 // ============================================================================
 // Helpers
 // ============================================================================
+
+function extractSopClassification(
+  metadata: Record<string, unknown> | null | undefined,
+): {
+  sopSlug: string | null;
+  sopName?: string;
+  confidence?: number;
+  unknown?: boolean;
+  source?: "agent" | "server";
+} | null {
+  if (!metadata) return null;
+  const raw = metadata.sop_classification;
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  // sop_slug can be a string (classified) or null (unknown)
+  if (obj.sop_slug === undefined) return null;
+  return {
+    sopSlug: typeof obj.sop_slug === "string" ? obj.sop_slug : null,
+    sopName: typeof obj.sop_name === "string" ? obj.sop_name : undefined,
+    confidence: typeof obj.confidence === "number" ? obj.confidence : undefined,
+    unknown: obj.unknown === true ? true : undefined,
+    source:
+      obj.source === "agent" || obj.source === "server"
+        ? obj.source
+        : undefined,
+  };
+}
 
 function formatSession(
   session: Session & {
@@ -277,6 +324,7 @@ function formatSession(
     totalTokens: session.totalTokens,
     costUsd: session.costUsd,
     feedbackSummary: session.feedbackSummary,
+    sopClassification: extractSopClassification(session.metadata),
   };
 }
 
@@ -304,6 +352,7 @@ function formatSessionDetail(
     metadata: session.metadata ?? {},
     agent: session.agent,
     durationSeconds: session.durationSeconds,
+    sopClassification: extractSopClassification(session.metadata),
     messages: session.messages.map(formatMessage),
     feedback: session.feedback.map(formatFeedback),
     links: session.links.map(formatLink),
@@ -357,6 +406,33 @@ function formatCreatedSession(session: Session) {
     endedAt: session.endedAt?.toISOString() ?? null,
     metadata: session.metadata ?? {},
   };
+}
+
+/**
+ * Background SOP classification — fetches messages, calls LLM, persists result.
+ * Designed for fire-and-forget: caller catches errors.
+ */
+async function classifyAndPersist(
+  orgId: string,
+  agentId: string,
+  sessionId: string,
+) {
+  const messages = await getSessionMessages(orgId, sessionId);
+  const classification = await classifySessionSop(
+    orgId,
+    agentId,
+    sessionId,
+    messages,
+  );
+  if (classification) {
+    await mergeSessionMetadata(orgId, sessionId, {
+      sop_classification: classification,
+    });
+    getLogger().info(
+      { sessionId, sopSlug: classification.sop_slug },
+      "server-side SOP classification",
+    );
+  }
 }
 
 // ============================================================================
@@ -480,6 +556,7 @@ const createSessionRoute = createRoute({
             totalTokens: true,
             costUsd: true,
             feedbackSummary: true,
+            sopClassification: true,
           }),
         },
       },
@@ -529,6 +606,7 @@ const updateSessionRoute = createRoute({
             totalTokens: true,
             costUsd: true,
             feedbackSummary: true,
+            sopClassification: true,
           }),
         },
       },
@@ -548,7 +626,86 @@ router.openapi(updateSessionRoute, async (c) => {
   const body = c.req.valid("json");
   const session = await updateSession(orgId, id, agent.id, body);
 
+  // Auto-classify on session end if not already classified by agent (fire-and-forget)
+  if (body.status && !session.metadata?.sop_classification) {
+    classifyAndPersist(orgId, agent.id, id).catch((err) =>
+      getLogger().warn(
+        { err, sessionId: id },
+        "server-side SOP classification failed, skipping",
+      ),
+    );
+  }
+
   return c.json(formatCreatedSession(session), 200);
+});
+
+// POST /:id/classify — Manual SOP classification (User auth)
+router.post(
+  "/:id/classify",
+  requireUser(),
+  requirePermission("sessions:update"),
+  requireOrganization(),
+);
+
+const classifySessionRoute = createRoute({
+  method: "post",
+  path: "/{id}/classify",
+  tags: ["Sessions"],
+  summary: "Classify session SOP",
+  description:
+    "Manually triggers SOP classification on an unclassified session.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: sessionIdParams,
+  },
+  responses: {
+    200: {
+      description: "Classification result",
+      content: {
+        "application/json": {
+          schema: z.object({ sopClassification: sopClassificationSchema }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Session not found"),
+    409: errorResponse("Session already has SOP classification"),
+  },
+});
+
+router.openapi(classifySessionRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  enrichLogger({ sessionId: id });
+
+  const session = await getSessionById(orgId, id);
+
+  if (extractSopClassification(session.metadata)) {
+    throw Errors.conflict("Session already has SOP classification");
+  }
+
+  const classification = await classifySessionSop(
+    orgId,
+    session.agent.id,
+    id,
+    session.messages,
+  );
+
+  if (!classification) {
+    throw Errors.validationError(
+      "Classification failed — no API key, no SOPs, or LLM error",
+    );
+  }
+
+  const updated = await mergeSessionMetadata(orgId, id, {
+    sop_classification: classification,
+  });
+
+  return c.json(
+    { sopClassification: extractSopClassification(updated.metadata) },
+    200,
+  );
 });
 
 // POST /:id/messages — Add message (Agent auth)

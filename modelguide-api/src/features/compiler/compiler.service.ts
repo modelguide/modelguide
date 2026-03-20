@@ -9,6 +9,7 @@ import { Errors } from "@lib/errors";
 import { getLogger } from "@lib/logger";
 import { and, eq } from "drizzle-orm";
 
+import { resolveAgentSops } from "@features/mcp/mcp.service";
 import { getSopById } from "@features/sops/sops.service";
 import { compile } from "./core/compile";
 import type { CompilerInput, KnowledgeBaseDetailResponse } from "./core/types";
@@ -115,7 +116,10 @@ export async function compileAgent(input: CompileAgentInput) {
     }),
   );
 
-  // 4. Convert SOP DB result to SopDetailResponse shape
+  // 4. Load all active SOPs assigned to the agent (for intent classification)
+  const agentSopRows = await resolveAgentSops(orgId, agentId);
+
+  // 5. Convert SOP DB result to SopDetailResponse shape
   const sopResponse = {
     id: sopDetail.id,
     name: sopDetail.name,
@@ -136,7 +140,7 @@ export async function compileAgent(input: CompileAgentInput) {
     updatedAt: sopDetail.updatedAt?.toISOString() ?? null,
   };
 
-  // 5. Run compiler
+  // 6. Run compiler
   const compilerInput: CompilerInput = {
     sops: [sopResponse],
     guardrails: guardrailResponses,
@@ -147,11 +151,12 @@ export async function compileAgent(input: CompileAgentInput) {
       description:
         agentDescription ?? agent.description ?? "AI customer support agent",
     },
+    agentSops: agentSopRows,
   };
 
   const ir = compile(compilerInput);
 
-  // 6. Build provenance metadata
+  // 7. Build provenance metadata
   const compiledFrom = {
     sopId,
     sopName: sopDetail.name,

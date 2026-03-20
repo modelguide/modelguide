@@ -15,5 +15,5 @@ import type { CompilerIR, CompilerInput } from "./types";
  */
 export function compile(input: CompilerInput): CompilerIR {
   const { sop, tools, guardrails } = parse(input);
-  return transform(sop, tools, guardrails, input.agentConfig);
+  return transform(sop, tools, guardrails, input.agentConfig, input.agentSops);
 }

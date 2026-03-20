@@ -10,6 +10,7 @@ import type { SopStep } from "@features/sops/sops.types";
 import { matchGuardrails } from "./guardrail-matcher";
 import { buildScopedPrompt, buildSystemPrompt } from "./prompt-builder";
 import type {
+  AgentSopInfo,
   CompilerIR,
   CompilerInput,
   EnrichedSop,
@@ -77,6 +78,7 @@ export function transform(
   tools: ResolvedTool[],
   guardrails: ParsedGuardrail[],
   agentConfig: CompilerInput["agentConfig"],
+  agentSops?: AgentSopInfo[],
 ): CompilerIR {
   // Normalize and enrich each step
   const normalizedSteps = sop.definition.steps
@@ -104,6 +106,7 @@ export function transform(
     },
     guardrails,
     tools,
+    agentSops,
   );
 
   // Assemble enriched SOP
