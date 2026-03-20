@@ -18,9 +18,16 @@ import { formatDate, formatDuration } from '~/lib/utils'
 import type {
   SessionDetail as SessionDetailType,
   SessionLink,
+  SessionStatus,
   SopClassification,
 } from '~/schemas/sessions'
 import { Transcript } from './transcript'
+
+const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'> = {
+  active: 'active',
+  completed: 'completed',
+  abandoned: 'abandoned',
+}
 
 export interface SessionDetailProps {
   session: SessionDetailType
