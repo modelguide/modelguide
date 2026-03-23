@@ -236,6 +236,74 @@ describe("Workflow 1: Re-init preserves manual evaluators", () => {
     // Cleanup
     await deleteEvalSuite(ctx.orgId, suite2.id);
   });
+
+  it("keeps auto-generated eval configs isolated per SOP", async () => {
+    const sop2 = await createSop(ctx.orgId, {
+      name: "WF Test WISMO SOP Variant",
+      slug: "wf-test-wismo-sop-variant",
+      definition: {
+        schemaVersion: 1,
+        trigger: { type: "manual", config: {} as Record<string, never> },
+        steps: [
+          {
+            id: "lookup-order",
+            order: 1,
+            instruction: "Create a helpdesk ticket for the request.",
+            required: true,
+            tool: { connectorToolId: ctx.createTicketToolId },
+          },
+        ],
+        metadata: {},
+      },
+    });
+
+    await forApp((tx) =>
+      tx.insert(agentSops).values({
+        agentId: ctx.agentId,
+        sopId: sop2.id,
+      }),
+    );
+
+    const suite1 = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
+    const suite1ToolEval = suite1.testCases[0].evaluators.find(
+      (e) => e.sopStepId === "lookup-order",
+    );
+    expect(suite1ToolEval).toBeDefined();
+
+    const suite2 = await initSuiteFromSop(ctx.orgId, ctx.agentId, sop2.id);
+    const suite2ToolEval = suite2.testCases[0].evaluators.find(
+      (e) => e.sopStepId === "lookup-order",
+    );
+    expect(suite2ToolEval).toBeDefined();
+
+    const [suite1Config, suite2Config] = await forOrg(ctx.orgId, async (tx) => {
+      const [first] = await tx
+        .select()
+        .from(evalConfigs)
+        .where(eq(evalConfigs.id, suite1ToolEval!.evalConfigId));
+      const [second] = await tx
+        .select()
+        .from(evalConfigs)
+        .where(eq(evalConfigs.id, suite2ToolEval!.evalConfigId));
+
+      return [first, second];
+    });
+
+    expect(suite1Config).toBeDefined();
+    expect(suite2Config).toBeDefined();
+    expect(suite1ToolEval!.evalConfigId).not.toBe(suite2ToolEval!.evalConfigId);
+    expect(suite1Config!.name).toContain("wf-test-wismo-sop");
+    expect(suite2Config!.name).toContain("wf-test-wismo-sop-variant");
+    expect(
+      (suite1Config!.config as Record<string, unknown>).connectorToolId,
+    ).toBe(ctx.lookUpOrderToolId);
+    expect(
+      (suite2Config!.config as Record<string, unknown>).connectorToolId,
+    ).toBe(ctx.createTicketToolId);
+
+    await deleteEvalSuite(ctx.orgId, suite1.id);
+    await deleteEvalSuite(ctx.orgId, suite2.id);
+  });
 });
 
 // ============================================================================
@@ -442,6 +510,56 @@ describe("Workflow 4: Validation gauntlet", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(AppError);
       expect((err as AppError).status).toBe(400);
+    }
+
+    await deleteEvalSuite(ctx.orgId, suite.id);
+  });
+
+  it("runEvalSuite with session from a different agent returns 400", async () => {
+    const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
+
+    const [agent2] = await forApp((tx) =>
+      tx
+        .insert(agents)
+        .values({
+          organizationId: ctx.orgId,
+          name: "WF4 Agent Session Mismatch",
+          slug: "wf4-agent-session-mismatch",
+          modality: "text",
+          agentPlatform: "custom",
+        })
+        .returning({ id: agents.id }),
+    );
+
+    const [completedSession] = await forOrg(ctx.orgId, (tx) =>
+      tx
+        .insert(sessions)
+        .values({
+          organizationId: ctx.orgId,
+          agentId: agent2.id,
+          channelType: "email",
+          status: "completed",
+          userIdentifier: "wf4-other-agent@example.com",
+          endedAt: new Date(),
+        })
+        .returning(),
+    );
+
+    await compileAgent({
+      orgId: ctx.orgId,
+      agentId: ctx.agentId,
+      sopId,
+      agentModel: "anthropic/claude-haiku-4-5-20251001",
+      agentDescription: agentConfig.description,
+    });
+
+    try {
+      await runEvalSuite(ctx.orgId, suite.id, completedSession.id, "compiled");
+      expect.unreachable("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).status).toBe(400);
+      expect((err as AppError).message).toContain("belongs to agent");
     }
 
     await deleteEvalSuite(ctx.orgId, suite.id);

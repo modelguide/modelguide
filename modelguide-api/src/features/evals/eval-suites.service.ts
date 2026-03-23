@@ -61,6 +61,14 @@ const log = getLogger();
 // Init Suite from SOP
 // ============================================================================
 
+function buildAutoEvalConfigName(
+  evaluatorType: "tool_called" | "llm_judge",
+  sopSlug: string,
+  stepId: string,
+): string {
+  return `auto:${evaluatorType}:${sopSlug}:${stepId}`;
+}
+
 /**
  * Initialize (or re-initialize) an eval suite for an agent+SOP pair.
  *
@@ -90,7 +98,7 @@ export async function initSuiteFromSop(
 
     // 1b. Validate SOP exists
     const [sop] = await tx
-      .select({ id: sops.id, name: sops.name })
+      .select({ id: sops.id, name: sops.name, slug: sops.slug })
       .from(sops)
       .where(eq(sops.id, sopId));
     if (!sop) throw Errors.sopNotFound(sopId);
@@ -215,7 +223,11 @@ export async function initSuiteFromSop(
         evaluatorType = cfg.evaluatorType;
       } else if (step.connectorToolId) {
         // Auto-create tool_called eval config
-        const autoName = `auto:tool_called:${step.stepId}`;
+        const autoName = buildAutoEvalConfigName(
+          "tool_called",
+          sop.slug,
+          step.stepId,
+        );
         const [existing] = await tx
           .select({ id: evalConfigs.id })
           .from(evalConfigs)
@@ -249,7 +261,11 @@ export async function initSuiteFromSop(
         evaluatorType = "tool_called";
       } else if (step.instruction) {
         // Auto-create llm_judge eval config for instruction steps
-        const autoName = `auto:llm_judge:${step.stepId}`;
+        const autoName = buildAutoEvalConfigName(
+          "llm_judge",
+          sop.slug,
+          step.stepId,
+        );
         const [existing] = await tx
           .select({ id: evalConfigs.id })
           .from(evalConfigs)
@@ -631,12 +647,22 @@ export async function runEvalSuite(
 
     // Validate session exists and is terminal
     const [session] = await tx
-      .select({ id: sessions.id, status: sessions.status })
+      .select({
+        id: sessions.id,
+        agentId: sessions.agentId,
+        status: sessions.status,
+      })
       .from(sessions)
       .where(eq(sessions.id, sessionId));
 
     if (!session) {
       throw Errors.notFound(`Session "${sessionId}" not found`);
+    }
+
+    if (session.agentId !== suite.agentId) {
+      throw Errors.validationError(
+        `Session "${sessionId}" belongs to agent "${session.agentId}", not suite agent "${suite.agentId}"`,
+      );
     }
 
     if (session.status === "active") {

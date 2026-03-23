@@ -72,35 +72,35 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
           <span className="font-medium text-fg-secondary">{total}</span> sessions
         </p>
       )}
-      <div className="rounded-2xl border border-fg-subtle/10 bg-bg-elevated">
-        <table className="w-full">
+      <div className="overflow-x-auto rounded-2xl border border-fg-subtle/10 bg-bg-elevated">
+        <table className="w-full table-fixed">
           <thead>
             <tr className="border-b border-fg-subtle/10 bg-bg-subtle/30">
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Time
               </th>
-              <th className="w-[16%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Agent
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[11%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Channel
               </th>
-              <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
-              <th className="w-[9%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 SOP
               </th>
-              <th className="w-[9%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[7%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Duration
               </th>
-              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Msgs
               </th>
-              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[7%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Cost
               </th>
               <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
@@ -174,21 +174,28 @@ function SessionRow({ session, index }: SessionRowProps) {
         </Tooltip>
       </td>
       <td className="px-4 py-3">
-        <span className="text-sm font-medium text-fg-primary">{session.agent.name}</span>
+        <span
+          className="block truncate text-sm font-medium text-fg-primary"
+          title={session.agent.name}
+        >
+          {session.agent.name}
+        </span>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-2 text-fg-secondary">
+        <div className="flex min-w-0 items-center gap-2 text-fg-secondary">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-bg-subtle">
             {channelConfig[session.channelType].icon}
           </span>
-          <span className="text-sm">{channelConfig[session.channelType].label}</span>
+          <span className="truncate text-sm">{channelConfig[session.channelType].label}</span>
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className="text-sm text-fg-secondary">{session.userIdentifier}</span>
+        <span className="block truncate text-sm text-fg-secondary" title={session.userIdentifier}>
+          {session.userIdentifier}
+        </span>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
           {session.mode === 'simulation' && (
             <Badge variant="warning" dot>
@@ -198,7 +205,9 @@ function SessionRow({ session, index }: SessionRowProps) {
         </div>
       </td>
       <td className="px-4 py-3">
-        <SopBadge classification={session.sopClassification} />
+        <div className="min-w-0">
+          <SopBadge classification={session.sopClassification} />
+        </div>
       </td>
       <td className="px-4 py-3">
         <span className="font-mono text-sm text-fg-secondary">
@@ -230,18 +239,20 @@ function SopBadge({ classification }: { classification: SopClassification }) {
 
   if (classification.unknown || !classification.sopSlug) {
     return (
-      <Badge variant="warning" dot>
-        Unknown
+      <Badge variant="warning" dot className="max-w-full min-w-0 whitespace-nowrap">
+        <span className="truncate">Unknown</span>
       </Badge>
     )
   }
+
+  const label = classification.sopName ?? classification.sopSlug
 
   return (
     <Tooltip
       content={`Slug: ${classification.sopSlug}${classification.confidence != null ? ` | Confidence: ${Math.round(classification.confidence * 100)}%` : ''}`}
     >
-      <Badge variant="brand" dot>
-        {classification.sopName ?? classification.sopSlug}
+      <Badge variant="brand" dot className="max-w-full min-w-0 whitespace-nowrap" title={label}>
+        <span className="truncate">{label}</span>
       </Badge>
     </Tooltip>
   )
