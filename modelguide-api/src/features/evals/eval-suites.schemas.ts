@@ -94,7 +94,9 @@ export const evalSuiteResponseSchema = z.object({
 export const evalSuiteSummaryResponseSchema = z.object({
   id: z.string().uuid(),
   agentId: z.string().uuid(),
+  agentName: z.string().nullable(),
   sopId: z.string().uuid().nullable(),
+  sopName: z.string().nullable(),
   name: z.string(),
   description: z.string().nullable(),
   createdBy: z.string().uuid().nullable(),

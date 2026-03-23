@@ -203,7 +203,7 @@ export async function initSuiteFromSop(
       .values({
         organizationId: orgId,
         suiteId,
-        name: `Eval: ${sop.name}`,
+        name: `${sop.name} — full flow`,
         description:
           "Auto-generated test case covering all SOP steps. Required steps have required evaluators; optional steps have optional evaluators.",
         source: "auto",
@@ -884,7 +884,7 @@ export async function listEvalSuites(
   orgId: string,
   params: ListEvalSuitesParams,
 ): Promise<{
-  data: EvalSuite[];
+  data: Array<EvalSuite & { agentName: string | null; sopName: string | null }>;
   pagination: ReturnType<typeof buildPaginationMeta>;
 }> {
   const { page, pageSize, agentId, sopId } = params;
@@ -899,8 +899,23 @@ export async function listEvalSuites(
 
     const [items, [{ total }]] = await Promise.all([
       tx
-        .select()
+        .select({
+          id: evalSuites.id,
+          organizationId: evalSuites.organizationId,
+          agentId: evalSuites.agentId,
+          agentName: agents.name,
+          sopId: evalSuites.sopId,
+          sopName: sops.name,
+          name: evalSuites.name,
+          description: evalSuites.description,
+          status: evalSuites.status,
+          createdBy: evalSuites.createdBy,
+          createdAt: evalSuites.createdAt,
+          updatedAt: evalSuites.updatedAt,
+        })
         .from(evalSuites)
+        .leftJoin(agents, eq(evalSuites.agentId, agents.id))
+        .leftJoin(sops, eq(evalSuites.sopId, sops.id))
         .where(where)
         .orderBy(desc(evalSuites.createdAt))
         .limit(pageSize)

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Clock, MessageSquare, Play, Square } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
+import { Card, CardContent } from '~/components/ui/card'
 import { Spinner } from '~/components/ui/spinner'
 import { RunResultsCard } from '~/features/evals/components/run-results-card'
 import { api } from '~/lib/api'
-import { cn } from '~/lib/cn'
 import { formatDate, formatDuration } from '~/lib/utils'
 import type { EvalSuiteDetail, EvalSuiteRun } from '~/schemas/eval-suites'
 import { PROMPT_SOURCE_LABELS } from '~/schemas/eval-suites'
@@ -72,72 +73,50 @@ function RunDetailPage() {
       ) : run ? (
         <>
           {/* Metadata */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                icon: Clock,
-                label: 'Duration',
-                value: run.durationMs != null ? formatDuration(run.durationMs / 1000) : '\u2014',
-              },
-              {
-                icon: Play,
-                label: 'Started',
-                value: formatDate(run.startedAt, { format: 'full' }),
-              },
-              {
-                icon: Square,
-                label: 'Completed',
-                value: run.completedAt ? formatDate(run.completedAt, { format: 'full' }) : '\u2014',
-              },
-            ].map((card, i) => (
-              <div
-                key={card.label}
-                className={cn(
-                  'group relative overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated px-4 py-3',
-                  'transition-all duration-200 hover:border-fg-subtle/20',
-                )}
-                style={{ animationDelay: `${i * 60}ms` }}
-              >
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/[0.03] via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                <div className="relative flex items-center gap-2">
-                  <card.icon className="h-3.5 w-3.5 text-fg-muted" />
-                  <p className="font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                    {card.label}
-                  </p>
-                </div>
-                <p className="relative mt-1 font-mono text-sm tabular-nums text-fg-primary">
-                  {card.value}
+          <Card>
+            <CardContent className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              <InfoItem label="Duration">
+                <p className="font-mono text-sm tabular-nums text-fg-primary">
+                  {run.durationMs != null ? formatDuration(run.durationMs / 1000) : '\u2014'}
                 </p>
-              </div>
-            ))}
-            {run.sessionId ? (
-              <Link
-                to="/sessions/$id"
-                params={{ id: run.sessionId }}
-                className={cn(
-                  'group relative overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated px-4 py-3',
-                  'transition-all duration-200 hover:border-brand-500/30',
-                )}
-                style={{ animationDelay: '180ms' }}
-              >
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/[0.03] via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                <div className="relative flex items-center gap-2">
-                  <MessageSquare className="h-3.5 w-3.5 text-fg-muted" />
-                  <p className="font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                    Session
-                  </p>
-                </div>
-                <p className="relative mt-1 truncate font-mono text-xs tabular-nums text-brand-400">
-                  {run.sessionId}
+              </InfoItem>
+              <InfoItem label="Started">
+                <p className="text-sm text-fg-primary">
+                  {formatDate(run.startedAt, { format: 'full' })}
                 </p>
-              </Link>
-            ) : null}
-          </div>
+              </InfoItem>
+              <InfoItem label="Completed">
+                <p className="text-sm text-fg-primary">
+                  {run.completedAt ? formatDate(run.completedAt, { format: 'full' }) : '\u2014'}
+                </p>
+              </InfoItem>
+              {run.sessionId ? (
+                <InfoItem label="Session">
+                  <Link
+                    to="/sessions/$id"
+                    params={{ id: run.sessionId }}
+                    className="truncate font-mono text-xs text-brand-400 hover:text-brand-300"
+                  >
+                    {run.sessionId}
+                  </Link>
+                </InfoItem>
+              ) : null}
+            </CardContent>
+          </Card>
 
           {/* Results */}
           <RunResultsCard testCaseResults={run.testCaseResults} testCases={suite?.testCases} />
         </>
       ) : null}
+    </div>
+  )
+}
+
+function InfoItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-fg-muted">{label}</p>
+      <div className="mt-1">{children}</div>
     </div>
   )
 }

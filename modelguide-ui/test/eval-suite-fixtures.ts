@@ -48,7 +48,9 @@ export function makeEvalSuiteSummary(overrides: Partial<EvalSuiteSummary> = {}):
   return {
     id: '00000000-0000-0000-0000-d00000000001',
     agentId: '00000000-0000-0000-0000-e00000000001',
+    agentName: 'GlowBox Agent',
     sopId: '00000000-0000-0000-0000-f00000000001',
+    sopName: 'Order Lookup',
     name: 'WISMO Eval Suite',
     description: 'Evaluates order lookup flow',
     createdBy: '00000000-0000-0000-0000-100000000001',

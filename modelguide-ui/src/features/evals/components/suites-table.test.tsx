@@ -23,12 +23,36 @@ describe('SuitesTable', () => {
     expect(screen.getByText('Created')).toBeInTheDocument()
   })
 
-  it('renders suite rows with name', () => {
-    const suites = [makeEvalSuiteSummary({ name: 'WISMO Eval Suite' })]
+  it('renders suite rows with name and agent/SOP names', () => {
+    const suites = [
+      makeEvalSuiteSummary({
+        name: 'WISMO Eval Suite',
+        agentName: 'GlowBox Agent',
+        sopName: 'Order Lookup',
+      }),
+    ]
 
     render(<SuitesTable suites={suites} />)
 
     expect(screen.getByText('WISMO Eval Suite')).toBeInTheDocument()
+    expect(screen.getByText('GlowBox Agent')).toBeInTheDocument()
+    expect(screen.getByText('Order Lookup')).toBeInTheDocument()
+  })
+
+  it('falls back to truncated UUID when agent/SOP names are missing', () => {
+    const suites = [
+      makeEvalSuiteSummary({
+        agentName: null,
+        sopName: null,
+        agentId: '12345678-aaaa-bbbb-cccc-dddddddddddd',
+        sopId: 'abcdef01-2222-3333-4444-555555555555',
+      }),
+    ]
+
+    render(<SuitesTable suites={suites} />)
+
+    expect(screen.getByText('12345678…')).toBeInTheDocument()
+    expect(screen.getByText('abcdef01…')).toBeInTheDocument()
   })
 
   it('shows description when present', () => {

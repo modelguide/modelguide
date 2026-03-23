@@ -33,12 +33,6 @@ function scoreIcon(score: EvalRunScore) {
   return <XCircle className="h-3.5 w-3.5 shrink-0 text-error" />
 }
 
-function scoreResultVariant(result: string): 'success' | 'error' | 'warning' | 'default' {
-  if (result === 'pass') return 'success'
-  if (result === 'skip') return 'warning'
-  return 'error'
-}
-
 export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
@@ -211,9 +205,10 @@ export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardPro
                         >
                           {scoreIcon(score)}
                           <span className="flex-1 font-mono text-fg-secondary">{score.name}</span>
-                          <Badge variant="info">{score.evaluatorType}</Badge>
-                          {score.required ? <Badge variant="warning">required</Badge> : null}
-                          <Badge variant={scoreResultVariant(score.result)}>{score.result}</Badge>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="info">{score.evaluatorType}</Badge>
+                            {score.required ? <Badge variant="warning">required</Badge> : null}
+                          </div>
                         </div>
                         {score.result !== 'pass' && score.reasoning ? (
                           <p className="ml-8 pb-1.5 text-xs text-fg-muted italic">

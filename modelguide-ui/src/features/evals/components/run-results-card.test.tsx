@@ -79,10 +79,10 @@ describe('RunResultsCard', () => {
 
     expect(screen.getByText('Score Breakdown:')).toBeInTheDocument()
     expect(screen.getByText('tool_called: get_order')).toBeInTheDocument()
-    expect(screen.getByText('pass')).toBeInTheDocument()
+    expect(screen.getByText('tool_called')).toBeInTheDocument()
   })
 
-  it('shows score name, result, and evaluator type for each score', () => {
+  it('shows score name and evaluator type badge for each score', () => {
     const results = [
       makeTestCaseResult({
         testCaseId: 'tc-1',
@@ -112,8 +112,9 @@ describe('RunResultsCard', () => {
 
     expect(screen.getByText('tool_called: get_order')).toBeInTheDocument()
     expect(screen.getByText('llm_judge: Confirms status')).toBeInTheDocument()
-    expect(screen.getByText('pass')).toBeInTheDocument()
-    expect(screen.getByText('fail')).toBeInTheDocument()
+    // Evaluator type badges render instead of result badges
+    expect(screen.getByText('tool_called')).toBeInTheDocument()
+    expect(screen.getByText('llm_judge')).toBeInTheDocument()
   })
 
   it('shows reasoning text for failed scores', () => {

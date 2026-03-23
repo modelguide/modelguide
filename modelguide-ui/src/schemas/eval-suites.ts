@@ -39,7 +39,9 @@ export type EvalSuiteTestCase = z.infer<typeof evalSuiteTestCaseSchema>
 export const evalSuiteSummarySchema = z.object({
   id: z.string().uuid(),
   agentId: z.string().uuid(),
+  agentName: z.string().nullable().optional(),
   sopId: z.string().uuid().nullable().optional(),
+  sopName: z.string().nullable().optional(),
   name: z.string(),
   description: z.string().nullable().optional(),
   createdBy: z.string().uuid().nullable().optional(),

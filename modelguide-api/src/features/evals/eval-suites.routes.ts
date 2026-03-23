@@ -111,13 +111,24 @@ function formatSuiteDetail(s: SuiteDetail) {
   };
 }
 
-function formatSuiteSummary(
-  s: Awaited<ReturnType<typeof listEvalSuites>>["data"][number],
-) {
+function formatSuiteSummary(s: {
+  id: string;
+  agentId: string;
+  agentName?: string | null;
+  sopId: string | null;
+  sopName?: string | null;
+  name: string;
+  description: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date | null;
+}) {
   return {
     id: s.id,
     agentId: s.agentId,
+    agentName: s.agentName ?? null,
     sopId: s.sopId,
+    sopName: s.sopName ?? null,
     name: s.name,
     description: s.description,
     createdBy: s.createdBy,

@@ -224,6 +224,7 @@ function SuiteDetailPage() {
           open={showRunDialog}
           onClose={() => setShowRunDialog(false)}
           suiteId={suiteId}
+          agentId={suite?.agentId}
           onSuccess={() => setActiveTab('runs')}
         />
       ) : null}

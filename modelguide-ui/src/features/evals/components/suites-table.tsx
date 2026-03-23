@@ -99,14 +99,14 @@ export function SuitesTable({ suites, isLoading }: SuitesTableProps) {
                 </div>
               </td>
               <td className="px-4 py-3">
-                <span className="font-mono text-xs tabular-nums text-fg-secondary">
-                  {suite.agentId.slice(0, 8)}…
+                <span className="text-xs text-fg-secondary">
+                  {suite.agentName ?? `${suite.agentId.slice(0, 8)}…`}
                 </span>
               </td>
               <td className="px-4 py-3">
                 {suite.sopId ? (
-                  <span className="font-mono text-xs tabular-nums text-fg-secondary">
-                    {suite.sopId.slice(0, 8)}…
+                  <span className="text-xs text-fg-secondary">
+                    {suite.sopName ?? `${suite.sopId.slice(0, 8)}…`}
                   </span>
                 ) : (
                   <span className="text-xs text-fg-muted">Manual</span>
