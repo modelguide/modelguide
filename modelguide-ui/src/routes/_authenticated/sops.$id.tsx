@@ -224,24 +224,22 @@ function SidebarTabs({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex min-w-full w-max justify-between gap-1 rounded-xl bg-bg-subtle p-1">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={cn(
-                'shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors',
-                activeTab === tab.key
-                  ? 'bg-bg-elevated text-fg-primary shadow-sm'
-                  : 'text-fg-secondary hover:text-fg-primary',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex gap-1 rounded-xl bg-bg-subtle p-1">
+        {visibleTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              'flex-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition-colors text-center',
+              activeTab === tab.key
+                ? 'bg-bg-elevated text-fg-primary shadow-sm'
+                : 'text-fg-secondary hover:text-fg-primary',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {activeTab === 'details' ? <DetailsCard sop={sop} /> : null}
