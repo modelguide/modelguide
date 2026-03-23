@@ -16,53 +16,101 @@ A WebRTC voice agent powered by [LiveKit Agents](https://github.com/livekit/agen
 
 ## Prerequisites
 
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- A running ModelGuide API with a configured agent (API key + connector tools assigned)
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
 - API keys for OpenAI, Deepgram, and ElevenLabs
-- For dev/start modes: LiveKit server (local or cloud)
+- A running ModelGuide API with a configured agent (API key + connector tools assigned)
+- For local voice dev: LiveKit server + CLI (`brew install livekit livekit-cli` or Docker)
 
-## Setup
+## Quick Start (local voice dev)
+
+All commands run from the **repo root**.
 
 ```bash
+# 1. Install deps + download VAD/turn-detector models (one-time)
+make lk-agent-setup
+
+# 2. Configure environment
 cd examples/agents/livekit-agent
-
-# Install dependencies
-uv sync
-
-# Configure environment
 cp .env.example .env
-# Edit .env with your API keys
-
-# Download model files (turn detector, VAD)
-python src/agent.py download-files
+# Edit .env with your API keys (OpenAI, Deepgram, ElevenLabs, ModelGuide)
+cd -
 ```
 
-## Running
-
-### Console mode (text-only, no WebRTC)
+Then open **three terminals**:
 
 ```bash
-python src/agent.py console
+# Terminal 1 — LiveKit server
+make livekit-up              # native (brew install livekit)
+# OR
+make livekit-up-docker       # Docker (no brew needed)
+
+# Terminal 2 — Voice agent
+make lk-agent-dev
+
+# Terminal 3 — Join the room (opens meet.livekit.io in browser)
+make livekit-token           # default identity: artur
+make livekit-token NAME=sam  # custom identity
+```
+
+Click **Join** in the browser, allow mic access, and talk to Sam.
+
+> **How it connects:** `livekit-server --dev` uses built-in credentials (`devkey` / `secret`) on `ws://localhost:7880` — these match `.env.example` defaults. The `--agent buildpro-sam` flag in the token tells LiveKit to dispatch the agent to the room.
+
+### Console mode (text-only, no LiveKit needed)
+
+```bash
+make lk-agent-console
 ```
 
 Type text and see tool calls execute against ModelGuide. Great for testing tools without audio.
 
-### Dev mode (full WebRTC)
-
-```bash
-python src/agent.py dev
-```
-
-Starts a worker with a dev server. Open the printed URL to join a LiveKit room and talk to Sam.
-
 ### Production mode
 
 ```bash
+cd examples/agents/livekit-agent
 python src/agent.py start
 ```
 
 Runs as a LiveKit Cloud worker, accepting jobs dispatched by the platform.
+
+## Debugging
+
+**Log levels** — defaults to `info` (no latency impact). Bump when you need more detail:
+
+```bash
+make lk-agent-dev                    # info (default)
+make lk-agent-dev LK_LOG_LEVEL=debug # + internal state changes
+make lk-agent-dev LK_LOG_LEVEL=trace # + every frame/event
+```
+
+Levels: `trace` > `debug` > `info` > `warn` > `error` > `critical`
+
+**Connect mode** — attach to an existing room (useful for breakpoints / step-debugging):
+
+```bash
+cd examples/agents/livekit-agent
+python src/agent.py connect --room test-room
+```
+
+**LiveKit server logs** (Docker):
+
+```bash
+docker logs -f livekit-agent-livekit-server-1
+```
+
+**Langfuse tracing** — set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in `.env` for per-session traces in the Langfuse dashboard. Never set `debug=True` on the Langfuse SDK (adds ~2-3s latency per turn — see Known Issues).
+
+## Makefile Reference
+
+| Command | Description |
+|---------|-------------|
+| `make lk-agent-setup` | Install deps + download model files |
+| `make lk-agent-dev` | Start agent in WebRTC dev mode |
+| `make lk-agent-console` | Start agent in text-only console mode |
+| `make livekit-up` | Start local LiveKit server (native) |
+| `make livekit-up-docker` | Start local LiveKit server (Docker) |
+| `make livekit-down` | Stop Docker LiveKit server |
+| `make livekit-token` | Generate token + open meet.livekit.io |
 
 ## How it works
 

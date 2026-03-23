@@ -1,0 +1,10 @@
+# Local LiveKit server for development (alternative to `brew install livekit`)
+# Usage: docker compose -f docker-compose.dev.yml up
+services:
+  livekit-server:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"   # HTTP + WebSocket signaling
+      - "7881:7881"   # TCP media (TURN/TLS)
+      - "50000-50060:50000-50060/udp"  # WebRTC media (UDP)
