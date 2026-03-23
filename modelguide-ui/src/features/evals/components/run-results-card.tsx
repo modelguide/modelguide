@@ -24,7 +24,8 @@ function getTestCaseName(result: TestCaseResult, testCases?: EvalSuiteTestCase[]
     const tc = testCases.find((t) => t.id === result.testCaseId)
     if (tc) return tc.name
   }
-  return 'Unknown Test Case'
+  // Test case may have been removed after a suite re-init
+  return result.testCaseId ? `Test Case ${result.testCaseId.slice(0, 8)}…` : 'Unknown Test Case'
 }
 
 function scoreIcon(score: EvalRunScore) {

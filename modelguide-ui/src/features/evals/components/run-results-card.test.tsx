@@ -161,11 +161,11 @@ describe('RunResultsCard', () => {
     expect(screen.getByText('Order Lookup Test')).toBeInTheDocument()
   })
 
-  it('shows "Unknown Test Case" when test case not found', () => {
-    const results = [makeTestCaseResult({ testCaseId: 'non-existent' })]
+  it('shows truncated ID fallback when test case not found', () => {
+    const results = [makeTestCaseResult({ testCaseId: 'abcdef01-2222-3333-4444-555555555555' })]
 
     render(<RunResultsCard testCaseResults={results} testCases={[]} />)
 
-    expect(screen.getByText('Unknown Test Case')).toBeInTheDocument()
+    expect(screen.getByText('Test Case abcdef01…')).toBeInTheDocument()
   })
 })
