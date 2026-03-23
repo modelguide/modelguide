@@ -82,16 +82,16 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
               <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Agent
               </th>
-              <th className="w-[11%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                Channel
+              <th className="w-[5%] px-4 py-3 text-center font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                Ch.
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
               <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 SOP
               </th>
               <th className="w-[7%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
@@ -181,13 +181,12 @@ function SessionRow({ session, index }: SessionRowProps) {
           {session.agent.name}
         </span>
       </td>
-      <td className="px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2 text-fg-secondary">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-bg-subtle">
+      <td className="px-4 py-3 text-center">
+        <Tooltip content={channelConfig[session.channelType].label}>
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-bg-subtle text-fg-secondary">
             {channelConfig[session.channelType].icon}
           </span>
-          <span className="truncate text-sm">{channelConfig[session.channelType].label}</span>
-        </div>
+        </Tooltip>
       </td>
       <td className="px-4 py-3">
         <span className="block truncate text-sm text-fg-secondary" title={session.userIdentifier}>
@@ -249,9 +248,9 @@ function SopBadge({ classification }: { classification: SopClassification }) {
 
   return (
     <Tooltip
-      content={`Slug: ${classification.sopSlug}${classification.confidence != null ? ` | Confidence: ${Math.round(classification.confidence * 100)}%` : ''}`}
+      content={`${label}${classification.confidence != null ? ` (${Math.round(classification.confidence * 100)}%)` : ''}`}
     >
-      <Badge variant="brand" dot className="max-w-full min-w-0 whitespace-nowrap" title={label}>
+      <Badge variant="brand" dot className="max-w-[140px] min-w-0">
         <span className="truncate">{label}</span>
       </Badge>
     </Tooltip>
