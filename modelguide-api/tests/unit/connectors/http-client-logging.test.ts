@@ -110,7 +110,7 @@ describe("connectorFetch logging", () => {
           headers: { "Content-Type": "application/json" },
         }),
       ),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const fetcher = makeFetcher();
     await fetcher("/test");
@@ -130,7 +130,7 @@ describe("connectorFetch logging", () => {
   test("logs warn and throws on HTTP error", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response("Not Found", { status: 404 })),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const fetcher = makeFetcher();
 
@@ -148,7 +148,7 @@ describe("connectorFetch logging", () => {
   test("logs error on network failure", async () => {
     globalThis.fetch = mock(() =>
       Promise.reject(new Error("ECONNREFUSED")),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const fetcher = makeFetcher();
 

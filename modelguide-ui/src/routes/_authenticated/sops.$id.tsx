@@ -1,6 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Archive, ArrowLeft, CirclePause, ClipboardList, GitFork, Pencil, Play } from 'lucide-react'
+import {
+  Archive,
+  ArrowLeft,
+  CirclePause,
+  ClipboardList,
+  FlaskConical,
+  GitFork,
+  Pencil,
+  Play,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -13,8 +22,10 @@ import { SopStepsTimeline } from '~/features/sops/components/sop-steps-timeline'
 import { SopTriggerDetail } from '~/features/sops/components/sop-trigger-badge'
 import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
+import type { PaginatedResponse } from '~/lib/pagination'
 import { useCanMutate, useIsAdmin } from '~/lib/permissions'
 import { formatDate } from '~/lib/utils'
+import type { EvalSuiteSummary } from '~/schemas/eval-suites'
 import type { SopDetail } from '~/schemas/sops'
 import { TRIGGER_LABELS, statusVariantMap } from '~/schemas/sops'
 
@@ -183,13 +194,14 @@ function SopDetailPage() {
   )
 }
 
-type SidebarTab = 'details' | 'trigger' | 'metadata' | 'agents' | 'settings'
+type SidebarTab = 'details' | 'trigger' | 'metadata' | 'agents' | 'evals' | 'settings'
 
 const sidebarTabs: { key: SidebarTab; label: string }[] = [
   { key: 'details', label: 'Details' },
   { key: 'trigger', label: 'Trigger' },
   { key: 'metadata', label: 'Metadata' },
   { key: 'agents', label: 'Agents' },
+  { key: 'evals', label: 'Evals' },
   { key: 'settings', label: 'Settings' },
 ]
 
@@ -219,7 +231,7 @@ function SidebarTabs({
             type="button"
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors',
+              'flex-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition-colors text-center',
               activeTab === tab.key
                 ? 'bg-bg-elevated text-fg-primary shadow-sm'
                 : 'text-fg-secondary hover:text-fg-primary',
@@ -236,6 +248,7 @@ function SidebarTabs({
       {activeTab === 'agents' ? (
         <SopAgentsCard sopId={sop.id} agents={sop.assignedAgents} canMutate={canMutate} />
       ) : null}
+      {activeTab === 'evals' ? <SopEvalSuitesCard sopId={sop.id} /> : null}
       {activeTab === 'settings' && isAdmin ? (
         <div className="space-y-6">
           {canMutate && sop.status !== 'archived' ? (
@@ -340,6 +353,45 @@ function TriggerCard({ sop }: { sop: SopDetail }) {
             </div>
           ) : null}
         </dl>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SopEvalSuitesCard({ sopId }: { sopId: string }) {
+  const { data } = useQuery({
+    queryKey: ['eval-suites', { sopId }],
+    queryFn: () =>
+      api
+        .get('eval-suites', { searchParams: { sopId } })
+        .json<PaginatedResponse<EvalSuiteSummary>>(),
+  })
+
+  const suites = data?.data ?? []
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        {suites.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-6 text-center">
+            <FlaskConical className="h-8 w-8 text-fg-muted" />
+            <p className="mt-3 text-sm text-fg-muted">No eval suites for this SOP</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {suites.map((suite) => (
+              <Link
+                key={suite.id}
+                to="/evals/suites/$suiteId"
+                params={{ suiteId: suite.id }}
+                className="flex items-center gap-2 rounded-lg border border-fg-subtle/10 bg-bg-subtle/50 px-3 py-2.5 transition-colors hover:border-fg-subtle/20 hover:bg-bg-subtle"
+              >
+                <FlaskConical className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="flex-1 text-sm font-medium text-fg-primary">{suite.name}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

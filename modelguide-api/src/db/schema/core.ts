@@ -394,6 +394,12 @@ export const agents = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     /** Secret ref map: { fieldName: secretId }. Resolved at tool execution time. */
     secrets: jsonb("secrets").$type<EntitySecretsMap>().notNull().default({}),
+    /** Compiled system prompt produced by SOP-to-Agent compiler. */
+    compiledInstructions: text("compiled_instructions"),
+    /** When the agent was last compiled. */
+    compiledAt: timestamp("compiled_at", { withTimezone: true }),
+    /** Provenance: which SOP(s) / guardrails fed the compilation. */
+    compiledFrom: jsonb("compiled_from").$type<Record<string, unknown>>(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
       () => new Date(),
     ),

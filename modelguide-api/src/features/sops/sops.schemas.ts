@@ -138,8 +138,7 @@ export const createSopSchema = z.object({
     .regex(
       slugPattern,
       "Slug must be lowercase alphanumeric with hyphens/underscores",
-    )
-    .optional(),
+    ),
   description: z.string().max(2000).optional(),
   definition: sopDefinitionWriteSchema,
   agentIds: z.array(z.string().uuid()).optional(),

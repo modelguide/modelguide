@@ -145,6 +145,9 @@ Optional:
 - `SIMULATION_LLM_API_KEY` — OpenAI (or compatible) API key for persona simulation
 - `SIMULATION_LLM_BASE_URL` — custom base URL for OpenAI-compatible endpoint (defaults to OpenAI). For Claude, set to `https://api.anthropic.com/v1/`
 - `SIMULATION_LLM_MODEL` — model to use for simulation (defaults to `gpt-5-mini`). For Claude, use e.g. `claude-sonnet-4-6`
+- `EVAL_LLM_API_KEY` — OpenAI (or compatible) API key for eval LLM judge. Falls back to `SIMULATION_LLM_API_KEY`
+- `EVAL_LLM_BASE_URL` — custom base URL for eval LLM endpoint. Falls back to `SIMULATION_LLM_BASE_URL`
+- `EVAL_LLM_MODEL` — model for eval scoring. Falls back to `SIMULATION_LLM_MODEL`
 
 ## 9. Verify
 

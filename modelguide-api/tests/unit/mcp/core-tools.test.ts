@@ -6,8 +6,8 @@ import { describe, expect, test } from "bun:test";
 import { CORE_TOOL_COUNT, registerCoreTools } from "@features/mcp/core-tools";
 
 describe("CORE_TOOL_COUNT", () => {
-  test("equals 1", () => {
-    expect(CORE_TOOL_COUNT).toBe(1);
+  test("equals 2", () => {
+    expect(CORE_TOOL_COUNT).toBe(2);
   });
 });
 
@@ -34,11 +34,11 @@ describe("registerCoreTools", () => {
     return { server, registeredTools };
   }
 
-  test("registers exactly 1 tool", () => {
+  test("registers exactly 2 tools", () => {
     const { server, registeredTools } = createMockServer();
     registerCoreTools(server as never, "org-1", "agent-1");
 
-    expect(registeredTools).toHaveLength(1);
+    expect(registeredTools).toHaveLength(2);
   });
 
   test("registers all expected tool names", () => {
@@ -47,6 +47,7 @@ describe("registerCoreTools", () => {
 
     const names = registeredTools.map((t) => t.name);
     expect(names).toContain("core_add_messages");
+    expect(names).toContain("core_classify_sop");
   });
 
   test("all tools have non-empty descriptions", () => {

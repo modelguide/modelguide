@@ -8,16 +8,9 @@ import { z } from "zod";
 // Request schemas
 // ============================================================================
 
-export const createEvalRunSchema = z.object({
-  sessionId: z.string().uuid(),
-  sourceType: z.enum(["sop"]),
-  sourceId: z.string().uuid(),
-  reporter: z.string().max(50).optional(),
-});
-
 export const evalRunListQuerySchema = z.object({
   sessionId: z.string().uuid().optional(),
-  sourceType: z.enum(["sop"]).optional(),
+  sourceType: z.enum(["suite", "replay_test", "live"]).optional(),
   sourceId: z.string().uuid().optional(),
   status: z.enum(["pending", "running", "completed", "failed"]).optional(),
   page: z.coerce.number().int().min(1).default(1),

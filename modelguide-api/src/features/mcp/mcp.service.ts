@@ -1,5 +1,5 @@
 import { forOrg } from "@db/rls";
-import { connectorTools, connectors } from "@db/schema";
+import { agentSops, connectorTools, connectors, sops } from "@db/schema";
 import { listAgentConnectors } from "@features/agents/agents.service";
 import { trimToShape } from "@features/connectors/catalog/lib/response-trimmer";
 import { getConnectorManifest } from "@features/connectors/catalog/registry";
@@ -9,9 +9,13 @@ import {
   getConnectorById,
   resolveConnectorConfig,
 } from "@features/connectors/connectors.service";
+import {
+  updateSession,
+  validateActiveSession,
+} from "@features/sessions/sessions.service";
 import { Errors } from "@lib/errors";
 import { getLogger, withTiming } from "@lib/logger";
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { ResolvedTool } from "./mcp.types";
 
 /**
@@ -159,4 +163,94 @@ export async function executeTool(
   }
 
   return result;
+}
+
+/**
+ * Resolve all active SOPs assigned to an agent.
+ * Returns slug, name, description for each active SOP.
+ */
+export async function resolveAgentSops(
+  orgId: string,
+  agentId: string,
+): Promise<{ slug: string; name: string; description: string | null }[]> {
+  return forOrg(orgId, async (tx) => {
+    const rows = await tx
+      .select({
+        slug: sops.slug,
+        name: sops.name,
+        description: sops.description,
+      })
+      .from(agentSops)
+      .innerJoin(sops, eq(agentSops.sopId, sops.id))
+      .where(and(eq(agentSops.agentId, agentId), eq(sops.status, "active")));
+
+    return rows;
+  });
+}
+
+// ============================================================================
+// SOP classification
+// ============================================================================
+
+export interface SopClassification {
+  sop_slug: string | null;
+  sop_name?: string;
+  confidence: number;
+  unknown: boolean;
+  source?: "agent" | "server";
+}
+
+export type ClassifySopResult = {
+  session_id: string;
+  sop_classification: SopClassification;
+};
+
+export type ClassifySopError = {
+  error: string;
+};
+
+/**
+ * Classify a session's SOP — validates the slug against the agent's active SOPs,
+ * builds the classification object, and merges it into session metadata.
+ *
+ * Used by core_classify_sop MCP tool and integration tests.
+ */
+export async function classifySop(
+  orgId: string,
+  agentId: string,
+  sessionId: string,
+  sopSlug: string | null | undefined,
+  confidence: number,
+): Promise<ClassifySopResult | ClassifySopError> {
+  await validateActiveSession(orgId, sessionId, agentId);
+
+  let matchedName: string | undefined;
+
+  if (sopSlug) {
+    const agentSopList = await resolveAgentSops(orgId, agentId);
+    const match = agentSopList.find((s) => s.slug === sopSlug);
+
+    if (!match) {
+      const available = agentSopList.map((s) => s.slug).join(", ");
+      return {
+        error: `SOP slug "${sopSlug}" is not assigned to this agent. Available slugs: ${available || "(none)"}`,
+      };
+    }
+
+    matchedName = match.name;
+  }
+
+  const sopClassification: SopClassification = {
+    sop_slug: sopSlug ?? null,
+    ...(matchedName && { sop_name: matchedName }),
+    confidence,
+    unknown: !sopSlug,
+    source: "agent",
+  };
+
+  await updateSession(orgId, sessionId, agentId, {
+    metadata: { sop_classification: sopClassification },
+  });
+
+  return { session_id: sessionId, sop_classification: sopClassification };
 }

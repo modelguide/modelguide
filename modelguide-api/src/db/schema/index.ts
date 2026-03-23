@@ -2,6 +2,7 @@ export * from "./enums";
 export * from "./core";
 export * from "./eval-configs";
 export * from "./eval-runs";
+export * from "./eval-suites";
 
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import type {
@@ -29,6 +30,11 @@ import type {
 } from "./core";
 import type { evalConfigs } from "./eval-configs";
 import type { evalRunScores, evalRuns } from "./eval-runs";
+import type {
+  evalSuiteEvaluators,
+  evalSuiteTestCases,
+  evalSuites,
+} from "./eval-suites";
 
 export type Organization = InferSelectModel<typeof organizations>;
 export type NewOrganization = InferInsertModel<typeof organizations>;
@@ -103,3 +109,7 @@ export type NewKnowledgeBase = InferInsertModel<typeof knowledgeBase>;
 
 export type AgentKnowledgeBase = InferSelectModel<typeof agentKnowledgeBase>;
 export type NewAgentKnowledgeBase = InferInsertModel<typeof agentKnowledgeBase>;
+
+export type EvalSuite = InferSelectModel<typeof evalSuites>;
+export type EvalSuiteTestCase = InferSelectModel<typeof evalSuiteTestCases>;
+export type EvalSuiteEvaluator = InferSelectModel<typeof evalSuiteEvaluators>;

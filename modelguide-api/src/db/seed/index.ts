@@ -13,6 +13,7 @@ import postgres from "postgres";
 import * as schema from "../schema";
 import { connectorsCatalog, sopTemplates } from "../schema";
 import { connectorsCatalogSeed } from "./connectors-catalog";
+import { seedCompileAgents } from "./seed-compile-agents";
 import { seedKnowledgeBase } from "./seed-knowledge-base";
 import { seedOrg } from "./seed-org";
 import { seedSopDefinitions } from "./seed-sop-defs";
@@ -96,7 +97,10 @@ async function seedAll(db: SeedDb) {
   // 5. Seed knowledge base guardrails (all orgs)
   await seedKnowledgeBase(db);
 
-  // 6. Verify data was actually persisted
+  // 6. Compile agents from assigned SOPs (requires steps 4 + 5)
+  await seedCompileAgents(db);
+
+  // 7. Verify data was actually persisted
   const ok = await verifySeed(db);
 
   // 7. Print summary

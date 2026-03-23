@@ -5,7 +5,7 @@ import { RatingBadge } from '~/components/ui/rating-badge'
 import { Tooltip } from '~/components/ui/tooltip'
 import { channelConfig } from '~/lib/channel-config'
 import { formatDate, formatDuration } from '~/lib/utils'
-import type { SessionListItem, SessionStatus } from '~/schemas/sessions'
+import type { SessionListItem, SessionStatus, SopClassification } from '~/schemas/sessions'
 
 function formatCost(costUsd?: number | null, totalTokens?: number | null): string {
   if (costUsd != null) return `$${costUsd.toFixed(4)}`
@@ -72,29 +72,29 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
           <span className="font-medium text-fg-secondary">{total}</span> sessions
         </p>
       )}
-      <div className="rounded-2xl border border-fg-subtle/10 bg-bg-elevated">
-        <table className="w-full">
+      <div className="overflow-hidden rounded-2xl border border-fg-subtle/10 bg-bg-elevated">
+        <table className="w-full table-fixed">
           <thead>
             <tr className="border-b border-fg-subtle/10 bg-bg-subtle/30">
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Time
               </th>
-              <th className="w-[16%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[18%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Agent
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                Channel
-              </th>
-              <th className="w-[13%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[9%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                Duration
+              <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                SOP
               </th>
               <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                Duration
+              </th>
+              <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Msgs
               </th>
               <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
@@ -171,27 +171,35 @@ function SessionRow({ session, index }: SessionRowProps) {
         </Tooltip>
       </td>
       <td className="px-4 py-3">
-        <span className="text-sm font-medium text-fg-primary">{session.agent.name}</span>
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2 text-fg-secondary">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-bg-subtle">
-            {channelConfig[session.channelType].icon}
+        <div className="flex items-center gap-2 min-w-0">
+          <Tooltip content={channelConfig[session.channelType].label}>
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-bg-subtle text-fg-secondary">
+              {channelConfig[session.channelType].icon}
+            </span>
+          </Tooltip>
+          <span className="truncate text-sm font-medium text-fg-primary" title={session.agent.name}>
+            {session.agent.name}
           </span>
-          <span className="text-sm">{channelConfig[session.channelType].label}</span>
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className="text-sm text-fg-secondary">{session.userIdentifier}</span>
+        <span className="block truncate text-sm text-fg-secondary" title={session.userIdentifier}>
+          {session.userIdentifier}
+        </span>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant={statusVariants[session.status]}>{session.status}</Badge>
           {session.mode === 'simulation' && (
             <Badge variant="warning" dot>
               Sim
             </Badge>
           )}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="min-w-0">
+          <SopBadge classification={session.sopClassification} />
         </div>
       </td>
       <td className="px-4 py-3">
@@ -214,5 +222,31 @@ function SessionRow({ session, index }: SessionRowProps) {
         <RatingBadge rating={session.feedbackSummary.supportRating ?? undefined} size="xs" />
       </td>
     </tr>
+  )
+}
+
+function SopBadge({ classification }: { classification: SopClassification }) {
+  if (!classification) {
+    return <span className="text-xs text-fg-muted">{'\u2014'}</span>
+  }
+
+  if (classification.unknown || !classification.sopSlug) {
+    return (
+      <Badge variant="warning" dot className="max-w-full min-w-0 whitespace-nowrap">
+        <span className="truncate">Unknown</span>
+      </Badge>
+    )
+  }
+
+  const label = classification.sopName ?? classification.sopSlug
+
+  return (
+    <Tooltip
+      content={`${label}${classification.confidence != null ? ` (${Math.round(classification.confidence * 100)}%)` : ''}`}
+    >
+      <Badge variant="brand" dot className="max-w-[140px] min-w-0">
+        <span className="truncate">{label}</span>
+      </Badge>
+    </Tooltip>
   )
 }

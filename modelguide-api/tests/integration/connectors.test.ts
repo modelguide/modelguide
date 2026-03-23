@@ -629,7 +629,7 @@ describe("POST /api/connectors/:id/ping", () => {
           headers: { "Content-Type": "application/json" },
         }),
       ),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
   }
 
   function restoreFetch() {

@@ -881,6 +881,50 @@ function productUrl(cfg: OrgVerticalConfig, product: Product): string {
 }
 
 // ============================================================================
+// SOP classification metadata
+// ============================================================================
+
+/**
+ * Map scenarios to SOP classification metadata.
+ * ~60% of sessions get classified to a real SOP slug,
+ * ~15% get classified as unknown, ~25% remain unclassified.
+ */
+const SCENARIO_SOP_MAP: Partial<
+  Record<Scenario, { sop_slug: string; sop_name: string }>
+> = {
+  order_status: { sop_slug: "order-lookup", sop_name: "Order Lookup" },
+  return_exchange: { sop_slug: "return-process", sop_name: "Return Process" },
+};
+
+function generateSopClassification(
+  scenario: Scenario,
+): Record<string, unknown> | null {
+  const mapped = SCENARIO_SOP_MAP[scenario];
+
+  if (mapped) {
+    // Scenario has a direct SOP mapping — classify with high confidence
+    return {
+      sop_slug: mapped.sop_slug,
+      sop_name: mapped.sop_name,
+      confidence: 0.85 + Math.random() * 0.15, // 0.85–1.0
+      unknown: false,
+    };
+  }
+
+  // For other scenarios, decide randomly:
+  // ~30% get classified as unknown, ~70% remain unclassified
+  if (Math.random() < 0.3) {
+    return {
+      sop_slug: null,
+      confidence: 0.3 + Math.random() * 0.4, // 0.3–0.7
+      unknown: true,
+    };
+  }
+
+  return null; // unclassified
+}
+
+// ============================================================================
 // Scenario dispatch
 // ============================================================================
 
@@ -982,6 +1026,7 @@ export async function generateSessions(
     userIdentifier: string;
     startedAt: Date;
     endedAt: Date | null;
+    metadata: Record<string, unknown>;
   }[] = [];
 
   const sessionScenarios: { scenario: Scenario; startedAt: Date }[] = [];
@@ -1008,6 +1053,13 @@ export async function generateSessions(
 
     const scenario = weightedPick(config.scenarioWeights);
 
+    // Generate SOP classification metadata
+    const sopClassification = generateSopClassification(scenario);
+    const metadata: Record<string, unknown> = {};
+    if (sopClassification) {
+      metadata.sop_classification = sopClassification;
+    }
+
     sessionValues.push({
       id: crypto.randomUUID(),
       organizationId: orgId,
@@ -1017,6 +1069,7 @@ export async function generateSessions(
       userIdentifier: userIdentifier(channel, config),
       startedAt,
       endedAt,
+      metadata,
     });
 
     sessionScenarios.push({ scenario, startedAt });

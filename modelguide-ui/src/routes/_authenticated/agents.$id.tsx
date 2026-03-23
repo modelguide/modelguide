@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Check,
   Copy,
+  FlaskConical,
   Key,
   Link2,
   Plug,
@@ -23,13 +24,16 @@ import { Toggle } from '~/components/ui/toggle'
 import { AddConnectorDialog } from '~/features/agents/components/add-connector-dialog'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { ElevenLabsCard } from '~/features/agents/components/elevenlabs-card'
+import { CompiledPromptCard } from '~/features/prompt-compiler/components/compiled-prompt-card'
 import { api } from '~/lib/api'
+import type { PaginatedResponse } from '~/lib/pagination'
 import type {
   Agent,
   AgentConnector,
   AgentConnectorTool,
   RegenerateKeyResponse,
 } from '~/schemas/agents'
+import type { EvalSuiteSummary } from '~/schemas/eval-suites'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated/agents/$id')({
@@ -411,6 +415,12 @@ function AgentDetailPage() {
             isAdmin={isAdmin}
           />
 
+          {/* Compiled Prompt */}
+          <CompiledPromptCard agent={agent} canMutate={isAdmin} />
+
+          {/* Eval Suites */}
+          <AgentEvalSuitesCard agentId={id} />
+
           {/* Platform */}
           <ElevenLabsCard agent={agent} isAdmin={isAdmin} />
 
@@ -522,5 +532,50 @@ function AgentDetailPage() {
         />
       ) : null}
     </div>
+  )
+}
+
+function AgentEvalSuitesCard({ agentId }: { agentId: string }) {
+  const { data } = useQuery({
+    queryKey: ['eval-suites', { agentId }],
+    queryFn: () =>
+      api
+        .get('eval-suites', { searchParams: { agentId } })
+        .json<PaginatedResponse<EvalSuiteSummary>>(),
+  })
+
+  const suites = data?.data ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FlaskConical className="h-4 w-4" />
+          Eval Suites
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {suites.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <FlaskConical className="h-8 w-8 text-fg-muted" />
+            <p className="mt-3 text-sm text-fg-muted">No eval suites for this agent</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {suites.map((suite) => (
+              <Link
+                key={suite.id}
+                to="/evals/suites/$suiteId"
+                params={{ suiteId: suite.id }}
+                className="flex items-center gap-2 rounded-lg border border-fg-subtle/10 bg-bg-subtle/50 px-3 py-2.5 transition-colors hover:border-fg-subtle/20 hover:bg-bg-subtle"
+              >
+                <FlaskConical className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="flex-1 text-sm font-medium text-fg-primary">{suite.name}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

@@ -18,7 +18,18 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, asc, count, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  isNull,
+  lte,
+  sql,
+} from "drizzle-orm";
 import { extractLinks } from "./link-extraction";
 
 // ============================================================================
@@ -31,6 +42,7 @@ interface SessionFilters extends PaginationParams {
   channelType?: string;
   mode?: string;
   hasFeedback?: boolean;
+  sopSlug?: string;
   startedAfter?: string;
   startedBefore?: string;
   sortBy?: "started_at" | "ended_at" | "status";
@@ -462,6 +474,28 @@ function buildFilterConditions(filters: SessionFilters) {
       ),
     );
   }
+  if (filters.sopSlug) {
+    if (filters.sopSlug === "__none__") {
+      // Unclassified: no sop_classification key in metadata
+      conditions.push(isNull(sql`${sessions.metadata}->'sop_classification'`));
+    } else if (filters.sopSlug === "__unknown__") {
+      // Unknown: sop_classification exists with unknown = true
+      // Covers both real classifications (sop_slug: null, unknown: true)
+      // and seed data (sop_slug: "__unknown__")
+      conditions.push(
+        sql`(${sessions.metadata}->'sop_classification'->>'unknown' = 'true'
+          OR ${sessions.metadata}->'sop_classification'->>'sop_slug' = '__unknown__')`,
+      );
+    } else {
+      // Specific SOP slug
+      conditions.push(
+        eq(
+          sql`${sessions.metadata}->'sop_classification'->>'sop_slug'`,
+          filters.sopSlug,
+        ),
+      );
+    }
+  }
   if (filters.startedAfter) {
     conditions.push(gte(sessions.startedAt, new Date(filters.startedAfter)));
   }
@@ -492,6 +526,55 @@ function buildSort(filters: SessionFilters) {
 function computeDuration(startedAt: Date, endedAt: Date | null): number | null {
   if (!endedAt) return null;
   return Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
+}
+
+/**
+ * Fetch only the messages for a session (lightweight — no joins, no feedback/links).
+ */
+export async function getSessionMessages(orgId: string, sessionId: string) {
+  return forOrg(orgId, (tx) =>
+    tx
+      .select()
+      .from(sessionMessages)
+      .where(eq(sessionMessages.sessionId, sessionId))
+      .orderBy(asc(sessionMessages.occurredAt), asc(sessionMessages.createdAt)),
+  );
+}
+
+/**
+ * Merge metadata into a session without checking terminal status.
+ *
+ * Used for post-close writes like server-side SOP classification,
+ * where the session is already ended.
+ *
+ * @note Caller must verify session ownership before calling.
+ */
+export async function mergeSessionMetadata(
+  orgId: string,
+  sessionId: string,
+  metadata: Record<string, unknown>,
+) {
+  return forOrg(orgId, async (tx) => {
+    const [existing] = await tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+
+    if (!existing) {
+      throw Errors.sessionNotFound(sessionId);
+    }
+
+    const [updated] = await tx
+      .update(sessions)
+      .set({
+        metadata:
+          sql`coalesce(${sessions.metadata}, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb` as unknown as typeof sessions.$inferInsert.metadata,
+      })
+      .where(eq(sessions.id, sessionId))
+      .returning();
+
+    return updated;
+  });
 }
 
 // ============================================================================

@@ -89,9 +89,9 @@ export function Dialog({
         className,
       )}
     >
-      <div className="p-6">
+      <div className="flex flex-col p-6 max-h-[inherit] overflow-hidden">
         {(title || description) && (
-          <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="mb-5 flex items-start justify-between gap-4 shrink-0">
             <div className="flex-1">
               {title && (
                 <h2 className="font-display text-lg font-semibold text-fg-primary">{title}</h2>
@@ -118,7 +118,7 @@ export function Dialog({
             <X className="h-4 w-4" />
           </button>
         )}
-        <div>{children}</div>
+        <div className="min-h-0 flex flex-col flex-1">{children}</div>
       </div>
     </dialog>
   )
