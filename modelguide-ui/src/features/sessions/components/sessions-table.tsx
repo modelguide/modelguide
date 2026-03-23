@@ -72,35 +72,32 @@ export function SessionsTable({ sessions, isLoading, total }: SessionsTableProps
           <span className="font-medium text-fg-secondary">{total}</span> sessions
         </p>
       )}
-      <div className="overflow-x-auto rounded-2xl border border-fg-subtle/10 bg-bg-elevated">
+      <div className="overflow-hidden rounded-2xl border border-fg-subtle/10 bg-bg-elevated">
         <table className="w-full table-fixed">
           <thead>
             <tr className="border-b border-fg-subtle/10 bg-bg-subtle/30">
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Time
               </th>
-              <th className="w-[15%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[18%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Agent
-              </th>
-              <th className="w-[5%] px-4 py-3 text-center font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-                Ch.
               </th>
               <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 User
               </th>
-              <th className="w-[10%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[9%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Status
               </th>
-              <th className="w-[12%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[14%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 SOP
               </th>
-              <th className="w-[7%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Duration
               </th>
               <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Msgs
               </th>
-              <th className="w-[7%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              <th className="w-[8%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                 Cost
               </th>
               <th className="w-[5%] px-4 py-3 text-left font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
@@ -174,19 +171,16 @@ function SessionRow({ session, index }: SessionRowProps) {
         </Tooltip>
       </td>
       <td className="px-4 py-3">
-        <span
-          className="block truncate text-sm font-medium text-fg-primary"
-          title={session.agent.name}
-        >
-          {session.agent.name}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-center">
-        <Tooltip content={channelConfig[session.channelType].label}>
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-bg-subtle text-fg-secondary">
-            {channelConfig[session.channelType].icon}
+        <div className="flex items-center gap-2 min-w-0">
+          <Tooltip content={channelConfig[session.channelType].label}>
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-bg-subtle text-fg-secondary">
+              {channelConfig[session.channelType].icon}
+            </span>
+          </Tooltip>
+          <span className="truncate text-sm font-medium text-fg-primary" title={session.agent.name}>
+            {session.agent.name}
           </span>
-        </Tooltip>
+        </div>
       </td>
       <td className="px-4 py-3">
         <span className="block truncate text-sm text-fg-secondary" title={session.userIdentifier}>
