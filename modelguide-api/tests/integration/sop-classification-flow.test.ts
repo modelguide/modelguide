@@ -10,7 +10,7 @@
  * 4. Verify the session's sop_classification metadata was written correctly
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, test } from "bun:test";
 import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentSops, agents, sessionMessages, sessions, sops } from "@db/schema";
@@ -30,6 +30,8 @@ import {
   authHeadersFor,
   getTestSeed,
 } from "../helpers/seed";
+
+const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 // ============================================================================
 // Setup
@@ -135,148 +137,155 @@ describe("SOP classification full flow", () => {
     expect(assignRes.status).toBe(200);
   });
 
-  test("2. compile + run agent — core_classify_sop writes to session via real service", async () => {
-    // Create a real session first so core_classify_sop can write to it
-    const createRes = await req("/api/sessions", {
-      method: "POST",
-      headers: { ...agentHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        channelType: "email",
-        userIdentifier: "jane@example.com",
-      }),
-    });
-    expect(createRes.status).toBe(201);
-    const sessionData = await createRes.json();
-    const sessionId = sessionData.id as string;
-    cleanupSessionIds.push(sessionId);
+  it.skipIf(!HAS_API_KEY)(
+    "2. compile + run agent — core_classify_sop writes to session via real service",
+    async () => {
+      // Create a real session first so core_classify_sop can write to it
+      const createRes = await req("/api/sessions", {
+        method: "POST",
+        headers: { ...agentHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelType: "email",
+          userIdentifier: "jane@example.com",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const sessionData = await createRes.json();
+      const sessionId = sessionData.id as string;
+      cleanupSessionIds.push(sessionId);
 
-    // Build core_classify_sop as a Mastra tool that calls the REAL service
-    // — same code path as registerCoreTools in core-tools.ts
-    const orgId = s.orgA.id;
-    const agentId = s.orgAAgentId;
+      // Build core_classify_sop as a Mastra tool that calls the REAL service
+      // — same code path as registerCoreTools in core-tools.ts
+      const orgId = s.orgA.id;
+      const agentId = s.orgAAgentId;
 
-    const coreClassifySop = createTool({
-      id: "core_classify_sop",
-      description: "Classify the customer's intent by matching it to an SOP",
-      inputSchema: z.object({
-        session_id: z.string().optional(),
-        sop_slug: z.string().nullable().optional(),
-        confidence: z.number().min(0).max(1),
-      }),
-      outputSchema: z.record(z.unknown()),
-      // biome-ignore lint/suspicious/noExplicitAny: Mastra tool execute types
-      execute: async (params: any) => {
-        const input = params.context ?? params;
-        // Same code path as the MCP tool handler in core-tools.ts
-        return classifySop(
-          orgId,
-          agentId,
-          input.session_id ?? sessionId,
-          input.sop_slug ?? null,
-          input.confidence ?? 0,
-        ) as Promise<Record<string, unknown>>;
-      },
-    });
+      const coreClassifySop = createTool({
+        id: "core_classify_sop",
+        description: "Classify the customer's intent by matching it to an SOP",
+        inputSchema: z.object({
+          session_id: z.string().optional(),
+          sop_slug: z.string().nullable().optional(),
+          confidence: z.number().min(0).max(1),
+        }),
+        outputSchema: z.record(z.unknown()),
+        // biome-ignore lint/suspicious/noExplicitAny: Mastra tool execute types
+        execute: async (params: any) => {
+          const input = params.context ?? params;
+          // Same code path as the MCP tool handler in core-tools.ts
+          return classifySop(
+            orgId,
+            agentId,
+            input.session_id ?? sessionId,
+            input.sop_slug ?? null,
+            input.confidence ?? 0,
+          ) as Promise<Record<string, unknown>>;
+        },
+      });
 
-    // Compile with agent SOPs for intent classification
-    const compilerInput: CompilerInput = {
-      sops: [emailOrderNotArrivedSop],
-      guardrails: sampleGuardrails,
-      agentConfig: {
-        id: agentId,
-        name: "Classification Flow Test Agent",
-        model: "anthropic/claude-haiku-4-5-20251001",
-        description:
-          "You are a customer support agent for an e-commerce store handling inbound support emails.",
-      },
-      agentSops: [
-        {
-          slug: sopSlug,
-          name: "WISMO — Where Is My Order",
+      // Compile with agent SOPs for intent classification
+      const compilerInput: CompilerInput = {
+        sops: [emailOrderNotArrivedSop],
+        guardrails: sampleGuardrails,
+        agentConfig: {
+          id: agentId,
+          name: "Classification Flow Test Agent",
+          model: "anthropic/claude-haiku-4-5-20251001",
           description:
-            "Handle customer inquiries about order status and delivery",
+            "You are a customer support agent for an e-commerce store handling inbound support emails.",
         },
-      ],
-    };
+        agentSops: [
+          {
+            slug: sopSlug,
+            name: "WISMO — Where Is My Order",
+            description:
+              "Handle customer inquiries about order status and delivery",
+          },
+        ],
+      };
 
-    const ir = compile(compilerInput);
-    expect(ir.systemPrompt).toContain("## Intent Classification (Step 0)");
-    expect(ir.systemPrompt).toContain(sopSlug);
+      const ir = compile(compilerInput);
+      expect(ir.systemPrompt).toContain("## Intent Classification (Step 0)");
+      expect(ir.systemPrompt).toContain(sopSlug);
 
-    const { agent } = toMastra(ir);
+      const { agent } = toMastra(ir);
 
-    // Run against the WISMO email — agent should call core_classify_sop
-    // which writes sop_classification to session metadata via real service
-    const prompt = `From: jane@example.com\nSubject: Order still not here\n\nHi, it's been over a week and my order #1042 still hasn't shown up. Can you look into this?\n\n(session_id: ${sessionId})`;
+      // Run against the WISMO email — agent should call core_classify_sop
+      // which writes sop_classification to session metadata via real service
+      const prompt = `From: jane@example.com\nSubject: Order still not here\n\nHi, it's been over a week and my order #1042 still hasn't shown up. Can you look into this?\n\n(session_id: ${sessionId})`;
 
-    const result = await agent.generate(prompt, {
-      toolsets: {
-        modelguide: {
-          store_look_up_order: createTool({
-            id: "store_look_up_order",
-            description: "Look up an order by order number and customer email",
-            inputSchema: z.object({
-              session_id: z.string().optional(),
-              order_number: z.union([z.string(), z.number()]).optional(),
-              customer_email: z.string().optional(),
-              email: z.string().optional(),
+      const result = await agent.generate(prompt, {
+        toolsets: {
+          modelguide: {
+            store_look_up_order: createTool({
+              id: "store_look_up_order",
+              description:
+                "Look up an order by order number and customer email",
+              inputSchema: z.object({
+                session_id: z.string().optional(),
+                order_number: z.union([z.string(), z.number()]).optional(),
+                customer_email: z.string().optional(),
+                email: z.string().optional(),
+              }),
+              outputSchema: z.record(z.unknown()),
+              execute: async () =>
+                mockedToolResponses.store_look_up_order as Record<
+                  string,
+                  unknown
+                >,
             }),
-            outputSchema: z.record(z.unknown()),
-            execute: async () =>
-              mockedToolResponses.store_look_up_order as Record<
-                string,
-                unknown
-              >,
-          }),
-          helpdesk_create_ticket: createTool({
-            id: "helpdesk_create_ticket",
-            description: "Create a helpdesk support ticket",
-            inputSchema: z.object({
-              session_id: z.string().optional(),
-              subject: z.string().optional(),
-              body: z.string().optional(),
-              requesterEmail: z.string().optional(),
-              tags: z.array(z.string()).optional(),
-              priority: z.string().optional(),
+            helpdesk_create_ticket: createTool({
+              id: "helpdesk_create_ticket",
+              description: "Create a helpdesk support ticket",
+              inputSchema: z.object({
+                session_id: z.string().optional(),
+                subject: z.string().optional(),
+                body: z.string().optional(),
+                requesterEmail: z.string().optional(),
+                tags: z.array(z.string()).optional(),
+                priority: z.string().optional(),
+              }),
+              outputSchema: z.record(z.unknown()),
+              execute: async () =>
+                mockedToolResponses.helpdesk_create_ticket as Record<
+                  string,
+                  unknown
+                >,
             }),
-            outputSchema: z.record(z.unknown()),
-            execute: async () =>
-              mockedToolResponses.helpdesk_create_ticket as Record<
-                string,
-                unknown
-              >,
-          }),
-          core_classify_sop: coreClassifySop,
+            core_classify_sop: coreClassifySop,
+          },
         },
-      },
-      maxSteps: 8,
-    });
+        maxSteps: 8,
+      });
 
-    // Agent should have produced a text reply
-    expect(result.text).toBeTruthy();
+      // Agent should have produced a text reply
+      expect(result.text).toBeTruthy();
 
-    // Verify sop_classification was written to session metadata by the real service
-    const getRes = await req(`/api/sessions/${sessionId}`, {
-      headers: adminHeaders,
-    });
-    expect(getRes.status).toBe(200);
+      // Verify sop_classification was written to session metadata by the real service
+      const getRes = await req(`/api/sessions/${sessionId}`, {
+        headers: adminHeaders,
+      });
+      expect(getRes.status).toBe(200);
 
-    const detail = await getRes.json();
-    const classification = detail.metadata?.sop_classification;
+      const detail = await getRes.json();
+      const classification = detail.metadata?.sop_classification;
 
-    expect(classification).toBeDefined();
-    expect(classification.sop_slug).toBe(sopSlug);
-    expect(typeof classification.confidence).toBe("number");
-    expect(classification.confidence).toBeGreaterThanOrEqual(0.5);
-    expect(classification.unknown).toBe(false);
+      expect(classification).toBeDefined();
+      expect(classification.sop_slug).toBe(sopSlug);
+      expect(typeof classification.confidence).toBe("number");
+      expect(classification.confidence).toBeGreaterThanOrEqual(0.5);
+      expect(classification.unknown).toBe(false);
 
-    // Verify session appears in sopSlug-filtered list
-    const listRes = await req(`/api/sessions?sopSlug=${sopSlug}`, {
-      headers: adminHeaders,
-    });
-    expect(listRes.status).toBe(200);
-    const listData = await listRes.json();
-    const found = listData.data.find((s: { id: string }) => s.id === sessionId);
-    expect(found).toBeDefined();
-  }, 30_000);
+      // Verify session appears in sopSlug-filtered list
+      const listRes = await req(`/api/sessions?sopSlug=${sopSlug}`, {
+        headers: adminHeaders,
+      });
+      expect(listRes.status).toBe(200);
+      const listData = await listRes.json();
+      const found = listData.data.find(
+        (s: { id: string }) => s.id === sessionId,
+      );
+      expect(found).toBeDefined();
+    },
+    30_000,
+  );
 });

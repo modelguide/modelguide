@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { forApp, forOrg } from "@db/rls";
 import {
+  agentSops,
   agents,
   connectorTools,
   connectors,
@@ -173,6 +174,14 @@ beforeAll(async () => {
     },
   });
   sopId = sop.id;
+
+  // Assign SOP to agent (required by initSuiteFromSop validation)
+  await forApp((tx) =>
+    tx.insert(agentSops).values({
+      agentId: ctx.agentId,
+      sopId: sop.id,
+    }),
+  );
 });
 
 afterAll(async () => {
@@ -475,6 +484,14 @@ describe("Workflow 4: Validation gauntlet", () => {
         metadata: {},
       },
     });
+
+    // Assign SOP to agent2 (required by initSuiteFromSop validation)
+    await forApp((tx) =>
+      tx.insert(agentSops).values({
+        agentId: agent2.id,
+        sopId: sop2.id,
+      }),
+    );
 
     const suite2 = await initSuiteFromSop(ctx.orgId, agent2.id, sop2.id);
 

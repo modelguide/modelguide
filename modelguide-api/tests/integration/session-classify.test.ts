@@ -39,16 +39,32 @@ function request(path: string, options?: RequestInit) {
   return app.fetch(new Request(`http://localhost${path}`, options));
 }
 
-/** Build a mock Anthropic tool_use response for the classify_sop tool. */
-function anthropicToolResponse(input: Record<string, unknown>) {
+/** Build a mock OpenAI-compatible tool_call response for the classify_sop tool. */
+function openAIToolResponse(input: Record<string, unknown>) {
   return {
-    id: "msg_mock",
-    type: "message",
-    role: "assistant",
-    content: [{ type: "tool_use", id: "call_1", name: "classify_sop", input }],
-    model: "mock-model",
-    stop_reason: "tool_use",
-    usage: { input_tokens: 100, output_tokens: 50 },
+    id: "chatcmpl-mock",
+    object: "chat.completion",
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "classify_sop",
+                arguments: JSON.stringify(input),
+              },
+            },
+          ],
+        },
+        finish_reason: "tool_calls",
+      },
+    ],
+    usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
   };
 }
 
@@ -181,7 +197,7 @@ function mockLlmClassification(slug: string, confidence: number) {
     Promise.resolve(
       new Response(
         JSON.stringify(
-          anthropicToolResponse({
+          openAIToolResponse({
             sop_slug: slug,
             confidence,
             reasoning: "Test classification",

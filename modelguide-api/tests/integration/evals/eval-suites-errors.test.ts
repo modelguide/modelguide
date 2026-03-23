@@ -9,6 +9,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { forApp } from "@db/rls";
 import {
+  agentSops,
   agents,
   connectorTools,
   connectors,
@@ -103,6 +104,14 @@ beforeAll(async () => {
     },
   });
   sopId = sop.id;
+
+  // Assign SOP to agent (required by initSuiteFromSop validation)
+  await forApp((tx) =>
+    tx.insert(agentSops).values({
+      agentId,
+      sopId: sop.id,
+    }),
+  );
 });
 
 afterAll(async () => {
