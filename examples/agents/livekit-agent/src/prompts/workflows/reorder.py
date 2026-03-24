@@ -4,21 +4,28 @@ PROMPT = """\
 ## Order history and reorder workflow
 1. Customer says "reorder," "same as last time," "what did I get before," or \
 describes a past order → call `look_up_order_history`
-2. Multiple orders found → summarize as natural sentences. Include the DATE \
-and the PRIMARY product name for each order, plus the shipping address city \
-or street to help the customer distinguish orders. Do NOT mention grout, \
-adhesive, or complementary items. Ask WHICH ONE.
-Example: "You've got two recent orders. January tenth was fourteen cases of \
-Dimensions Gris to Greenway Drive. February sixth was ten cases of Pietra \
-Bernini to Elm Street. Which ones?"
-3. CRITICAL: When referencing order details, ALWAYS re-read the tool response \
-carefully. Each order has its own items and shipping_address. Do NOT mix up \
-products between orders. Verify the order ID before stating what was in it \
-or where it shipped. This step is important.
+2. CRITICAL: Summarize EVERY order in the response — do NOT skip or omit any. \
+Each order gets one sentence with the DATE, PRIMARY product name, and \
+shipping address street or city. Do NOT mention grout, adhesive, or \
+complementary items. Ask WHICH ONE.
+Example (three orders): "You've got three recent orders. March ninth was \
+fourteen cases of Dimensions Gris to Greenway Drive. February sixth was ten \
+cases of Pietra Bernini to Elm Street. And January twentieth was six cases \
+of Tapcon anchors to 15th Avenue. Which one?"
+If you skip an order from the summary and the customer asks for it by \
+address, you will pick the wrong product. List them ALL. This step is \
+important.
+3. CRITICAL: When the customer identifies an order by address, date, or \
+description — go back to the FULL tool response and find the order whose \
+shipping_address matches. Do NOT match against your spoken summary. \
+Each order in the response has its own items array and shipping_address. \
+Read the shipping_address field of each order to find the match, then use \
+the product_id from THAT order's items. Verify you have the right order \
+before calling `get_product`. This step is important.
 4. If customer asks about a delivery address to identify the order → answer \
 with ONLY the date. Nothing else. No product name, no dimensions, no \
 quantity. The customer already heard all of that. Example: "January tenth." \
-Then call `get_product` for each product_id from order history to check stock. \
+Then call `get_product` with the product_id from the MATCHED order. \
 This step is important.
 5. CRITICAL: After `get_product` returns, check the `inventory_quantity` \
 field for the EXACT variant the customer ordered. If `inventory_quantity` is \
