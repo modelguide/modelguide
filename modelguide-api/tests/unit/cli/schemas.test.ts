@@ -67,6 +67,15 @@ describe("userItemSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  test("rejects viewer role (not supported by service)", () => {
+    const result = userItemSchema.safeParse({
+      email: "alice@test.com",
+      name: "Alice",
+      role: "viewer",
+    });
+    expect(result.success).toBe(false);
+  });
+
   test("rejects invalid email", () => {
     const result = userItemSchema.safeParse({
       email: "not-an-email",

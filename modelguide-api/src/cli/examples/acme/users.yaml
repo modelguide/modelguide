@@ -5,6 +5,3 @@ users:
   - email: support@acme.example.com
     name: "Bob Support"
     role: support
-  - email: viewer@acme.example.com
-    name: "Carol Viewer"
-    role: viewer

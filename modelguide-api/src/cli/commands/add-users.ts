@@ -29,7 +29,7 @@ export async function handleAddUsers(
       const result = await createUser(orgId, {
         email: user.email,
         name: user.name,
-        role: user.role as "admin" | "support",
+        role: user.role,
       });
       if (registry) {
         registry.set("user", result.email, result.id);

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const userRoles = ["admin", "support", "viewer"] as const;
+const userRoles = ["admin", "support"] as const;
 
 export const userItemSchema = z.object({
   email: z.string().email(),

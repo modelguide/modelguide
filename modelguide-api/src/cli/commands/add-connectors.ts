@@ -8,6 +8,7 @@ import {
   createConnector,
   listCatalog,
   listConnectorTools,
+  listConnectors,
 } from "@features/connectors/connectors.service";
 import { createSecret } from "@features/secrets/secrets.service";
 import type { Command } from "commander";
@@ -40,10 +41,26 @@ export async function handleAddConnectors(
   options?: { skipSecrets?: boolean; registry?: IdRegistry },
 ): Promise<{ created: number; existing: number }> {
   const catalog = await resolveCatalog();
+  const { data: existingConnectors } = await listConnectors(orgId, {
+    page: 1,
+    pageSize: 100,
+  });
+  const existingBySlug = new Map(existingConnectors.map((c) => [c.slug, c]));
   let created = 0;
   let existing = 0;
 
   for (const item of items) {
+    // Check if connector already exists to avoid creating orphaned secrets
+    const existingConn = existingBySlug.get(item.slug);
+    if (existingConn) {
+      if (options?.registry) {
+        options.registry.set("connector", item.slug, existingConn.id);
+      }
+      log.info(`Found existing connector: ${item.slug}`);
+      existing++;
+      continue;
+    }
+
     const catalogEntry = catalog.get(item.catalogSlug);
     if (!catalogEntry) {
       throw new Error(
@@ -76,46 +93,28 @@ export async function handleAddConnectors(
       }
     }
 
-    try {
-      const connector = await createConnector(orgId, {
-        connectorCatalogId: catalogEntry.id,
-        name: item.name,
-        slug: item.slug,
-        config: item.config,
-        secrets: secretsMap,
-      });
+    const connector = await createConnector(orgId, {
+      connectorCatalogId: catalogEntry.id,
+      name: item.name,
+      slug: item.slug,
+      config: item.config,
+      secrets: secretsMap,
+    });
 
-      // Count tools created
-      const tools = await listConnectorTools(orgId, connector.id);
+    // Count tools created
+    const tools = await listConnectorTools(orgId, connector.id);
 
-      if (options?.registry) {
-        options.registry.set("connector", item.slug, connector.id);
-        if (options.registry.has("catalogEntry", item.catalogSlug) === false) {
-          options.registry.set(
-            "catalogEntry",
-            item.catalogSlug,
-            catalogEntry.id,
-          );
-        }
-      }
-
-      log.success(
-        `Created connector: ${item.slug} (${item.catalogSlug}, ${tools.length} tools)`,
-      );
-      created++;
-    } catch (err) {
-      const msg = (err as Error).message;
-      if (
-        msg.includes("duplicate") ||
-        msg.includes("already exists") ||
-        msg.includes("Already exists")
-      ) {
-        log.info(`Found existing connector: ${item.slug}`);
-        existing++;
-      } else {
-        throw err;
+    if (options?.registry) {
+      options.registry.set("connector", item.slug, connector.id);
+      if (options.registry.has("catalogEntry", item.catalogSlug) === false) {
+        options.registry.set("catalogEntry", item.catalogSlug, catalogEntry.id);
       }
     }
+
+    log.success(
+      `Created connector: ${item.slug} (${item.catalogSlug}, ${tools.length} tools)`,
+    );
+    created++;
   }
 
   return { created, existing };
