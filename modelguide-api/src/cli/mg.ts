@@ -9,6 +9,7 @@
 // Load env validation before anything else
 import "@/env";
 
+import { closeDatabase } from "@db/client";
 import { Command } from "commander";
 import { registerAddAgentsCommand } from "./commands/add-agents";
 import { registerAddConnectorsCommand } from "./commands/add-connectors";
@@ -38,7 +39,13 @@ registerCompileAgentsCommand(program);
 registerSetupCommand(program);
 
 if (import.meta.main) {
-  program.parse(process.argv);
+  program
+    .parseAsync(process.argv)
+    .then(() => closeDatabase())
+    .catch(async () => {
+      await closeDatabase();
+      process.exit(1);
+    });
 }
 
 export { program };

@@ -3,6 +3,7 @@
  * Creates sessions, adds messages, updates status, and adds feedback.
  */
 
+import { listAgents } from "@features/agents/agents.service";
 import { addFeedback } from "@features/feedback/feedback.service";
 import {
   addMessages,
@@ -24,18 +25,35 @@ export async function handleImportSessions(
   items: SessionItemInput[],
   options?: { registry?: IdRegistry },
 ): Promise<{ created: number }> {
+  // Build agent slug→id map from registry or DB
+  const agentMap = new Map<string, string>();
+  if (options?.registry) {
+    for (const [slug, id] of options.registry.getAll("agent")) {
+      agentMap.set(slug, id);
+    }
+  }
+  // Supplement with DB lookup for slugs not in registry
+  const missingSlugs = [...new Set(items.map((i) => i.agentSlug))].filter(
+    (s) => !agentMap.has(s),
+  );
+  if (missingSlugs.length > 0) {
+    const { data: agents } = await listAgents(orgId, {
+      page: 1,
+      pageSize: 100,
+    });
+    for (const agent of agents) {
+      if (missingSlugs.includes(agent.slug)) {
+        agentMap.set(agent.slug, agent.id);
+      }
+    }
+  }
+
   let created = 0;
 
   for (const item of items) {
-    // Resolve agent slug to ID
-    let agentId: string | undefined;
-    if (options?.registry?.has("agent", item.agentSlug)) {
-      agentId = options.registry.get("agent", item.agentSlug);
-    }
+    const agentId = agentMap.get(item.agentSlug);
     if (!agentId) {
-      log.warn(
-        `Agent "${item.agentSlug}" not found in registry, skipping session`,
-      );
+      log.warn(`Agent "${item.agentSlug}" not found, skipping session`);
       continue;
     }
 

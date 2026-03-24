@@ -12,6 +12,7 @@ import {
   listConnectorTools,
   listConnectors,
 } from "@features/connectors/connectors.service";
+import { listUsers } from "@features/users/users.service";
 import type { Command } from "commander";
 import type { IdRegistry } from "../lib/id-registry";
 import { log, table } from "../lib/logger";
@@ -57,7 +58,8 @@ export async function handleAddAgents(
   const apiKeys: { name: string; key: string }[] = [];
 
   // We need a user ID for createdBy. Use provided or look up first admin.
-  const createdBy = options?.createdBy ?? getFirstUserId(options?.registry);
+  const createdBy =
+    options?.createdBy ?? (await getFirstUserId(orgId, options?.registry));
 
   for (const item of items) {
     try {
@@ -142,14 +144,19 @@ export async function handleAddAgents(
   return { created, existing, apiKeys };
 }
 
-function getFirstUserId(registry?: IdRegistry): string {
+async function getFirstUserId(
+  orgId: string,
+  registry?: IdRegistry,
+): Promise<string> {
   if (registry) {
     const users = registry.getAll("user");
     const first = users.values().next();
     if (!first.done) return first.value;
   }
-  // Fallback: system user placeholder
-  return "00000000-0000-0000-0000-000000000000";
+  // Fallback: look up first user from the DB
+  const { data } = await listUsers(orgId, { page: 1, pageSize: 1 });
+  if (data.length > 0) return data[0].id;
+  throw new Error("No users found in org — create users before agents");
 }
 
 export function registerAddAgentsCommand(program: Command): void {
