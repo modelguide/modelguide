@@ -62,17 +62,14 @@ railway variables \
 
 ## 5. Deploy services
 
-From the repo root:
+From the **monorepo root** (do NOT `cd` into subdirectories — Railway's
+`railway.toml` in each service directory already sets the build root; deploying
+from a subdirectory doubles the path and fails):
 
 ```bash
-# API — railway.toml handles Dockerfile, pre-deploy migrations, healthcheck
-(cd modelguide-api && railway up --service api)
-
-# UI — railway.toml handles Dockerfile
-(cd modelguide-ui && railway up --service ui)
-
-# Load balancer — deploy from railway/lb/
-(cd railway/lb && railway up --service lb)
+railway up --service api   # railway.toml handles Dockerfile, pre-deploy migrations, healthcheck
+railway up --service ui    # railway.toml handles Dockerfile
+railway up --service lb    # Caddy reverse proxy
 ```
 
 ## 6. Migrate and seed database (one-time)

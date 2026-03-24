@@ -13,32 +13,29 @@ Ask the user if not provided:
 - **project** — Railway project name
 - **environment** — Railway environment to deploy to (e.g., `demo-upgrade`, `demo`, `production`)
 
-## Service Directory Mapping
+## Deployment Rules
 
-CRITICAL — each service MUST be deployed from its specific subdirectory:
-
-| Service | workspacePath |
-|---------|--------------|
-| `api`   | `<project-root>/modelguide-api` |
-| `ui`    | `<project-root>/modelguide-ui` |
-| `lb`    | `<project-root>/railway/lb` |
-
-NEVER deploy from the monorepo root.
+CRITICAL — ALL services MUST be deployed from the **monorepo root** (`<project-root>`), NOT from subdirectories. Railway's `railway.toml` in each service directory already specifies the root directory for the build. Deploying from a subdirectory doubles the path and causes "Could not find root directory" errors.
 
 ## Procedure
 
-1. **Link to the correct project and environment** using Railway MCP `link-environment` tool:
-   - workspacePath: <project-root>
-   - environmentName: <environment>
+1. **Link to the correct project and environment** — either via Railway MCP `link-environment` tool or `railway link`:
+   - workspacePath: `<project-root>` (monorepo root)
+   - environmentName: `<environment>`
 
-2. **Deploy all three services in parallel** using Railway MCP `deploy` tool:
-   - `api`: workspacePath `<project-root>/modelguide-api`, service `api`, environment `<environment>`
-   - `ui`: workspacePath `<project-root>/modelguide-ui`, service `ui`, environment `<environment>`
-   - `lb`: workspacePath `<project-root>/railway/lb`, service `lb`, environment `<environment>`
+2. **Deploy services from the monorepo root** using `railway up --service <name>`:
+   ```bash
+   cd <project-root>
+   railway up --service api
+   railway up --service ui
+   railway up --service lb
+   ```
+   If Railway MCP tools are available, use the `deploy` tool with `workspacePath: <project-root>` for all services.
+   Deploy all requested services in parallel when possible.
 
 3. **Wait ~45 seconds** for builds to complete.
 
-4. **Check deploy logs** using Railway MCP `get-logs` tool for all three services (logType: `deploy`, lines: 30).
+4. **Check deploy logs** using `railway logs --service <name> --deployment` or Railway MCP `get-logs` tool for each service.
 
 5. **Report** status of each service to the user, including the LB URL: `lb-<environment>.up.railway.app`
 
