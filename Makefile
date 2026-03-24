@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose lk-agent-setup lk-agent-console lk-agent-dev livekit-up livekit-up-docker livekit-down livekit-token
 
 .DEFAULT_GOAL := help
 
@@ -159,3 +159,32 @@ docker-expose: ## [Docker] Show exposed ports
 	@echo "Caddy (reverse proxy): http://localhost:8080"
 	@echo "API (direct):          http://localhost:3000"
 	@echo "PostgreSQL:            localhost:5434"
+
+# =============================================================================
+# LiveKit Voice Agent (examples/agents/livekit-agent)
+# =============================================================================
+
+LK_AGENT_DIR := examples/agents/livekit-agent
+LK_AGENT_NAME ?= buildpro-sam
+LK_LOG_LEVEL ?= info
+
+lk-agent-setup: ## [LK Agent] Install deps and download model files
+	cd $(LK_AGENT_DIR) && uv sync && uv run python src/agent.py download-files
+
+lk-agent-console: ## [LK Agent] Run in text-only console mode (no LiveKit needed)
+	cd $(LK_AGENT_DIR) && uv run python src/agent.py console
+
+lk-agent-dev: ## [LK Agent] Run in WebRTC dev mode (LOG_LEVEL=trace for debug)
+	cd $(LK_AGENT_DIR) && uv run python src/agent.py dev --log-level $(LK_LOG_LEVEL)
+
+livekit-up: ## [LiveKit] Start local server (native, requires brew install livekit)
+	livekit-server --dev
+
+livekit-up-docker: ## [LiveKit] Start local server (Docker)
+	cd $(LK_AGENT_DIR) && docker compose -f docker-compose.dev.yml up -d
+
+livekit-down: ## [LiveKit] Stop Docker LiveKit server
+	cd $(LK_AGENT_DIR) && docker compose -f docker-compose.dev.yml down
+
+livekit-token: ## [LiveKit] Generate token and open meet.livekit.io (NAME=yourname)
+	lk token create --api-key devkey --api-secret secret --room test-room --identity $(or $(NAME),artur) --join --valid-for 1h --agent $(LK_AGENT_NAME) --open meet

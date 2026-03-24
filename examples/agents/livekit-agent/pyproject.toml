@@ -1,0 +1,30 @@
+[project]
+name = "livekit-modelguide-agent"
+version = "0.2.0"
+description = "LiveKit voice agent for ModelGuide (BuildPro Sam demo)"
+requires-python = ">=3.11"
+dependencies = [
+    "livekit-agents[silero,turn-detector]~=1.4",
+    "livekit-plugins-openai~=1.4",
+    "livekit-plugins-deepgram~=1.4",
+    "livekit-plugins-elevenlabs~=1.4",
+    "livekit-plugins-cartesia~=1.4",
+    "httpx",
+    "python-dotenv",
+    "mcp",
+    "langfuse>=4.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
