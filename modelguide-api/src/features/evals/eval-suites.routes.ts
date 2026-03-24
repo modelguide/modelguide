@@ -24,12 +24,15 @@ import {
   evalSuiteSummaryResponseSchema,
   initSuiteFromSopSchema,
   runEvalSuiteSchema,
+  simulateAndRunResponseSchema,
+  simulateAndRunSchema,
 } from "./eval-suites.schemas";
 import {
   createEvaluator,
   createSuite,
   createTestCase,
   deleteEvalSuite,
+  enqueueSimulateAndRun,
   getEvalSuiteById,
   getEvalSuiteRunById,
   getEvalSuiteRuns,
@@ -161,6 +164,7 @@ function formatSuiteRun(r: SuiteRunDetail) {
   return {
     id: r.id,
     suiteId: r.suiteId,
+    status: r.status,
     sessionId: r.sessionId ?? null,
     promptSource: r.promptSource,
     passed: r.passed,
@@ -186,6 +190,7 @@ function formatSuiteRunSummary(
   return {
     id: r.id,
     suiteId: r.suiteId,
+    status: r.status,
     sessionId: r.sessionId ?? null,
     promptSource: r.promptSource,
     passed: r.passed,
@@ -241,6 +246,12 @@ router.delete(
 );
 router.post(
   "/:suiteId/run",
+  requireUser(),
+  requirePermission("eval_suites:run"),
+  requireOrganization(),
+);
+router.post(
+  "/:suiteId/simulate-and-run",
   requireUser(),
   requirePermission("eval_suites:run"),
   requireOrganization(),
@@ -487,6 +498,58 @@ router.openapi(runSuiteRoute, async (c) => {
 
   const detail = await getEvalSuiteRunById(orgId, suiteId, result.suiteRun.id);
   return c.json(formatSuiteRun(detail), 201);
+});
+
+// POST /:suiteId/simulate-and-run — async simulate + eval
+const simulateAndRunRoute = createRoute({
+  method: "post",
+  path: "/{suiteId}/simulate-and-run",
+  tags: ["Eval Suites"],
+  summary: "Simulate and run eval suite",
+  description:
+    "Asynchronously simulates conversations for each test case using mock tools via MCP, then scores each session. Returns immediately with a suite run ID (HTTP 202). Poll GET /:suiteId/runs/:runId for progress.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: suiteIdParams,
+    body: {
+      content: { "application/json": { schema: simulateAndRunSchema } },
+    },
+  },
+  responses: {
+    202: {
+      description: "Suite run enqueued",
+      content: {
+        "application/json": { schema: simulateAndRunResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Eval suite not found"),
+    409: errorResponse("Eval suite is archived"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(simulateAndRunRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const auth = c.get("auth");
+  const triggeredBy = auth.type === "user" ? auth.user.id : undefined;
+
+  const result = await enqueueSimulateAndRun(
+    orgId,
+    suiteId,
+    body.promptSource,
+    {
+      triggeredBy,
+    },
+  );
+
+  return c.json(
+    { suiteRunId: result.suiteRunId, status: "running" as const },
+    202,
+  );
 });
 
 // GET /:suiteId/runs — list runs

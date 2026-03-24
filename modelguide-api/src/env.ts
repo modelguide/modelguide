@@ -57,6 +57,11 @@ const envSchema = z
     SIMULATION_LLM_MODEL: z.string().default("gpt-5-mini"),
     SIMULATION_LLM_BASE_URL: z.string().url().optional(),
     SIMULATION_MAX_TURNS: z.coerce.number().default(20),
+    SIMULATION_TIMEOUT_MS: z.coerce.number().default(120_000),
+    // Model ID for the Mastra agent in simulations (Vercel AI SDK format)
+    SIMULATION_AGENT_MODEL: z
+      .string()
+      .default("anthropic/claude-haiku-4-5-20251001"),
 
     // Eval engine — LLM judge configuration (optional)
     EVAL_LLM_API_KEY: z.string().optional(),

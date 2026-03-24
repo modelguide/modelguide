@@ -8,10 +8,9 @@ import { validateActiveSession } from "@features/sessions";
 import { Errors } from "@lib/errors";
 import { enrichLogger, getLogger } from "@lib/logger";
 import {
-  McpServer,
+  type McpServer,
   ResourceTemplate,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Context } from "hono";
 import { z } from "zod";
 import { CORE_TOOL_COUNT, registerCoreTools } from "./core-tools";
@@ -20,6 +19,7 @@ import {
   getAgentTools,
   resolveConnectorConfigById,
 } from "./mcp.service";
+import { createMcpSession } from "./mcp.shared";
 import { type ResolvedTool, mcpErrorResponse, mcpResponse } from "./mcp.types";
 import { jsonSchemaToZod } from "./schema-utils";
 
@@ -47,30 +47,24 @@ export async function mcpHandler(c: Context<AppBindings>): Promise<Response> {
   const enableCoreAddMessages =
     auth.agent.metadata?.enableCoreAddMessages === true;
 
-  const server = new McpServer(
-    { name: "ModelGuide MCP", version: "1.0.0" },
-    { capabilities: { logging: {} } },
-  );
-
   const coreToolCount = enableCoreAddMessages ? CORE_TOOL_COUNT : 0;
-  registerResources(server, auth.agent, tools, coreToolCount);
-  if (enableCoreAddMessages) {
-    registerCoreTools(server, orgId, agentId);
-  }
-  registerConnectorTools(server, orgId, agentId, tools);
+
+  const { handleRequest } = await createMcpSession({
+    setup: (server) => {
+      registerResources(server, auth.agent, tools, coreToolCount);
+      if (enableCoreAddMessages) {
+        registerCoreTools(server, orgId, agentId);
+      }
+      registerConnectorTools(server, orgId, agentId, tools);
+    },
+  });
 
   getLogger().info(
     { connectorTools: tools.length, coreTools: coreToolCount },
     "MCP server initialized",
   );
 
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
-
-  await server.connect(transport);
-
-  return transport.handleRequest(c.req.raw);
+  return handleRequest(c.req.raw);
 }
 
 function registerResources(

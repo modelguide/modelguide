@@ -49,6 +49,20 @@ export interface CreateEvaluatorInput {
   required?: boolean;
 }
 
+export interface SimulateAndRunPayload {
+  orgId: string;
+  suiteId: string;
+  suiteRunId: string;
+  promptSource: string;
+  triggeredBy?: string;
+}
+
+export interface SimulateAndRunProgress {
+  completed: number;
+  total: number;
+  currentTestCase: string | null;
+}
+
 // ============================================================================
 // Result types (returned from mutation operations)
 // ============================================================================

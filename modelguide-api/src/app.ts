@@ -15,6 +15,7 @@ import { organizationRoutes } from "@features/organizations";
 import { secretsRoutes } from "@features/secrets";
 import { sessionRoutes } from "@features/sessions";
 import { simulationRoutes } from "@features/simulations";
+import { simulationMcpHandler } from "@features/simulations/simulation-mcp.routes";
 import { sopRoutes } from "@features/sops";
 import { authRoutes, userRoutes } from "@features/users";
 import { elevenlabsWebhooks } from "@features/webhooks";
@@ -121,5 +122,13 @@ app.route("/webhooks/elevenlabs", elevenlabsWebhooks);
 // MCP endpoint — separate from API router (different protocol, not REST)
 // Agent ID in path for explicit routing; API key in header for auth verification.
 app.on(["POST", "GET", "DELETE"], "/mcp/:agentId", mcpHandler);
+
+// Simulation MCP endpoint — internal only, serves mock tools per simulation session.
+// No auth required — called by in-process Mastra agents during simulation runs.
+app.on(
+  ["POST", "GET", "DELETE"],
+  "/simulations/:simulationId/mcp",
+  simulationMcpHandler,
+);
 
 export default app;

@@ -49,6 +49,15 @@ export const evalSuiteRunsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const simulateAndRunSchema = z.object({
+  promptSource: z.enum(["compiled", "hand_written", "edited"]),
+});
+
+export const simulateAndRunResponseSchema = z.object({
+  suiteRunId: z.string().uuid(),
+  status: z.enum(["running"]),
+});
+
 // ============================================================================
 // Response schemas
 // ============================================================================
@@ -131,6 +140,7 @@ const testCaseResultSchema = z.object({
 export const evalSuiteRunResponseSchema = z.object({
   id: z.string().uuid(),
   suiteId: z.string().uuid(),
+  status: z.enum(["running", "completed", "completed_with_errors", "failed"]),
   promptSource: z.string(),
   passed: z.boolean().nullable(),
   triggeredBy: z.string().uuid().nullable(),

@@ -5,6 +5,7 @@
  * only the evaluators relevant to the SOP path it exercises.
  */
 
+import { env } from "@/env";
 import { type Transaction, forOrg } from "@db/rls";
 import {
   type EvalRunScore,
@@ -29,6 +30,11 @@ import {
   sopSteps,
   sops,
 } from "@db/schema";
+import { createSession } from "@features/sessions/sessions.service";
+import { MastraAdapter } from "@features/simulations/adapters/mastra-adapter";
+import { runEvalSimulation } from "@features/simulations/eval-orchestrator";
+import { personalizeInputMessage } from "@features/simulations/llm-client";
+import { getPersona } from "@features/simulations/personas";
 import { Errors } from "@lib/errors";
 import { getLogger } from "@lib/logger";
 import {
@@ -36,6 +42,7 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
+import { taskRunner } from "@lib/task-runner";
 import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import type {
@@ -45,6 +52,7 @@ import type {
   InitEvalSuiteOpts,
   ListEvalSuitesParams,
   RunEvalSuiteOpts,
+  SimulateAndRunPayload,
   SuiteRunDetail,
   SuiteRunResult,
   TestCaseEvalResult,
@@ -1258,4 +1266,385 @@ export async function getEvalSuiteRunById(
       testCaseResults,
     };
   });
+}
+
+// ============================================================================
+// Simulate and Run
+// ============================================================================
+
+/**
+ * Enqueue an async simulate-and-run task for an eval suite.
+ *
+ * Creates a suite run record, validates the suite, then enqueues
+ * the simulation task to run asynchronously. Returns immediately
+ * with the suite run ID (HTTP 202).
+ *
+ * For each test case:
+ * 1. Create a simulation session with mock config
+ * 2. Start Mastra agent pointing at simulation MCP route
+ * 3. Run eval-orchestrator to drive the conversation
+ * 4. Score the session via runTestCaseEval
+ * 5. Update progress in eval_suite_runs.metadata
+ */
+/**
+ * Validate suite + agent, create a run record, and enqueue the async
+ * simulate-and-run task. Returns immediately (HTTP 202 pattern).
+ *
+ * Only cheap, synchronous-feeling checks live here so the caller gets
+ * an immediate 400/404/409. Detailed per-test-case validation happens
+ * inside the async task handler.
+ */
+export async function enqueueSimulateAndRun(
+  orgId: string,
+  suiteId: string,
+  promptSource: string,
+  opts?: RunEvalSuiteOpts,
+): Promise<{ suiteRunId: string }> {
+  // Cheap validation — give the caller an immediate error for obvious problems
+  const { testCaseCount } = await forOrg(orgId, async (tx) => {
+    const [s] = await tx
+      .select()
+      .from(evalSuites)
+      .where(eq(evalSuites.id, suiteId));
+
+    if (!s) throw Errors.evalSuiteNotFound(suiteId);
+    if (s.status === "archived") {
+      throw Errors.conflict(
+        `Eval suite "${suiteId}" is archived and cannot be run`,
+      );
+    }
+
+    const [a] = await tx
+      .select({
+        id: agents.id,
+        compiledInstructions: agents.compiledInstructions,
+      })
+      .from(agents)
+      .where(eq(agents.id, s.agentId));
+
+    if (!a) throw Errors.agentNotFound(s.agentId);
+    if (!a.compiledInstructions) {
+      throw Errors.validationError(
+        `Agent "${s.agentId}" has no compiled_instructions — compile the SOP first`,
+      );
+    }
+
+    const testCases = await tx
+      .select({
+        id: evalSuiteTestCases.id,
+        name: evalSuiteTestCases.name,
+        input: evalSuiteTestCases.input,
+      })
+      .from(evalSuiteTestCases)
+      .where(eq(evalSuiteTestCases.suiteId, suiteId));
+
+    if (testCases.length === 0) {
+      throw Errors.validationError(
+        `Eval suite "${suiteId}" has no test cases — initialize the suite first`,
+      );
+    }
+
+    for (const tc of testCases) {
+      const input = tc.input as Record<string, unknown> | null;
+      if (!input?.message || typeof input.message !== "string") {
+        throw Errors.validationError(
+          `Test case "${tc.name}" missing required input.message for simulation`,
+        );
+      }
+    }
+
+    return { testCaseCount: testCases.length };
+  });
+
+  // Create suite run record
+  const [suiteRun] = await forOrg(orgId, (tx) =>
+    tx
+      .insert(evalSuiteRuns)
+      .values({
+        organizationId: orgId,
+        suiteId,
+        promptSource,
+        triggeredBy: opts?.triggeredBy,
+        metadata: {
+          progress: {
+            completed: 0,
+            total: testCaseCount,
+            currentTestCase: null,
+          },
+        },
+      })
+      .returning(),
+  );
+
+  // Enqueue — actual simulation + scoring happens asynchronously
+  taskRunner.enqueue(
+    "simulate-and-run",
+    {
+      orgId,
+      suiteId,
+      suiteRunId: suiteRun.id,
+      promptSource,
+      triggeredBy: opts?.triggeredBy,
+    },
+    executeSimulateAndRun,
+  );
+
+  return { suiteRunId: suiteRun.id };
+}
+
+/**
+ * Async task handler for simulate-and-run.
+ * Runs each test case sequentially: simulate -> score -> update progress.
+ */
+async function executeSimulateAndRun(
+  payload: SimulateAndRunPayload,
+  updateProgress: (progress: {
+    completed: number;
+    total: number;
+    currentTestCase: string | null;
+  }) => void,
+): Promise<void> {
+  const { orgId, suiteId, suiteRunId, triggeredBy } = payload;
+  const startTime = performance.now();
+
+  try {
+    await executeSimulateAndRunInner(
+      orgId,
+      suiteId,
+      suiteRunId,
+      triggeredBy,
+      startTime,
+      updateProgress,
+    );
+  } catch (err) {
+    // Ensure the suite run is marked failed if anything unexpected happens
+    // (data load failure, final DB update failure, etc.)
+    log.error({ err, suiteRunId, suiteId }, "simulate-and-run task failed");
+    try {
+      await forOrg(orgId, (tx) =>
+        tx
+          .update(evalSuiteRuns)
+          .set({
+            status: "failed",
+            completedAt: new Date(),
+            durationMs: elapsedMs(startTime),
+          })
+          .where(eq(evalSuiteRuns.id, suiteRunId)),
+      );
+    } catch {
+      // Last resort — DB update itself failed
+      log.error({ suiteRunId }, "failed to mark suite run as failed");
+    }
+  }
+}
+
+async function executeSimulateAndRunInner(
+  orgId: string,
+  suiteId: string,
+  suiteRunId: string,
+  triggeredBy: string | undefined,
+  startTime: number,
+  updateProgress: (progress: {
+    completed: number;
+    total: number;
+    currentTestCase: string | null;
+  }) => void,
+): Promise<void> {
+  // Load suite data
+  const suiteData = await forOrg(orgId, async (tx) => {
+    const [suite] = await tx
+      .select()
+      .from(evalSuites)
+      .where(eq(evalSuites.id, suiteId));
+
+    const [agent] = await tx
+      .select({
+        id: agents.id,
+        name: agents.name,
+        compiledInstructions: agents.compiledInstructions,
+      })
+      .from(agents)
+      .where(eq(agents.id, suite!.agentId));
+
+    const testCases = await tx
+      .select()
+      .from(evalSuiteTestCases)
+      .where(eq(evalSuiteTestCases.suiteId, suiteId))
+      .orderBy(asc(evalSuiteTestCases.order));
+
+    return { suite: suite!, agent: agent!, testCases };
+  });
+
+  const results: TestCaseEvalResult[] = [];
+
+  for (let i = 0; i < suiteData.testCases.length; i++) {
+    const testCase = suiteData.testCases[i];
+    const input = testCase.input as Record<string, unknown>;
+    let inputMessage = input.message as string;
+    const personaId = input.persona as string | undefined;
+    const mockToolResponses =
+      (testCase.mockToolResponses as Record<string, unknown>) ?? {};
+
+    // Update progress
+    const progress = {
+      completed: i,
+      total: suiteData.testCases.length,
+      currentTestCase: testCase.name,
+    };
+    updateProgress(progress);
+
+    await forOrg(orgId, (tx) =>
+      tx
+        .update(evalSuiteRuns)
+        .set({ metadata: { progress } })
+        .where(eq(evalSuiteRuns.id, suiteRunId)),
+    );
+
+    // 0. Personalize input message if persona is set
+    if (personaId) {
+      const persona = getPersona(personaId);
+      if (persona) {
+        try {
+          inputMessage = await personalizeInputMessage(inputMessage, persona);
+          log.info(
+            { testCaseId: testCase.id, persona: personaId },
+            "personalized input message",
+          );
+        } catch (err) {
+          log.warn(
+            { err, personaId },
+            "persona personalization failed — using raw message",
+          );
+        }
+      } else {
+        log.warn({ personaId }, "unknown persona ID — using raw message");
+      }
+    }
+
+    // 1. Pre-create simulation session with mock config in metadata
+    let adapter: MastraAdapter | null = null;
+    try {
+      const session = await createSession(orgId, suiteData.agent.id, {
+        channelType: "api",
+        userIdentifier: "simulation:eval",
+        mode: "simulation",
+        metadata: {
+          source: "simulate-and-run",
+          mockToolResponses,
+        },
+      });
+
+      // 2. Create MastraAdapter pointing at simulation MCP route
+      const simulationMcpUrl = `${env.APP_URL}/simulations/${session.id}/mcp`;
+      adapter = new MastraAdapter({
+        compiledInstructions: suiteData.agent.compiledInstructions!,
+        model: env.SIMULATION_AGENT_MODEL,
+        agentId: suiteData.agent.id,
+        agentName: suiteData.agent.name,
+        simulationMcpUrl,
+      });
+
+      // 3. Run simulation
+      const simResult = await runEvalSimulation({
+        orgId,
+        agentId: suiteData.agent.id,
+        adapter,
+        inputMessage,
+        sessionId: session.id,
+      });
+
+      if (simResult.status === "error") {
+        log.warn(
+          { testCaseId: testCase.id, suiteRunId, error: simResult.error },
+          "test case simulation failed",
+        );
+        results.push(erroredTestCaseResult(testCase));
+        continue;
+      }
+
+      // 4. Score the session against test case evaluators
+      const evalResult = await runTestCaseEval(
+        orgId,
+        suiteData.suite,
+        testCase,
+        suiteRunId,
+        simResult.sessionId,
+        { triggeredBy },
+      );
+
+      results.push(evalResult);
+    } catch (err) {
+      log.warn(
+        { err, testCaseId: testCase.id, suiteRunId },
+        "test case simulation+eval failed",
+      );
+      results.push(erroredTestCaseResult(testCase));
+    } finally {
+      await adapter?.disconnect();
+    }
+  }
+
+  // Determine suite run status (AC 22-24)
+  const durationMs = elapsedMs(startTime);
+  const runStatus = determineSuiteRunStatus(results);
+
+  // Update suite run with final status
+  await forOrg(orgId, (tx) =>
+    tx
+      .update(evalSuiteRuns)
+      .set({
+        status: runStatus,
+        completedAt: new Date(),
+        durationMs,
+        metadata: {
+          progress: {
+            completed: suiteData.testCases.length,
+            total: suiteData.testCases.length,
+            currentTestCase: null,
+          },
+        },
+      })
+      .where(eq(evalSuiteRuns.id, suiteRunId)),
+  );
+
+  log.info(
+    {
+      suiteRunId,
+      suiteId,
+      runStatus,
+      durationMs,
+      testCaseCount: results.length,
+    },
+    "simulate-and-run completed",
+  );
+}
+
+/** Build an errored test case result (simulation or eval failed). */
+function erroredTestCaseResult(testCase: {
+  id: string;
+  name: string;
+}): TestCaseEvalResult {
+  return {
+    testCaseId: testCase.id,
+    testCaseName: testCase.name,
+    evalRunId: null,
+    passed: null,
+    scores: [],
+  };
+}
+
+/**
+ * Determine suite run status from test case results (AC 22-24).
+ *
+ * - `failed` when all test cases errored (passed === null)
+ * - `completed_with_errors` when ≥1 errored but not all
+ * - `completed` when all succeeded
+ */
+export function determineSuiteRunStatus(
+  results: TestCaseEvalResult[],
+): "completed" | "completed_with_errors" | "failed" {
+  const totalErrored = results.filter((r) => r.passed === null).length;
+  if (totalErrored === results.length) return "failed";
+  if (totalErrored > 0) return "completed_with_errors";
+  return "completed";
 }
