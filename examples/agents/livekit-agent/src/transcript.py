@@ -26,9 +26,6 @@ class TranscriptCollector:
     def add_assistant_response(self, text: str) -> None:
         if not text.strip():
             return
-        # Flush any pending tool calls into the previous assistant message
-        # or create a tool-call-only message first
-        self._flush_tool_calls()
         self._messages.append({
             "role": "assistant",
             "content": text.strip(),
@@ -53,19 +50,12 @@ class TranscriptCollector:
         }
         if latency_ms > 0:
             call["latencyMs"] = latency_ms
-        # Record each tool call as its own assistant message immediately
-        # (preserves correct ordering in the transcript)
         self._messages.append({
             "role": "assistant",
             "toolCalls": [call],
             "occurredAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
 
-    def _flush_tool_calls(self) -> None:
-        """No-op — tool calls are now recorded immediately."""
-        pass
-
     def get_messages(self) -> list[dict]:
-        """Return all collected messages, flushing any pending tool calls."""
-        self._flush_tool_calls()
+        """Return all collected messages."""
         return list(self._messages)

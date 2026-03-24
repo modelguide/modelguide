@@ -143,11 +143,16 @@ ModelGuide API
 
 ```
 src/
-  agent.py        # Entrypoint + BuildProAgent class + 11 @function_tool methods
-  config.py       # Environment variable loading and validation
+  agent.py        # CLI entry point, session lifecycle, event handlers
+  mcp_agent.py    # MCPAgent base class (tool execution, tracing, transcripts)
+  buildpro.py     # BuildProAgent — tools + hooks for contractor supply scenario
+  config.py       # Environment variables (AGENT_NAME, CONNECTOR_PREFIX, etc.)
+  providers.py    # STT/TTS factory functions (Deepgram, ElevenLabs, Cartesia)
+  tracing.py      # Langfuse OpenTelemetry setup
+  hangup.py       # Auto-hangup state machine
   mg_client.py    # ModelGuide REST + MCP client
   transcript.py   # In-memory transcript collector
-  prompts/        # BuildPro "Sam" system prompt + 7 workflow modules
+  prompts/        # System prompt (base + 7 auto-discovered workflow modules)
 ```
 
 ### Key differences from Pipecat agent
@@ -159,6 +164,96 @@ src/
 | Transport | Daily.co WebRTC | LiveKit Cloud WebRTC |
 | Cart tracking | Module-level global | Instance attribute on Agent |
 | Turn detection | Silero VAD only (stop_secs) | EnglishModel (context-aware end-of-utterance) |
+
+## Creating a New Agent Scenario
+
+The agent is split into a reusable base class (`MCPAgent` in `mcp_agent.py`) and a scenario-specific subclass (`BuildProAgent` in `buildpro.py`). To create a different agent — say a healthcare booking assistant or a SaaS support bot — you only touch the scenario layer. Everything else works automatically.
+
+### What you get for free (MCPAgent base class)
+
+These work identically for any scenario with zero configuration:
+
+- **MCP tool execution** — persistent connection to ModelGuide, with one-shot fallback
+- **Tool name mapping** — short names (`book_appointment`) auto-map to connector-prefixed MCP names (`clinic_connector_book_appointment`) via `CONNECTOR_PREFIX`
+- **Langfuse tracing** — every tool call gets an OTel span, flows to Langfuse if keys are set
+- **Transcript recording** — user utterances, assistant responses, and tool calls collected and posted to ModelGuide on session close
+- **Session lifecycle** — ModelGuide session created on connect, completed/abandoned on disconnect
+- **Stubbed tools** — tools without an MCP backend return fake success (configured via `STUBBED_TOOLS` env var)
+- **Error handling** — tool failures logged, recorded in transcript, and surfaced as `ToolError` to the LLM
+- **Shared HTTP client** — single connection pool for all REST calls to ModelGuide
+
+### Steps to create a new agent
+
+**1. Create your agent file** (copy `buildpro.py` → `your_agent.py`):
+
+```python
+from mcp_agent import MCPAgent
+from livekit.agents import RunContext, function_tool
+
+class YourAgent(MCPAgent):
+    TOOL_NAMES = ["book_appointment", "list_doctors", "get_patient"]
+
+    def __init__(self, *, session_id, user_email, mcp=None):
+        instructions = build_your_prompt(session_id or "", user_email)
+        super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
+
+    @function_tool()
+    async def book_appointment(self, context: RunContext, doctorId: str = "", date: str = "") -> str:
+        """Book an appointment with a doctor."""
+        return await self._call_mcp_tool("book_appointment", {"doctorId": doctorId, "date": date})
+
+    # Override hooks only if your scenario needs them:
+    async def _transform_args(self, tool_name, args):
+        """Inject patientId, nest address fields, etc."""
+        return args
+
+    def _on_tool_result(self, tool_name, result):
+        """Extract booking confirmation ID, etc."""
+        pass
+
+    def _check_guardrail(self, tool_name, args):
+        """Block double-booking, enforce workflow order, etc."""
+        return None
+```
+
+**2. Write new prompts:**
+
+- Replace `prompts/base.py` with your agent's personality, tone rules, and tool documentation
+- Add workflow files in `prompts/workflows/` — they're auto-discovered (just export a `PROMPT` string)
+
+**3. Update `.env`:**
+
+```bash
+AGENT_NAME=clinic-assistant
+CONNECTOR_PREFIX=clinic_connector
+STUBBED_TOOLS=            # empty = all tools hit MCP
+```
+
+**4. Change one import in `agent.py`:**
+
+```python
+from your_agent import YourAgent as AgentClass
+```
+
+That's it. Langfuse traces, ModelGuide session tracking, transcript posting, and the MCP connection all work without changes.
+
+## Stubbed Tools
+
+Some tools return fake success responses because their MCP backend doesn't exist yet (e.g. `send_email` — no email connector is deployed). Instead of removing the tool from the LLM (which would break the prompt and demo flow), the agent returns a canned `{"success": true}` response so the conversation continues naturally.
+
+**How it works:**
+
+- `STUBBED_TOOLS` env var lists comma-separated tool names that are stubbed (default: `send_email`)
+- When the LLM calls a stubbed tool, `BuildProAgent._call_mcp_tool()` returns a fake success without hitting MCP
+- The stub is logged and recorded in the transcript so you can see it happened
+
+**When a real connector arrives:**
+
+1. Deploy the connector and assign its tools to the agent in ModelGuide
+2. Remove the tool name from `STUBBED_TOOLS` in `.env` (e.g. `STUBBED_TOOLS=` for none)
+3. Restart the agent — the tool now executes via MCP like all others
+
+No code changes needed. The tool's `@function_tool` definition and MCP name mapping already exist.
 
 ## Known Issues
 

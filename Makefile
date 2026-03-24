@@ -165,6 +165,7 @@ docker-expose: ## [Docker] Show exposed ports
 # =============================================================================
 
 LK_AGENT_DIR := examples/agents/livekit-agent
+LK_AGENT_NAME ?= buildpro-sam
 LK_LOG_LEVEL ?= info
 
 lk-agent-setup: ## [LK Agent] Install deps and download model files
@@ -186,4 +187,4 @@ livekit-down: ## [LiveKit] Stop Docker LiveKit server
 	cd $(LK_AGENT_DIR) && docker compose -f docker-compose.dev.yml down
 
 livekit-token: ## [LiveKit] Generate token and open meet.livekit.io (NAME=yourname)
-	lk token create --api-key devkey --api-secret secret --room test-room --identity $(or $(NAME),artur) --join --valid-for 1h --agent buildpro-sam --open meet
+	lk token create --api-key devkey --api-secret secret --room test-room --identity $(or $(NAME),artur) --join --valid-for 1h --agent $(LK_AGENT_NAME) --open meet

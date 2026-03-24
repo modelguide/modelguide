@@ -4,7 +4,8 @@ Validation is deferred so the LiveKit agent can start its worker process
 before env vars are checked.  Call ``validate()`` once at the top of the
 entrypoint — after that the module-level constants are safe to read.
 
-MCP tool discovery runs once at validate() time and logs missing tools.
+AGENT_NAME and CONNECTOR_PREFIX are read at import time (needed for
+WorkerOptions before validate() runs). All other vars require validate().
 """
 
 import asyncio
@@ -16,6 +17,10 @@ from dotenv import load_dotenv
 logger = logging.getLogger("config")
 
 load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Required vars — validate() raises if any are missing
+# ---------------------------------------------------------------------------
 
 REQUIRED_VARS = [
     "OPENAI_API_KEY",
@@ -30,6 +35,51 @@ class ConfigError(RuntimeError):
     pass
 
 
+# ---------------------------------------------------------------------------
+# Agent identity — read at import time (used by WorkerOptions before validate)
+# ---------------------------------------------------------------------------
+
+AGENT_NAME: str = os.getenv("AGENT_NAME", "buildpro-sam")
+CONNECTOR_PREFIX: str = os.getenv("CONNECTOR_PREFIX", "glowbox_store")
+
+# ---------------------------------------------------------------------------
+# All other config — values set by validate()
+# ---------------------------------------------------------------------------
+
+# LLM / STT / TTS
+OPENAI_API_KEY: str = ""
+DEEPGRAM_API_KEY: str = ""
+ELEVENLABS_API_KEY: str = ""
+CARTESIA_API_KEY: str = ""
+LLM_MODEL: str = "gpt-4.1-mini"
+STT_MODEL: str = "nova-3"
+TTS_PROVIDER: str = "elevenlabs"
+ELEVENLABS_VOICE_ID: str = ""
+CARTESIA_VOICE_ID: str = ""
+
+# ModelGuide
+MODELGUIDE_API_URL: str = ""
+MODELGUIDE_API_KEY: str = ""
+MODELGUIDE_AGENT_ID: str = ""
+USER_EMAIL: str = ""
+
+# Observability
+LANGFUSE_PUBLIC_KEY: str = ""
+LANGFUSE_SECRET_KEY: str = ""
+LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+
+# Stubbed tools (comma-separated names with no MCP backend yet — returns fake success)
+STUBBED_TOOLS: str = "send_email"
+
+# Other
+GOOGLE_API_KEY: str = ""
+REGION: str = "us"
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
 _validated = False
 
 
@@ -39,13 +89,6 @@ def validate() -> None:
     Safe to call multiple times — only runs once.
     """
     global _validated
-    global OPENAI_API_KEY, DEEPGRAM_API_KEY
-    global ELEVENLABS_API_KEY, CARTESIA_API_KEY
-    global MODELGUIDE_API_URL, MODELGUIDE_API_KEY, MODELGUIDE_AGENT_ID
-    global ELEVENLABS_VOICE_ID, CARTESIA_VOICE_ID, TTS_PROVIDER
-    global GOOGLE_API_KEY, USER_EMAIL, LLM_MODEL, REGION, STT_MODEL
-    global LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST
-
     if _validated:
         return
 
@@ -53,29 +96,39 @@ def validate() -> None:
     if missing:
         raise ConfigError(f"Missing required environment variables: {', '.join(missing)}")
 
-    OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-    DEEPGRAM_API_KEY = os.environ["DEEPGRAM_API_KEY"]
-    ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
-    CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY", "")
-    MODELGUIDE_API_URL = os.environ["MODELGUIDE_API_URL"].rstrip("/")
-    MODELGUIDE_API_KEY = os.environ["MODELGUIDE_API_KEY"]
-    MODELGUIDE_AGENT_ID = os.environ["MODELGUIDE_AGENT_ID"]
-    ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "iP95p4xoKVk53GoZ742B")
-    CARTESIA_VOICE_ID = os.getenv("CARTESIA_VOICE_ID", "a167e0f3-df7e-4d52-a9c3-f949145571bd")
-    TTS_PROVIDER = os.getenv("TTS_PROVIDER", "elevenlabs")
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-    USER_EMAIL = os.getenv("USER_EMAIL", "voice-caller")
-    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
-    REGION = os.getenv("REGION", "us")
-    STT_MODEL = os.getenv("STT_MODEL", "nova-3")
-    LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
-    LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
-    LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    g = globals()
+    g.update({
+        # LLM / STT / TTS
+        "OPENAI_API_KEY": os.environ["OPENAI_API_KEY"],
+        "DEEPGRAM_API_KEY": os.environ["DEEPGRAM_API_KEY"],
+        "ELEVENLABS_API_KEY": os.getenv("ELEVENLABS_API_KEY", ""),
+        "CARTESIA_API_KEY": os.getenv("CARTESIA_API_KEY", ""),
+        "LLM_MODEL": os.getenv("LLM_MODEL", "gpt-4.1-mini"),
+        "STT_MODEL": os.getenv("STT_MODEL", "nova-3"),
+        "TTS_PROVIDER": os.getenv("TTS_PROVIDER", "elevenlabs"),
+        "ELEVENLABS_VOICE_ID": os.getenv("ELEVENLABS_VOICE_ID", "iP95p4xoKVk53GoZ742B"),
+        "CARTESIA_VOICE_ID": os.getenv("CARTESIA_VOICE_ID", "a167e0f3-df7e-4d52-a9c3-f949145571bd"),
+        # ModelGuide
+        "MODELGUIDE_API_URL": os.environ["MODELGUIDE_API_URL"].rstrip("/"),
+        "MODELGUIDE_API_KEY": os.environ["MODELGUIDE_API_KEY"],
+        "MODELGUIDE_AGENT_ID": os.environ["MODELGUIDE_AGENT_ID"],
+        "USER_EMAIL": os.getenv("USER_EMAIL", "voice-caller"),
+        # Observability
+        "LANGFUSE_PUBLIC_KEY": os.getenv("LANGFUSE_PUBLIC_KEY", ""),
+        "LANGFUSE_SECRET_KEY": os.getenv("LANGFUSE_SECRET_KEY", ""),
+        "LANGFUSE_HOST": os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+        # Stubbed tools
+        "STUBBED_TOOLS": os.getenv("STUBBED_TOOLS", "send_email"),
+        # Other
+        "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY", ""),
+        "REGION": os.getenv("REGION", "us"),
+    })
 
     # Validate TTS provider has its API key
-    if TTS_PROVIDER == "cartesia" and not CARTESIA_API_KEY:
+    tts = g["TTS_PROVIDER"]
+    if tts == "cartesia" and not g["CARTESIA_API_KEY"]:
         raise ConfigError("TTS_PROVIDER=cartesia but CARTESIA_API_KEY is not set")
-    if TTS_PROVIDER == "elevenlabs" and not ELEVENLABS_API_KEY:
+    if tts == "elevenlabs" and not g["ELEVENLABS_API_KEY"]:
         raise ConfigError("TTS_PROVIDER=elevenlabs but ELEVENLABS_API_KEY is not set")
 
     _validated = True
@@ -93,37 +146,17 @@ async def _validate_mcp_tools() -> None:
     """Discover MCP tools and log any mismatches with our tool map."""
     try:
         import mg_client
-        from agent import TOOL_NAME_MAP
+        from buildpro import BuildProAgent
 
         mcp_tools = await mg_client.list_tools()
         mcp_names = {t["name"] for t in mcp_tools}
         logger.info("MCP tools discovered: %s", ", ".join(sorted(mcp_names)))
 
-        for short_name, mcp_name in TOOL_NAME_MAP.items():
+        for short_name in BuildProAgent.TOOL_NAMES:
+            mcp_name = f"{CONNECTOR_PREFIX}_{short_name}"
             if mcp_name not in mcp_names:
                 logger.warning("Tool %s (%s) NOT found in MCP — calls will fail", short_name, mcp_name)
     except Exception:
         logger.exception(
             "Failed to discover MCP tools — MODELGUIDE_API_KEY may be invalid or agent inactive"
         )
-
-
-# Declare module-level names so imports don't fail — values set by validate()
-OPENAI_API_KEY: str = ""
-DEEPGRAM_API_KEY: str = ""
-ELEVENLABS_API_KEY: str = ""
-CARTESIA_API_KEY: str = ""
-MODELGUIDE_API_URL: str = ""
-MODELGUIDE_API_KEY: str = ""
-MODELGUIDE_AGENT_ID: str = ""
-ELEVENLABS_VOICE_ID: str = ""
-CARTESIA_VOICE_ID: str = ""
-TTS_PROVIDER: str = "elevenlabs"
-GOOGLE_API_KEY: str = ""
-USER_EMAIL: str = ""
-LLM_MODEL: str = "gpt-4.1-mini"
-REGION: str = "us"
-STT_MODEL: str = "nova-3"
-LANGFUSE_PUBLIC_KEY: str = ""
-LANGFUSE_SECRET_KEY: str = ""
-LANGFUSE_HOST: str = "https://cloud.langfuse.com"

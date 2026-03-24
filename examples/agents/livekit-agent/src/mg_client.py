@@ -25,46 +25,71 @@ def _mcp_url():
 
 
 # ---------------------------------------------------------------------------
+# Shared HTTP client (one TCP connection pool per agent lifetime)
+# ---------------------------------------------------------------------------
+
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Lazy-init a shared httpx.AsyncClient for REST calls."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            base_url=config.MODELGUIDE_API_URL,
+            headers=_headers(),
+            timeout=30.0,
+        )
+    return _http_client
+
+
+async def close_http_client() -> None:
+    """Close the shared HTTP client. Call during shutdown."""
+    global _http_client
+    if _http_client and not _http_client.is_closed:
+        await _http_client.aclose()
+        _http_client = None
+
+
+# ---------------------------------------------------------------------------
 # Session management (REST)
 # ---------------------------------------------------------------------------
 
 
 async def create_session(user_identifier: str | None = None) -> str:
     """Create a new ModelGuide session. Returns the session ID."""
-    async with httpx.AsyncClient() as client:
-        res = await client.post(
-            f"{config.MODELGUIDE_API_URL}/api/sessions",
-            headers=_headers(),
-            json={
-                "channelType": "voice",
-                "userIdentifier": user_identifier or "voice-caller",
-            },
-        )
-        res.raise_for_status()
-        data = res.json()
-        session_id = data["id"]
-        logger.info("Session created: %s", session_id)
-        return session_id
+    client = _get_http_client()
+    res = await client.post(
+        "/api/sessions",
+        json={
+            "channelType": "voice",
+            "userIdentifier": user_identifier or "voice-caller",
+        },
+    )
+    res.raise_for_status()
+    data = res.json()
+    session_id = data["id"]
+    logger.info("Session created: %s", session_id)
+    return session_id
 
 
 async def add_messages(session_id: str, messages: list[dict]) -> None:
     """Post messages to a session. Errors are logged, not raised."""
-    async with httpx.AsyncClient() as client:
-        for msg in messages:
-            try:
-                res = await client.post(
-                    f"{config.MODELGUIDE_API_URL}/api/sessions/{session_id}/messages",
-                    headers=_headers(),
-                    json=msg,
+    client = _get_http_client()
+    for msg in messages:
+        try:
+            res = await client.post(
+                f"/api/sessions/{session_id}/messages",
+                json=msg,
+            )
+            if not res.is_success:
+                logger.warning(
+                    "Failed to post message (status %s): %s",
+                    res.status_code,
+                    res.text,
                 )
-                if not res.is_success:
-                    logger.warning(
-                        "Failed to post message (status %s): %s",
-                        res.status_code,
-                        res.text,
-                    )
-            except Exception:
-                logger.exception("Error posting message to session %s", session_id)
+        except Exception:
+            logger.exception("Error posting message to session %s", session_id)
 
 
 async def complete_session(
@@ -73,27 +98,26 @@ async def complete_session(
     metadata: dict | None = None,
 ) -> None:
     """Mark session as completed or abandoned."""
-    async with httpx.AsyncClient() as client:
-        body: dict = {"status": status}
-        if metadata:
-            body["metadata"] = metadata
-        try:
-            res = await client.patch(
-                f"{config.MODELGUIDE_API_URL}/api/sessions/{session_id}",
-                headers=_headers(),
-                json=body,
+    client = _get_http_client()
+    body: dict = {"status": status}
+    if metadata:
+        body["metadata"] = metadata
+    try:
+        res = await client.patch(
+            f"/api/sessions/{session_id}",
+            json=body,
+        )
+        if res.is_success:
+            logger.info("Session %s completed", session_id)
+        else:
+            logger.warning(
+                "Failed to complete session %s (status %s): %s",
+                session_id,
+                res.status_code,
+                res.text,
             )
-            if res.is_success:
-                logger.info("Session %s completed", session_id)
-            else:
-                logger.warning(
-                    "Failed to complete session %s (status %s): %s",
-                    session_id,
-                    res.status_code,
-                    res.text,
-                )
-        except Exception:
-            logger.exception("Error completing session %s", session_id)
+    except Exception:
+        logger.exception("Error completing session %s", session_id)
 
 
 # ---------------------------------------------------------------------------

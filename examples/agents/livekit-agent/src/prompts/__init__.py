@@ -7,6 +7,10 @@ _WORKFLOW_PROMPTS = _load_workflows()
 
 SYSTEM_PROMPT_TEMPLATE = BASE_PROMPT + "\n\n# Workflows\n\n" + "\n\n".join(_WORKFLOW_PROMPTS)
 
+# TTS greeting — spoken immediately before LLM is invoked.
+# Must match the greeting instruction in base.py.
+GREETING = "Hey {name} — what do you need?"
+
 
 def build_system_prompt(
     session_id: str,

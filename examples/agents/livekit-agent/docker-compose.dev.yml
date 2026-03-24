@@ -7,4 +7,4 @@ services:
     ports:
       - "7880:7880"   # HTTP + WebSocket signaling
       - "7881:7881"   # TCP media (TURN/TLS)
-      - "50000-50060:50000-50060/udp"  # WebRTC media (UDP)
+      - "7882:7882/udp"  # WebRTC media (matches --dev default)
