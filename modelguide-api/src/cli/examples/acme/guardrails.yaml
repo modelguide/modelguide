@@ -1,0 +1,25 @@
+guardrails:
+  - name: "No Medical Claims"
+    slug: "no-medical-claims"
+    content: |
+      Never claim any product treats, cures, or prevents a medical condition.
+      If a customer asks about health benefits, redirect them to consult a healthcare professional.
+    description: "FDA compliance guardrail"
+    config:
+      priority: critical
+      category: compliance
+    agents:
+      - "acme-voice-agent"
+      - "acme-chat-assistant"
+  - name: "No Competitor Disparagement"
+    slug: "no-competitor-disparagement"
+    content: |
+      Never make negative statements about competitor products or services.
+      Focus on the strengths and features of our own products.
+    description: "Brand guidelines"
+    config:
+      priority: high
+      category: brand
+    agents:
+      - "acme-voice-agent"
+      - "acme-chat-assistant"

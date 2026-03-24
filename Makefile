@@ -119,6 +119,13 @@ demo-disable: ## [Demo] Disable demo mode for an org (usage: make demo-disable O
 	cd modelguide-api && bun run scripts/demo-toggle.ts disable $(ORG_SLUG)
 
 # =============================================================================
+# CLI
+# =============================================================================
+
+mg: ## [CLI] Run ModelGuide CLI (usage: make mg -- create-org --name "Test" --slug test)
+	cd modelguide-api && bun run src/cli/mg.ts $(filter-out $@,$(MAKECMDGOALS))
+
+# =============================================================================
 # General
 # =============================================================================
 
