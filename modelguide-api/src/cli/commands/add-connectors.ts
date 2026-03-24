@@ -12,10 +12,11 @@ import {
 } from "@features/connectors/connectors.service";
 import { createSecret } from "@features/secrets/secrets.service";
 import type { Command } from "commander";
+import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
 import { parseKvArgs } from "../lib/parse-kv";
-import { promptSecret } from "../lib/prompt";
+import { generatePlaceholder, promptSecret } from "../lib/prompt";
 import { resolveOrgId } from "../lib/resolve-org";
 import { loadYaml } from "../lib/yaml-loader";
 import {
@@ -74,7 +75,7 @@ export async function handleAddConnectors(
       let value = secretDef.value;
       if (!value) {
         if (options?.skipSecrets) {
-          value = `placeholder_${secretDef.name.toLowerCase().replace(/\s+/g, "_")}`;
+          value = generatePlaceholder(secretDef.name);
         } else {
           value = await promptSecret(secretDef.name);
         }
@@ -162,7 +163,7 @@ export function registerAddConnectorsCommand(program: Command): void {
           `Connectors: ${result.created} created, ${result.existing} existing`,
         );
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

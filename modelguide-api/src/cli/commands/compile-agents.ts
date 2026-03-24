@@ -7,6 +7,7 @@ import { listAgents } from "@features/agents/agents.service";
 import { compileAgent } from "@features/compiler/compiler.service";
 import { listSops } from "@features/sops/sops.service";
 import type { Command } from "commander";
+import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
 import { resolveOrgId } from "../lib/resolve-org";
@@ -60,7 +61,7 @@ export async function handleCompileAgents(
         compiled++;
       } catch (err) {
         log.warn(
-          `Failed to compile ${agent.name} with SOP ${sop.name}: ${(err as Error).message}`,
+          `Failed to compile ${agent.name} with SOP ${sop.name}: ${getErrorMessage(err)}`,
         );
         skipped++;
       }
@@ -87,7 +88,7 @@ export function registerCompileAgentsCommand(program: Command): void {
           `Compilation: ${result.compiled} compiled, ${result.skipped} skipped`,
         );
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

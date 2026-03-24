@@ -11,6 +11,7 @@ import {
   updateSession,
 } from "@features/sessions/sessions.service";
 import type { Command } from "commander";
+import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
 import { resolveOrgId } from "../lib/resolve-org";
@@ -121,7 +122,7 @@ export function registerImportSessionsCommand(program: Command): void {
         const result = await handleImportSessions(orgId, data.sessions);
         log.success(`Sessions: ${result.created} imported`);
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

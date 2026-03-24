@@ -78,4 +78,4 @@ The CLI loads the full `src/env.ts` (same as the API) and uses the same DB conne
 - New connectors/agents can be tested locally before deploying
 - The CLI shares the same service layer as the API — no behavior drift
 - Secret values are visible in shell history when passed as CLI args (acceptable for internal tooling; production secrets should use `--from` with restricted file permissions)
-- DB connection pool must be explicitly closed after CLI commands complete (handled in `mg.ts` entry point)
+- The `mg.ts` entry point closes the DB connection pool after command completion so the process exits cleanly — individual commands don't need to handle this

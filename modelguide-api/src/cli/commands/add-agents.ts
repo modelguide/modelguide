@@ -14,6 +14,7 @@ import {
 } from "@features/connectors/connectors.service";
 import { listUsers } from "@features/users/users.service";
 import type { Command } from "commander";
+import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log, table } from "../lib/logger";
 import { parseKvArgs } from "../lib/parse-kv";
@@ -118,12 +119,7 @@ export async function handleAddAgents(
       );
       created++;
     } catch (err) {
-      const msg = (err as Error).message;
-      if (
-        msg.includes("duplicate") ||
-        msg.includes("already exists") ||
-        msg.includes("Already exists")
-      ) {
+      if (isDuplicateError(err)) {
         log.info(`Found existing agent: ${item.name}`);
         existing++;
       } else {
@@ -188,7 +184,7 @@ export function registerAddAgentsCommand(program: Command): void {
           `Agents: ${result.created} created, ${result.existing} existing`,
         );
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

@@ -5,6 +5,7 @@
 
 import { createUser } from "@features/users/users.service";
 import type { Command } from "commander";
+import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
 import { parseKvArgs } from "../lib/parse-kv";
@@ -37,12 +38,7 @@ export async function handleAddUsers(
       log.success(`Created user: ${result.email} (${user.role})`);
       created++;
     } catch (err) {
-      const msg = (err as Error).message;
-      if (
-        msg.includes("duplicate") ||
-        msg.includes("already exists") ||
-        msg.includes("unique")
-      ) {
+      if (isDuplicateError(err)) {
         log.info(`Found existing user: ${user.email}`);
         existing++;
       } else {
@@ -83,7 +79,7 @@ export function registerAddUsersCommand(program: Command): void {
           `Users: ${result.created} created, ${result.existing} existing`,
         );
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

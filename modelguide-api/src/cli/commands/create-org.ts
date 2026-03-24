@@ -7,6 +7,7 @@
 import { forApp } from "@db/rls";
 import { organizations } from "@db/schema";
 import type { Command } from "commander";
+import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
 import { loadYaml } from "../lib/yaml-loader";
@@ -77,7 +78,7 @@ export function registerCreateOrgCommand(program: Command): void {
             demoEnabled: opts.demo ?? false,
           });
         } catch (err) {
-          log.error(`Validation error: ${(err as Error).message}`);
+          log.error(`Validation error: ${getErrorMessage(err)}`);
           process.exit(1);
         }
       }
@@ -86,7 +87,7 @@ export function registerCreateOrgCommand(program: Command): void {
         const org = await handleCreateOrg(input);
         log.success(`Created org: ${org.name} (${org.slug})`);
       } catch (err) {
-        log.error(`Failed to create org: ${(err as Error).message}`);
+        log.error(`Failed to create org: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

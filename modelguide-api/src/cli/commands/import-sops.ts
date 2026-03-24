@@ -15,8 +15,10 @@ import {
 } from "@features/sops/sops.service";
 import type { SopSchema } from "@features/sops/sops.types";
 import type { Command } from "commander";
+import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
+import { resolveAgentIds } from "../lib/resolve-agents";
 import { resolveOrgId } from "../lib/resolve-org";
 import { loadYaml } from "../lib/yaml-loader";
 import { type SopItemInput, sopsFileSchema } from "../schemas/sops.schema";
@@ -28,16 +30,6 @@ async function resolveTemplates(): Promise<Map<string, string>> {
     map.set(t.slug, t.id);
   }
   return map;
-}
-
-function resolveAgentIds(
-  agentSlugs: string[],
-  registry?: IdRegistry,
-): string[] {
-  if (!registry) return [];
-  return agentSlugs
-    .filter((slug) => registry.has("agent", slug))
-    .map((slug) => registry.get("agent", slug));
 }
 
 function resolveConnectorMapping(
@@ -69,7 +61,11 @@ export async function handleImportSops(
   for (const item of items) {
     try {
       let sopId: string;
-      const agentIds = resolveAgentIds(item.agents, options?.registry);
+      const agentIds = await resolveAgentIds(
+        orgId,
+        item.agents,
+        options?.registry,
+      );
 
       if (item.templateSlug) {
         // Template fork
@@ -154,12 +150,7 @@ export async function handleImportSops(
 
       created++;
     } catch (err) {
-      const msg = (err as Error).message;
-      if (
-        msg.includes("duplicate") ||
-        msg.includes("already exists") ||
-        msg.includes("Already exists")
-      ) {
+      if (isDuplicateError(err)) {
         log.info(`Found existing SOP: ${item.name}`);
         existing++;
       } else {
@@ -187,7 +178,7 @@ export function registerImportSopsCommand(program: Command): void {
           `SOPs: ${result.created} imported (${result.activated} active), ${result.existing} existing`,
         );
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

@@ -5,24 +5,16 @@
 
 import { createKnowledgeBase } from "@features/knowledge-base/knowledge-base.service";
 import type { Command } from "commander";
+import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
+import { resolveAgentIds } from "../lib/resolve-agents";
 import { resolveOrgId } from "../lib/resolve-org";
 import { loadYaml } from "../lib/yaml-loader";
 import {
   type GuardrailItemInput,
   guardrailsFileSchema,
 } from "../schemas/guardrails.schema";
-
-function resolveAgentIds(
-  agentSlugs: string[],
-  registry?: IdRegistry,
-): string[] {
-  if (!registry) return [];
-  return agentSlugs
-    .filter((slug) => registry.has("agent", slug))
-    .map((slug) => registry.get("agent", slug));
-}
 
 export async function handleImportGuardrails(
   orgId: string,
@@ -33,7 +25,11 @@ export async function handleImportGuardrails(
   let existing = 0;
 
   for (const item of items) {
-    const agentIds = resolveAgentIds(item.agents, options?.registry);
+    const agentIds = await resolveAgentIds(
+      orgId,
+      item.agents,
+      options?.registry,
+    );
 
     try {
       const result = await createKnowledgeBase(orgId, {
@@ -53,12 +49,7 @@ export async function handleImportGuardrails(
       log.success(`Created guardrail: ${item.name}`);
       created++;
     } catch (err) {
-      const msg = (err as Error).message;
-      if (
-        msg.includes("duplicate") ||
-        msg.includes("already exists") ||
-        msg.includes("Already exists")
-      ) {
+      if (isDuplicateError(err)) {
         log.info(`Found existing guardrail: ${item.name}`);
         existing++;
       } else {
@@ -86,7 +77,7 @@ export function registerImportGuardrailsCommand(program: Command): void {
           `Guardrails: ${result.created} created, ${result.existing} existing`,
         );
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

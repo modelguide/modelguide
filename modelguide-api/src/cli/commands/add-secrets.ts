@@ -6,10 +6,11 @@
 
 import { createSecret } from "@features/secrets/secrets.service";
 import type { Command } from "commander";
+import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
 import { parseKvArgs } from "../lib/parse-kv";
-import { promptSecret } from "../lib/prompt";
+import { generatePlaceholder, promptSecret } from "../lib/prompt";
 import { resolveOrgId } from "../lib/resolve-org";
 import { loadYaml } from "../lib/yaml-loader";
 import {
@@ -30,7 +31,7 @@ export async function handleAddSecrets(
     let value = secret.value;
     if (!value) {
       if (options?.skipSecrets) {
-        value = `placeholder_${secret.name.toLowerCase().replace(/\s+/g, "_")}`;
+        value = generatePlaceholder(secret.name);
       } else {
         value = await promptSecret(secret.name);
       }
@@ -49,12 +50,7 @@ export async function handleAddSecrets(
       log.success(`Created secret: ${secret.name}`);
       created++;
     } catch (err) {
-      const msg = (err as Error).message;
-      if (
-        msg.includes("duplicate") ||
-        msg.includes("already exists") ||
-        msg.includes("unique")
-      ) {
+      if (isDuplicateError(err)) {
         log.info(`Found existing secret: ${secret.name}`);
         existing++;
       } else {
@@ -95,7 +91,7 @@ export function registerAddSecretsCommand(program: Command): void {
           `Secrets: ${result.created} created, ${result.existing} existing`,
         );
       } catch (err) {
-        log.error(`Failed: ${(err as Error).message}`);
+        log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

@@ -19,6 +19,13 @@ export async function promptSecret(name: string): Promise<string> {
 }
 
 /**
+ * Generate a placeholder value for a secret when --skip-secrets is used.
+ */
+export function generatePlaceholder(name: string): string {
+  return `placeholder_${name.toLowerCase().replace(/\s+/g, "_")}`;
+}
+
+/**
  * Confirm an action.
  */
 export async function confirm(message: string): Promise<boolean> {

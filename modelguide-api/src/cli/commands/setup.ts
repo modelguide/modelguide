@@ -6,6 +6,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { getErrorMessage } from "../lib/errors";
 import { IdRegistry } from "../lib/id-registry";
 import { intro, log, outro, table } from "../lib/logger";
 import { loadYaml } from "../lib/yaml-loader";
@@ -17,6 +18,8 @@ import type { GuardrailItemInput } from "../schemas/guardrails.schema";
 import { guardrailsFileSchema } from "../schemas/guardrails.schema";
 import type { OrgInput } from "../schemas/org.schema";
 import { orgSchema } from "../schemas/org.schema";
+import type { SecretItemInput } from "../schemas/secrets.schema";
+import { secretsFileSchema } from "../schemas/secrets.schema";
 import type { SessionItemInput } from "../schemas/sessions.schema";
 import { sessionsFileSchema } from "../schemas/sessions.schema";
 import type { SopItemInput } from "../schemas/sops.schema";
@@ -25,6 +28,7 @@ import type { UserItemInput } from "../schemas/users.schema";
 import { usersFileSchema } from "../schemas/users.schema";
 import { handleAddAgents } from "./add-agents";
 import { handleAddConnectors } from "./add-connectors";
+import { handleAddSecrets } from "./add-secrets";
 import { handleAddUsers } from "./add-users";
 import { handleCompileAgents } from "./compile-agents";
 import { handleCreateOrg } from "./create-org";
@@ -42,6 +46,7 @@ interface SetupOptions {
 interface SetupFiles {
   org: OrgInput;
   users?: { users: UserItemInput[] };
+  secrets?: { secrets: SecretItemInput[] };
   connectors?: { connectors: ConnectorItemInput[] };
   agents?: { agents: AgentItemInput[] };
   sops?: { sops: SopItemInput[] };
@@ -68,6 +73,7 @@ function loadSetupFiles(dir: string): SetupFiles {
   return {
     org: loadYaml(orgPath, orgSchema),
     users: tryLoadYaml(dir, "users.yaml", usersFileSchema),
+    secrets: tryLoadYaml(dir, "secrets.yaml", secretsFileSchema),
     connectors: tryLoadYaml(dir, "connectors.yaml", connectorsFileSchema),
     agents: tryLoadYaml(dir, "agents.yaml", agentsFileSchema),
     sops: tryLoadYaml(dir, "sops.yaml", sopsFileSchema),
@@ -84,6 +90,13 @@ function printDryRun(files: SetupFiles): void {
     log.step(`Users: ${files.users.users.length}`);
     for (const u of files.users.users) {
       log.info(`  - ${u.email} (${u.role})`);
+    }
+  }
+
+  if (files.secrets) {
+    log.step(`Secrets: ${files.secrets.secrets.length}`);
+    for (const s of files.secrets.secrets) {
+      log.info(`  - ${s.name} (${s.type})`);
     }
   }
 
@@ -160,7 +173,19 @@ export async function handleSetup(
     );
   }
 
-  // 5. Create connectors (includes secrets)
+  // 5. Create standalone secrets
+  if (files.secrets) {
+    log.step("Creating secrets...");
+    const secretResult = await handleAddSecrets(orgId, files.secrets.secrets, {
+      skipSecrets: options.skipSecrets,
+      registry,
+    });
+    log.success(
+      `Secrets: ${secretResult.created} created, ${secretResult.existing} existing`,
+    );
+  }
+
+  // 6. Create connectors (includes connector-scoped secrets)
   if (files.connectors) {
     log.step("Creating connectors...");
     const connResult = await handleAddConnectors(
@@ -176,7 +201,7 @@ export async function handleSetup(
     );
   }
 
-  // 6. Create agents
+  // 7. Create agents
   let agentResult: Awaited<ReturnType<typeof handleAddAgents>> | undefined;
   if (files.agents) {
     log.step("Creating agents...");
@@ -188,7 +213,7 @@ export async function handleSetup(
     );
   }
 
-  // 7. Import SOPs
+  // 8. Import SOPs
   if (files.sops) {
     log.step("Importing SOPs...");
     const sopResult = await handleImportSops(orgId, files.sops.sops, {
@@ -199,7 +224,7 @@ export async function handleSetup(
     );
   }
 
-  // 8. Import guardrails
+  // 9. Import guardrails
   if (files.guardrails) {
     log.step("Importing guardrails...");
     const guardrailResult = await handleImportGuardrails(
@@ -212,7 +237,7 @@ export async function handleSetup(
     );
   }
 
-  // 9. Compile agents
+  // 10. Compile agents
   if (!options.skipCompile) {
     log.step("Compiling agents...");
     const compileResult = await handleCompileAgents(orgId, { registry });
@@ -221,7 +246,7 @@ export async function handleSetup(
     );
   }
 
-  // 10. Import sessions
+  // 11. Import sessions
   if (files.sessions && !options.skipSessions) {
     log.step("Importing sessions...");
     const sessionResult = await handleImportSessions(
@@ -273,7 +298,7 @@ export function registerSetupCommand(program: Command): void {
           skipSessions: opts.skipSessions,
         });
       } catch (err) {
-        log.error(`Setup failed: ${(err as Error).message}`);
+        log.error(`Setup failed: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

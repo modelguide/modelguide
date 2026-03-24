@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const secretTypes = [
+export const secretTypes = [
   "api_key",
   "oauth_token",
   "credentials",
@@ -8,7 +8,7 @@ const secretTypes = [
   "webhook_secret",
 ] as const;
 
-const secretScopes = ["connector", "agent"] as const;
+export const secretScopes = ["connector", "agent"] as const;
 
 export const secretItemSchema = z.object({
   name: z.string().min(1),
