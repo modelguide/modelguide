@@ -241,6 +241,11 @@ No proprietary components. Every layer is inspectable, replaceable, forkable.
 modelguide/
 ├── modelguide-api/              # Hono API + MCP server
 │   └── src/
+│       ├── cli/                 # mg CLI — org provisioning tool
+│       │   ├── commands/        # One file per command
+│       │   ├── examples/acme/   # Sample YAML configs
+│       │   ├── lib/             # IdRegistry, YAML loader, logger
+│       │   └── schemas/         # Zod validation for YAML files
 │       ├── features/
 │       │   ├── agents/          # Agent CRUD, tool assignment
 │       │   ├── connectors/      # Connector config + catalog/
@@ -249,7 +254,7 @@ modelguide/
 │       │   │       ├── registry.ts
 │       │   │       └── sync.ts
 │       │   ├── mcp/             # MCP handler, core tools, schema conversion
-│       │   ├── sops/             # SOP templates, definitions, agent assignment
+│       │   ├── sops/            # SOP templates, definitions, agent assignment
 │       │   ├── sessions/        # Session lifecycle, messages, feedback
 │       │   ├── secrets/         # Encrypted credential storage
 │       │   └── users/           # Auth, RBAC, user management
@@ -376,12 +381,40 @@ Config-as-code via `railway.toml` in each service. Full setup guide: [`railway/D
 
 Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (migrations) automatically on every deploy via `preDeployCommand` in `railway.toml`.
 
+## CLI — Customer Onboarding
+
+The `mg` CLI provisions new organizations from YAML configs. One command sets up an org with users, connectors, agents, SOPs, guardrails, and demo sessions.
+
+```bash
+# Full setup from a YAML directory
+bun run src/cli/mg.ts setup src/cli/examples/acme/
+
+# Dry-run — validate and print plan without touching the DB
+bun run src/cli/mg.ts setup src/cli/examples/acme/ --dry-run
+```
+
+**Individual commands** for incremental setup:
+
+```bash
+bun run src/cli/mg.ts create-org --name "Acme Corp" --slug acme
+bun run src/cli/mg.ts add-users --org acme "email=admin@acme.com,name=Admin,role=admin"
+bun run src/cli/mg.ts add-connectors --org acme --from connectors.yaml
+bun run src/cli/mg.ts add-agents --org acme --from agents.yaml
+bun run src/cli/mg.ts import-sops --org acme sops.yaml
+bun run src/cli/mg.ts import-guardrails --org acme guardrails.yaml
+bun run src/cli/mg.ts compile-agents --org acme
+bun run src/cli/mg.ts import-sessions --org acme sessions.yaml
+```
+
+All commands are idempotent — safe to re-run. See `src/cli/examples/acme/` for sample YAML files and [ADR-010](docs/decisions/010-cli-onboarding-tool.md) for design decisions.
+
 ## Documentation
 
 | Resource | Description |
 |----------|-------------|
 | [MCP Integration Guide](docs/guide/mcp-integration.md) | Connect your AI agent via MCP |
 | [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools |
+| [CLI Examples](modelguide-api/src/cli/examples/acme/) | Sample YAML configs for org provisioning |
 | [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
 | [Deployment Guide](railway/DEPLOY.md) | Railway production deployment |
 | [Contributing](CONTRIBUTING.md) | Setup, workflow, conventions |
