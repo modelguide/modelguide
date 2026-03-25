@@ -36,6 +36,7 @@ import { runEvalSimulation } from "@features/simulations/eval-orchestrator";
 import { personalizeInputMessage } from "@features/simulations/llm-client";
 import { getPersona } from "@features/simulations/personas";
 import { Errors } from "@lib/errors";
+import { generateSimulationJWT } from "@lib/jwt";
 import { getLogger } from "@lib/logger";
 import {
   type PaginationParams,
@@ -1536,12 +1537,14 @@ async function executeSimulateAndRunInner(
 
       // 2. Create MastraAdapter pointing at simulation MCP route
       const simulationMcpUrl = `${env.APP_URL}/simulations/${session.id}/mcp`;
+      const simulationToken = await generateSimulationJWT(session.id);
       adapter = new MastraAdapter({
         compiledInstructions: suiteData.agent.compiledInstructions!,
         model: env.SIMULATION_AGENT_MODEL,
         agentId: suiteData.agent.id,
         agentName: suiteData.agent.name,
         simulationMcpUrl,
+        simulationToken,
       });
 
       // 3. Run simulation

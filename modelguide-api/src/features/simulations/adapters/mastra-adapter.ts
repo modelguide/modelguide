@@ -28,6 +28,8 @@ export interface MastraAdapterConfig {
   agentName: string;
   /** Full URL to the simulation MCP route (e.g., "http://localhost:3000/simulations/{id}/mcp"). */
   simulationMcpUrl: string;
+  /** JWT for authenticating with the simulation MCP route. */
+  simulationToken: string;
   /** Max steps for agent.generate() tool-calling loops. */
   maxSteps?: number;
 }
@@ -51,6 +53,11 @@ export class MastraAdapter implements AgentAdapter {
       servers: {
         simulation: {
           url: new URL(config.simulationMcpUrl),
+          requestInit: {
+            headers: {
+              Authorization: `Bearer ${config.simulationToken}`,
+            },
+          },
         },
       },
     });

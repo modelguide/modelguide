@@ -71,6 +71,39 @@ export async function verifyJWT(token: string): Promise<AuthUser | null> {
   }
 }
 
+/** Short-lived JWT for simulation MCP route authentication. */
+const SIMULATION_TOKEN_EXPIRY_SECONDS = 5 * 60; // 5 minutes
+
+export async function generateSimulationJWT(
+  sessionId: string,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return sign(
+    {
+      type: "simulation",
+      sub: sessionId,
+      iat: now,
+      exp: now + SIMULATION_TOKEN_EXPIRY_SECONDS,
+    },
+    env.JWT_SECRET,
+    "HS256",
+  );
+}
+
+export async function verifySimulationJWT(
+  token: string,
+): Promise<{ sessionId: string } | null> {
+  try {
+    const payload = await verify(token, env.JWT_SECRET, "HS256");
+    if (payload.type !== "simulation" || typeof payload.sub !== "string") {
+      return null;
+    }
+    return { sessionId: payload.sub };
+  } catch {
+    return null;
+  }
+}
+
 interface RefreshTokenPayload {
   familyId: string;
   generation: number;

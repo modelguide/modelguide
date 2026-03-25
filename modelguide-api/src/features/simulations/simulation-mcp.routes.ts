@@ -17,6 +17,7 @@ import { getAgentTools } from "@features/mcp/mcp.service";
 import { createMcpSession } from "@features/mcp/mcp.shared";
 import type { McpToolRegistration } from "@features/mcp/mcp.shared";
 import { mcpErrorResponse, mcpResponse } from "@features/mcp/mcp.types";
+import { verifySimulationJWT } from "@lib/jwt";
 import { getLogger } from "@lib/logger";
 import { eq } from "drizzle-orm";
 import type { Context } from "hono";
@@ -86,7 +87,19 @@ export async function simulationMcpHandler(
     return c.json({ error: "Missing simulationId" }, 400);
   }
 
-  // Load simulation session with RLS bypass (internal route, no org context)
+  // Verify simulation JWT — reuses existing JWT_SECRET infrastructure
+  const authHeader = c.req.header("Authorization");
+  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token) {
+    return c.json({ error: "Missing simulation token" }, 401);
+  }
+
+  const claims = await verifySimulationJWT(token);
+  if (!claims || claims.sessionId !== simulationId) {
+    return c.json({ error: "Invalid simulation token" }, 401);
+  }
+
+  // Load simulation session with RLS bypass (internal route, authenticated via JWT)
   const [session] = await forApp((tx) =>
     tx
       .select({
