@@ -82,19 +82,15 @@ export class MastraAdapter implements AgentAdapter {
       toolsets,
       maxSteps: this.config.maxSteps ?? 5,
     });
-
     // Extract tool calls from the generation steps
     const toolCalls: AgentAdapterResponse["toolCalls"] = [];
-    // biome-ignore lint/suspicious/noExplicitAny: Mastra step types are loosely typed
-    for (const step of (result as any).steps ?? []) {
-      if (step.toolCalls) {
-        for (const tc of step.toolCalls) {
-          toolCalls.push({
-            name: tc.toolName,
-            arguments: tc.args ?? {},
-            result: tc.result,
-          });
-        }
+    for (const step of result.steps ?? []) {
+      for (const tc of step.toolCalls ?? []) {
+        toolCalls.push({
+          name: tc.payload.toolName,
+          arguments: (tc.payload.args as Record<string, unknown>) ?? {},
+          result: tc.payload.output,
+        });
       }
     }
 
