@@ -300,7 +300,13 @@ async function executeSimulateAndRunInner(
       sessionId = session.id;
 
       // 2. Create MastraAdapter pointing at simulation MCP route
-      const simulationMcpUrl = `${env.APP_URL}/simulations/${sessionId}/mcp`;
+      const apiBaseUrl = env.API_EXTERNAL_ADDRESS;
+      if (!apiBaseUrl) {
+        throw Errors.validationError(
+          "API_EXTERNAL_ADDRESS must be set for simulate-and-run (used to reach the simulation MCP route)",
+        );
+      }
+      const simulationMcpUrl = `${apiBaseUrl}/simulations/${sessionId}/mcp`;
       const simulationToken = await generateSimulationJWT(sessionId);
       adapter = new MastraAdapter({
         compiledInstructions: suiteData.agent.compiledInstructions!,

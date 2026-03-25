@@ -52,9 +52,9 @@ const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY;
 // ============================================================================
 
 // MastraAdapter's MCPClient makes real HTTP requests to the simulation MCP route.
-// Start an ephemeral server so it's reachable, and point APP_URL to it.
+// Start an ephemeral server so it's reachable, and point API_EXTERNAL_ADDRESS to it.
 const mcpServer = Bun.serve({ port: 0, fetch: app.fetch });
-(env as { APP_URL: string }).APP_URL = `http://localhost:${mcpServer.port}`;
+env.API_EXTERNAL_ADDRESS = `http://localhost:${mcpServer.port}`;
 
 // ============================================================================
 // Shared fixtures
