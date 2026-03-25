@@ -38,6 +38,8 @@ The boring stuff between "it works" and "it ships" — that's what kills timelin
 
 ## What ModelGuide Does
 
+![SOP](./docs/sop_demo.mp4)
+
 ModelGuide is the infrastructure layer between your AI agents and your business systems. It doesn't run the AI or own the voice stack — it gives you four production-ready layers you'd otherwise build from scratch:
 
 **Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
