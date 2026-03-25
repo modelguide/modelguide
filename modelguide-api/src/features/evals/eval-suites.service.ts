@@ -1301,32 +1301,32 @@ export async function enqueueSimulateAndRun(
   promptSource: string,
   opts?: RunEvalSuiteOpts,
 ): Promise<{ suiteRunId: string }> {
-  // Cheap validation — give the caller an immediate error for obvious problems
-  const { testCaseCount } = await forOrg(orgId, async (tx) => {
-    const [s] = await tx
+  // Validate + create suite run in a single transaction (avoids TOCTOU race)
+  const suiteRun = await forOrg(orgId, async (tx) => {
+    const [suite] = await tx
       .select()
       .from(evalSuites)
       .where(eq(evalSuites.id, suiteId));
 
-    if (!s) throw Errors.evalSuiteNotFound(suiteId);
-    if (s.status === "archived") {
+    if (!suite) throw Errors.evalSuiteNotFound(suiteId);
+    if (suite.status === "archived") {
       throw Errors.conflict(
         `Eval suite "${suiteId}" is archived and cannot be run`,
       );
     }
 
-    const [a] = await tx
+    const [agent] = await tx
       .select({
         id: agents.id,
         compiledInstructions: agents.compiledInstructions,
       })
       .from(agents)
-      .where(eq(agents.id, s.agentId));
+      .where(eq(agents.id, suite.agentId));
 
-    if (!a) throw Errors.agentNotFound(s.agentId);
-    if (!a.compiledInstructions) {
+    if (!agent) throw Errors.agentNotFound(suite.agentId);
+    if (!agent.compiledInstructions) {
       throw Errors.validationError(
-        `Agent "${s.agentId}" has no compiled_instructions — compile the SOP first`,
+        `Agent "${suite.agentId}" has no compiled_instructions — compile the SOP first`,
       );
     }
 
@@ -1354,12 +1354,7 @@ export async function enqueueSimulateAndRun(
       }
     }
 
-    return { testCaseCount: testCases.length };
-  });
-
-  // Create suite run record
-  const [suiteRun] = await forOrg(orgId, (tx) =>
-    tx
+    const [run] = await tx
       .insert(evalSuiteRuns)
       .values({
         organizationId: orgId,
@@ -1369,13 +1364,15 @@ export async function enqueueSimulateAndRun(
         metadata: {
           progress: {
             completed: 0,
-            total: testCaseCount,
+            total: testCases.length,
             currentTestCase: null,
           },
         },
       })
-      .returning(),
-  );
+      .returning();
+
+    return run;
+  });
 
   // Enqueue — actual simulation + scoring happens asynchronously
   taskRunner.enqueue(
