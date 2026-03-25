@@ -13,6 +13,7 @@
 import type { AppBindings } from "@/types";
 import { forApp } from "@db/rls";
 import { sessions } from "@db/schema";
+import type { SimulationSessionMetadata } from "@features/evals/eval-suites.types";
 import { getAgentTools } from "@features/mcp/mcp.service";
 import { createMcpSession } from "@features/mcp/mcp.shared";
 import type { McpToolRegistration } from "@features/mcp/mcp.shared";
@@ -127,9 +128,9 @@ export async function simulationMcpHandler(
     );
   }
 
-  const metadata = (session.metadata ?? {}) as Record<string, unknown>;
-  const mockToolResponses =
-    (metadata.mockToolResponses as Record<string, unknown>) ?? {};
+  const metadata = (session.metadata ??
+    {}) as unknown as SimulationSessionMetadata;
+  const mockToolResponses = metadata.mockToolResponses ?? {};
 
   // Load agent tools for fallback registration (AC 4)
   const agentTools =

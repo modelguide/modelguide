@@ -67,7 +67,13 @@ describe("runEvalSimulation", () => {
       agentId: "agent-1",
       adapter: slowAdapter,
       inputMessage: "Hi",
-      persona: { systemPrompt: "You are a customer" } as never,
+      persona: {
+        id: "test-persona",
+        name: "Test Customer",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
       sessionId: "pre-created-session",
       timeoutMs: 100, // 100ms timeout
       maxTurns: 10,
@@ -96,7 +102,13 @@ describe("runEvalSimulation", () => {
       agentId: "agent-1",
       adapter,
       inputMessage: "Hi",
-      persona: { systemPrompt: "You are a customer" } as never,
+      persona: {
+        id: "test-persona",
+        name: "Test Customer",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
       sessionId: "pre-created-session",
       maxTurns: 10,
     });

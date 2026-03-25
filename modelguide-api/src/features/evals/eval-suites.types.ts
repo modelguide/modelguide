@@ -49,6 +49,18 @@ export interface CreateEvaluatorInput {
   required?: boolean;
 }
 
+/** Expected shape of eval_suite_test_cases.input for simulation. */
+export interface SimulationTestCaseInput {
+  message: string;
+  persona?: string;
+}
+
+/** Expected shape of sessions.metadata for simulation sessions. */
+export interface SimulationSessionMetadata {
+  source: string;
+  mockToolResponses: Record<string, unknown>;
+}
+
 export interface SimulateAndRunPayload {
   orgId: string;
   suiteId: string;

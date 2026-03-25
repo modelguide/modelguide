@@ -54,6 +54,7 @@ import type {
   ListEvalSuitesParams,
   RunEvalSuiteOpts,
   SimulateAndRunPayload,
+  SimulationTestCaseInput,
   SuiteRunDetail,
   SuiteRunResult,
   TestCaseEvalResult,
@@ -1346,8 +1347,8 @@ export async function enqueueSimulateAndRun(
     }
 
     for (const tc of testCases) {
-      const input = tc.input as Record<string, unknown> | null;
-      if (!input?.message || typeof input.message !== "string") {
+      const input = tc.input as SimulationTestCaseInput | null;
+      if (!input?.message) {
         throw Errors.validationError(
           `Test case "${tc.name}" missing required input.message for simulation`,
         );
@@ -1477,9 +1478,9 @@ async function executeSimulateAndRunInner(
 
   for (let i = 0; i < suiteData.testCases.length; i++) {
     const testCase = suiteData.testCases[i];
-    const input = testCase.input as Record<string, unknown>;
-    let inputMessage = input.message as string;
-    const personaId = input.persona as string | undefined;
+    const input = testCase.input as unknown as SimulationTestCaseInput;
+    let inputMessage = input.message;
+    const personaId = input.persona;
     const mockToolResponses =
       (testCase.mockToolResponses as Record<string, unknown>) ?? {};
 
