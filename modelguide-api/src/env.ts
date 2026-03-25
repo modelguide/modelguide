@@ -58,7 +58,11 @@ const envSchema = z
     SIMULATION_LLM_BASE_URL: z.string().url().optional(),
     SIMULATION_MAX_TURNS: z.coerce.number().default(20),
     SIMULATION_TIMEOUT_MS: z.coerce.number().default(120_000),
-    // Model ID for the Mastra agent in simulations (Vercel AI SDK format)
+    // LLM model for the simulated agent (Vercel AI SDK format: "provider/model").
+    // Different from SIMULATION_LLM_MODEL which drives persona/personalization.
+    // This is the model the agent-under-test runs on during simulation.
+    // TODO: should become a per-agent DB property (agents.model) so simulations
+    // match the production model — see phase 4 planning notes.
     SIMULATION_AGENT_MODEL: z
       .string()
       .default("anthropic/claude-haiku-4-5-20251001"),
