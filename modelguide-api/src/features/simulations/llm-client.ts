@@ -64,6 +64,47 @@ export function toOpenAiTools(tools: ResolvedTool[]): ChatCompletionTool[] {
 }
 
 /**
+ * Rewrite an input message template in a persona's voice.
+ *
+ * Preserves all factual content (order IDs, names, dates) but changes
+ * tone and style to match the persona. One LLM call, no multi-turn.
+ */
+export async function personalizeInputMessage(
+  messageTemplate: string,
+  persona: { name: string; systemPrompt: string },
+): Promise<string> {
+  const openai = getClient();
+
+  const response = await openai.chat.completions.create({
+    model: env.SIMULATION_LLM_MODEL,
+    max_completion_tokens: SIMULATION_MAX_TOKENS,
+    messages: [
+      {
+        role: "system",
+        content: `You are rewriting a customer message in the voice of a specific persona.
+
+Persona: ${persona.name}
+${persona.systemPrompt}
+
+Rules:
+- Rewrite the message as this persona would naturally say it
+- Keep ALL factual content exactly the same (order IDs, product names, dates, numbers)
+- Change only the tone, style, and phrasing
+- Output ONLY the rewritten message, nothing else`,
+      },
+      { role: "user", content: messageTemplate },
+    ],
+  });
+
+  const rewritten = response.choices[0]?.message?.content?.trim();
+  if (!rewritten) {
+    logger.warn("personalizeInputMessage returned empty — using original");
+    return messageTemplate;
+  }
+  return rewritten;
+}
+
+/**
  * Generate the next persona (simulated customer) message.
  */
 export async function generatePersonaMessage(

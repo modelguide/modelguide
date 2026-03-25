@@ -776,7 +776,7 @@ export async function runEvalSuite(
 /**
  * Evaluate an existing session against a test case's resolved assertions.
  */
-async function runTestCaseEval(
+export async function runTestCaseEval(
   orgId: string,
   suite: EvalSuite,
   testCase: EvalSuiteTestCase,
