@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { determineSuiteRunStatus } from "@features/evals/eval-suites.service";
+import { determineSuiteRunStatus } from "@features/evals/eval-suites-simulate.service";
 
 function makeResult(passed: boolean | null) {
   return {

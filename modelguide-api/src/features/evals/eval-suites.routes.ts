@@ -13,6 +13,7 @@ import {
 import { paginatedResponseSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
 
+import { enqueueSimulateAndRun } from "./eval-suites-simulate.service";
 import {
   createEvaluatorSchema,
   createSuiteSchema,
@@ -32,7 +33,6 @@ import {
   createSuite,
   createTestCase,
   deleteEvalSuite,
-  enqueueSimulateAndRun,
   getEvalSuiteById,
   getEvalSuiteRunById,
   getEvalSuiteRuns,

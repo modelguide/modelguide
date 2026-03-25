@@ -34,9 +34,9 @@ import {
   sessions,
 } from "@db/schema";
 import { compileAgent } from "@features/compiler/compiler.service";
+import { enqueueSimulateAndRun } from "@features/evals/eval-suites-simulate.service";
 import {
   deleteEvalSuite,
-  enqueueSimulateAndRun,
   getEvalSuiteRunById,
   initSuiteFromSop,
 } from "@features/evals/eval-suites.service";
