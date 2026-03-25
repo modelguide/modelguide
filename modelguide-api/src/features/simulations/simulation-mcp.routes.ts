@@ -128,8 +128,7 @@ export async function simulationMcpHandler(
     );
   }
 
-  const metadata = (session.metadata ??
-    {}) as unknown as SimulationSessionMetadata;
+  const metadata = (session.metadata ?? {}) as SimulationSessionMetadata;
   const mockToolResponses = metadata.mockToolResponses ?? {};
 
   // Load agent tools for fallback registration (AC 4)

@@ -1478,8 +1478,8 @@ async function executeSimulateAndRunInner(
 
   for (let i = 0; i < suiteData.testCases.length; i++) {
     const testCase = suiteData.testCases[i];
-    const input = testCase.input as unknown as SimulationTestCaseInput;
-    let inputMessage = input.message;
+    const input = testCase.input as SimulationTestCaseInput;
+    let inputMessage = input.message!; // validated in enqueueSimulateAndRun
     const personaId = input.persona;
     const mockToolResponses =
       (testCase.mockToolResponses as Record<string, unknown>) ?? {};

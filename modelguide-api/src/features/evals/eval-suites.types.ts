@@ -51,14 +51,14 @@ export interface CreateEvaluatorInput {
 
 /** Expected shape of eval_suite_test_cases.input for simulation. */
 export interface SimulationTestCaseInput {
-  message: string;
+  message?: string;
   persona?: string;
 }
 
 /** Expected shape of sessions.metadata for simulation sessions. */
 export interface SimulationSessionMetadata {
-  source: string;
-  mockToolResponses: Record<string, unknown>;
+  source?: string;
+  mockToolResponses?: Record<string, unknown>;
 }
 
 export interface SimulateAndRunPayload {
