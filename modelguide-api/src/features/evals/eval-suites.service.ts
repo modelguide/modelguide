@@ -1522,6 +1522,7 @@ async function executeSimulateAndRunInner(
 
     // 1. Pre-create simulation session with mock config in metadata
     let adapter: MastraAdapter | null = null;
+    let sessionId: string | null = null;
     try {
       const session = await createSession(orgId, suiteData.agent.id, {
         channelType: "api",
@@ -1532,10 +1533,11 @@ async function executeSimulateAndRunInner(
           mockToolResponses,
         },
       });
+      sessionId = session.id;
 
       // 2. Create MastraAdapter pointing at simulation MCP route
-      const simulationMcpUrl = `${env.APP_URL}/simulations/${session.id}/mcp`;
-      const simulationToken = await generateSimulationJWT(session.id);
+      const simulationMcpUrl = `${env.APP_URL}/simulations/${sessionId}/mcp`;
+      const simulationToken = await generateSimulationJWT(sessionId);
       adapter = new MastraAdapter({
         compiledInstructions: suiteData.agent.compiledInstructions!,
         model: env.SIMULATION_AGENT_MODEL,
@@ -1551,7 +1553,7 @@ async function executeSimulateAndRunInner(
         agentId: suiteData.agent.id,
         adapter,
         inputMessage,
-        sessionId: session.id,
+        sessionId,
       });
 
       if (simResult.status === "error") {
@@ -1559,7 +1561,16 @@ async function executeSimulateAndRunInner(
           { testCaseId: testCase.id, suiteRunId, error: simResult.error },
           "test case simulation failed",
         );
-        results.push(erroredTestCaseResult(testCase));
+        results.push(
+          await persistFailedEvalRun(
+            orgId,
+            suiteData.suite.id,
+            suiteRunId,
+            testCase,
+            sessionId,
+            simResult.error,
+          ),
+        );
         continue;
       }
 
@@ -1579,7 +1590,20 @@ async function executeSimulateAndRunInner(
         { err, testCaseId: testCase.id, suiteRunId },
         "test case simulation+eval failed",
       );
-      results.push(erroredTestCaseResult(testCase));
+      if (sessionId) {
+        results.push(
+          await persistFailedEvalRun(
+            orgId,
+            suiteData.suite.id,
+            suiteRunId,
+            testCase,
+            sessionId,
+            err instanceof Error ? err.message : "Unknown error",
+          ),
+        );
+      } else {
+        results.push(erroredTestCaseResult(testCase));
+      }
     } finally {
       await adapter?.disconnect();
     }
@@ -1620,7 +1644,47 @@ async function executeSimulateAndRunInner(
   );
 }
 
-/** Build an errored test case result (simulation or eval failed). */
+/**
+ * Persist a failed eval_run so the read path can surface it.
+ * Without this, failed test cases would disappear from API responses
+ * because getEvalSuiteRunById rebuilds results from persisted eval_runs.
+ */
+async function persistFailedEvalRun(
+  orgId: string,
+  suiteId: string,
+  suiteRunId: string,
+  testCase: { id: string; name: string },
+  sessionId: string,
+  error?: string,
+): Promise<TestCaseEvalResult> {
+  const [evalRun] = await forOrg(orgId, (tx) =>
+    tx
+      .insert(evalRuns)
+      .values({
+        organizationId: orgId,
+        sessionId,
+        sourceType: "suite",
+        sourceId: suiteId,
+        status: "error" as EvalStatus,
+        passed: null,
+        suiteRunId,
+        testCaseId: testCase.id,
+        metadata: error ? { error } : undefined,
+        completedAt: new Date(),
+      })
+      .returning(),
+  );
+
+  return {
+    testCaseId: testCase.id,
+    testCaseName: testCase.name,
+    evalRunId: evalRun.id,
+    passed: null,
+    scores: [],
+  };
+}
+
+/** Build an in-memory errored result (no session available to persist). */
 function erroredTestCaseResult(testCase: {
   id: string;
   name: string;
