@@ -507,7 +507,7 @@ const simulateAndRunRoute = createRoute({
   tags: ["Eval Suites"],
   summary: "Simulate and run eval suite",
   description:
-    "Asynchronously simulates conversations for each test case using mock tools via MCP, then scores each session. Returns immediately with a suite run ID (HTTP 202). Poll GET /:suiteId/runs/:runId for progress.",
+    "Asynchronously simulates conversations for each test case using mock tools via MCP, then scores each session. Returns immediately with a suite run ID (HTTP 202). Poll GET /:suiteId/runs/:runId for progress. Requires `eval_suites:run` permission.",
   security: [{ bearerAuth: [] }],
   request: {
     params: suiteIdParams,
