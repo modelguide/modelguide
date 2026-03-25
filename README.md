@@ -38,7 +38,9 @@ The boring stuff between "it works" and "it ships" — that's what kills timelin
 
 ## What ModelGuide Does
 
-![SOP](./docs/sop_demo.mp4)
+<a href="https://github.com/modelguide/modelguide/blob/main/docs/sop_demo.mp4" target="_blank">
+  <img src="./docs/sop_demo_thumbnail.png" alt="SOP Demo" />
+</a>
 
 ModelGuide is the infrastructure layer between your AI agents and your business systems. It doesn't run the AI or own the voice stack — it gives you four production-ready layers you'd otherwise build from scratch:
 
