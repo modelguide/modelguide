@@ -55,115 +55,43 @@ export interface EvalOrchestrationResult {
 /**
  * Run a test-case-driven simulation conversation.
  *
- * 1. Creates a simulation session with mock config in metadata
- * 2. Sends the test case's input message to the agent via adapter
- * 3. If persona is set and agent didn't end conversation, generates follow-ups
- * 4. Repeats until conversation ends, max turns reached, or timeout
- * 5. Completes the session
+ * The entire conversation loop runs under a single timeout via Promise.race.
+ * This catches hangs in adapter.sendMessage(), persona generation, and
+ * message storage — not just between turns.
  */
 export async function runEvalSimulation(
   input: EvalOrchestrationInput,
 ): Promise<EvalOrchestrationResult> {
-  const { orgId, agentId, sessionId, adapter, inputMessage, persona } = input;
-
+  const { orgId, agentId, sessionId } = input;
   const timeoutMs = input.timeoutMs ?? env.SIMULATION_TIMEOUT_MS;
-  const maxTurns = input.maxTurns ?? env.SIMULATION_MAX_TURNS;
   const startTime = Date.now();
 
-  let turnCount = 0;
-  let status: EvalOrchestrationResult["status"] = "completed";
-  let error: string | undefined;
-  const conversationHistory: Array<{
-    role: "user" | "assistant";
-    content: string;
-  }> = [];
+  let result: EvalOrchestrationResult;
 
   try {
-    // First turn: send the test case input message
-    let currentMessage = inputMessage;
-
-    for (let turn = 0; turn < maxTurns; turn++) {
-      // Check timeout
-      if (Date.now() - startTime > timeoutMs) {
-        status = "timeout";
-        break;
-      }
-
-      // Store user message
-      await addMessage(orgId, sessionId, agentId, {
-        role: "user",
-        content: currentMessage,
-        occurredAt: new Date(),
-      });
-
-      // Send to agent via adapter
-      const agentResponse = await adapter.sendMessage(
-        sessionId,
-        currentMessage,
-      );
-
-      // Store agent response with tool calls
-      if (agentResponse.toolCalls.length > 0) {
-        await addMessage(orgId, sessionId, agentId, {
-          role: "assistant",
-          content: agentResponse.response || undefined,
-          toolCalls: agentResponse.toolCalls.map((tc, i) => ({
-            toolCallId: `tc_${turn}_${i}`,
-            toolName: tc.name,
-            toolInput: tc.arguments,
-            toolOutput: (tc.result as Record<string, unknown>) ?? {},
-            toolStatus: "success" as const,
-          })),
-          occurredAt: new Date(),
-        });
-      } else {
-        await addMessage(orgId, sessionId, agentId, {
-          role: "assistant",
-          content: agentResponse.response,
-          occurredAt: new Date(),
-        });
-      }
-
-      // Track conversation history for persona context
-      conversationHistory.push(
-        { role: "user", content: currentMessage },
-        { role: "assistant", content: agentResponse.response },
-      );
-
-      turnCount = turn + 1;
-
-      // If agent signals conversation ended, stop
-      if (agentResponse.conversationEnded) {
-        status = "completed";
-        break;
-      }
-
-      // If no persona, single-turn — we're done
-      if (!persona) {
-        status = "completed";
-        break;
-      }
-
-      // Generate persona follow-up with full conversation history
-      const personaResponse = await generatePersonaMessage(
-        conversationHistory,
-        persona.systemPrompt,
-      );
-
-      currentMessage = personaResponse.content;
-
-      if (turn === maxTurns - 1) {
-        status = "max_turns_reached";
-      }
-    }
+    result = await Promise.race([
+      runConversationLoop(input, startTime),
+      rejectAfterTimeout(timeoutMs),
+    ]);
   } catch (err) {
-    status = "error";
-    error = err instanceof Error ? err.message : "Unknown simulation error";
-    log.error({ err, sessionId: sessionId, agentId }, "eval simulation failed");
+    const isTimeout =
+      err instanceof Error && err.message === "Simulation timeout";
+    result = {
+      sessionId,
+      turnCount: 0,
+      status: isTimeout ? "timeout" : "error",
+      durationMs: Date.now() - startTime,
+      ...(!isTimeout && {
+        error: err instanceof Error ? err.message : "Unknown simulation error",
+      }),
+    };
+    if (!isTimeout) {
+      log.error({ err, sessionId, agentId }, "eval simulation failed");
+    }
   }
 
   // Complete the session
-  const sessionStatus = status === "error" ? "abandoned" : "completed";
+  const sessionStatus = result.status === "error" ? "abandoned" : "completed";
   try {
     await updateSession(orgId, sessionId, agentId, {
       status: sessionStatus,
@@ -172,18 +100,117 @@ export async function runEvalSimulation(
     // Session may already be ended
   }
 
-  const durationMs = Date.now() - startTime;
-
   log.info(
-    { sessionId: sessionId, turnCount, status, durationMs },
+    {
+      sessionId,
+      turnCount: result.turnCount,
+      status: result.status,
+      durationMs: result.durationMs,
+    },
     "eval simulation completed",
   );
 
+  return result;
+}
+
+// ============================================================================
+// Internal
+// ============================================================================
+
+async function runConversationLoop(
+  input: EvalOrchestrationInput,
+  startTime: number,
+): Promise<EvalOrchestrationResult> {
+  const { orgId, agentId, sessionId, adapter, inputMessage, persona } = input;
+  const maxTurns = input.maxTurns ?? env.SIMULATION_MAX_TURNS;
+
+  let currentMessage = inputMessage;
+  let turnCount = 0;
+  const conversationHistory: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }> = [];
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    // Store user message
+    await addMessage(orgId, sessionId, agentId, {
+      role: "user",
+      content: currentMessage,
+      occurredAt: new Date(),
+    });
+
+    // Send to agent via adapter
+    const agentResponse = await adapter.sendMessage(sessionId, currentMessage);
+
+    // Store agent response with tool calls
+    if (agentResponse.toolCalls.length > 0) {
+      await addMessage(orgId, sessionId, agentId, {
+        role: "assistant",
+        content: agentResponse.response || undefined,
+        toolCalls: agentResponse.toolCalls.map((tc, i) => ({
+          toolCallId: `tc_${turn}_${i}`,
+          toolName: tc.name,
+          toolInput: tc.arguments,
+          toolOutput: (tc.result as Record<string, unknown>) ?? {},
+          toolStatus: "success" as const,
+        })),
+        occurredAt: new Date(),
+      });
+    } else {
+      await addMessage(orgId, sessionId, agentId, {
+        role: "assistant",
+        content: agentResponse.response,
+        occurredAt: new Date(),
+      });
+    }
+
+    // Track conversation history for persona context
+    conversationHistory.push(
+      { role: "user", content: currentMessage },
+      { role: "assistant", content: agentResponse.response },
+    );
+
+    turnCount = turn + 1;
+
+    // If agent signals conversation ended, stop
+    if (agentResponse.conversationEnded) {
+      return {
+        sessionId,
+        turnCount,
+        status: "completed",
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    // If no persona, single-turn — we're done
+    if (!persona) {
+      return {
+        sessionId,
+        turnCount,
+        status: "completed",
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    // Generate persona follow-up with full conversation history
+    const personaResponse = await generatePersonaMessage(
+      conversationHistory,
+      persona.systemPrompt,
+    );
+
+    currentMessage = personaResponse.content;
+  }
+
   return {
-    sessionId: sessionId,
+    sessionId,
     turnCount,
-    status,
-    durationMs,
-    ...(error && { error }),
+    status: "max_turns_reached",
+    durationMs: Date.now() - startTime,
   };
+}
+
+function rejectAfterTimeout(ms: number): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Simulation timeout")), ms);
+  });
 }
