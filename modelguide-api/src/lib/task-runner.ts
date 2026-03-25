@@ -77,7 +77,9 @@ export class InProcessTaskRunner implements TaskRunner {
     this.tasks.set(taskId, state);
 
     // Fire and forget — run asynchronously
-    this.run(taskId, taskType, payload, handler);
+    this.run(taskId, taskType, payload, handler).catch((err) => {
+      log.error({ taskId, taskType, err }, "task runner unexpected error");
+    });
 
     return taskId;
   }
