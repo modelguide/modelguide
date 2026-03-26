@@ -383,30 +383,38 @@ Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (mig
 
 ## CLI — Customer Onboarding
 
-The `mg` CLI provisions new organizations from YAML configs. One command sets up an org with users, connectors, agents, SOPs, guardrails, and demo sessions.
+The `mg` CLI provisions new organizations from YAML configs. Create a directory anywhere with your YAML files and run one command to set up an org with users, connectors, agents, SOPs, guardrails, and demo sessions.
 
 ```bash
-# Full setup from a YAML directory
-bun run src/cli/mg.ts setup src/cli/examples/acme/
+cd modelguide-api
 
-# Dry-run — validate and print plan without touching the DB
-bun run src/cli/mg.ts setup src/cli/examples/acme/ --dry-run
+# Full setup from a YAML directory (path can be absolute or relative)
+bun run src/cli/mg.ts setup /path/to/my-org/
+
+# Dry-run — validate all YAML and print plan without touching the DB
+bun run src/cli/mg.ts setup /path/to/my-org/ --dry-run
+
+# Skip interactive secret prompts (uses placeholders — useful for testing/CI)
+bun run src/cli/mg.ts setup /path/to/my-org/ --skip-secrets
 ```
+
+The setup directory needs only `org.yaml` (required). All other files are optional: `users.yaml`, `secrets.yaml`, `connectors.yaml`, `agents.yaml`, `sops.yaml`, `guardrails.yaml`, `sessions.yaml`. Additional flags: `--skip-compile` (skip agent compilation), `--skip-sessions` (skip session import).
 
 **Individual commands** for incremental setup:
 
 ```bash
-bun run src/cli/mg.ts create-org --name "Acme Corp" --slug acme
-bun run src/cli/mg.ts add-users --org acme "email=admin@acme.com,name=Admin,role=admin"
-bun run src/cli/mg.ts add-connectors --org acme --from connectors.yaml
-bun run src/cli/mg.ts add-agents --org acme --from agents.yaml
-bun run src/cli/mg.ts import-sops --org acme sops.yaml
-bun run src/cli/mg.ts import-guardrails --org acme guardrails.yaml
+bun run src/cli/mg.ts create-org --from /path/to/org.yaml
+bun run src/cli/mg.ts add-users --org acme --from /path/to/users.yaml
+bun run src/cli/mg.ts add-secrets --org acme --from /path/to/secrets.yaml
+bun run src/cli/mg.ts add-connectors --org acme --from /path/to/connectors.yaml
+bun run src/cli/mg.ts add-agents --org acme --from /path/to/agents.yaml
+bun run src/cli/mg.ts import-sops --org acme /path/to/sops.yaml
+bun run src/cli/mg.ts import-guardrails --org acme /path/to/guardrails.yaml
 bun run src/cli/mg.ts compile-agents --org acme
-bun run src/cli/mg.ts import-sessions --org acme sessions.yaml
+bun run src/cli/mg.ts import-sessions --org acme /path/to/sessions.yaml
 ```
 
-Provisioning commands are safe to re-run. Session imports dedupe on `externalId` (or a deterministic fingerprint when omitted). Standalone `add-secrets` is append-only because secrets do not currently have a stable natural key. See `src/cli/examples/acme/` for sample YAML files and [ADR-010](docs/decisions/010-cli-onboarding-tool.md) for design decisions.
+All provisioning commands are idempotent and safe to re-run — orgs upsert on slug, duplicate entities are skipped, and session imports dedupe on `externalId` (explicit or derived from a deterministic payload hash). Standalone `add-secrets` is append-only (use `--skip-secrets` on re-runs). See `src/cli/examples/acme/` for sample YAML files and [ADR-010](docs/decisions/010-cli-onboarding-tool.md) for design decisions.
 
 ## Documentation
 
