@@ -13,6 +13,11 @@ import {
 import { paginatedResponseSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
 
+import {
+  enqueueGenerateTestCases,
+  getGenerationStatus,
+} from "@features/test-case-generation";
+import { Errors } from "@lib/errors";
 import { enqueueSimulateAndRun } from "./eval-suites-simulate.service";
 import {
   createEvaluatorSchema,
@@ -23,6 +28,9 @@ import {
   evalSuiteRunResponseSchema,
   evalSuiteRunsQuerySchema,
   evalSuiteSummaryResponseSchema,
+  generateTestCasesResponseSchema,
+  generateTestCasesSchema,
+  generationTaskStatusResponseSchema,
   initSuiteFromSopSchema,
   runEvalSuiteSchema,
   simulateAndRunResponseSchema,
@@ -54,6 +62,10 @@ const suiteIdParams = z.object({
 const runIdParams = z.object({
   suiteId: z.string().uuid().openapi({ description: "Eval Suite ID" }),
   runId: z.string().uuid().openapi({ description: "Eval Suite Run ID" }),
+});
+
+const taskIdParams = z.object({
+  taskId: z.string().uuid().openapi({ description: "Generation Task ID" }),
 });
 
 const testCaseParams = z.object({
@@ -267,6 +279,17 @@ router.get(
   requireUser(),
   requirePermission("eval_suites:read"),
   requireOrganization(),
+);
+router.post(
+  "/:suiteId/generate-test-cases",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.get(
+  "/generation-tasks/:taskId",
+  requireUser(),
+  requirePermission("eval_suites:read"),
 );
 router.post(
   "/:suiteId/test-cases",
@@ -619,6 +642,98 @@ router.openapi(getRunRoute, async (c) => {
   const { suiteId, runId } = c.req.valid("param");
   const detail = await getEvalSuiteRunById(orgId, suiteId, runId);
   return c.json(formatSuiteRun(detail), 200);
+});
+
+// POST /:suiteId/generate-test-cases — async test case generation
+const generateTestCasesRoute = createRoute({
+  method: "post",
+  path: "/{suiteId}/generate-test-cases",
+  tags: ["Eval Suites"],
+  summary: "Generate synthetic test cases",
+  description:
+    "Derives scenario dimensions from the suite's linked SOP and generates synthetic test cases via LLM. Returns immediately with a task ID (HTTP 202). Poll the task status for progress.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: suiteIdParams,
+    body: {
+      content: { "application/json": { schema: generateTestCasesSchema } },
+    },
+  },
+  responses: {
+    202: {
+      description: "Generation task enqueued",
+      content: {
+        "application/json": { schema: generateTestCasesResponseSchema },
+      },
+    },
+    400: errorResponse("Suite has no linked SOP"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Eval suite not found"),
+  },
+});
+
+router.openapi(generateTestCasesRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId } = c.req.valid("param");
+  const body = c.req.valid("json");
+
+  const result = await enqueueGenerateTestCases(orgId, suiteId, body.count);
+
+  return c.json({ taskId: result.taskId, status: "running" as const }, 202);
+});
+
+// GET /generation-tasks/:taskId — poll generation task status
+const getGenerationTaskStatusRoute = createRoute({
+  method: "get",
+  path: "/generation-tasks/{taskId}",
+  tags: ["Eval Suites"],
+  summary: "Get generation task status",
+  description:
+    "Returns the current status and progress of a test case generation task.",
+  security: [{ bearerAuth: [] }],
+  request: { params: taskIdParams },
+  responses: {
+    200: {
+      description: "Generation task status",
+      content: {
+        "application/json": { schema: generationTaskStatusResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    404: errorResponse("Task not found"),
+  },
+});
+
+router.openapi(getGenerationTaskStatusRoute, async (c) => {
+  const { taskId } = c.req.valid("param");
+  const state = getGenerationStatus(taskId);
+
+  if (!state) {
+    throw Errors.notFound("Generation task not found");
+  }
+
+  const progress = state.progress as
+    | {
+        status: "deriving_dimensions" | "generating" | "completed" | "failed";
+        completed: number;
+        total: number;
+        accepted: number;
+        rejected: number;
+        error?: string;
+        result?: Record<string, unknown>;
+      }
+    | undefined;
+
+  return c.json(
+    {
+      id: state.id,
+      status: state.status,
+      progress,
+      error: state.error,
+    },
+    200,
+  );
 });
 
 // POST /:suiteId/test-cases — create manual test case

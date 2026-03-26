@@ -53,6 +53,37 @@ export const simulateAndRunSchema = z.object({
   promptSource: z.enum(["compiled", "hand_written", "edited"]),
 });
 
+export const generateTestCasesSchema = z.object({
+  count: z.coerce.number().int().min(1).max(100).default(40),
+});
+
+export const generateTestCasesResponseSchema = z.object({
+  taskId: z.string().uuid(),
+  status: z.enum(["running"]),
+});
+
+export const generationTaskStatusResponseSchema = z.object({
+  id: z.string(),
+  status: z.enum(["pending", "running", "completed", "failed"]),
+  progress: z
+    .object({
+      status: z.enum([
+        "deriving_dimensions",
+        "generating",
+        "completed",
+        "failed",
+      ]),
+      completed: z.number(),
+      total: z.number(),
+      accepted: z.number(),
+      rejected: z.number(),
+      error: z.string().optional(),
+      result: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+  error: z.string().optional(),
+});
+
 export const simulateAndRunResponseSchema = z.object({
   suiteRunId: z.string().uuid(),
   status: z.enum(["running"]),

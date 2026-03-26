@@ -982,9 +982,10 @@ export async function createTestCase(
         suiteId,
         name: data.name,
         description: data.description ?? null,
-        source: "manual",
+        source: data.source ?? "manual",
         input: data.input ?? null,
         expectedBehavior: data.expectedBehavior ?? null,
+        mockToolResponses: data.mockToolResponses ?? {},
         order: nextOrder,
       })
       .returning();
