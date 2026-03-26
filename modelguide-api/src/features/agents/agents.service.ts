@@ -161,7 +161,7 @@ export async function createAgent(
       .insert(secrets)
       .values({
         organizationId: orgId,
-        name: "ModelGuide API Key",
+        name: `${data.name} API Key`,
         secretType: "api_key",
         encryptedValue: encryptedKey,
         scope: "agent",
@@ -313,7 +313,7 @@ export async function regenerateApiKey(
     await tx.insert(apiKeys).values({
       organizationId: orgId,
       agentId,
-      name: "Regenerated API Key",
+      name: `${agent.name} API Key`,
       keyHash: keyData.hash,
       keyPrefix: keyData.prefix,
       isActive: true,
@@ -336,7 +336,7 @@ export async function regenerateApiKey(
         .insert(secrets)
         .values({
           organizationId: orgId,
-          name: "ModelGuide API Key",
+          name: `${agent.name} API Key`,
           secretType: "api_key",
           encryptedValue,
           scope: "agent",
