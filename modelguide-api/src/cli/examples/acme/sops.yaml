@@ -1,0 +1,57 @@
+sops:
+  - name: "Order Lookup"
+    slug: "order-lookup"
+    description: "Guide the agent through looking up a customer order"
+    status: active
+    agents:
+      - "acme-voice-agent"
+      - "acme-chat-assistant"
+    trigger:
+      type: intent
+      config:
+        intent: order_status
+    steps:
+      - id: greet
+        instruction: "Greet the customer and ask for their order number or email address"
+        required: true
+      - id: lookup
+        instruction: "Look up the order using the provided identifier"
+        required: true
+        tool:
+          connectorSlug: "acme_store"
+          toolSlug: "get_order"
+      - id: summarize
+        instruction: "Summarize the order status, including estimated delivery date if available"
+        required: true
+      - id: follow-up
+        instruction: "Ask if there's anything else you can help with"
+        required: false
+  - name: "Return Request"
+    slug: "return-request"
+    description: "Handle a product return request"
+    status: active
+    agents:
+      - "acme-voice-agent"
+    trigger:
+      type: intent
+      config:
+        intent: return_request
+    steps:
+      - id: identify
+        instruction: "Ask the customer for their order number and the item they want to return"
+        required: true
+      - id: verify
+        instruction: "Look up the order to verify it exists and is eligible for return"
+        required: true
+        tool:
+          connectorSlug: "acme_store"
+          toolSlug: "get_order"
+      - id: create-ticket
+        instruction: "Create a support ticket for the return request with order details"
+        required: true
+        tool:
+          connectorSlug: "acme_support"
+          toolSlug: "create_ticket"
+      - id: confirm
+        instruction: "Confirm the return has been initiated and provide the ticket number"
+        required: true

@@ -1,0 +1,41 @@
+sessions:
+  - agentSlug: "acme-voice-agent"
+    externalId: "acme-demo-session-voice-001"
+    channel: voice
+    status: completed
+    userIdentifier: "sarah@example.com"
+    hoursAgo: 2
+    messages:
+      - role: user
+        content: "Hi, I want to check on my order ORD-1234."
+      - role: assistant
+        content: "Hello Sarah! Let me look that up for you right away."
+      - role: assistant
+        content: "I found your order ORD-1234. It was shipped yesterday and should arrive by Thursday."
+      - role: user
+        content: "Great, thank you!"
+      - role: assistant
+        content: "You're welcome! Is there anything else I can help with?"
+    feedback:
+      verdict: good
+      comment: "Very helpful and quick response"
+      source: customer
+  - agentSlug: "acme-chat-assistant"
+    externalId: "acme-demo-session-chat-001"
+    channel: web
+    status: completed
+    userIdentifier: "john@example.com"
+    hoursAgo: 5
+    messages:
+      - role: user
+        content: "What products do you have for dry skin?"
+      - role: assistant
+        content: "We have several great options for dry skin! Let me show you our top picks."
+      - role: user
+        content: "Do you have anything with hyaluronic acid?"
+      - role: assistant
+        content: "Yes! Our Hydra-Boost Serum contains hyaluronic acid and is one of our bestsellers."
+    feedback:
+      verdict: good
+      comment: "Good recommendations"
+      source: customer

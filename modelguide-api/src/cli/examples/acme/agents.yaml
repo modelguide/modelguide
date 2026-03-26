@@ -1,0 +1,19 @@
+agents:
+  - name: "Acme Voice Agent"
+    slug: "acme-voice-agent"
+    description: "Handles phone orders and support"
+    modality: voice
+    platform: custom
+    tools:
+      - connectorSlug: "acme_store"
+      - connectorSlug: "acme_support"
+        toolSlugs:
+          - create_ticket
+          - search_tickets
+  - name: "Acme Chat Assistant"
+    slug: "acme-chat-assistant"
+    description: "Web chat support"
+    modality: text
+    platform: custom
+    tools:
+      - connectorSlug: "acme_store"

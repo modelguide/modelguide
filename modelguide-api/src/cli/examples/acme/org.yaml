@@ -1,0 +1,7 @@
+name: "Acme Corp"
+slug: "acme"
+timezone: "America/Chicago"
+features:
+  - voice-agents
+  - chat-agents
+demoEnabled: false

@@ -1,0 +1,7 @@
+users:
+  - email: admin@acme.example.com
+    name: "Alice Admin"
+    role: admin
+  - email: support@acme.example.com
+    name: "Bob Support"
+    role: support

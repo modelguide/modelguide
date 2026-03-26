@@ -244,6 +244,11 @@ No proprietary components. Every layer is inspectable, replaceable, forkable.
 modelguide/
 ├── modelguide-api/              # Hono API + MCP server
 │   └── src/
+│       ├── cli/                 # mg CLI — org provisioning tool
+│       │   ├── commands/        # One file per command
+│       │   ├── examples/acme/   # Sample YAML configs
+│       │   ├── lib/             # IdRegistry, YAML loader, logger
+│       │   └── schemas/         # Zod validation for YAML files
 │       ├── features/
 │       │   ├── agents/          # Agent CRUD, tool assignment
 │       │   ├── connectors/      # Connector config + catalog/
@@ -252,7 +257,7 @@ modelguide/
 │       │   │       ├── registry.ts
 │       │   │       └── sync.ts
 │       │   ├── mcp/             # MCP handler, core tools, schema conversion
-│       │   ├── sops/             # SOP templates, definitions, agent assignment
+│       │   ├── sops/            # SOP templates, definitions, agent assignment
 │       │   ├── sessions/        # Session lifecycle, messages, feedback
 │       │   ├── secrets/         # Encrypted credential storage
 │       │   └── users/           # Auth, RBAC, user management
@@ -379,12 +384,60 @@ Config-as-code via `railway.toml` in each service. Full setup guide: [`railway/D
 
 Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (migrations) automatically on every deploy via `preDeployCommand` in `railway.toml`.
 
+## CLI — Customer Onboarding
+
+The `mg` CLI provisions new organizations from YAML configs. Create a directory anywhere with your YAML files and run one command to set up an org with users, connectors, agents, SOPs, guardrails, and demo sessions.
+
+```bash
+cd modelguide-api
+
+# Full setup from a YAML directory (path can be absolute or relative)
+bun run src/cli/mg.ts setup /path/to/my-org/
+
+# Dry-run — validate all YAML and print plan without touching the DB
+bun run src/cli/mg.ts setup /path/to/my-org/ --dry-run
+
+# Skip interactive secret prompts (uses placeholders — useful for testing/CI)
+bun run src/cli/mg.ts setup /path/to/my-org/ --skip-secrets
+```
+
+**Running against Railway** (from your local machine):
+
+```bash
+cd modelguide-api
+
+railway run --service api -- sh -c \
+  'DATABASE_URL=postgresql://modelguide_app:$APP_DB_PASSWORD@$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/$PGDATABASE \
+   bun run src/cli/mg.ts setup /path/to/my-org/ --skip-secrets'
+```
+
+This uses `railway run` to inject all env vars (secrets, encryption keys, etc.) and overrides `DATABASE_URL` with the public TCP proxy since the private hostname isn't reachable locally. Requires the TCP proxy vars from [DEPLOY.md step 6](railway/DEPLOY.md).
+
+The setup directory needs only `org.yaml` (required). All other files are optional: `users.yaml`, `secrets.yaml`, `connectors.yaml`, `agents.yaml`, `sops.yaml`, `guardrails.yaml`, `sessions.yaml`. Additional flags: `--skip-compile` (skip agent compilation), `--skip-sessions` (skip session import).
+
+**Individual commands** for incremental setup:
+
+```bash
+bun run src/cli/mg.ts create-org --from /path/to/org.yaml
+bun run src/cli/mg.ts add-users --org acme --from /path/to/users.yaml
+bun run src/cli/mg.ts add-secrets --org acme --from /path/to/secrets.yaml
+bun run src/cli/mg.ts add-connectors --org acme --from /path/to/connectors.yaml
+bun run src/cli/mg.ts add-agents --org acme --from /path/to/agents.yaml
+bun run src/cli/mg.ts import-sops --org acme /path/to/sops.yaml
+bun run src/cli/mg.ts import-guardrails --org acme /path/to/guardrails.yaml
+bun run src/cli/mg.ts compile-agents --org acme
+bun run src/cli/mg.ts import-sessions --org acme /path/to/sessions.yaml
+```
+
+All provisioning commands are idempotent and safe to re-run — orgs upsert on slug, duplicate entities are skipped, and session imports dedupe on `externalId` (explicit or derived from a deterministic payload hash). Standalone `add-secrets` is append-only (use `--skip-secrets` on re-runs). See `src/cli/examples/acme/` for sample YAML files and [ADR-010](docs/decisions/010-cli-onboarding-tool.md) for design decisions.
+
 ## Documentation
 
 | Resource | Description |
 |----------|-------------|
 | [MCP Integration Guide](docs/guide/mcp-integration.md) | Connect your AI agent via MCP |
 | [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools |
+| [CLI Examples](modelguide-api/src/cli/examples/acme/) | Sample YAML configs for org provisioning |
 | [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
 | [Deployment Guide](railway/DEPLOY.md) | Railway production deployment |
 | [Contributing](CONTRIBUTING.md) | Setup, workflow, conventions |

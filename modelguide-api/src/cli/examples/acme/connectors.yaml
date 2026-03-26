@@ -1,0 +1,21 @@
+connectors:
+  - name: "Acme Store"
+    slug: "acme_store"
+    catalogSlug: "medusa"
+    config:
+      baseUrl: "https://api.acme.example.com"
+      publishableKey: "pk_acme_example"
+    secrets:
+      - field: "secretApiKey"
+        name: "Acme Store API Key"
+        type: api_key
+  - name: "Acme Support"
+    slug: "acme_support"
+    catalogSlug: "zendesk"
+    config:
+      subdomain: "acme"
+      email: "support@acme.example.com"
+    secrets:
+      - field: "apiToken"
+        name: "Acme Zendesk Token"
+        type: api_key

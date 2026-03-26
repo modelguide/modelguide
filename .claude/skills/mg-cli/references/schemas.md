@@ -1,0 +1,244 @@
+# YAML Schema Reference
+
+Complete field-by-field specification for every CLI YAML file. Source of truth: `modelguide-api/src/cli/schemas/*.schema.ts`.
+
+## Table of Contents
+
+- [org.yaml](#orgyaml)
+- [users.yaml](#usersyaml)
+- [secrets.yaml](#secretsyaml)
+- [connectors.yaml](#connectorsyaml)
+- [agents.yaml](#agentsyaml)
+- [sops.yaml](#sopsyaml)
+- [guardrails.yaml](#guardrailsyaml)
+- [sessions.yaml](#sessionsyaml)
+
+---
+
+## org.yaml
+
+Top-level object (not wrapped in a key).
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `name` | string | yes | — | min 1 char |
+| `slug` | string | yes | — | regex `/^[a-z0-9-]+$/` (lowercase, digits, hyphens) |
+| `timezone` | string | no | — | IANA timezone (e.g., `America/Chicago`) |
+| `features` | string[] | no | — | e.g., `["voice-agents", "chat-agents"]` |
+| `demoEnabled` | boolean | no | `false` | enables demo mode for the org |
+
+**Behavior:** Upsert on `slug` — if org exists, name/settings/demo flag are updated. A warning is logged on update.
+
+---
+
+## users.yaml
+
+Wrapper key: `users` (array, min 1 item).
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `email` | string | yes | — | valid email format |
+| `name` | string | yes | — | min 1 char |
+| `role` | enum | yes | — | `"admin"` \| `"support"` |
+
+**Behavior:** Duplicates detected by email (catches PostgreSQL unique constraint error). Existing users are counted and their IDs registered for downstream use.
+
+---
+
+## secrets.yaml
+
+Wrapper key: `secrets` (array, min 1 item).
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `name` | string | yes | — | min 1 char, unique within org |
+| `value` | string | no | — | if omitted: prompted interactively, or placeholder with `--skip-secrets` |
+| `type` | enum | yes | — | `"api_key"` \| `"oauth_token"` \| `"credentials"` \| `"platform_api_key"` \| `"webhook_secret"` |
+| `scope` | enum | no | — | `"connector"` \| `"agent"` |
+
+**Behavior:** Secrets are append-only (no stable dedup key). Use `--skip-secrets` on re-runs to avoid creating duplicates. Placeholder format: `placeholder_<name_snake_cased>`.
+
+---
+
+## connectors.yaml
+
+Wrapper key: `connectors` (array, min 1 item).
+
+### Connector item
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `name` | string | yes | — | min 1 char |
+| `slug` | string | yes | — | regex `/^[a-z0-9_]+$/` (lowercase, digits, underscores) |
+| `catalogSlug` | string | yes | — | must match an entry in the connector catalog (see `references/catalog.md`) |
+| `config` | object | no | `{}` | arbitrary key-value pairs (e.g., `baseUrl`, `subdomain`) |
+| `secrets` | array | no | `[]` | connector-scoped secrets (see below) |
+
+### Connector secret
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `field` | string | yes | — | field name in the connector's config that references this secret |
+| `name` | string | yes | — | human-readable secret name |
+| `type` | enum | yes | — | same enum as standalone secrets |
+| `value` | string | no | — | if omitted: prompted or placeholder |
+
+**Behavior:** Checks if connector slug already exists before creating secrets (avoids orphaned secrets). Each connector secret becomes a separate secret entity; the `field → secretId` mapping is passed to `createConnector`.
+
+**Note on slug format:** Connector slugs use underscores (`acme_store`), not hyphens. This is because connector slugs become part of tool names (`acme_store_get_order`).
+
+---
+
+## agents.yaml
+
+Wrapper key: `agents` (array, min 1 item).
+
+### Agent item
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `name` | string | yes | — | min 1 char |
+| `slug` | string | no | — | auto-generated from name if omitted |
+| `description` | string | no | — | |
+| `modality` | enum | no | `"voice"` | `"voice"` \| `"text"` |
+| `platform` | enum | no | `"custom"` | `"custom"` \| `"elevenlabs"` |
+| `active` | boolean | no | `false` | whether to activate the agent immediately after creation |
+| `tools` | array | no | `[]` | tool assignments (see below) |
+
+### Tool link
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `connectorSlug` | string | yes | — | must match a connector created earlier in the pipeline |
+| `toolSlugs` | string[] | no | — | if omitted, **all tools** from the connector are assigned |
+
+**Behavior:** Auto-generates an API key on creation (printed once in a table). Duplicates detected by slug. On re-run, existing agents are found and their IDs registered but tool assignments are NOT re-applied.
+
+**Important:** Agents require a `createdBy` user ID. In `mg setup`, this is automatically resolved from the first user in the registry. When running standalone, the first user in the org is used.
+
+---
+
+## sops.yaml
+
+Wrapper key: `sops` (array, min 1 item).
+
+Two mutually exclusive modes: **template fork** or **inline**. Cannot specify both `templateSlug` and `steps`.
+
+### Common fields
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `name` | string | yes | — | min 1 char |
+| `slug` | string | no | — | auto-generated if omitted |
+| `description` | string | no | — | |
+| `status` | enum | no | `"draft"` | `"draft"` \| `"active"` \| `"archived"` |
+| `agents` | string[] | no | `[]` | agent slugs to assign (must exist) |
+
+### Template fork fields
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `templateSlug` | string | yes (for fork) | — | must match a global SOP template (see `references/catalog.md`) |
+| `connectorMapping` | object | no | — | maps catalog slugs in the template to your org's connector slugs |
+
+**`connectorMapping` example:** If the template references tools from catalog `medusa`, and your org's Medusa connector slug is `acme_store`:
+```yaml
+connectorMapping:
+  medusa: "acme_store"
+```
+
+### Inline fields
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `trigger` | object | no | `{type: "manual", config: {}}` | see trigger types below |
+| `metadata` | object | no | `{}` | arbitrary key-value pairs |
+| `steps` | array | yes (for inline) | — | at least one step |
+
+### Trigger object
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | string | yes | any string, e.g., `"manual"`, `"intent"`, `"channel"`, `"tool_present"` |
+| `config` | object | no (default `{}`) | type-specific configuration |
+
+### Step object
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `id` | string | yes | — | unique within the SOP |
+| `instruction` | string | yes | — | what the agent should do |
+| `required` | boolean | no | `true` | whether the step is mandatory |
+| `tool` | object | no | — | tool reference (see below) |
+
+### Step tool reference
+
+| Field | Type | Required |
+|-------|------|----------|
+| `connectorSlug` | string | yes | the org's connector slug |
+| `toolSlug` | string | yes | the tool within that connector |
+
+**Behavior:** If `status: active`, the SOP is activated after creation. Agent assignment happens during creation (passed to `forkFromTemplate` or `createSop`).
+
+---
+
+## guardrails.yaml
+
+Wrapper key: `guardrails` (array, min 1 item).
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `name` | string | yes | — | min 1 char |
+| `slug` | string | no | — | auto-generated if omitted |
+| `content` | string | yes | — | the guardrail rule text (supports multiline) |
+| `description` | string | no | — | |
+| `config` | object | no | `{}` | arbitrary (e.g., `priority`, `category`) |
+| `agents` | string[] | no | `[]` | agent slugs to assign |
+
+**Behavior:** Creates a knowledge base entry with type `"guardrail"`. Duplicates detected by slug.
+
+---
+
+## sessions.yaml
+
+Wrapper key: `sessions` (array, min 1 item).
+
+### Session item
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `agentSlug` | string | yes | — | must match an existing agent |
+| `externalId` | string | no | — | max 255 chars. If omitted, derived deterministically from payload (SHA-256 hash, prefix `mg-import:`) |
+| `channel` | enum | yes | — | `"voice"` \| `"web"` \| `"api"` \| `"slack"` \| `"widget"` \| `"sms"` \| `"whatsapp"` \| `"email"` |
+| `status` | enum | no | `"completed"` | `"active"` \| `"completed"` \| `"abandoned"` |
+| `userIdentifier` | string | yes | — | min 1 char (e.g., email, phone) |
+| `hoursAgo` | number | no | `1` | how far back to timestamp the session |
+| `messages` | array | yes | — | at least one message |
+| `feedback` | object | no | — | see below |
+| `links` | array | no | `[]` | see below |
+
+### Message
+
+| Field | Type | Required |
+|-------|------|----------|
+| `role` | enum | yes | `"user"` \| `"assistant"` \| `"system"` \| `"tool"` |
+| `content` | string | yes | min 1 char |
+
+### Feedback
+
+| Field | Type | Required | Default |
+|-------|------|----------|---------|
+| `verdict` | enum | yes | — | `"good"` \| `"bad"` |
+| `comment` | string | no | — | |
+| `source` | enum | no | `"customer"` | `"customer"` \| `"support"` \| `"system"` |
+
+### Link
+
+| Field | Type | Required |
+|-------|------|----------|
+| `url` | string | yes | valid URL |
+| `title` | string | no | |
+| `connectorSlug` | string | no | |
+| `resourceType` | string | no | e.g., `"order"`, `"ticket"` |
+
+**Behavior:** Sessions are created in `"simulation"` mode. Messages are timestamped with 15-second intervals starting from `Date.now() - hoursAgo * 3600000`. Deduplication is by `(agentId, externalId)` pair — providing explicit `externalId` values is recommended for predictable idempotency.
