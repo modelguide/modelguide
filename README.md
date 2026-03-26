@@ -398,6 +398,18 @@ bun run src/cli/mg.ts setup /path/to/my-org/ --dry-run
 bun run src/cli/mg.ts setup /path/to/my-org/ --skip-secrets
 ```
 
+**Running against Railway** (from your local machine):
+
+```bash
+cd modelguide-api
+
+railway run --service api -- sh -c \
+  'DATABASE_URL=postgresql://modelguide_app:$APP_DB_PASSWORD@$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/$PGDATABASE \
+   bun run src/cli/mg.ts setup /path/to/my-org/ --skip-secrets'
+```
+
+This uses `railway run` to inject all env vars (secrets, encryption keys, etc.) and overrides `DATABASE_URL` with the public TCP proxy since the private hostname isn't reachable locally. Requires the TCP proxy vars from [DEPLOY.md step 6](railway/DEPLOY.md).
+
 The setup directory needs only `org.yaml` (required). All other files are optional: `users.yaml`, `secrets.yaml`, `connectors.yaml`, `agents.yaml`, `sops.yaml`, `guardrails.yaml`, `sessions.yaml`. Additional flags: `--skip-compile` (skip agent compilation), `--skip-sessions` (skip session import).
 
 **Individual commands** for incremental setup:

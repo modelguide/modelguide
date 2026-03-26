@@ -59,7 +59,7 @@ async function resolveConnectors(
 export interface AddAgentsResult {
   created: number;
   existing: number;
-  apiKeys: { name: string; key: string }[];
+  apiKeys: { name: string; id: string; key: string }[];
 }
 
 export async function handleAddAgents(
@@ -70,7 +70,7 @@ export async function handleAddAgents(
   const connectorMap = await resolveConnectors(orgId, options?.registry);
   let created = 0;
   let existing = 0;
-  const apiKeys: { name: string; key: string }[] = [];
+  const apiKeys: { name: string; id: string; key: string }[] = [];
 
   // We need a user ID for createdBy. Use provided or look up first admin.
   const createdBy =
@@ -96,7 +96,7 @@ export async function handleAddAgents(
         options.registry.set("agent", result.agent.slug, agentId);
       }
 
-      apiKeys.push({ name: item.name, key: result.apiKey });
+      apiKeys.push({ name: item.name, id: agentId, key: result.apiKey });
 
       // Assign connector tools
       for (const toolLink of item.tools) {
@@ -158,10 +158,10 @@ export async function handleAddAgents(
   // Print API keys table
   if (apiKeys.length > 0) {
     const tbl = table(
-      ["Agent", "API Key"],
-      apiKeys.map((k) => [k.name, k.key]),
+      ["Agent", "ID", "API Key"],
+      apiKeys.map((k) => [k.name, k.id, k.key]),
     );
-    log.info(`API Keys (shown once):\n${tbl}`);
+    log.info(`Agents (API keys shown once):\n${tbl}`);
   }
 
   return { created, existing, apiKeys };

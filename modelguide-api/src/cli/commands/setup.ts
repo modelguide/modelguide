@@ -265,10 +265,10 @@ export async function handleSetup(
 
   if (agentResult && agentResult.apiKeys.length > 0) {
     const tbl = table(
-      ["Agent", "API Key"],
-      agentResult.apiKeys.map((k) => [k.name, k.key]),
+      ["Agent", "ID", "API Key"],
+      agentResult.apiKeys.map((k) => [k.name, k.id, k.key]),
     );
-    log.info(`API Keys (shown once):\n${tbl}`);
+    log.info(`Agents (API keys shown once):\n${tbl}`);
   }
 
   outro("Setup complete");
