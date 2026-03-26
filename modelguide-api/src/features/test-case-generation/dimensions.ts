@@ -1,0 +1,296 @@
+/**
+ * Dimension derivation and tuple selection for test case generation.
+ *
+ * - deriveDimensionsFromSop() — LLM-derived dimensions via Sonnet generateObject()
+ * - selectTuples() — deterministic stratified sampling (no LLM)
+ * - toneToPersonaId() — maps tones to existing persona IDs
+ */
+
+import { env } from "@/env";
+import { anthropic } from "@ai-sdk/anthropic";
+import type { SopStep } from "@features/sops/sops.types";
+import { generateObject } from "ai";
+import { z } from "zod";
+import type {
+  DimensionConfig,
+  DimensionTuple,
+  TokenUsage,
+  ToolStateVariant,
+} from "./types";
+
+// ============================================================================
+// Zod schema for LLM-derived dimensions
+// ============================================================================
+
+const dimensionConfigSchema = z.object({
+  intents: z
+    .array(z.string())
+    .min(3)
+    .max(6)
+    .describe("Customer intents relevant to this SOP (3-6 items)"),
+  edgeCases: z
+    .array(z.string())
+    .min(5)
+    .max(8)
+    .describe(
+      'Edge cases including "straightforward" as the first item (5-8 items)',
+    ),
+  toolStates: z
+    .record(
+      z.string(),
+      z
+        .array(z.record(z.string(), z.unknown()))
+        .min(3)
+        .max(4)
+        .describe(
+          "3-4 response variants per tool, including one error state with { error: true, message: string }",
+        ),
+    )
+    .describe(
+      "Mock tool response variants keyed by tool slug. Empty object if SOP has no tool steps.",
+    ),
+});
+
+// ============================================================================
+// Fixed dimensions (not LLM-derived)
+// ============================================================================
+
+const FIXED_TONES = ["polite", "frustrated", "confused", "hostile", "terse"];
+const FIXED_COMPLEXITY = ["single_step", "multi_step", "requires_escalation"];
+
+// ============================================================================
+// Persona mapping (AC 15)
+// ============================================================================
+
+const TONE_PERSONA_MAP: Record<string, string> = {
+  frustrated: "impatient-returner",
+  hostile: "impatient-returner",
+  confused: "confused-browser",
+  polite: "polite-buyer",
+  terse: "polite-buyer",
+};
+
+/** Map a dimension tone to an existing persona ID (AC 15, AC 24). */
+export function toneToPersonaId(tone: string): string {
+  return TONE_PERSONA_MAP[tone] ?? "polite-buyer";
+}
+
+// ============================================================================
+// deriveDimensionsFromSop (AC 1, AC 2, AC 3)
+// ============================================================================
+
+/** Extract tool slugs from SOP steps that reference connector tools. */
+function extractToolSlugs(steps: SopStep[]): string[] {
+  const slugs: string[] = [];
+  for (const step of steps) {
+    if (step.tool?.resolvedName) {
+      slugs.push(step.tool.resolvedName);
+    }
+  }
+  return [...new Set(slugs)];
+}
+
+/**
+ * Derive scenario dimensions from a SOP using Sonnet generateObject().
+ *
+ * Returns intents, fixed tones/complexity, LLM-derived edge cases,
+ * and tool-state variants per tool slug.
+ */
+export async function deriveDimensionsFromSop(
+  sopName: string,
+  sopDescription: string | null,
+  steps: SopStep[],
+): Promise<{ dimensions: DimensionConfig; usage: TokenUsage }> {
+  const toolSlugs = extractToolSlugs(steps);
+
+  const stepsDescription = steps
+    .map((s, i) => {
+      const toolInfo = s.tool?.resolvedName
+        ? ` [tool: ${s.tool.resolvedName}]`
+        : "";
+      return `${i + 1}. ${s.instruction}${toolInfo}${s.required ? " (required)" : " (optional)"}`;
+    })
+    .join("\n");
+
+  const toolSlugsInfo =
+    toolSlugs.length > 0
+      ? `\nTool slugs in this SOP: ${toolSlugs.join(", ")}\nGenerate 3-4 mock response variants per tool (including one error state with { "error": true, "message": "..." }).`
+      : "\nThis SOP has no tool-referencing steps. Return an empty object for toolStates.";
+
+  const prompt = `Analyze this Standard Operating Procedure (SOP) and derive test scenario dimensions.
+
+SOP Name: ${sopName}
+${sopDescription ? `Description: ${sopDescription}` : ""}
+
+Steps:
+${stepsDescription}
+${toolSlugsInfo}
+
+Generate:
+1. "intents" — 3-6 customer intents that would trigger this SOP (e.g., "order_status", "delivery_delay")
+2. "edgeCases" — 5-8 edge cases starting with "straightforward", then increasingly challenging scenarios (e.g., "ambiguous_intent", "missing_order_number", "contradictory_request")
+3. "toolStates" — for each tool slug, generate 3-4 realistic mock response objects representing different outcomes (success variants + one error)
+
+Make intents specific to this SOP's domain. Make edge cases relevant to the SOP's workflow.
+Tool state keys must match the exact tool slugs listed above.`;
+
+  const { object, usage } = await generateObject({
+    model: anthropic(env.GENERATION_DIMENSION_MODEL),
+    schema: dimensionConfigSchema,
+    prompt,
+  });
+
+  // Merge LLM-derived fields with fixed dimensions
+  const dimensions: DimensionConfig = {
+    intents: object.intents,
+    tones: FIXED_TONES,
+    complexity: FIXED_COMPLEXITY,
+    edgeCases: object.edgeCases,
+    toolStates: toolSlugs.length > 0 ? object.toolStates : {},
+  };
+
+  return {
+    dimensions,
+    usage: {
+      input: usage.inputTokens ?? 0,
+      output: usage.outputTokens ?? 0,
+    },
+  };
+}
+
+// ============================================================================
+// selectTuples (AC 4, AC 5, AC 6)
+// ============================================================================
+
+interface SelectTuplesOpts {
+  count: number;
+}
+
+/** Create a deterministic hash key for deduplication. */
+function tupleKey(t: DimensionTuple): string {
+  return `${t.intent}|${t.tone}|${t.complexity}|${t.edgeCase}|${JSON.stringify(t.toolState)}`;
+}
+
+/** Pick a random element from an array. */
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Build a toolState record by picking one variant per tool slug. */
+function pickToolState(
+  toolStates: Record<string, ToolStateVariant[]>,
+  specificSlug?: string,
+  specificIdx?: number,
+): Record<string, ToolStateVariant> {
+  const result: Record<string, ToolStateVariant> = {};
+  for (const [slug, variants] of Object.entries(toolStates)) {
+    if (slug === specificSlug && specificIdx !== undefined) {
+      result[slug] = variants[specificIdx % variants.length];
+    } else {
+      result[slug] = pick(variants);
+    }
+  }
+  return result;
+}
+
+/**
+ * Select deduplicated dimension tuples using stratified sampling.
+ *
+ * Strategy (AC 5):
+ * 1. Happy path: intent x tool state (systematic coverage)
+ * 2. Edge case: edge case x intent (each edge paired with each intent)
+ * 3. Stress: hard tone + high complexity + edge case
+ *
+ * No LLM calls — pure deterministic code (AC 6).
+ */
+export function selectTuples(
+  dims: DimensionConfig,
+  opts: SelectTuplesOpts,
+): DimensionTuple[] {
+  const seen = new Set<string>();
+  const tuples: DimensionTuple[] = [];
+
+  function addIfNew(t: DimensionTuple): boolean {
+    const key = tupleKey(t);
+    if (seen.has(key)) return false;
+    if (tuples.length >= opts.count) return false;
+    seen.add(key);
+    tuples.push(t);
+    return true;
+  }
+
+  const toolSlugs = Object.keys(dims.toolStates);
+
+  // --- Layer 1: Happy path coverage (intent x tool state) ---
+  for (const intent of dims.intents) {
+    if (toolSlugs.length > 0) {
+      for (const slug of toolSlugs) {
+        const variants = dims.toolStates[slug];
+        for (let vi = 0; vi < variants.length; vi++) {
+          addIfNew({
+            intent,
+            tone: pick(["polite", "terse"]),
+            complexity: pick(["single_step", "multi_step"]),
+            edgeCase: "straightforward",
+            toolState: pickToolState(dims.toolStates, slug, vi),
+          });
+        }
+      }
+    } else {
+      // No tools — still generate happy path tuples
+      addIfNew({
+        intent,
+        tone: pick(["polite", "terse"]),
+        complexity: pick(["single_step", "multi_step"]),
+        edgeCase: "straightforward",
+        toolState: {},
+      });
+    }
+  }
+
+  // --- Layer 2: Edge case coverage (edge case x intent) ---
+  const nonStraightforward = dims.edgeCases.filter(
+    (e) => e !== "straightforward",
+  );
+  for (const edgeCase of nonStraightforward) {
+    for (const intent of dims.intents) {
+      addIfNew({
+        intent,
+        tone: pick(dims.tones),
+        complexity: pick(dims.complexity),
+        edgeCase,
+        toolState: pickToolState(dims.toolStates),
+      });
+    }
+  }
+
+  // --- Layer 3: Stress combinations (hard tone + high complexity + edge) ---
+  const hardTones = ["frustrated", "hostile"];
+  for (const tone of hardTones) {
+    for (const edgeCase of nonStraightforward) {
+      addIfNew({
+        intent: pick(dims.intents),
+        tone,
+        complexity: "requires_escalation",
+        edgeCase,
+        toolState: pickToolState(dims.toolStates),
+      });
+    }
+  }
+
+  // --- Fill remaining with random combinations ---
+  let attempts = 0;
+  const maxAttempts = opts.count * 3;
+  while (tuples.length < opts.count && attempts < maxAttempts) {
+    attempts++;
+    addIfNew({
+      intent: pick(dims.intents),
+      tone: pick(dims.tones),
+      complexity: pick(dims.complexity),
+      edgeCase: pick(dims.edgeCases),
+      toolState: pickToolState(dims.toolStates),
+    });
+  }
+
+  return tuples;
+}
