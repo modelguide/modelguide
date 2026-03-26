@@ -252,7 +252,7 @@ describe("sessionItemSchema", () => {
       channel: "web",
       userIdentifier: "user",
       messages: [{ role: "user", content: "Hi" }],
-      feedback: { rating: 5, comment: "Great" },
+      feedback: { verdict: "good", comment: "Great" },
     });
     expect(result.success).toBe(true);
   });
@@ -277,13 +277,13 @@ describe("sessionItemSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  test("rejects invalid feedback rating", () => {
+  test("rejects invalid feedback verdict", () => {
     const result = sessionItemSchema.safeParse({
       agentSlug: "agent",
       channel: "voice",
       userIdentifier: "user",
       messages: [{ role: "user", content: "Hi" }],
-      feedback: { rating: 10 },
+      feedback: { verdict: "amazing" },
     });
     expect(result.success).toBe(false);
   });

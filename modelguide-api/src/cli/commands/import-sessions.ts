@@ -127,7 +127,7 @@ export async function handleImportSessions(
     // Add feedback
     if (item.feedback) {
       await addFeedback(orgId, session.id, {
-        rating: item.feedback.rating,
+        rating: item.feedback.verdict === "good" ? 2 : 1,
         comment: item.feedback.comment,
         feedbackSource: item.feedback.source,
       });

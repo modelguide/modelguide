@@ -17,7 +17,7 @@ sessions:
       - role: assistant
         content: "You're welcome! Is there anything else I can help with?"
     feedback:
-      rating: 5
+      verdict: good
       comment: "Very helpful and quick response"
       source: customer
   - agentSlug: "acme-chat-assistant"
@@ -36,6 +36,6 @@ sessions:
       - role: assistant
         content: "Yes! Our Hydra-Boost Serum contains hyaluronic acid and is one of our bestsellers."
     feedback:
-      rating: 4
+      verdict: good
       comment: "Good recommendations"
       source: customer

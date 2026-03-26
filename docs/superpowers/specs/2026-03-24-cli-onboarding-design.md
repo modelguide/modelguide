@@ -282,7 +282,7 @@ sessions:
       - role: assistant
         content: "Hello Sarah! Let me look that up..."
     feedback:
-      rating: 2
+      verdict: good
       comment: "Very helpful!"
       source: customer
 ```

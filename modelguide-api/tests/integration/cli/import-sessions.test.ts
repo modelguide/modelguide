@@ -171,7 +171,7 @@ describe("import-sessions", () => {
             { role: "assistant", content: "Sure, go ahead!" },
           ],
           feedback: {
-            rating: 5,
+            verdict: "good",
             comment: "Great service!",
             source: "customer",
           },
@@ -198,7 +198,7 @@ describe("import-sessions", () => {
         .where(eq(sessionFeedback.sessionId, orgSessions[1].id));
     });
     expect(feedbackRows.length).toBe(1);
-    expect(feedbackRows[0].rating).toBe(5);
+    expect(feedbackRows[0].rating).toBe(2);
   });
 
   test("standalone agent lookup without registry", async () => {

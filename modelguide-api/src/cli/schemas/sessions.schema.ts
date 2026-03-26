@@ -23,7 +23,7 @@ const sessionMessageSchema = z.object({
 });
 
 const sessionFeedbackSchema = z.object({
-  rating: z.number().int().min(1).max(5),
+  verdict: z.enum(["good", "bad"]),
   comment: z.string().optional(),
   source: z.enum(feedbackSources).default("customer"),
 });
