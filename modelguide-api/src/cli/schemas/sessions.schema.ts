@@ -37,6 +37,9 @@ const sessionLinkSchema = z.object({
 
 export const sessionItemSchema = z.object({
   agentSlug: z.string().min(1),
+  // Explicit idempotency key for repeatable imports. Optional because the CLI
+  // can derive a deterministic fallback from the rest of the payload.
+  externalId: z.string().max(255).optional(),
   channel: z.enum(channelTypes),
   status: z.enum(sessionStatuses).default("completed"),
   userIdentifier: z.string().min(1),

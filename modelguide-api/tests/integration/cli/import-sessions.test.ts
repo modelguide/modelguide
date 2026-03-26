@@ -10,6 +10,7 @@ import {
   apiKeys,
   organizations,
   sessionFeedback,
+  sessionLinks,
   sessionMessages,
   sessions,
   users,
@@ -112,7 +113,14 @@ describe("import-sessions", () => {
             },
             { role: "user", content: "ORD-12345" },
           ],
-          links: [],
+          links: [
+            {
+              url: "https://example.com/orders/ORD-12345",
+              title: "Order ORD-12345",
+              connectorSlug: "store",
+              resourceType: "order",
+            },
+          ],
         },
       ],
       { registry },
@@ -136,6 +144,15 @@ describe("import-sessions", () => {
         .where(eq(sessionMessages.sessionId, orgSessions[0].id));
     });
     expect(msgs.length).toBe(3);
+
+    const links = await forApp(async (tx) => {
+      return tx
+        .select()
+        .from(sessionLinks)
+        .where(eq(sessionLinks.sessionId, orgSessions[0].id));
+    });
+    expect(links.length).toBe(1);
+    expect(links[0].url).toBe("https://example.com/orders/ORD-12345");
   });
 
   test("creates session with feedback", async () => {
@@ -200,6 +217,25 @@ describe("import-sessions", () => {
     ]);
 
     expect(result.created).toBe(1);
+  });
+
+  test("re-importing the same session is idempotent", async () => {
+    const item = {
+      agentSlug: "session-test-agent",
+      externalId: "demo-session-001",
+      channel: "web" as const,
+      status: "completed" as const,
+      userIdentifier: "user-duplicate-check",
+      hoursAgo: 1,
+      messages: [{ role: "user" as const, content: "Hello again" }],
+      links: [],
+    };
+
+    const first = await handleImportSessions(orgId, [item], { registry });
+    const second = await handleImportSessions(orgId, [item], { registry });
+
+    expect(first.created).toBe(1);
+    expect(second.created).toBe(0);
   });
 
   test("skips session for unknown agent", async () => {

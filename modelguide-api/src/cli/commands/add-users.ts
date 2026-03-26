@@ -3,14 +3,16 @@
  * Delegates to users.service.createUser.
  */
 
+import { forOrg } from "@db/rls";
+import { users as usersTable } from "@db/schema";
 import { createUser } from "@features/users/users.service";
 import type { Command } from "commander";
+import { eq } from "drizzle-orm";
 import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
-import { parseKvArgs } from "../lib/parse-kv";
+import { resolveInput } from "../lib/resolve-input";
 import { resolveOrgId } from "../lib/resolve-org";
-import { loadYaml } from "../lib/yaml-loader";
 import {
   type UserItemInput,
   userItemSchema,
@@ -39,6 +41,18 @@ export async function handleAddUsers(
       created++;
     } catch (err) {
       if (isDuplicateError(err)) {
+        if (registry) {
+          const [existingUser] = await forOrg(orgId, (tx) =>
+            tx
+              .select({ id: usersTable.id })
+              .from(usersTable)
+              .where(eq(usersTable.email, user.email))
+              .limit(1),
+          );
+          if (existingUser) {
+            registry.set("user", user.email, existingUser.id);
+          }
+        }
         log.info(`Found existing user: ${user.email}`);
         existing++;
       } else {
@@ -50,6 +64,11 @@ export async function handleAddUsers(
   return { created, existing };
 }
 
+interface AddUsersOpts {
+  org: string;
+  from?: string;
+}
+
 export function registerAddUsersCommand(program: Command): void {
   program
     .command("add-users")
@@ -57,21 +76,15 @@ export function registerAddUsersCommand(program: Command): void {
     .requiredOption("--org <slug>", "Organization slug")
     .option("--from <file>", "Load from YAML file")
     .argument("[entries...]", "Key=value user entries")
-    .action(async (entries: string[], opts) => {
+    .action(async (entries: string[], opts: AddUsersOpts) => {
       const orgId = await resolveOrgId(opts.org);
-
-      let users: UserItemInput[];
-
-      if (opts.from) {
-        const data = loadYaml(opts.from, usersFileSchema);
-        users = data.users;
-      } else if (entries.length > 0) {
-        const kvs = parseKvArgs(entries);
-        users = kvs.map((kv) => userItemSchema.parse(kv));
-      } else {
-        log.error("Provide user entries as args or --from <file>");
-        process.exit(1);
-      }
+      const users = resolveInput<UserItemInput>(
+        opts,
+        entries,
+        usersFileSchema,
+        userItemSchema,
+        "users",
+      );
 
       try {
         const result = await handleAddUsers(orgId, users);

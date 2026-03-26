@@ -7,6 +7,7 @@
 import { forApp } from "@db/rls";
 import { organizations } from "@db/schema";
 import type { Command } from "commander";
+import { eq } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
@@ -17,6 +18,15 @@ export async function handleCreateOrg(
   input: OrgInput,
   registry?: IdRegistry,
 ): Promise<{ id: string; slug: string; name: string }> {
+  // Check if org already exists (upsert will update silently otherwise)
+  const [existing] = await forApp((tx) =>
+    tx
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, input.slug))
+      .limit(1),
+  );
+
   const orgValues = {
     name: input.name,
     slug: input.slug,
@@ -46,11 +56,24 @@ export async function handleCreateOrg(
     throw new Error(`Failed to create/find org ${input.slug}`);
   }
 
+  if (existing) {
+    log.warn(`Org "${input.slug}" already exists — updated settings`);
+  }
+
   if (registry) {
     registry.set("org", org.slug, org.id);
   }
 
   return { id: org.id, slug: org.slug, name: org.name };
+}
+
+interface CreateOrgOpts {
+  name?: string;
+  slug?: string;
+  timezone?: string;
+  features?: string;
+  demo?: boolean;
+  from?: string;
 }
 
 export function registerCreateOrgCommand(program: Command): void {
@@ -63,7 +86,7 @@ export function registerCreateOrgCommand(program: Command): void {
     .option("--features <features>", "Comma-separated features")
     .option("--demo", "Enable demo mode")
     .option("--from <file>", "Load from YAML file")
-    .action(async (opts) => {
+    .action(async (opts: CreateOrgOpts) => {
       let input: OrgInput;
 
       if (opts.from) {

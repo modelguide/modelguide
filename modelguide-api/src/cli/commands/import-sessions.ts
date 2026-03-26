@@ -1,9 +1,11 @@
 /**
  * mg import-sessions — Import demo sessions from YAML.
  * Creates sessions, adds messages, updates status, and adds feedback.
+ * Re-imports are deduped by externalId (explicit or derived from the payload).
  */
 
-import { listAgents } from "@features/agents/agents.service";
+import { forOrg } from "@db/rls";
+import { sessionLinks, sessions } from "@db/schema";
 import { addFeedback } from "@features/feedback/feedback.service";
 import {
   addMessages,
@@ -11,43 +13,66 @@ import {
   updateSession,
 } from "@features/sessions/sessions.service";
 import type { Command } from "commander";
+import { and, eq } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
+import { lookupAgentIds } from "../lib/resolve-agents";
 import { resolveOrgId } from "../lib/resolve-org";
+import { buildImportedSessionExternalId } from "../lib/session-external-id";
 import { loadYaml } from "../lib/yaml-loader";
 import {
   type SessionItemInput,
   sessionsFileSchema,
 } from "../schemas/sessions.schema";
 
+async function findImportedSessionId(
+  orgId: string,
+  agentId: string,
+  externalId: string,
+): Promise<string | null> {
+  const [existing] = await forOrg(orgId, (tx) =>
+    tx
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(
+        and(eq(sessions.agentId, agentId), eq(sessions.externalId, externalId)),
+      )
+      .limit(1),
+  );
+
+  return existing?.id ?? null;
+}
+
+async function addSessionLinks(
+  orgId: string,
+  sessionId: string,
+  item: SessionItemInput,
+): Promise<void> {
+  if (item.links.length === 0) {
+    return;
+  }
+
+  await forOrg(orgId, (tx) =>
+    tx
+      .insert(sessionLinks)
+      .values(item.links.map((link) => ({ sessionId, ...link })))
+      .onConflictDoNothing({
+        target: [sessionLinks.sessionId, sessionLinks.url],
+      }),
+  );
+}
+
 export async function handleImportSessions(
   orgId: string,
   items: SessionItemInput[],
   options?: { registry?: IdRegistry },
 ): Promise<{ created: number }> {
-  // Build agent slug→id map from registry or DB
-  const agentMap = new Map<string, string>();
-  if (options?.registry) {
-    for (const [slug, id] of options.registry.getAll("agent")) {
-      agentMap.set(slug, id);
-    }
-  }
-  // Supplement with DB lookup for slugs not in registry
-  const missingSlugs = [...new Set(items.map((i) => i.agentSlug))].filter(
-    (s) => !agentMap.has(s),
+  const agentMap = await lookupAgentIds(
+    orgId,
+    items.map((item) => item.agentSlug),
+    options?.registry,
   );
-  if (missingSlugs.length > 0) {
-    const { data: agents } = await listAgents(orgId, {
-      page: 1,
-      pageSize: 100,
-    });
-    for (const agent of agents) {
-      if (missingSlugs.includes(agent.slug)) {
-        agentMap.set(agent.slug, agent.id);
-      }
-    }
-  }
 
   let created = 0;
 
@@ -58,8 +83,24 @@ export async function handleImportSessions(
       continue;
     }
 
+    const externalId = buildImportedSessionExternalId(item);
+    const existingSessionId = await findImportedSessionId(
+      orgId,
+      agentId,
+      externalId,
+    );
+
+    if (existingSessionId) {
+      if (options?.registry) {
+        options.registry.set("session", externalId, existingSessionId);
+      }
+      log.info(`Found existing session: ${item.agentSlug} (${externalId})`);
+      continue;
+    }
+
     // Create session (always starts as active so we can add messages)
     const session = await createSession(orgId, agentId, {
+      externalId,
       channelType: item.channel,
       userIdentifier: item.userIdentifier,
       mode: "simulation",
@@ -74,6 +115,7 @@ export async function handleImportSessions(
     }));
 
     await addMessages(orgId, session.id, agentId, messages);
+    await addSessionLinks(orgId, session.id, item);
 
     // Update to final status
     if (item.status !== "active") {
@@ -92,11 +134,7 @@ export async function handleImportSessions(
     }
 
     if (options?.registry) {
-      options.registry.set(
-        "session",
-        `${item.agentSlug}-${created}`,
-        session.id,
-      );
+      options.registry.set("session", externalId, session.id);
     }
 
     log.success(
@@ -114,7 +152,7 @@ export function registerImportSessionsCommand(program: Command): void {
     .description("Import demo sessions from YAML file")
     .requiredOption("--org <slug>", "Organization slug")
     .argument("<file>", "YAML file path")
-    .action(async (file: string, opts) => {
+    .action(async (file: string, opts: { org: string }) => {
       const orgId = await resolveOrgId(opts.org);
       const data = loadYaml(file, sessionsFileSchema);
 

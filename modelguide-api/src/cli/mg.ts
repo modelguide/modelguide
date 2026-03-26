@@ -21,6 +21,8 @@ import { registerImportGuardrailsCommand } from "./commands/import-guardrails";
 import { registerImportSessionsCommand } from "./commands/import-sessions";
 import { registerImportSopsCommand } from "./commands/import-sops";
 import { registerSetupCommand } from "./commands/setup";
+import { getErrorMessage } from "./lib/errors";
+import { log } from "./lib/logger";
 
 const program = new Command()
   .name("mg")
@@ -42,7 +44,8 @@ if (import.meta.main) {
   program
     .parseAsync(process.argv)
     .then(() => closeDatabase())
-    .catch(async () => {
+    .catch(async (err) => {
+      log.error(getErrorMessage(err));
       await closeDatabase();
       process.exit(1);
     });

@@ -406,7 +406,7 @@ bun run src/cli/mg.ts compile-agents --org acme
 bun run src/cli/mg.ts import-sessions --org acme sessions.yaml
 ```
 
-All commands are idempotent — safe to re-run. See `src/cli/examples/acme/` for sample YAML files and [ADR-010](docs/decisions/010-cli-onboarding-tool.md) for design decisions.
+Provisioning commands are safe to re-run. Session imports dedupe on `externalId` (or a deterministic fingerprint when omitted). Standalone `add-secrets` is append-only because secrets do not currently have a stable natural key. See `src/cli/examples/acme/` for sample YAML files and [ADR-010](docs/decisions/010-cli-onboarding-tool.md) for design decisions.
 
 ## Documentation
 

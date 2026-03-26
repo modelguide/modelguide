@@ -4,9 +4,16 @@
 
 /**
  * Check if an error indicates a duplicate/already-exists condition.
- * Centralizes the string matching so all commands behave consistently.
+ * Checks PostgreSQL error code 23505 (unique_violation) first,
+ * falls back to string matching for service-layer errors that wrap the original.
  */
 export function isDuplicateError(err: unknown): boolean {
+  if (
+    err instanceof Error &&
+    (err as Error & { code?: string }).code === "23505"
+  ) {
+    return true;
+  }
   const msg =
     err instanceof Error
       ? err.message.toLowerCase()
@@ -14,7 +21,7 @@ export function isDuplicateError(err: unknown): boolean {
   return (
     msg.includes("duplicate") ||
     msg.includes("already exists") ||
-    msg.includes("unique")
+    msg.includes("unique constraint")
   );
 }
 

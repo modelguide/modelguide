@@ -4,6 +4,8 @@
  * and agents.service.assignConnectorToAgent for tool links.
  */
 
+import { forOrg } from "@db/rls";
+import { agents as agentsTable } from "@db/schema";
 import {
   assignConnectorToAgent,
   createAgent,
@@ -14,17 +16,19 @@ import {
 } from "@features/connectors/connectors.service";
 import { listUsers } from "@features/users/users.service";
 import type { Command } from "commander";
+import { eq } from "drizzle-orm";
 import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log, table } from "../lib/logger";
-import { parseKvArgs } from "../lib/parse-kv";
+import { resolveInput } from "../lib/resolve-input";
 import { resolveOrgId } from "../lib/resolve-org";
-import { loadYaml } from "../lib/yaml-loader";
 import {
   type AgentItemInput,
   agentItemSchema,
   agentsFileSchema,
 } from "../schemas/agents.schema";
+
+const PAGE_LIMIT = 100;
 
 /**
  * Build a connector slug→id map from existing connectors.
@@ -36,7 +40,15 @@ async function resolveConnectors(
   if (registry) {
     return registry.getAll("connector");
   }
-  const { data } = await listConnectors(orgId, { page: 1, pageSize: 100 });
+  const { data } = await listConnectors(orgId, {
+    page: 1,
+    pageSize: PAGE_LIMIT,
+  });
+  if (data.length === PAGE_LIMIT) {
+    log.warn(
+      `Org has ${PAGE_LIMIT}+ connectors — some may be missing from resolution`,
+    );
+  }
   const map = new Map<string, string>();
   for (const c of data) {
     map.set(c.slug, c.id);
@@ -44,15 +56,17 @@ async function resolveConnectors(
   return map;
 }
 
+export interface AddAgentsResult {
+  created: number;
+  existing: number;
+  apiKeys: { name: string; key: string }[];
+}
+
 export async function handleAddAgents(
   orgId: string,
   items: AgentItemInput[],
   options?: { registry?: IdRegistry; createdBy?: string },
-): Promise<{
-  created: number;
-  existing: number;
-  apiKeys: { name: string; key: string }[];
-}> {
+): Promise<AddAgentsResult> {
   const connectorMap = await resolveConnectors(orgId, options?.registry);
   let created = 0;
   let existing = 0;
@@ -120,6 +134,19 @@ export async function handleAddAgents(
       created++;
     } catch (err) {
       if (isDuplicateError(err)) {
+        const slug = item.slug;
+        if (options?.registry && slug) {
+          const [existingAgent] = await forOrg(orgId, (tx) =>
+            tx
+              .select({ id: agentsTable.id })
+              .from(agentsTable)
+              .where(eq(agentsTable.slug, slug))
+              .limit(1),
+          );
+          if (existingAgent) {
+            options.registry.set("agent", slug, existingAgent.id);
+          }
+        }
         log.info(`Found existing agent: ${item.name}`);
         existing++;
       } else {
@@ -155,6 +182,11 @@ async function getFirstUserId(
   throw new Error("No users found in org — create users before agents");
 }
 
+interface AddAgentsOpts {
+  org: string;
+  from?: string;
+}
+
 export function registerAddAgentsCommand(program: Command): void {
   program
     .command("add-agents")
@@ -162,21 +194,15 @@ export function registerAddAgentsCommand(program: Command): void {
     .requiredOption("--org <slug>", "Organization slug")
     .option("--from <file>", "Load from YAML file")
     .argument("[entries...]", "Key=value agent entries")
-    .action(async (entries: string[], opts) => {
+    .action(async (entries: string[], opts: AddAgentsOpts) => {
       const orgId = await resolveOrgId(opts.org);
-
-      let items: AgentItemInput[];
-
-      if (opts.from) {
-        const data = loadYaml(opts.from, agentsFileSchema);
-        items = data.agents;
-      } else if (entries.length > 0) {
-        const kvs = parseKvArgs(entries);
-        items = kvs.map((kv) => agentItemSchema.parse(kv));
-      } else {
-        log.error("Provide agent entries as args or --from <file>");
-        process.exit(1);
-      }
+      const items = resolveInput<AgentItemInput>(
+        opts,
+        entries,
+        agentsFileSchema,
+        agentItemSchema,
+        "agents",
+      );
 
       try {
         const result = await handleAddAgents(orgId, items);

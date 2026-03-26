@@ -9,10 +9,9 @@ import type { Command } from "commander";
 import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
-import { parseKvArgs } from "../lib/parse-kv";
 import { generatePlaceholder, promptSecret } from "../lib/prompt";
+import { resolveInput } from "../lib/resolve-input";
 import { resolveOrgId } from "../lib/resolve-org";
-import { loadYaml } from "../lib/yaml-loader";
 import {
   type SecretItemInput,
   secretItemSchema,
@@ -62,6 +61,11 @@ export async function handleAddSecrets(
   return { created, existing };
 }
 
+interface AddSecretsOpts {
+  org: string;
+  from?: string;
+}
+
 export function registerAddSecretsCommand(program: Command): void {
   program
     .command("add-secrets")
@@ -69,21 +73,15 @@ export function registerAddSecretsCommand(program: Command): void {
     .requiredOption("--org <slug>", "Organization slug")
     .option("--from <file>", "Load from YAML file")
     .argument("[entries...]", "Key=value secret entries")
-    .action(async (entries: string[], opts) => {
+    .action(async (entries: string[], opts: AddSecretsOpts) => {
       const orgId = await resolveOrgId(opts.org);
-
-      let secrets: SecretItemInput[];
-
-      if (opts.from) {
-        const data = loadYaml(opts.from, secretsFileSchema);
-        secrets = data.secrets;
-      } else if (entries.length > 0) {
-        const kvs = parseKvArgs(entries);
-        secrets = kvs.map((kv) => secretItemSchema.parse(kv));
-      } else {
-        log.error("Provide secret entries as args or --from <file>");
-        process.exit(1);
-      }
+      const secrets = resolveInput<SecretItemInput>(
+        opts,
+        entries,
+        secretsFileSchema,
+        secretItemSchema,
+        "secrets",
+      );
 
       try {
         const result = await handleAddSecrets(orgId, secrets);

@@ -11,20 +11,28 @@ import {
   createSop,
   forkFromTemplate,
   listTemplates,
-  setAssignedAgents,
 } from "@features/sops/sops.service";
-import type { SopSchema } from "@features/sops/sops.types";
+import type { SopSchema, SopTrigger } from "@features/sops/sops.types";
 import type { Command } from "commander";
 import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
-import { resolveAgentIds } from "../lib/resolve-agents";
+import { requireAgentIds } from "../lib/resolve-agents";
+import {
+  resolveConnectorMappingIds,
+  resolveConnectorToolReference,
+} from "../lib/resolve-connectors";
 import { resolveOrgId } from "../lib/resolve-org";
 import { loadYaml } from "../lib/yaml-loader";
 import { type SopItemInput, sopsFileSchema } from "../schemas/sops.schema";
 
+const PAGE_LIMIT = 100;
+
 async function resolveTemplates(): Promise<Map<string, string>> {
-  const { data } = await listTemplates({ page: 1, pageSize: 100 });
+  const { data } = await listTemplates({ page: 1, pageSize: PAGE_LIMIT });
+  if (data.length === PAGE_LIMIT) {
+    log.warn(`${PAGE_LIMIT}+ SOP templates found — some may be missing`);
+  }
   const map = new Map<string, string>();
   for (const t of data) {
     map.set(t.slug, t.id);
@@ -32,20 +40,91 @@ async function resolveTemplates(): Promise<Map<string, string>> {
   return map;
 }
 
-function resolveConnectorMapping(
-  mapping: Record<string, string> | undefined,
-  registry?: IdRegistry,
-): Record<string, string> {
-  if (!mapping) return {};
-  const resolved: Record<string, string> = {};
-  for (const [catalogSlug, connectorSlug] of Object.entries(mapping)) {
-    if (registry?.has("connector", connectorSlug)) {
-      resolved[catalogSlug] = registry.get("connector", connectorSlug);
-    } else {
-      resolved[catalogSlug] = connectorSlug;
-    }
+async function buildInlineDefinition(
+  orgId: string,
+  item: SopItemInput,
+): Promise<SopSchema> {
+  if (!item.steps || item.steps.length === 0) {
+    throw new Error(`Inline SOP "${item.name}" must have at least one step`);
   }
-  return resolved;
+
+  const steps = await Promise.all(
+    item.steps.map(async (step, idx) => ({
+      id: step.id,
+      order: idx + 1,
+      instruction: step.instruction,
+      required: step.required,
+      ...(step.tool
+        ? {
+            tool: {
+              connectorToolId: await resolveConnectorToolReference(
+                orgId,
+                step.tool.connectorSlug,
+                step.tool.toolSlug,
+              ),
+            },
+          }
+        : {}),
+    })),
+  );
+
+  return {
+    schemaVersion: 1,
+    trigger: (item.trigger as SopTrigger | undefined) ?? {
+      type: "manual",
+      config: {},
+    },
+    steps,
+    metadata: item.metadata ?? {},
+  };
+}
+
+async function importTemplateSop(
+  orgId: string,
+  item: SopItemInput,
+  templates: Map<string, string>,
+  agentIds: string[],
+  registry?: IdRegistry,
+): Promise<string> {
+  const templateId = templates.get(item.templateSlug!);
+  if (!templateId) {
+    throw new Error(
+      `SOP template "${item.templateSlug}" not found. Available: ${[...templates.keys()].join(", ")}`,
+    );
+  }
+
+  const connectorMapping = await resolveConnectorMappingIds(
+    orgId,
+    item.connectorMapping,
+    registry,
+  );
+
+  const sop = await forkFromTemplate(orgId, templateId, {
+    name: item.name,
+    slug: item.slug,
+    connectorMapping,
+    agentIds,
+  });
+  log.success(`Forked SOP from template: ${item.name} (${item.templateSlug})`);
+  return sop.id;
+}
+
+async function importInlineSop(
+  orgId: string,
+  item: SopItemInput,
+  agentIds: string[],
+): Promise<string> {
+  const definition = await buildInlineDefinition(orgId, item);
+
+  const sop = await createSop(orgId, {
+    name: item.name,
+    slug: item.slug,
+    description: item.description,
+    definition,
+    agentIds,
+  });
+  log.success(`Created inline SOP: ${item.name}`);
+  return sop.id;
 }
 
 export async function handleImportSops(
@@ -60,92 +139,29 @@ export async function handleImportSops(
 
   for (const item of items) {
     try {
-      let sopId: string;
-      const agentIds = await resolveAgentIds(
+      const agentIds = await requireAgentIds(
         orgId,
         item.agents,
         options?.registry,
       );
 
-      if (item.templateSlug) {
-        // Template fork
-        const templateId = templates.get(item.templateSlug);
-        if (!templateId) {
-          throw new Error(
-            `SOP template "${item.templateSlug}" not found. Available: ${[...templates.keys()].join(", ")}`,
-          );
-        }
-
-        const connectorMapping = resolveConnectorMapping(
-          item.connectorMapping,
-          options?.registry,
-        );
-
-        const sop = await forkFromTemplate(orgId, templateId, {
-          name: item.name,
-          slug: item.slug,
-          connectorMapping,
-          agentIds,
-        });
-        sopId = sop.id;
-        log.success(
-          `Forked SOP from template: ${item.name} (${item.templateSlug})`,
-        );
-      } else {
-        // Inline SOP
-        if (!item.steps || item.steps.length === 0) {
-          throw new Error(
-            `Inline SOP "${item.name}" must have at least one step`,
-          );
-        }
-
-        const definition: SopSchema = {
-          schemaVersion: 1,
-          trigger: (item.trigger as SopSchema["trigger"]) ?? {
-            type: "manual",
-            config: {},
-          },
-          steps: item.steps.map((step, idx) => ({
-            id: step.id,
-            order: idx + 1,
-            instruction: step.instruction,
-            required: step.required,
-            ...(step.tool
-              ? {
-                  tool: {
-                    catalogSlug: step.tool.connectorSlug,
-                    toolSlug: step.tool.toolSlug,
-                  },
-                }
-              : {}),
-          })),
-          metadata: (item.metadata as SopSchema["metadata"]) ?? {},
-        };
-
-        const sop = await createSop(orgId, {
-          name: item.name,
-          slug: item.slug,
-          description: item.description,
-          definition,
-          agentIds,
-        });
-        sopId = sop.id;
-        log.success(`Created inline SOP: ${item.name}`);
-      }
+      const sopId = item.templateSlug
+        ? await importTemplateSop(
+            orgId,
+            item,
+            templates,
+            agentIds,
+            options?.registry,
+          )
+        : await importInlineSop(orgId, item, agentIds);
 
       if (options?.registry) {
         options.registry.set("sop", item.slug ?? item.name, sopId);
       }
 
-      // Activate if requested
       if (item.status === "active") {
         await activateSop(orgId, sopId);
         activated++;
-      }
-
-      // Set agent assignments (in case agents weren't passed to create/fork)
-      if (agentIds.length > 0) {
-        await setAssignedAgents(orgId, sopId, agentIds);
       }
 
       created++;
@@ -168,7 +184,7 @@ export function registerImportSopsCommand(program: Command): void {
     .description("Import SOPs from YAML file")
     .requiredOption("--org <slug>", "Organization slug")
     .argument("<file>", "YAML file path")
-    .action(async (file: string, opts) => {
+    .action(async (file: string, opts: { org: string }) => {
       const orgId = await resolveOrgId(opts.org);
       const data = loadYaml(file, sopsFileSchema);
 

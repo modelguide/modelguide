@@ -26,7 +26,7 @@ import type { SopItemInput } from "../schemas/sops.schema";
 import { sopsFileSchema } from "../schemas/sops.schema";
 import type { UserItemInput } from "../schemas/users.schema";
 import { usersFileSchema } from "../schemas/users.schema";
-import { handleAddAgents } from "./add-agents";
+import { type AddAgentsResult, handleAddAgents } from "./add-agents";
 import { handleAddConnectors } from "./add-connectors";
 import { handleAddSecrets } from "./add-secrets";
 import { handleAddUsers } from "./add-users";
@@ -82,54 +82,48 @@ function loadSetupFiles(dir: string): SetupFiles {
   };
 }
 
+function printSection<T>(
+  label: string,
+  items: T[] | undefined,
+  detail?: (item: T) => string,
+): void {
+  if (!items || items.length === 0) return;
+  log.step(`${label}: ${items.length}`);
+  if (detail) {
+    for (const item of items) {
+      log.info(`  - ${detail(item)}`);
+    }
+  }
+}
+
 function printDryRun(files: SetupFiles): void {
   log.info("Dry-run plan:");
   log.step(`Org: ${files.org.name} (${files.org.slug})`);
 
-  if (files.users) {
-    log.step(`Users: ${files.users.users.length}`);
-    for (const u of files.users.users) {
-      log.info(`  - ${u.email} (${u.role})`);
-    }
-  }
-
-  if (files.secrets) {
-    log.step(`Secrets: ${files.secrets.secrets.length}`);
-    for (const s of files.secrets.secrets) {
-      log.info(`  - ${s.name} (${s.type})`);
-    }
-  }
-
-  if (files.connectors) {
-    log.step(`Connectors: ${files.connectors.connectors.length}`);
-    for (const c of files.connectors.connectors) {
-      log.info(`  - ${c.slug} (${c.catalogSlug})`);
-    }
-  }
-
-  if (files.agents) {
-    log.step(`Agents: ${files.agents.agents.length}`);
-    for (const a of files.agents.agents) {
-      log.info(`  - ${a.name} (${a.modality})`);
-    }
-  }
-
-  if (files.sops) {
-    log.step(`SOPs: ${files.sops.sops.length}`);
-    for (const s of files.sops.sops) {
-      log.info(
-        `  - ${s.name} (${s.templateSlug ? `template: ${s.templateSlug}` : "inline"})`,
-      );
-    }
-  }
-
-  if (files.guardrails) {
-    log.step(`Guardrails: ${files.guardrails.guardrails.length}`);
-  }
-
-  if (files.sessions) {
-    log.step(`Sessions: ${files.sessions.sessions.length}`);
-  }
+  printSection("Users", files.users?.users, (u) => `${u.email} (${u.role})`);
+  printSection(
+    "Secrets",
+    files.secrets?.secrets,
+    (s) => `${s.name} (${s.type})`,
+  );
+  printSection(
+    "Connectors",
+    files.connectors?.connectors,
+    (c) => `${c.slug} (${c.catalogSlug})`,
+  );
+  printSection(
+    "Agents",
+    files.agents?.agents,
+    (a) => `${a.name} (${a.modality})`,
+  );
+  printSection(
+    "SOPs",
+    files.sops?.sops,
+    (s) =>
+      `${s.name} (${s.templateSlug ? `template: ${s.templateSlug}` : "inline"})`,
+  );
+  printSection("Guardrails", files.guardrails?.guardrails);
+  printSection("Sessions", files.sessions?.sessions);
 }
 
 export async function handleSetup(
@@ -202,7 +196,7 @@ export async function handleSetup(
   }
 
   // 7. Create agents
-  let agentResult: Awaited<ReturnType<typeof handleAddAgents>> | undefined;
+  let agentResult: AddAgentsResult | undefined;
   if (files.agents) {
     log.step("Creating agents...");
     agentResult = await handleAddAgents(orgId, files.agents.agents, {

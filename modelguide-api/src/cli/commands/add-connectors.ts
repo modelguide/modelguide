@@ -7,7 +7,6 @@
 import {
   createConnector,
   listCatalog,
-  listConnectorTools,
   listConnectors,
 } from "@features/connectors/connectors.service";
 import { createSecret } from "@features/secrets/secrets.service";
@@ -25,10 +24,15 @@ import {
   connectorsFileSchema,
 } from "../schemas/connectors.schema";
 
+const PAGE_LIMIT = 100;
+
 async function resolveCatalog(): Promise<
   Map<string, { id: string; slug: string }>
 > {
-  const { data } = await listCatalog({ page: 1, pageSize: 100 });
+  const { data } = await listCatalog({ page: 1, pageSize: PAGE_LIMIT });
+  if (data.length === PAGE_LIMIT) {
+    log.warn(`Catalog has ${PAGE_LIMIT}+ entries — some may be missing`);
+  }
   const map = new Map<string, { id: string; slug: string }>();
   for (const entry of data) {
     map.set(entry.slug, { id: entry.id, slug: entry.slug });
@@ -44,7 +48,7 @@ export async function handleAddConnectors(
   const catalog = await resolveCatalog();
   const { data: existingConnectors } = await listConnectors(orgId, {
     page: 1,
-    pageSize: 100,
+    pageSize: PAGE_LIMIT,
   });
   const existingBySlug = new Map(existingConnectors.map((c) => [c.slug, c]));
   let created = 0;
@@ -102,23 +106,23 @@ export async function handleAddConnectors(
       secrets: secretsMap,
     });
 
-    // Count tools created
-    const tools = await listConnectorTools(orgId, connector.id);
-
     if (options?.registry) {
       options.registry.set("connector", item.slug, connector.id);
-      if (options.registry.has("catalogEntry", item.catalogSlug) === false) {
+      if (!options.registry.has("catalogEntry", item.catalogSlug)) {
         options.registry.set("catalogEntry", item.catalogSlug, catalogEntry.id);
       }
     }
 
-    log.success(
-      `Created connector: ${item.slug} (${item.catalogSlug}, ${tools.length} tools)`,
-    );
+    log.success(`Created connector: ${item.slug} (${item.catalogSlug})`);
     created++;
   }
 
   return { created, existing };
+}
+
+interface AddConnectorsOpts {
+  org: string;
+  from?: string;
 }
 
 export function registerAddConnectorsCommand(program: Command): void {
@@ -128,7 +132,7 @@ export function registerAddConnectorsCommand(program: Command): void {
     .requiredOption("--org <slug>", "Organization slug")
     .option("--from <file>", "Load from YAML file")
     .argument("[entries...]", "Key=value connector entries")
-    .action(async (entries: string[], opts) => {
+    .action(async (entries: string[], opts: AddConnectorsOpts) => {
       const orgId = await resolveOrgId(opts.org);
 
       let items: ConnectorItemInput[];
@@ -144,7 +148,7 @@ export function registerAddConnectorsCommand(program: Command): void {
             try {
               kv.config = JSON.parse(kv.config);
             } catch {
-              // keep as-is
+              throw new Error(`Invalid JSON in config value: ${kv.config}`);
             }
           }
           return connectorItemSchema.parse({

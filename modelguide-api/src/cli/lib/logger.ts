@@ -1,5 +1,9 @@
 /**
- * CLI output helpers — colored console output with simple formatting.
+ * CLI output helpers — thin wrapper around @clack/prompts.
+ *
+ * This indirection exists so command files import a stable `log` API.
+ * If we later replace clack (e.g., for plain-text CI output),
+ * only this file changes.
  */
 
 import * as p from "@clack/prompts";

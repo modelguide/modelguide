@@ -254,4 +254,59 @@ describe("import-sops", () => {
       ),
     ).rejects.toThrow("must have at least one step");
   });
+
+  test("resolves agents and connector tools without registry", async () => {
+    const [tool] = await forApp(async (tx) => {
+      return tx
+        .select({ slug: connectorTools.slug })
+        .from(connectorTools)
+        .where(
+          eq(
+            connectorTools.connectorId,
+            registry.get("connector", "sop_test_store"),
+          ),
+        )
+        .limit(1);
+    });
+
+    expect(tool).toBeDefined();
+
+    const result = await handleImportSops(orgId, [
+      {
+        name: "Standalone Inline SOP",
+        slug: "standalone-inline-sop",
+        status: "draft",
+        agents: ["sop-test-agent"],
+        steps: [
+          {
+            id: "lookup",
+            instruction: "Use the connector tool",
+            required: true,
+            tool: {
+              connectorSlug: "sop_test_store",
+              toolSlug: tool!.slug,
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(result.created).toBe(1);
+
+    const [createdSop] = await forApp(async (tx) => {
+      return tx
+        .select({ id: sops.id })
+        .from(sops)
+        .where(eq(sops.slug, "standalone-inline-sop"));
+    });
+    expect(createdSop).toBeDefined();
+
+    const assignments = await forApp(async (tx) => {
+      return tx
+        .select()
+        .from(agentSops)
+        .where(eq(agentSops.sopId, createdSop!.id));
+    });
+    expect(assignments.length).toBe(1);
+  });
 });

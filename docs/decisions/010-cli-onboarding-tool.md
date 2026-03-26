@@ -51,9 +51,11 @@ An `IdRegistry` threads entity IDs (slug → UUID) across steps so later steps c
 
 ### Idempotency
 
-Every command catches duplicate/already-exists errors and counts them as `existing` rather than failing. This makes `mg setup` safe to re-run — the second run finds all entities already present and reports `0 created, N existing`.
+Commands that create uniquely keyed resources catch duplicate/already-exists errors and count them as `existing` rather than failing. Session imports dedupe on `externalId`; when omitted, the CLI derives a deterministic fingerprint from the YAML entry so re-importing the same payload is safe.
 
 Connector creation checks existence before creating secrets to avoid orphaned secret rows on re-run.
+Standalone `add-secrets` is intentionally append-only because secrets do not currently have a stable natural key in the data model.
+Agent re-runs detect the duplicate and skip tool assignment — updating an existing agent's connector tool links requires the dashboard or API. This is acceptable because tool assignment changes are typically deliberate configuration updates, not part of initial provisioning.
 
 ### YAML schema validation
 

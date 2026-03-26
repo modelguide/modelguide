@@ -24,22 +24,27 @@ const sopTriggerSchema = z.object({
  * - Template fork: templateSlug + connectorMapping
  * - Inline: trigger + steps
  */
-export const sopItemSchema = z.object({
-  name: z.string().min(1),
-  slug: z.string().min(1).optional(),
-  description: z.string().optional(),
-  status: z.enum(sopStatuses).default("draft"),
-  agents: z.array(z.string()).default([]),
+export const sopItemSchema = z
+  .object({
+    name: z.string().min(1),
+    slug: z.string().min(1).optional(),
+    description: z.string().optional(),
+    status: z.enum(sopStatuses).default("draft"),
+    agents: z.array(z.string()).default([]),
 
-  // Template fork fields
-  templateSlug: z.string().optional(),
-  connectorMapping: z.record(z.string()).optional(),
+    // Template fork fields
+    templateSlug: z.string().optional(),
+    connectorMapping: z.record(z.string()).optional(),
 
-  // Inline fields
-  trigger: sopTriggerSchema.optional(),
-  metadata: z.record(z.unknown()).optional(),
-  steps: z.array(sopStepSchema).optional(),
-});
+    // Inline fields
+    trigger: sopTriggerSchema.optional(),
+    metadata: z.record(z.unknown()).optional(),
+    steps: z.array(sopStepSchema).optional(),
+  })
+  .refine((s) => !(s.templateSlug && s.steps), {
+    message:
+      "Cannot specify both templateSlug and steps — use one or the other",
+  });
 
 export const sopsFileSchema = z.object({
   sops: z.array(sopItemSchema).min(1),

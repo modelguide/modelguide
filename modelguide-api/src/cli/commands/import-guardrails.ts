@@ -8,7 +8,7 @@ import type { Command } from "commander";
 import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
-import { resolveAgentIds } from "../lib/resolve-agents";
+import { requireAgentIds } from "../lib/resolve-agents";
 import { resolveOrgId } from "../lib/resolve-org";
 import { loadYaml } from "../lib/yaml-loader";
 import {
@@ -25,7 +25,7 @@ export async function handleImportGuardrails(
   let existing = 0;
 
   for (const item of items) {
-    const agentIds = await resolveAgentIds(
+    const agentIds = await requireAgentIds(
       orgId,
       item.agents,
       options?.registry,
@@ -67,7 +67,7 @@ export function registerImportGuardrailsCommand(program: Command): void {
     .description("Import guardrails from YAML file")
     .requiredOption("--org <slug>", "Organization slug")
     .argument("<file>", "YAML file path")
-    .action(async (file: string, opts) => {
+    .action(async (file: string, opts: { org: string }) => {
       const orgId = await resolveOrgId(opts.org);
       const data = loadYaml(file, guardrailsFileSchema);
 

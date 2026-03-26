@@ -12,6 +12,8 @@ import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
 import { resolveOrgId } from "../lib/resolve-org";
 
+const PAGE_LIMIT = 100;
+
 export async function handleCompileAgents(
   orgId: string,
   options?: { agentSlug?: string; registry?: IdRegistry },
@@ -19,8 +21,11 @@ export async function handleCompileAgents(
   // Get agents
   const { data: allAgents } = await listAgents(orgId, {
     page: 1,
-    pageSize: 100,
+    pageSize: PAGE_LIMIT,
   });
+  if (allAgents.length === PAGE_LIMIT) {
+    log.warn(`Org has ${PAGE_LIMIT}+ agents — some may be skipped`);
+  }
 
   const agentsToCompile = options?.agentSlug
     ? allAgents.filter((a) => a.slug === options.agentSlug)
@@ -40,7 +45,7 @@ export async function handleCompileAgents(
       agentId: agent.id,
       status: "active",
       page: 1,
-      pageSize: 10,
+      pageSize: PAGE_LIMIT,
     });
 
     if (agentSops.length === 0) {
@@ -77,7 +82,7 @@ export function registerCompileAgentsCommand(program: Command): void {
     .description("Compile agents from their assigned SOPs")
     .requiredOption("--org <slug>", "Organization slug")
     .option("--agent <slug>", "Compile only this agent")
-    .action(async (opts) => {
+    .action(async (opts: { org: string; agent?: string }) => {
       const orgId = await resolveOrgId(opts.org);
 
       try {

@@ -235,6 +235,17 @@ describe("sessionItemSchema", () => {
     }
   });
 
+  test("accepts optional externalId", () => {
+    const result = sessionItemSchema.safeParse({
+      agentSlug: "voice-agent",
+      externalId: "demo-session-001",
+      channel: "voice",
+      userIdentifier: "user@test.com",
+      messages: [{ role: "user", content: "Hello" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   test("validates session with feedback", () => {
     const result = sessionItemSchema.safeParse({
       agentSlug: "agent",
