@@ -22,26 +22,25 @@ import type {
 // Zod schema for LLM-derived dimensions
 // ============================================================================
 
+/** Leaf-level JSON value — explicit union avoids `additionalProperties: {}` in JSON Schema. */
+const jsonLeafSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
 const dimensionConfigSchema = z.object({
   intents: z
     .array(z.string())
-    .min(3)
-    .max(6)
-    .describe("Customer intents relevant to this SOP (3-6 items)"),
+    .describe(
+      "Customer intents relevant to this SOP (generate exactly 3-6 items)",
+    ),
   edgeCases: z
     .array(z.string())
-    .min(5)
-    .max(8)
     .describe(
-      'Edge cases including "straightforward" as the first item (5-8 items)',
+      'Edge cases including "straightforward" as the first item (generate exactly 5-8 items)',
     ),
   toolStates: z
     .record(
       z.string(),
       z
-        .array(z.record(z.string(), z.unknown()))
-        .min(3)
-        .max(4)
+        .array(z.record(z.string(), jsonLeafSchema))
         .describe(
           "3-4 response variants per tool, including one error state with { error: true, message: string }",
         ),

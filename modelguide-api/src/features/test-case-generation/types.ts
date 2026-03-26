@@ -9,8 +9,11 @@
 // Dimension types (Step 1 — derived from SOP via Sonnet)
 // ============================================================================
 
+/** JSON leaf value — string, number, boolean, or null. */
+export type JsonLeaf = string | number | boolean | null;
+
 /** Tool state variant — a mock response shape for a specific tool. */
-export type ToolStateVariant = Record<string, unknown>;
+export type ToolStateVariant = Record<string, JsonLeaf>;
 
 /**
  * Dimensions derived from a SOP for test case generation.

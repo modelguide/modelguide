@@ -20,6 +20,9 @@ import type { DimensionTuple, GeneratedTestCase, TokenUsage } from "./types";
 // Zod schema for generated test case
 // ============================================================================
 
+/** Leaf-level JSON value — explicit union avoids `additionalProperties: {}` in JSON Schema. */
+const jsonLeafSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
 const generatedTestCaseSchema = z.object({
   name: z.string().describe("Short descriptive name: intent - tone - edgeCase"),
   scenario: z
@@ -33,7 +36,7 @@ const generatedTestCaseSchema = z.object({
       "A realistic customer email (at least 5 words) written in the specified tone, reflecting the edge case",
     ),
   mock_tool_responses: z
-    .record(z.string(), z.record(z.string(), z.unknown()))
+    .record(z.string(), z.record(z.string(), jsonLeafSchema))
     .describe(
       "Mock responses keyed by tool slug, matching the provided tool states",
     ),
