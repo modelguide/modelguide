@@ -94,6 +94,7 @@ export const PRODUCT: ResponseShape = {
   status: true,
   thumbnail: true,
   images: true,
+  metadata: true,
   variants: VARIANT,
   options: { id: true, title: true, values: true },
 };

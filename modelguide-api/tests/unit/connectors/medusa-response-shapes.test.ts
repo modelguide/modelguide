@@ -110,6 +110,7 @@ describe("PRODUCT shape", () => {
       handle: "cerave",
       status: "published",
       thumbnail: "https://example.com/t.jpg",
+      metadata: { conflict_categories: ["retinol"], skin_type: "oily" },
       variants: [
         {
           id: "var_1",
@@ -130,6 +131,10 @@ describe("PRODUCT shape", () => {
       PRODUCT,
     );
     expect(result!.id).toBe("prod_1");
+    expect(result!.metadata).toEqual({
+      conflict_categories: ["retinol"],
+      skin_type: "oily",
+    });
     expect(result!.raw_metadata).toBeUndefined();
     expect(result!.type_id).toBeUndefined();
 
