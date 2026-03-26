@@ -6,6 +6,7 @@ import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Spinner } from '~/components/ui/spinner'
+import { GenerateTestCasesButton } from '~/features/evals/components/generate-test-cases-button'
 import { RunSuiteDialog } from '~/features/evals/components/run-suite-dialog'
 import { SuiteRunsTable } from '~/features/evals/components/suite-runs-table'
 import { TestCasesPanel } from '~/features/evals/components/test-cases-panel'
@@ -119,6 +120,9 @@ function SuiteDetailPage() {
               <RefreshCw className="h-4 w-4" />
               Re-init
             </Button>
+            {suite.sopId ? (
+              <GenerateTestCasesButton suiteId={suiteId} hasSop={!!suite.sopId} />
+            ) : null}
             <Button onClick={() => setShowRunDialog(true)}>
               <Play className="h-4 w-4" />
               Run Suite
