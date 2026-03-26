@@ -14,14 +14,32 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { SopStep } from "@features/sops/sops.types";
 import { generateObject } from "ai";
 import { z } from "zod";
-import type { DimensionTuple, GeneratedTestCase, TokenUsage } from "./types";
+import type {
+  DimensionTuple,
+  GeneratedTestCase,
+  TokenUsage,
+  ToolStateVariant,
+} from "./types";
 
 // ============================================================================
 // Zod schema for generated test case
 // ============================================================================
 
-/** Leaf-level JSON value — explicit union avoids `additionalProperties: {}` in JSON Schema. */
-const jsonLeafSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+/**
+ * Anthropic API rejects z.record() (produces `additionalProperties: { ... }`).
+ * Use array-of-entries format and convert back to Record after generation.
+ */
+const mockFieldSchema = z.object({
+  key: z.string().describe("Response field name"),
+  value: z.string().describe("Response field value as string"),
+});
+
+const mockToolEntrySchema = z.object({
+  toolSlug: z.string().describe("Exact tool slug from the SOP"),
+  fields: z
+    .array(mockFieldSchema)
+    .describe("Key-value pairs for this tool's mock response"),
+});
 
 const generatedTestCaseSchema = z.object({
   name: z.string().describe("Short descriptive name: intent - tone - edgeCase"),
@@ -36,9 +54,9 @@ const generatedTestCaseSchema = z.object({
       "A realistic customer email (at least 5 words) written in the specified tone, reflecting the edge case",
     ),
   mock_tool_responses: z
-    .record(z.string(), z.record(z.string(), jsonLeafSchema))
+    .array(mockToolEntrySchema)
     .describe(
-      "Mock responses keyed by tool slug, matching the provided tool states",
+      "Mock responses as array of { toolSlug, fields } entries. Copy the tool states provided in the prompt.",
     ),
 });
 
@@ -93,8 +111,8 @@ Requirements:
 3. "input_email" — write a realistic customer email (minimum 5 words) that:
    ${toneGuidance}
    ${edgeCaseGuidance}
-4. "mock_tool_responses" — copy the exact tool states provided above. Keys must match tool slugs exactly.
-   If no tools, return an empty object {}.
+4. "mock_tool_responses" — array of { toolSlug, fields: [{ key, value }] } entries matching the tool states above.
+   If no tools, return an empty array [].
 
 The email should feel like a real customer wrote it, not a template.`;
 
@@ -104,8 +122,29 @@ The email should feel like a real customer wrote it, not a template.`;
     prompt,
   });
 
+  // Convert array-of-entries back to Record<slug, ToolStateVariant>
+  const mockToolResponses: Record<string, ToolStateVariant> = {};
+  for (const entry of object.mock_tool_responses) {
+    const record: ToolStateVariant = {};
+    for (const field of entry.fields) {
+      if (field.value === "true") record[field.key] = true;
+      else if (field.value === "false") record[field.key] = false;
+      else if (field.value !== "" && !Number.isNaN(Number(field.value)))
+        record[field.key] = Number(field.value);
+      else record[field.key] = field.value;
+    }
+    mockToolResponses[entry.toolSlug] = record;
+  }
+
+  const testCase: GeneratedTestCase = {
+    name: object.name,
+    scenario: object.scenario,
+    input_email: object.input_email,
+    mock_tool_responses: mockToolResponses,
+  };
+
   return {
-    testCase: object as GeneratedTestCase,
+    testCase,
     usage: {
       input: usage.inputTokens ?? 0,
       output: usage.outputTokens ?? 0,

@@ -22,8 +22,36 @@ import type {
 // Zod schema for LLM-derived dimensions
 // ============================================================================
 
-/** Leaf-level JSON value — explicit union avoids `additionalProperties: {}` in JSON Schema. */
-const jsonLeafSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+/**
+ * Tool state variant schema for LLM output.
+ *
+ * z.record() produces `additionalProperties: { ... }` in JSON Schema,
+ * which the Anthropic API rejects. Instead we use an array of { key, value }
+ * pairs and convert to a Record after generation.
+ */
+const toolStateFieldSchema = z.object({
+  key: z.string().describe("Field name (e.g. 'status', 'error', 'tracking')"),
+  value: z
+    .string()
+    .describe(
+      "Field value as a string. Use 'true'/'false' for booleans, stringified numbers for numbers.",
+    ),
+});
+
+const toolVariantSchema = z.object({
+  fields: z
+    .array(toolStateFieldSchema)
+    .describe("Key-value pairs representing one mock tool response"),
+});
+
+const toolStatesEntrySchema = z.object({
+  toolSlug: z.string().describe("Exact tool slug from the SOP"),
+  variants: z
+    .array(toolVariantSchema)
+    .describe(
+      "3-4 response variants for this tool, including one error state with fields: key='error' value='true', key='message' value='<error description>'",
+    ),
+});
 
 const dimensionConfigSchema = z.object({
   intents: z
@@ -37,16 +65,9 @@ const dimensionConfigSchema = z.object({
       'Edge cases including "straightforward" as the first item (generate exactly 5-8 items)',
     ),
   toolStates: z
-    .record(
-      z.string(),
-      z
-        .array(z.record(z.string(), jsonLeafSchema))
-        .describe(
-          "3-4 response variants per tool, including one error state with { error: true, message: string }",
-        ),
-    )
+    .array(toolStatesEntrySchema)
     .describe(
-      "Mock tool response variants keyed by tool slug. Empty object if SOP has no tool steps.",
+      "Mock tool response variants per tool slug. Empty array if SOP has no tool steps.",
     ),
 });
 
@@ -113,8 +134,8 @@ export async function deriveDimensionsFromSop(
 
   const toolSlugsInfo =
     toolSlugs.length > 0
-      ? `\nTool slugs in this SOP: ${toolSlugs.join(", ")}\nGenerate 3-4 mock response variants per tool (including one error state with { "error": true, "message": "..." }).`
-      : "\nThis SOP has no tool-referencing steps. Return an empty object for toolStates.";
+      ? `\nTool slugs in this SOP: ${toolSlugs.join(", ")}\nGenerate 3-4 mock response variants per tool (including one error state). Each variant is an array of { key, value } pairs representing the mock response fields.`
+      : "\nThis SOP has no tool-referencing steps. Return an empty array for toolStates.";
 
   const prompt = `Analyze this Standard Operating Procedure (SOP) and derive test scenario dimensions.
 
@@ -128,10 +149,10 @@ ${toolSlugsInfo}
 Generate:
 1. "intents" — 3-6 customer intents that would trigger this SOP (e.g., "order_status", "delivery_delay")
 2. "edgeCases" — 5-8 edge cases starting with "straightforward", then increasingly challenging scenarios (e.g., "ambiguous_intent", "missing_order_number", "contradictory_request")
-3. "toolStates" — for each tool slug, generate 3-4 realistic mock response objects representing different outcomes (success variants + one error)
+3. "toolStates" — array of { toolSlug, variants } entries. Each variant has a "fields" array of { key, value } pairs. Include one error variant per tool with key="error" value="true".
 
 Make intents specific to this SOP's domain. Make edge cases relevant to the SOP's workflow.
-Tool state keys must match the exact tool slugs listed above.`;
+Tool slugs must match the exact slugs listed above.`;
 
   const { object, usage } = await generateObject({
     model: anthropic(env.GENERATION_DIMENSION_MODEL),
@@ -139,13 +160,32 @@ Tool state keys must match the exact tool slugs listed above.`;
     prompt,
   });
 
+  // Convert LLM array-of-entries format to Record<slug, ToolStateVariant[]>
+  const toolStatesRecord: Record<string, ToolStateVariant[]> = {};
+  if (toolSlugs.length > 0) {
+    for (const entry of object.toolStates) {
+      toolStatesRecord[entry.toolSlug] = entry.variants.map((v) => {
+        const record: ToolStateVariant = {};
+        for (const field of v.fields) {
+          // Parse "true"/"false" back to booleans, numbers back to numbers
+          if (field.value === "true") record[field.key] = true;
+          else if (field.value === "false") record[field.key] = false;
+          else if (field.value !== "" && !Number.isNaN(Number(field.value)))
+            record[field.key] = Number(field.value);
+          else record[field.key] = field.value;
+        }
+        return record;
+      });
+    }
+  }
+
   // Merge LLM-derived fields with fixed dimensions
   const dimensions: DimensionConfig = {
     intents: object.intents,
     tones: FIXED_TONES,
     complexity: FIXED_COMPLEXITY,
     edgeCases: object.edgeCases,
-    toolStates: toolSlugs.length > 0 ? object.toolStates : {},
+    toolStates: toolStatesRecord,
   };
 
   return {
