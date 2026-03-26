@@ -9,6 +9,7 @@ import { agents as agentsTable } from "@db/schema";
 import {
   assignConnectorToAgent,
   createAgent,
+  setAgentActive,
 } from "@features/agents/agents.service";
 import {
   listConnectorTools,
@@ -128,8 +129,12 @@ export async function handleAddAgents(
         }
       }
 
+      if (item.active) {
+        await setAgentActive(orgId, agentId, true);
+      }
+
       log.success(
-        `Created agent: ${item.name} (${item.tools.length} connector links)`,
+        `Created agent: ${item.name}${item.active ? " (active)" : ""} (${item.tools.length} connector links)`,
       );
       created++;
     } catch (err) {

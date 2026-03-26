@@ -44,6 +44,7 @@ beforeAll(async () => {
       slug: "guardrail-test-agent",
       modality: "voice",
       platform: "custom",
+      active: false,
       tools: [],
     },
   ]);

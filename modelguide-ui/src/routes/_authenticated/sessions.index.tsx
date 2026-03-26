@@ -22,7 +22,7 @@ export const Route = createFileRoute('/_authenticated/sessions/')({
 
 function SessionsPage() {
   const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState<SessionFilters>({ mode: 'live' as const })
+  const [filters, setFilters] = useState<SessionFilters>({})
   const [autoRefresh, setAutoRefresh] = useState(
     () => localStorage.getItem(AUTO_REFRESH_KEY) === 'true',
   )

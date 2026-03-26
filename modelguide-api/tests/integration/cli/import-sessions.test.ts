@@ -55,6 +55,7 @@ beforeAll(async () => {
         slug: "session-test-agent",
         modality: "voice",
         platform: "custom",
+        active: false,
         tools: [],
       },
     ],

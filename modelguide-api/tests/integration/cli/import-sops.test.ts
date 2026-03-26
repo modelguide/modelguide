@@ -67,6 +67,7 @@ beforeAll(async () => {
         slug: "sop-test-agent",
         modality: "voice",
         platform: "custom",
+        active: false,
         tools: [{ connectorSlug: "sop_test_store" }],
       },
     ],

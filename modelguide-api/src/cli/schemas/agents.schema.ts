@@ -14,6 +14,7 @@ export const agentItemSchema = z.object({
   description: z.string().optional(),
   modality: z.enum(modalities).default("voice"),
   platform: z.enum(agentPlatforms).default("custom"),
+  active: z.boolean().default(false),
   tools: z.array(agentToolLinkSchema).default([]),
 });
 
