@@ -6,7 +6,7 @@ connectors:
       baseUrl: "https://api.acme.example.com"
       publishableKey: "pk_acme_example"
     secrets:
-      - field: "apiKey"
+      - field: "secretApiKey"
         name: "Acme Store API Key"
         type: api_key
   - name: "Acme Support"
