@@ -1,13 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, createFileRoute, useMatch, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Bot, FileText, FlaskConical, Play, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  Bot,
+  FileText,
+  FlaskConical,
+  Play,
+  RefreshCw,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Spinner } from '~/components/ui/spinner'
+import { EvaluateSessionDialog } from '~/features/evals/components/evaluate-session-dialog'
+import { EvaluatorsPanel } from '~/features/evals/components/evaluators-panel'
 import { GenerateTestCasesButton } from '~/features/evals/components/generate-test-cases-button'
-import { RunSuiteDialog } from '~/features/evals/components/run-suite-dialog'
+import { SimulateRunDialog } from '~/features/evals/components/simulate-run-dialog'
 import { SuiteRunsTable } from '~/features/evals/components/suite-runs-table'
 import { TestCasesPanel } from '~/features/evals/components/test-cases-panel'
 import { api } from '~/lib/api'
@@ -27,8 +38,9 @@ function SuiteDetailPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const isAdmin = useIsAdmin()
-  const [activeTab, setActiveTab] = useState<'test-cases' | 'runs'>('test-cases')
-  const [showRunDialog, setShowRunDialog] = useState(false)
+  const [activeTab, setActiveTab] = useState<'test-cases' | 'evaluators' | 'runs'>('test-cases')
+  const [showEvalSessionDialog, setShowEvalSessionDialog] = useState(false)
+  const [showSimulateRunDialog, setShowSimulateRunDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   // If a child route (e.g. runs/$runId) is active, render it instead
@@ -123,9 +135,13 @@ function SuiteDetailPage() {
             {suite.sopId ? (
               <GenerateTestCasesButton suiteId={suiteId} hasSop={!!suite.sopId} />
             ) : null}
-            <Button onClick={() => setShowRunDialog(true)}>
+            <Button variant="secondary" onClick={() => setShowEvalSessionDialog(true)}>
+              <Search className="h-4 w-4" />
+              Evaluate Session
+            </Button>
+            <Button onClick={() => setShowSimulateRunDialog(true)}>
               <Play className="h-4 w-4" />
-              Run Suite
+              Simulate & Run
             </Button>
             <Button
               variant="danger"
@@ -196,6 +212,21 @@ function SuiteDetailPage() {
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab('evaluators')}
+              className={cn(
+                'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                activeTab === 'evaluators'
+                  ? 'bg-bg-elevated text-fg-primary shadow-sm'
+                  : 'text-fg-secondary hover:text-fg-primary',
+              )}
+            >
+              Evaluators
+              {suite.evaluators ? (
+                <span className="ml-1.5 text-xs text-fg-muted">({suite.evaluators.length})</span>
+              ) : null}
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab('runs')}
               className={cn(
                 'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
@@ -216,19 +247,32 @@ function SuiteDetailPage() {
           {/* Tab Content */}
           {activeTab === 'test-cases' ? (
             <TestCasesPanel testCases={suite.testCases ?? []} />
+          ) : activeTab === 'evaluators' ? (
+            <EvaluatorsPanel evaluators={suite.evaluators ?? []} />
           ) : (
             <SuiteRunsTable runs={runsData?.data ?? []} suiteId={suiteId} isLoading={runsLoading} />
           )}
         </>
       ) : null}
 
-      {/* Run Suite Dialog */}
+      {/* Evaluate Session Dialog */}
       {isAdmin ? (
-        <RunSuiteDialog
-          open={showRunDialog}
-          onClose={() => setShowRunDialog(false)}
+        <EvaluateSessionDialog
+          open={showEvalSessionDialog}
+          onClose={() => setShowEvalSessionDialog(false)}
           suiteId={suiteId}
           agentId={suite?.agentId}
+          onSuccess={() => setActiveTab('runs')}
+        />
+      ) : null}
+
+      {/* Simulate & Run Dialog */}
+      {isAdmin ? (
+        <SimulateRunDialog
+          open={showSimulateRunDialog}
+          onClose={() => setShowSimulateRunDialog(false)}
+          suiteId={suiteId}
+          testCases={suite?.testCases ?? []}
           onSuccess={() => setActiveTab('runs')}
         />
       ) : null}

@@ -154,17 +154,19 @@ describe('SuiteDetailPage', () => {
     expect(screen.getByText('Failed')).toBeInTheDocument()
   })
 
-  it('shows "Run Suite" button for admin', async () => {
+  it('shows "Evaluate Session" and "Simulate & Run" buttons for admin', async () => {
     mockIsAdmin = true
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByText('Run Suite')).toBeInTheDocument()
+      expect(screen.getByText('Evaluate Session')).toBeInTheDocument()
     })
+
+    expect(screen.getByText('Simulate & Run')).toBeInTheDocument()
   })
 
-  it('hides "Run Suite" and "Delete" for non-admin', async () => {
+  it('hides action buttons and "Delete" for non-admin', async () => {
     mockIsAdmin = false
 
     renderPage()
@@ -173,7 +175,8 @@ describe('SuiteDetailPage', () => {
       expect(screen.getByText('Test Cases')).toBeInTheDocument()
     })
 
-    expect(screen.queryByText('Run Suite')).not.toBeInTheDocument()
+    expect(screen.queryByText('Evaluate Session')).not.toBeInTheDocument()
+    expect(screen.queryByText('Simulate & Run')).not.toBeInTheDocument()
     expect(screen.queryByText('Delete')).not.toBeInTheDocument()
   })
 

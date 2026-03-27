@@ -51,7 +51,7 @@ export async function enqueueSimulateAndRun(
   orgId: string,
   suiteId: string,
   promptSource: string,
-  opts?: RunEvalSuiteOpts,
+  opts?: RunEvalSuiteOpts & { testCaseIds?: string[] },
 ): Promise<{ suiteRunId: string }> {
   // Validate + create suite run in a single transaction (avoids TOCTOU race)
   const suiteRun = await forOrg(orgId, async (tx) => {
@@ -82,7 +82,7 @@ export async function enqueueSimulateAndRun(
       );
     }
 
-    const testCases = await tx
+    let testCases = await tx
       .select({
         id: evalSuiteTestCases.id,
         name: evalSuiteTestCases.name,
@@ -95,6 +95,17 @@ export async function enqueueSimulateAndRun(
       throw Errors.validationError(
         `Eval suite "${suiteId}" has no test cases — initialize the suite first`,
       );
+    }
+
+    // Filter to specific test cases if requested
+    if (opts?.testCaseIds && opts.testCaseIds.length > 0) {
+      const requestedIds = new Set(opts.testCaseIds);
+      testCases = testCases.filter((tc) => requestedIds.has(tc.id));
+      if (testCases.length === 0) {
+        throw Errors.validationError(
+          "None of the specified testCaseIds match test cases in this suite",
+        );
+      }
     }
 
     for (const tc of testCases) {
@@ -136,6 +147,7 @@ export async function enqueueSimulateAndRun(
       suiteRunId: suiteRun.id,
       promptSource,
       triggeredBy: opts?.triggeredBy,
+      testCaseIds: opts?.testCaseIds,
     },
     executeSimulateAndRun,
   );
@@ -171,7 +183,7 @@ async function executeSimulateAndRun(
     currentTestCase: string | null;
   }) => void,
 ): Promise<void> {
-  const { orgId, suiteId, suiteRunId, triggeredBy } = payload;
+  const { orgId, suiteId, suiteRunId, triggeredBy, testCaseIds } = payload;
   const startTime = performance.now();
 
   try {
@@ -182,6 +194,7 @@ async function executeSimulateAndRun(
       triggeredBy,
       startTime,
       updateProgress,
+      testCaseIds,
     );
   } catch (err) {
     log.error({ err, suiteRunId, suiteId }, "simulate-and-run task failed");
@@ -213,6 +226,7 @@ async function executeSimulateAndRunInner(
     total: number;
     currentTestCase: string | null;
   }) => void,
+  testCaseIds?: string[],
 ): Promise<void> {
   const suiteData = await forOrg(orgId, async (tx) => {
     const [suite] = await tx
@@ -229,11 +243,17 @@ async function executeSimulateAndRunInner(
       .from(agents)
       .where(eq(agents.id, suite!.agentId));
 
-    const testCases = await tx
+    let testCases = await tx
       .select()
       .from(evalSuiteTestCases)
       .where(eq(evalSuiteTestCases.suiteId, suiteId))
       .orderBy(asc(evalSuiteTestCases.order));
+
+    // Filter to specific test cases if requested
+    if (testCaseIds && testCaseIds.length > 0) {
+      const requestedIds = new Set(testCaseIds);
+      testCases = testCases.filter((tc) => requestedIds.has(tc.id));
+    }
 
     return { suite: suite!, agent: agent!, testCases };
   });

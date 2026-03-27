@@ -91,9 +91,9 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = vi.fn()
 })
 
-import { RunSuiteDialog } from './run-suite-dialog'
+import { EvaluateSessionDialog } from './evaluate-session-dialog'
 
-function renderDialog(props: Partial<React.ComponentProps<typeof RunSuiteDialog>> = {}) {
+function renderDialog(props: Partial<React.ComponentProps<typeof EvaluateSessionDialog>> = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -105,14 +105,14 @@ function renderDialog(props: Partial<React.ComponentProps<typeof RunSuiteDialog>
   }
   return render(
     <QueryClientProvider client={queryClient}>
-      <RunSuiteDialog {...defaultProps} />
+      <EvaluateSessionDialog {...defaultProps} />
     </QueryClientProvider>,
   )
 }
 
 // --- Tests ---
 
-describe('RunSuiteDialog', () => {
+describe('EvaluateSessionDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     shouldReturnSessions = true
@@ -121,7 +121,7 @@ describe('RunSuiteDialog', () => {
   it('renders dialog title and session ID input', () => {
     renderDialog()
 
-    expect(screen.getByText('Run Eval Suite')).toBeInTheDocument()
+    expect(screen.getByText('Evaluate Session')).toBeInTheDocument()
     expect(screen.getByLabelText('Session ID')).toBeInTheDocument()
   })
 
@@ -132,10 +132,10 @@ describe('RunSuiteDialog', () => {
     expect(screen.getByText('Compiled')).toBeInTheDocument()
   })
 
-  it('disables Run Suite button when no session ID', () => {
+  it('disables Evaluate button when no session ID', () => {
     renderDialog()
 
-    const button = screen.getByText('Run Suite')
+    const button = screen.getByText('Evaluate')
     expect(button).toBeDisabled()
   })
 
@@ -148,13 +148,13 @@ describe('RunSuiteDialog', () => {
     expect(screen.getByText('Enter a valid UUID')).toBeInTheDocument()
   })
 
-  it('enables Run Suite button when valid UUID is entered', () => {
+  it('enables Evaluate button when valid UUID is entered', () => {
     renderDialog()
 
     const input = screen.getByLabelText('Session ID')
     fireEvent.change(input, { target: { value: '11111111-1111-1111-1111-111111111111' } })
 
-    const button = screen.getByText('Run Suite')
+    const button = screen.getByText('Evaluate')
     expect(button).not.toBeDisabled()
   })
 

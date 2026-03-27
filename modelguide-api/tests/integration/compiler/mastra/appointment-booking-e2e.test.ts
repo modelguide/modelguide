@@ -168,10 +168,7 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
       const suite = await initSuiteFromSop(orgId, agentId, sop.id);
 
       expect(suite.testCases.length).toBe(1);
-      const allEvaluators = suite.testCases.flatMap(
-        (tc: { evaluators: unknown[] }) => tc.evaluators,
-      );
-      expect(allEvaluators.length).toBeGreaterThanOrEqual(3);
+      expect(suite.evaluators.length).toBeGreaterThanOrEqual(3);
 
       // Step 2: compileAgent
       const compileResult = await compileAgent({

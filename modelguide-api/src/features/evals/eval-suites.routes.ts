@@ -68,11 +68,6 @@ const taskIdParams = z.object({
   taskId: z.string().uuid().openapi({ description: "Generation Task ID" }),
 });
 
-const testCaseParams = z.object({
-  suiteId: z.string().uuid().openapi({ description: "Eval Suite ID" }),
-  testCaseId: z.string().uuid().openapi({ description: "Test Case ID" }),
-});
-
 // ============================================================================
 // Formatters
 // ============================================================================
@@ -80,12 +75,10 @@ const testCaseParams = z.object({
 type SuiteDetail = Awaited<ReturnType<typeof getEvalSuiteById>>;
 type SuiteRunDetail = Awaited<ReturnType<typeof getEvalSuiteRunById>>;
 
-function formatEvaluator(
-  a: SuiteDetail["testCases"][number]["evaluators"][number],
-) {
+function formatEvaluator(a: SuiteDetail["evaluators"][number]) {
   return {
     id: a.id,
-    testCaseId: a.testCaseId,
+    suiteId: a.suiteId,
     evalConfigId: a.evalConfigId,
     name: a.name,
     sopStepId: a.sopStepId,
@@ -106,7 +99,6 @@ function formatTestCase(tc: SuiteDetail["testCases"][number]) {
     input: tc.input as Record<string, unknown> | null,
     expectedBehavior: tc.expectedBehavior,
     order: tc.order,
-    evaluators: tc.evaluators.map(formatEvaluator),
     createdAt: tc.createdAt.toISOString(),
     updatedAt: tc.updatedAt?.toISOString() ?? null,
   };
@@ -120,6 +112,7 @@ function formatSuiteDetail(s: SuiteDetail) {
     name: s.name,
     description: s.description,
     testCases: s.testCases.map(formatTestCase),
+    evaluators: s.evaluators.map(formatEvaluator),
     createdBy: s.createdBy,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt?.toISOString() ?? null,
@@ -298,7 +291,7 @@ router.post(
   requireOrganization(),
 );
 router.post(
-  "/:suiteId/test-cases/:testCaseId/evaluators",
+  "/:suiteId/evaluators",
   requireUser(),
   requirePermission("eval_suites:create"),
   requireOrganization(),
@@ -566,6 +559,7 @@ router.openapi(simulateAndRunRoute, async (c) => {
     body.promptSource,
     {
       triggeredBy,
+      testCaseIds: body.testCaseIds,
     },
   );
 
@@ -794,17 +788,17 @@ router.openapi(createTestCaseRoute, async (c) => {
   );
 });
 
-// POST /:suiteId/test-cases/:testCaseId/evaluators — create manual evaluator
+// POST /:suiteId/evaluators — create manual evaluator
 const createEvaluatorRoute = createRoute({
   method: "post",
-  path: "/{suiteId}/test-cases/{testCaseId}/evaluators",
+  path: "/{suiteId}/evaluators",
   tags: ["Eval Suites"],
   summary: "Create manual evaluator",
   description:
-    "Creates a manual evaluator for an existing test case. Links to an eval_config.",
+    "Creates a manual evaluator for an existing suite. Links to an eval_config.",
   security: [{ bearerAuth: [] }],
   request: {
-    params: testCaseParams,
+    params: suiteIdParams,
     body: {
       content: { "application/json": { schema: createEvaluatorSchema } },
     },
@@ -816,7 +810,7 @@ const createEvaluatorRoute = createRoute({
         "application/json": {
           schema: z.object({
             id: z.string().uuid(),
-            testCaseId: z.string().uuid(),
+            suiteId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
             name: z.string(),
             source: z.enum(["auto", "manual"]),
@@ -829,21 +823,21 @@ const createEvaluatorRoute = createRoute({
     },
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
-    404: errorResponse("Suite or test case not found"),
+    404: errorResponse("Suite not found"),
   },
 });
 
 router.openapi(createEvaluatorRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const { suiteId, testCaseId } = c.req.valid("param");
+  const { suiteId } = c.req.valid("param");
   const body = c.req.valid("json");
 
-  const evaluator = await createEvaluator(orgId, suiteId, testCaseId, body);
+  const evaluator = await createEvaluator(orgId, suiteId, body);
 
   return c.json(
     {
       id: evaluator.id,
-      testCaseId: evaluator.testCaseId,
+      suiteId: evaluator.suiteId,
       evalConfigId: evaluator.evalConfigId,
       name: evaluator.name,
       source: evaluator.source,

@@ -13,7 +13,7 @@ export function makeEvalSuiteAssertion(
 ): EvalSuiteAssertion {
   return {
     id: '00000000-0000-0000-0000-a00000000001',
-    testCaseId: '00000000-0000-0000-0000-b00000000001',
+    suiteId: '00000000-0000-0000-0000-d00000000001',
     evalConfigId: '00000000-0000-0000-0000-c00000000001',
     name: 'tool_called: get_order',
     sopStepId: 'step-1',
@@ -37,7 +37,6 @@ export function makeEvalSuiteTestCase(
     input: { userMessage: 'Where is my order?' },
     expectedBehavior: 'Agent looks up order and reports status',
     order: 1,
-    evaluators: [makeEvalSuiteAssertion()],
     createdAt: '2026-02-15T10:00:00Z',
     updatedAt: '2026-02-16T12:00:00Z',
     ...overrides,
@@ -71,27 +70,30 @@ export function makeEvalSuiteDetail(overrides: Partial<EvalSuiteDetail> = {}): E
         order: 2,
         source: 'manual',
         description: 'Tests edge case scenario',
-        evaluators: [
-          makeEvalSuiteAssertion({
-            id: 'a-2a',
-            testCaseId: 'tc-2',
-            name: 'llm_judge: Confirms status',
-            order: 1,
-          }),
-          makeEvalSuiteAssertion({
-            id: 'a-2b',
-            testCaseId: 'tc-2',
-            name: 'tool_called: search_products',
-            order: 2,
-            required: false,
-          }),
-        ],
       }),
       makeEvalSuiteTestCase({
         id: 'tc-3',
         name: 'Guardrail Test',
         order: 3,
         description: 'Tests guardrail behavior',
+      }),
+    ],
+    evaluators: [
+      makeEvalSuiteAssertion({
+        id: 'a-1',
+        name: 'tool_called: get_order',
+        order: 1,
+      }),
+      makeEvalSuiteAssertion({
+        id: 'a-2a',
+        name: 'llm_judge: Confirms status',
+        order: 2,
+      }),
+      makeEvalSuiteAssertion({
+        id: 'a-2b',
+        name: 'tool_called: search_products',
+        order: 3,
+        required: false,
       }),
     ],
     ...overrides,

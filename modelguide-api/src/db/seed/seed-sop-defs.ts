@@ -18,7 +18,7 @@ import type {
 import { isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "../schema";
-import { agentSops, evalConfigs, sopSteps, sops } from "../schema";
+import { agentSops, evalConfigs, evalSuites, sopSteps, sops } from "../schema";
 
 type SeedDb = PostgresJsDatabase<typeof schema>;
 
@@ -287,7 +287,7 @@ async function seedGlowbox(db: SeedDb) {
   );
 
   // ── 1. Order Lookup (active, forked from template) ──
-  await insertSop(db, {
+  const orderLookupSop = await insertSop(db, {
     orgId: org.id,
     adminId: admin?.id,
     templateSlug: "order-lookup",
@@ -692,6 +692,35 @@ async function seedGlowbox(db: SeedDb) {
     ],
     agentIds,
   });
+
+  // ── Eval Suite linked to Order Lookup SOP ──
+  if (orderLookupSop && agentIds.length > 0) {
+    const existingSuite = await db.query.evalSuites.findFirst({
+      where: (es, { eq, and }) =>
+        and(
+          eq(es.organizationId, org.id),
+          eq(es.name, "Order Lookup — WISMO Coverage"),
+        ),
+    });
+
+    if (!existingSuite) {
+      await db.insert(evalSuites).values({
+        organizationId: org.id,
+        agentId: agentIds[0],
+        sopId: orderLookupSop.id,
+        name: "Order Lookup — WISMO Coverage",
+        description:
+          "End-to-end test suite for the Order Lookup SOP. Validates greeting, identity verification, order lookup tool usage, and status communication.",
+        status: "active",
+        createdBy: admin?.id,
+      });
+      console.log("  Created eval suite: Order Lookup — WISMO Coverage");
+    } else {
+      console.log(
+        "  Skipped eval suite: Order Lookup — WISMO Coverage (already exists)",
+      );
+    }
+  }
 }
 
 // ============================================================================

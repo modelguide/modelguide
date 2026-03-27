@@ -12,7 +12,7 @@ import type { EvalSuiteRun } from '~/schemas/eval-suites'
 import { PROMPT_SOURCE_LABELS } from '~/schemas/eval-suites'
 import type { SessionListItem } from '~/schemas/sessions'
 
-export interface RunSuiteDialogProps {
+export interface EvaluateSessionDialogProps {
   open: boolean
   onClose: () => void
   suiteId: string
@@ -22,13 +22,13 @@ export interface RunSuiteDialogProps {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export function RunSuiteDialog({
+export function EvaluateSessionDialog({
   open,
   onClose,
   suiteId,
   agentId,
   onSuccess,
-}: RunSuiteDialogProps) {
+}: EvaluateSessionDialogProps) {
   const queryClient = useQueryClient()
 
   const [sessionId, setSessionId] = useState('')
@@ -66,8 +66,8 @@ export function RunSuiteDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Run Eval Suite"
-      description="Evaluate a session against this suite's test cases and assertions."
+      title="Evaluate Session"
+      description="Pick an existing live session to evaluate against this suite's evaluators."
     >
       <div className="space-y-4">
         {/* Recent sessions picker */}
@@ -105,7 +105,7 @@ export function RunSuiteDialog({
           <div>
             <p className="mb-2 text-xs font-medium text-fg-muted">Recent Sessions</p>
             <div className="rounded-lg border border-fg-subtle/10 bg-bg-base p-4 text-center text-xs text-fg-muted">
-              Loading sessions…
+              Loading sessions...
             </div>
           </div>
         ) : null}
@@ -113,7 +113,7 @@ export function RunSuiteDialog({
         <div>
           <Input
             label="Session ID"
-            placeholder="Paste a session UUID…"
+            placeholder="Paste a session UUID..."
             value={sessionId}
             onChange={(e) => setSessionId(e.target.value)}
           />
@@ -135,7 +135,7 @@ export function RunSuiteDialog({
         </Select>
 
         {runMutation.error ? (
-          <p className="text-xs text-error">Failed to start run. Please try again.</p>
+          <p className="text-xs text-error">Failed to evaluate session. Please try again.</p>
         ) : null}
       </div>
 
@@ -148,7 +148,7 @@ export function RunSuiteDialog({
           disabled={!canSubmit}
           loading={runMutation.isPending}
         >
-          Run Suite
+          Evaluate
         </Button>
       </DialogFooter>
     </Dialog>

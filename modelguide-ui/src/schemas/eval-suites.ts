@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 export const evalSuiteAssertionSchema = z.object({
   id: z.string().uuid(),
-  testCaseId: z.string().uuid(),
+  suiteId: z.string().uuid(),
   evalConfigId: z.string().uuid(),
   name: z.string(),
   sopStepId: z.string().nullable().optional(),
@@ -27,7 +27,6 @@ export const evalSuiteTestCaseSchema = z.object({
   input: z.record(z.unknown()).nullable().optional(),
   expectedBehavior: z.string().nullable().optional(),
   order: z.number(),
-  evaluators: z.array(evalSuiteAssertionSchema),
   createdAt: z.string(),
   updatedAt: z.string().nullable().optional(),
 })
@@ -55,6 +54,7 @@ export type EvalSuiteSummary = z.infer<typeof evalSuiteSummarySchema>
 
 export const evalSuiteDetailSchema = evalSuiteSummarySchema.extend({
   testCases: z.array(evalSuiteTestCaseSchema).optional(),
+  evaluators: z.array(evalSuiteAssertionSchema).optional(),
 })
 
 export type EvalSuiteDetail = z.infer<typeof evalSuiteDetailSchema>

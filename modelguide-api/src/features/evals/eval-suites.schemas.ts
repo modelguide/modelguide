@@ -51,6 +51,7 @@ export const evalSuiteRunsQuerySchema = z.object({
 
 export const simulateAndRunSchema = z.object({
   promptSource: z.enum(["compiled", "hand_written", "edited"]),
+  testCaseIds: z.array(z.string().uuid()).optional(),
 });
 
 export const generateTestCasesSchema = z.object({
@@ -95,7 +96,7 @@ export const simulateAndRunResponseSchema = z.object({
 
 const evalSuiteEvaluatorResponseSchema = z.object({
   id: z.string().uuid(),
-  testCaseId: z.string().uuid(),
+  suiteId: z.string().uuid(),
   evalConfigId: z.string().uuid(),
   name: z.string(),
   sopStepId: z.string().nullable(),
@@ -114,7 +115,6 @@ const evalSuiteTestCaseResponseSchema = z.object({
   input: z.record(z.string(), z.unknown()).nullable(),
   expectedBehavior: z.string().nullable(),
   order: z.number(),
-  evaluators: z.array(evalSuiteEvaluatorResponseSchema),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });
@@ -126,6 +126,7 @@ export const evalSuiteResponseSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   testCases: z.array(evalSuiteTestCaseResponseSchema).optional(),
+  evaluators: z.array(evalSuiteEvaluatorResponseSchema).optional(),
   createdBy: z.string().uuid().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),

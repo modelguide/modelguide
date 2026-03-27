@@ -71,6 +71,7 @@ export interface SimulateAndRunPayload {
   suiteRunId: string;
   promptSource: string;
   triggeredBy?: string;
+  testCaseIds?: string[];
 }
 
 export interface SimulateAndRunProgress {
