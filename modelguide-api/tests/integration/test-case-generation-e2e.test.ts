@@ -6,11 +6,12 @@
  *   GET  /api/eval-suites/generation-tasks/:taskId       →  poll until done
  *   GET  /api/eval-suites/:suiteId                       →  verify test cases
  *
- * Requires ANTHROPIC_API_KEY to be set. All env vars are expected to be
- * configured in the test environment.
+ * Requires ANTHROPIC_API_KEY to be set. Skipped in CI when key is not available.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+
+const SKIP = !process.env.ANTHROPIC_API_KEY;
 import { forApp, forOrg } from "@db/rls";
 import {
   agentSops,
@@ -234,7 +235,9 @@ afterAll(async () => {
 // Tests
 // ============================================================================
 
-describe("E2E: Synthetic test case generation", () => {
+const describeE2E = SKIP ? describe.skip : describe;
+
+describeE2E("E2E: Synthetic test case generation", () => {
   test("returns 400 when suite has no linked SOP", async () => {
     const res = await request(
       `/api/eval-suites/${suiteWithoutSopId}/generate-test-cases`,
