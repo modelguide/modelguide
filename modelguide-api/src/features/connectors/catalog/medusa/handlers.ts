@@ -21,7 +21,7 @@ export const listProducts = withMedusa(async (fetcher, ctx) => {
       limit: input.limit ?? 20,
       offset: input.offset ?? 0,
       q: input.query,
-      fields: "+variants.inventory_quantity",
+      fields: "+variants.inventory_quantity,+metadata",
     },
   });
   return { success: true, data };
@@ -33,7 +33,7 @@ export const getProduct = withMedusa(async (fetcher, ctx) => {
     `/store/products/${productId}`,
     {
       params: {
-        fields: "+variants.inventory_quantity",
+        fields: "+variants.inventory_quantity,+metadata",
       },
     },
   );
