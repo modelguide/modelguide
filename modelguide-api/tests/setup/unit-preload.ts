@@ -17,5 +17,5 @@ process.env.MAGIC_LINK_SECRET =
   "test-magic-link-secret-that-is-at-least-32-characters-long";
 process.env.LOG_LEVEL = "silent";
 process.env.ANTHROPIC_API_KEY = "test-anthropic-api-key";
-process.env.GENERATION_DIMENSION_MODEL = "claude-sonnet-4-5-20250514";
+process.env.GENERATION_DIMENSION_MODEL = "claude-sonnet-4-20250514";
 process.env.GENERATION_CASE_MODEL = "claude-haiku-4-5-20251001";

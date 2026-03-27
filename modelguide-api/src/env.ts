@@ -75,9 +75,7 @@ const envSchema = z
     // Test case generation — Anthropic API key for generateObject() calls
     ANTHROPIC_API_KEY: z.string().optional(),
     // Sonnet model for dimension derivation
-    GENERATION_DIMENSION_MODEL: z
-      .string()
-      .default("claude-sonnet-4-5-20250514"),
+    GENERATION_DIMENSION_MODEL: z.string().default("claude-sonnet-4-20250514"),
     // Haiku model for per-case generation + validation
     GENERATION_CASE_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   })

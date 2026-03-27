@@ -149,7 +149,7 @@ Optional:
 - `EVAL_LLM_BASE_URL` — custom base URL for eval LLM endpoint. Falls back to `SIMULATION_LLM_BASE_URL`
 - `EVAL_LLM_MODEL` — model for eval scoring. Falls back to `SIMULATION_LLM_MODEL`
 - `ANTHROPIC_API_KEY` — Anthropic API key for synthetic test case generation (uses Vercel AI SDK)
-- `GENERATION_DIMENSION_MODEL` — Sonnet model for dimension derivation (defaults to `claude-sonnet-4-5-20250514`)
+- `GENERATION_DIMENSION_MODEL` — Sonnet model for dimension derivation (defaults to `claude-sonnet-4-20250514`)
 - `GENERATION_CASE_MODEL` — Haiku model for per-case generation + validation (defaults to `claude-haiku-4-5-20251001`)
 
 ## 9. Verify
