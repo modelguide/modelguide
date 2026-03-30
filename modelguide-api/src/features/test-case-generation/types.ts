@@ -69,7 +69,7 @@ export interface DimensionTuple {
 }
 
 // ============================================================================
-// Generated test case (Step 3 — LLM-generated via Haiku)
+// Generated test case (Step 3 — LLM-generated)
 // ============================================================================
 
 /** Raw output from the LLM for a single test case. */
@@ -95,7 +95,7 @@ export interface ValidationResult {
 export interface GenerationRejection {
   tupleName: string;
   issues: string[];
-  rejectionSource: "structural" | "semantic";
+  rejectionSource: "structural" | "semantic" | "error";
 }
 
 // ============================================================================
@@ -127,7 +127,7 @@ export interface GenerationRunResult {
   accepted: number;
   rejected: number;
   rejections: GenerationRejection[];
-  rejectionsBySource: { structural: number; semantic: number };
+  rejectionsBySource: { structural: number; semantic: number; error: number };
   topIssues: TopIssue[];
   cost: GenerationCost;
 }

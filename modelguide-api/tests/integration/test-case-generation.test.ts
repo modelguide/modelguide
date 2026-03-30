@@ -502,7 +502,11 @@ describe("Full generation pipeline", () => {
           issues: string[];
           rejectionSource: string;
         }>;
-        rejectionsBySource: { structural: number; semantic: number };
+        rejectionsBySource: {
+          structural: number;
+          semantic: number;
+          error: number;
+        };
         topIssues: Array<{ issue: string; count: number }>;
         cost: {
           dimensionTokens: { input: number; output: number };

@@ -2,7 +2,7 @@
  * Dimension derivation and tuple selection for test case generation.
  *
  * - deriveDimensionsFromSop() — LLM-derived dimensions via generateObject()
- * - selectTuples() — deterministic stratified sampling (no LLM)
+ * - selectTuples() — stratified sampling (no LLM)
  * - toneToPersonaId() — maps tones to existing persona IDs
  */
 
@@ -58,11 +58,13 @@ const toolStatesEntrySchema = z.object({
 const dimensionConfigSchema = z.object({
   intents: z
     .array(z.string())
+    .min(1)
     .describe(
       "Customer intents relevant to this SOP (generate exactly 3-6 items)",
     ),
   edgeCases: z
     .array(z.string())
+    .min(1)
     .describe(
       'Edge cases including "straightforward" as the first item (generate exactly 5-8 items)',
     ),
@@ -106,7 +108,8 @@ function extractToolSlugs(steps: SopStep[]): string[] {
 }
 
 /**
- * Derive scenario dimensions from a SOP using Sonnet generateObject().
+ * Derive scenario dimensions from a SOP using generateObject()
+ * (model configurable via GENERATION_DIMENSION_MODEL).
  *
  * Returns intents, fixed tones/complexity, LLM-derived edge cases,
  * and tool-state variants per tool slug.
@@ -191,9 +194,13 @@ interface SelectTuplesOpts {
   count: number;
 }
 
-/** Create a deterministic hash key for deduplication. */
+/** Create a hash key for deduplication (sorted keys for order independence). */
 function tupleKey(t: DimensionTuple): string {
-  return `${t.intent}|${t.tone}|${t.complexity}|${t.edgeCase}|${JSON.stringify(t.toolState)}`;
+  const sortedState = JSON.stringify(
+    t.toolState,
+    Object.keys(t.toolState).sort(),
+  );
+  return `${t.intent}|${t.tone}|${t.complexity}|${t.edgeCase}|${sortedState}`;
 }
 
 /** Pick a random element from an array. */
@@ -226,7 +233,7 @@ function pickToolState(
  * 2. Edge case: edge case x intent (each edge paired with each intent)
  * 3. Stress: hard tone + high complexity + edge case
  *
- * No LLM calls — pure deterministic code.
+ * No LLM calls — pure in-process code (uses Math.random for variety).
  */
 export function selectTuples(
   dims: DimensionConfig,

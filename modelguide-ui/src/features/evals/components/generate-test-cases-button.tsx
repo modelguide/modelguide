@@ -98,7 +98,8 @@ export function GenerateTestCasesButton({ suiteId, hasSop }: GenerateTestCasesBu
           const body = await (error as { response: Response }).response.json()
           if (body?.message) message = body.message
         } catch {
-          // use default message
+          const response = (error as { response: Response }).response
+          message = `Failed to start generation (HTTP ${response.status})`
         }
       }
       toast.error(message)

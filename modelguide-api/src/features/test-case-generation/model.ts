@@ -5,13 +5,17 @@
  * "openai/gpt-4o"). Bare model names (no slash) default to Anthropic for backwards compat.
  *
  * All providers are configured with GENERATION_LLM_API_KEY so a single env var
- * controls API access for the generation feature.
+ * controls API access. When switching providers (e.g., from openai/* to anthropic/*),
+ * the API key must also be changed to one valid for that provider.
  */
 
 import { env } from "@/env";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { getLogger } from "@lib/logger";
 import type { LanguageModel } from "ai";
+
+const log = getLogger();
 
 /** Lazily-created provider instances keyed by GENERATION_LLM_API_KEY. */
 function getProviders(): Record<string, (model: string) => LanguageModel> {
@@ -49,7 +53,7 @@ export function resolveGenerationModel(modelId: string): LanguageModel {
   return factory(model);
 }
 
-/** Per-MTok pricing: [inputCostPerMTok, outputCostPerMTok]. */
+/** Per-MTok pricing: [inputCostPerMTok, outputCostPerMTok]. As of March 2026. */
 const MODEL_PRICING: Record<string, [number, number]> = {
   "claude-sonnet-4-20250514": [3, 15],
   "claude-haiku-4-5-20251001": [0.8, 4],
@@ -69,7 +73,13 @@ export function estimateModelCost(
 ): number {
   const model = modelId.includes("/") ? modelId.split("/")[1] : modelId;
   const pricing = MODEL_PRICING[model];
-  if (!pricing) return 0;
+  if (!pricing) {
+    log.warn(
+      { model, modelId },
+      "no pricing data for model — cost estimate will be $0",
+    );
+    return 0;
+  }
   const [inputRate, outputRate] = pricing;
   return (inputTokens * inputRate + outputTokens * outputRate) / 1_000_000;
 }

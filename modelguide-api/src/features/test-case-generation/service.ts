@@ -53,7 +53,9 @@ interface GenerateTestCasesPayload {
 /**
  * Validate suite has linked SOP and enqueue the generation task.
  * Returns immediately (HTTP 202 pattern). Old auto cases are deleted
- * inside the async handler to avoid data loss if the task fails early.
+ * inside the async handler only after the first new case is accepted,
+ * so existing cases survive if the pipeline fails without producing
+ * replacements.
  */
 export async function enqueueGenerateTestCases(
   orgId: string,
@@ -135,18 +137,10 @@ async function executeGenerateTestCases(
 
   const sopDetail = await getSopById(orgId, suite.sopId);
 
-  // Delete old auto-generated cases (deferred into async handler
-  // so old cases survive if the pipeline fails early)
-  await forOrg(orgId, async (tx) => {
-    await tx
-      .delete(evalSuiteTestCases)
-      .where(
-        and(
-          eq(evalSuiteTestCases.suiteId, suiteId),
-          eq(evalSuiteTestCases.source, "auto"),
-        ),
-      );
-  });
+  // Old auto cases are deleted after the first new case is inserted,
+  // so previously generated cases survive if the pipeline fails before
+  // producing any replacements.
+  let deletedOldCases = false;
 
   // 2. Derive dimensions
   let dimensionResult: Awaited<ReturnType<typeof deriveDimensionsFromSop>>;
@@ -249,6 +243,22 @@ async function executeGenerateTestCases(
         continue;
       }
 
+      // Delete old auto cases on first accepted insert (avoids data loss
+      // if the pipeline fails before producing any replacements)
+      if (!deletedOldCases) {
+        await forOrg(orgId, async (tx) => {
+          await tx
+            .delete(evalSuiteTestCases)
+            .where(
+              and(
+                eq(evalSuiteTestCases.suiteId, suiteId),
+                eq(evalSuiteTestCases.source, "auto"),
+              ),
+            );
+        });
+        deletedOldCases = true;
+      }
+
       // Insert accepted test case
       const personaId = toneToPersonaId(tuple.tone);
       await createTestCase(orgId, suiteId, {
@@ -282,7 +292,7 @@ async function executeGenerateTestCases(
       rejections.push({
         tupleName,
         issues: [err instanceof Error ? err.message : "LLM generation failed"],
-        rejectionSource: "structural",
+        rejectionSource: "error",
       });
     }
 
@@ -334,12 +344,27 @@ async function executeGenerateTestCases(
  * Detect infrastructure-level errors that should abort the entire pipeline
  * (auth failures, rate limits, network errors) vs per-case LLM failures
  * that can be safely skipped.
+ *
+ * Heuristic: checks structured status codes first (AI SDK errors carry
+ * these), then falls back to message substring matching. May need updating
+ * as LLM provider error formats evolve.
  */
 function isInfrastructureError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
+
+  // Check structured status code if available (AI SDK errors carry these)
+  const status = (err as unknown as Record<string, unknown>).status;
+  if (
+    typeof status === "number" &&
+    (status === 401 || status === 403 || status === 429)
+  ) {
+    return true;
+  }
+
   const msg = err.message.toLowerCase();
   return (
     msg.includes("rate limit") ||
+    msg.includes("429") ||
     msg.includes("401") ||
     msg.includes("403") ||
     msg.includes("econnrefused") ||
@@ -358,7 +383,7 @@ function buildRunResult(
   valUsage: TokenUsage,
 ): GenerationRunResult {
   // Rejections by source
-  const rejectionsBySource = { structural: 0, semantic: 0 };
+  const rejectionsBySource = { structural: 0, semantic: 0, error: 0 };
   for (const r of rejections) {
     rejectionsBySource[r.rejectionSource]++;
   }

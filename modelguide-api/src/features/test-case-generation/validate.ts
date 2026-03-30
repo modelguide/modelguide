@@ -86,7 +86,8 @@ export function validateStructural(
 // ============================================================================
 
 /**
- * Validate internal consistency of a generated test case using Haiku.
+ * Validate internal consistency of a generated test case via LLM
+ * (model configurable via GENERATION_CASE_MODEL).
  *
  * Checks that the email matches the scenario and mock data make sense together.
  */
