@@ -148,9 +148,9 @@ Optional:
 - `EVAL_LLM_API_KEY` — OpenAI (or compatible) API key for eval LLM judge. Falls back to `SIMULATION_LLM_API_KEY`
 - `EVAL_LLM_BASE_URL` — custom base URL for eval LLM endpoint. Falls back to `SIMULATION_LLM_BASE_URL`
 - `EVAL_LLM_MODEL` — model for eval scoring. Falls back to `SIMULATION_LLM_MODEL`
-- `ANTHROPIC_API_KEY` — Anthropic API key for synthetic test case generation (uses Vercel AI SDK)
-- `GENERATION_DIMENSION_MODEL` — Sonnet model for dimension derivation (defaults to `claude-sonnet-4-20250514`)
-- `GENERATION_CASE_MODEL` — Haiku model for per-case generation + validation (defaults to `claude-haiku-4-5-20251001`)
+- `GENERATION_LLM_API_KEY` — API key for synthetic test case generation (Anthropic or OpenAI)
+- `GENERATION_DIMENSION_MODEL` — model for dimension derivation (format: `provider/model`, defaults to `openai/gpt-4o`)
+- `GENERATION_CASE_MODEL` — model for per-case generation + validation (format: `provider/model`, defaults to `openai/gpt-4o-mini`)
 
 ## 9. Verify
 

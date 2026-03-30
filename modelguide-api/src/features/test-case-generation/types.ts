@@ -6,7 +6,29 @@
  */
 
 // ============================================================================
-// Dimension types (Step 1 — derived from SOP via Sonnet)
+// Fixed dimension constants
+// ============================================================================
+
+/** Fixed tone set used for test case generation. */
+export const TONES = [
+  "polite",
+  "frustrated",
+  "confused",
+  "hostile",
+  "terse",
+] as const;
+export type Tone = (typeof TONES)[number];
+
+/** Fixed complexity levels used for test case generation. */
+export const COMPLEXITIES = [
+  "single_step",
+  "multi_step",
+  "requires_escalation",
+] as const;
+export type Complexity = (typeof COMPLEXITIES)[number];
+
+// ============================================================================
+// Dimension types (Step 1 — derived from SOP)
 // ============================================================================
 
 /** JSON leaf value — string, number, boolean, or null. */

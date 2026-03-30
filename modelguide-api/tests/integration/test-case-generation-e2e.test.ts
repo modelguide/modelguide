@@ -6,12 +6,12 @@
  *   GET  /api/eval-suites/generation-tasks/:taskId       →  poll until done
  *   GET  /api/eval-suites/:suiteId                       →  verify test cases
  *
- * Requires ANTHROPIC_API_KEY to be set. Skipped in CI when key is not available.
+ * Requires GENERATION_LLM_API_KEY to be set. Skipped in CI when key is not available.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-const SKIP = !process.env.ANTHROPIC_API_KEY;
+const SKIP = !process.env.GENERATION_LLM_API_KEY;
 import { forApp, forOrg } from "@db/rls";
 import {
   agentSops,

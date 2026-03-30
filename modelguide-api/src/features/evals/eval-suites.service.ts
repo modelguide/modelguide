@@ -72,10 +72,9 @@ function buildAutoEvalConfigName(
 /**
  * Initialize (or re-initialize) an eval suite for an agent+SOP pair.
  *
- * - Derives test cases from SOP steps
- * - Creates evaluators per test case from step eval configs
- * - Loads agent guardrails and creates llm_judge evaluators for all test cases
- * - On re-init: preserves manual test cases, replaces auto-generated ones
+ * - Creates evaluators from SOP step eval configs (suite-level, not per test case)
+ * - Loads agent guardrails and creates llm_judge evaluators
+ * - On re-init: preserves manual evaluators, replaces auto-generated ones
  */
 export async function initSuiteFromSop(
   orgId: string,
@@ -563,14 +562,21 @@ export async function resolveAssertions(
   return assertions.map((a) => {
     const cfg = configMap.get(a.evalConfigId);
     if (!cfg) {
+      log.error(
+        { evalConfigId: a.evalConfigId, suiteId },
+        "evaluator references missing eval config — data integrity issue",
+      );
       return {
         order: a.order,
-        name: a.name || `assertion:${a.order}:unknown`,
+        name: a.name || `assertion:${a.order}:missing_config`,
         required: a.required,
         evaluator: {
           configId: a.evalConfigId,
           evaluatorType: "llm_judge" as const,
-          config: { criterion: "Unknown eval config" },
+          config: {
+            criterion:
+              "ERROR: This evaluator references a deleted eval config. Result should be treated as 'error', not 'pass'.",
+          },
         },
         toolNameMap: {},
       };

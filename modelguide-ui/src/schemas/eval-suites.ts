@@ -105,7 +105,7 @@ export const evalSuiteRunSchema = z.object({
   completedAt: z.string().nullable().optional(),
   durationMs: z.number().nullable().optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
-  testCaseResults: z.array(testCaseResultSchema),
+  testCaseResults: z.array(testCaseResultSchema).optional().default([]),
 })
 
 export type EvalSuiteRun = z.infer<typeof evalSuiteRunSchema>

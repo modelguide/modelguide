@@ -31,7 +31,7 @@ const log = getLogger();
  *
  * - Configured tools (in mockToolResponses) → return the mock fixture
  * - Unconfigured tools (in agentTools but not mockToolResponses) → return
- *   "No mock configured for {toolName}" error (AC 4)
+ *   "No mock configured for {toolName}" error
  */
 export function buildMockToolsWithFallbacks(
   mockToolResponses: Record<string, unknown>,
@@ -131,7 +131,7 @@ export async function simulationMcpHandler(
   const metadata = (session.metadata ?? {}) as SimulationSessionMetadata;
   const mockToolResponses = metadata.mockToolResponses ?? {};
 
-  // Load agent tools for fallback registration (AC 4)
+  // Load agent tools for fallback registration
   const agentTools =
     session.agentId && session.organizationId
       ? await getAgentTools(session.organizationId, session.agentId)

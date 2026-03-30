@@ -209,8 +209,15 @@ async function executeSimulateAndRun(
           })
           .where(eq(evalSuiteRuns.id, suiteRunId)),
       );
-    } catch {
-      log.error({ suiteRunId }, "failed to mark suite run as failed");
+    } catch (dbErr) {
+      log.error(
+        {
+          err: dbErr,
+          suiteRunId,
+          originalError: err instanceof Error ? err.message : String(err),
+        },
+        "failed to mark suite run as failed in database",
+      );
     }
   }
 }
@@ -295,8 +302,8 @@ async function executeSimulateAndRunInner(
           );
         } catch (err) {
           log.warn(
-            { err, personaId },
-            "persona personalization failed — using raw message",
+            { err, personaId, testCaseId: testCase.id },
+            "persona personalization failed — using raw message. Eval results may not reflect intended persona tone.",
           );
         }
       } else {
@@ -392,6 +399,10 @@ async function executeSimulateAndRunInner(
           ),
         );
       } else {
+        log.error(
+          { testCaseId: testCase.id, suiteRunId },
+          "test case failed before session creation — result will not be persisted",
+        );
         results.push(erroredTestCaseResult(testCase));
       }
     } finally {

@@ -4,7 +4,7 @@
  * Tables:
  *  - eval_suites:             suite metadata (agent + SOP pair)
  *  - eval_suite_test_cases:   individual test cases per suite
- *  - eval_suite_evaluators:   evaluators per test case (FK to eval_configs)
+ *  - eval_suite_evaluators:   evaluators per suite (FK to eval_configs)
  *  - eval_suite_runs:         thin aggregator for a full suite execution
  *
  * All tables have organization_id + RLS enabled.

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Sparkles } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '~/components/ui/button'
 import { api } from '~/lib/api'
@@ -71,14 +71,16 @@ export function GenerateTestCasesButton({ suiteId, hasSop }: GenerateTestCasesBu
     [queryClient, suiteId],
   )
 
-  // Detect completion
-  if (
-    taskStatus &&
-    (taskStatus.status === 'completed' || taskStatus.status === 'failed') &&
-    taskId
-  ) {
-    handleTaskComplete(taskStatus)
-  }
+  // Detect completion (in useEffect to avoid state updates during render)
+  useEffect(() => {
+    if (
+      taskStatus &&
+      (taskStatus.status === 'completed' || taskStatus.status === 'failed') &&
+      taskId
+    ) {
+      handleTaskComplete(taskStatus)
+    }
+  }, [taskStatus, taskId, handleTaskComplete])
 
   // Start generation
   const generateMutation = useMutation({
@@ -89,8 +91,17 @@ export function GenerateTestCasesButton({ suiteId, hasSop }: GenerateTestCasesBu
     onSuccess: (data) => {
       setTaskId(data.taskId)
     },
-    onError: () => {
-      toast.error('Failed to start test case generation')
+    onError: async (error: unknown) => {
+      let message = 'Failed to start test case generation'
+      if (error && typeof error === 'object' && 'response' in error) {
+        try {
+          const body = await (error as { response: Response }).response.json()
+          if (body?.message) message = body.message
+        } catch {
+          // use default message
+        }
+      }
+      toast.error(message)
     },
   })
 

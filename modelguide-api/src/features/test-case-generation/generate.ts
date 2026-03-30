@@ -1,19 +1,16 @@
 /**
- * Test case generation — per-tuple LLM generation via Haiku generateObject().
+ * Test case generation — per-tuple LLM generation via generateObject().
  *
  * Each tuple produces one GeneratedTestCase with:
  * - name, scenario, input_email, mock_tool_responses
- *
- * AC 7: validates output against Zod schema via generateObject()
- * AC 8: mock_tool_responses keys match SOP tool slugs
- * AC 9: input_email reflects tuple tone and edge case
  */
 
 import { env } from "@/env";
-import { anthropic } from "@ai-sdk/anthropic";
 import type { SopStep } from "@features/sops/sops.types";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { resolveGenerationModel } from "./model";
+import { parseFields } from "./parse-fields";
 import type {
   DimensionTuple,
   GeneratedTestCase,
@@ -26,7 +23,7 @@ import type {
 // ============================================================================
 
 /**
- * Anthropic API rejects z.record() (produces `additionalProperties: { ... }`).
+ * Some LLM APIs reject z.record() (produces `additionalProperties: { ... }`).
  * Use array-of-entries format and convert back to Record after generation.
  */
 const mockFieldSchema = z.object({
@@ -61,13 +58,12 @@ const generatedTestCaseSchema = z.object({
 });
 
 // ============================================================================
-// generateTestCase (AC 7, AC 8, AC 9)
+// generateTestCase
 // ============================================================================
 
 /**
  * Generate a single test case from a dimension tuple and SOP context.
  *
- * Uses Haiku generateObject() for fast, cheap generation.
  * Returns the generated case and token usage.
  */
 export async function generateTestCase(
@@ -117,7 +113,7 @@ Requirements:
 The email should feel like a real customer wrote it, not a template.`;
 
   const { object, usage } = await generateObject({
-    model: anthropic(env.GENERATION_CASE_MODEL),
+    model: resolveGenerationModel(env.GENERATION_CASE_MODEL),
     schema: generatedTestCaseSchema,
     prompt,
   });
@@ -125,15 +121,7 @@ The email should feel like a real customer wrote it, not a template.`;
   // Convert array-of-entries back to Record<slug, ToolStateVariant>
   const mockToolResponses: Record<string, ToolStateVariant> = {};
   for (const entry of object.mock_tool_responses) {
-    const record: ToolStateVariant = {};
-    for (const field of entry.fields) {
-      if (field.value === "true") record[field.key] = true;
-      else if (field.value === "false") record[field.key] = false;
-      else if (field.value !== "" && !Number.isNaN(Number(field.value)))
-        record[field.key] = Number(field.value);
-      else record[field.key] = field.value;
-    }
-    mockToolResponses[entry.toolSlug] = record;
+    mockToolResponses[entry.toolSlug] = parseFields(entry.fields);
   }
 
   const testCase: GeneratedTestCase = {

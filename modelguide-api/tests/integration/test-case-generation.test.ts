@@ -392,8 +392,7 @@ describe("POST /api/eval-suites/:suiteId/generate-test-cases", () => {
     const autoBefore = beforeCases.filter((c) => c.source === "auto");
     expect(autoBefore.length).toBeGreaterThanOrEqual(2);
 
-    // Call generate — deletion of old auto cases happens synchronously
-    // in enqueueGenerateTestCases before the async task is enqueued
+    // Call generate — deletion of old auto cases is deferred into the async handler
     const response = await request(
       `/api/eval-suites/${suiteWithSopId}/generate-test-cases`,
       {
@@ -403,8 +402,24 @@ describe("POST /api/eval-suites/:suiteId/generate-test-cases", () => {
       },
     );
     expect(response.status).toBe(202);
+    const body = await response.json();
 
-    // Old auto cases should already be deleted (sync in enqueue)
+    // Wait for async task to complete (deletion happens inside the handler)
+    const { taskRunner } = await import("@lib/task-runner");
+    const maxWaitMs = 10_000;
+    const start = Date.now();
+    let state = taskRunner.getStatus(body.taskId);
+    while (
+      state &&
+      state.status !== "completed" &&
+      state.status !== "failed" &&
+      Date.now() - start < maxWaitMs
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      state = taskRunner.getStatus(body.taskId);
+    }
+
+    // Old auto cases should be gone (replaced by new ones)
     const afterCases = await forOrg(orgId, async (tx) =>
       tx
         .select()
@@ -412,7 +427,6 @@ describe("POST /api/eval-suites/:suiteId/generate-test-cases", () => {
         .where(eq(evalSuiteTestCases.suiteId, suiteWithSopId)),
     );
 
-    // Old auto cases should be gone
     const oldAutoIds = [tc1.id, tc2.id];
     const remainingAutoIds = afterCases
       .filter((c) => c.source === "auto")

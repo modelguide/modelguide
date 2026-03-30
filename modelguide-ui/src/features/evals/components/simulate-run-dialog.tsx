@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Select } from '~/components/ui/select'
@@ -29,6 +29,11 @@ export function SimulateRunDialog({
   const [selectedTestCaseIds, setSelectedTestCaseIds] = useState<Set<string>>(
     () => new Set(testCases.map((tc) => tc.id)),
   )
+
+  // Reset selection when test cases change (e.g., after generation)
+  useEffect(() => {
+    setSelectedTestCaseIds(new Set(testCases.map((tc) => tc.id)))
+  }, [testCases])
 
   const allSelected = testCases.length > 0 && selectedTestCaseIds.size === testCases.length
 

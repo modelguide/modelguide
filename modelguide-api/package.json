@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",
+    "@ai-sdk/openai": "^3.0.48",
     "@elevenlabs/elevenlabs-js": "^2.34.0",
     "@hono/zod-openapi": "^0.18.0",
     "@mastra/mcp": "^1.3.1",

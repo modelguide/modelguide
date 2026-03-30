@@ -1,16 +1,12 @@
 /**
- * Test case validation — structural checks + semantic validation via Haiku.
- *
- * AC 10: Structural validation rejects bad slugs, missing mocks, short emails
- * AC 11: Semantic validation via Haiku generateObject() checks internal consistency
- * AC 12: Rejected cases collected with rejectionSource
+ * Test case validation — structural checks + LLM-based semantic validation.
  */
 
 import { env } from "@/env";
-import { anthropic } from "@ai-sdk/anthropic";
 import type { SopStep } from "@features/sops/sops.types";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { resolveGenerationModel } from "./model";
 import type { GeneratedTestCase, TokenUsage, ValidationResult } from "./types";
 
 // ============================================================================
@@ -27,7 +23,7 @@ const semanticValidationSchema = z.object({
 });
 
 // ============================================================================
-// Structural validation (AC 10 — no LLM)
+// Structural validation (no LLM)
 // ============================================================================
 
 /**
@@ -86,7 +82,7 @@ export function validateStructural(
 }
 
 // ============================================================================
-// Semantic validation (AC 11 — Haiku generateObject())
+// Semantic validation (LLM-based)
 // ============================================================================
 
 /**
@@ -115,7 +111,7 @@ Check for:
 Set "passes" to true if the test case is internally consistent. Only flag real issues — minor style differences are acceptable.`;
 
   const { object, usage } = await generateObject({
-    model: anthropic(env.GENERATION_CASE_MODEL),
+    model: resolveGenerationModel(env.GENERATION_CASE_MODEL),
     schema: semanticValidationSchema,
     prompt,
   });

@@ -72,12 +72,12 @@ const envSchema = z
     EVAL_LLM_BASE_URL: z.string().url().optional(),
     EVAL_LLM_MODEL: z.string().max(100).optional(),
 
-    // Test case generation — Anthropic API key for generateObject() calls
-    ANTHROPIC_API_KEY: z.string().optional(),
-    // Sonnet model for dimension derivation
-    GENERATION_DIMENSION_MODEL: z.string().default("claude-sonnet-4-20250514"),
-    // Haiku model for per-case generation + validation
-    GENERATION_CASE_MODEL: z.string().default("claude-haiku-4-5-20251001"),
+    // Test case generation — LLM API key for generateObject() calls (Anthropic or OpenAI)
+    GENERATION_LLM_API_KEY: z.string().optional(),
+    // Model for dimension derivation (format: "provider/model")
+    GENERATION_DIMENSION_MODEL: z.string().default("openai/gpt-4o"),
+    // Model for per-case generation + validation
+    GENERATION_CASE_MODEL: z.string().default("openai/gpt-4o-mini"),
   })
   .refine(
     (data) => {

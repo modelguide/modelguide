@@ -7,6 +7,7 @@
  * - executeGenerateTestCases() is the async handler
  */
 
+import { env } from "@/env";
 import { forOrg } from "@db/rls";
 import { evalSuiteTestCases, evalSuites } from "@db/schema";
 import { getSopById } from "@features/sops/sops.service";
@@ -22,6 +23,7 @@ import {
   toneToPersonaId,
 } from "./dimensions";
 import { generateTestCase } from "./generate";
+import { estimateModelCost } from "./model";
 import type {
   GenerationCost,
   GenerationProgress,
@@ -45,18 +47,26 @@ interface GenerateTestCasesPayload {
 }
 
 // ============================================================================
-// Public API — enqueue (AC 17, AC 19)
+// Public API — enqueue
 // ============================================================================
 
 /**
- * Validate suite has linked SOP, delete old auto cases, and enqueue
- * the generation task. Returns immediately (HTTP 202 pattern).
+ * Validate suite has linked SOP and enqueue the generation task.
+ * Returns immediately (HTTP 202 pattern). Old auto cases are deleted
+ * inside the async handler to avoid data loss if the task fails early.
  */
 export async function enqueueGenerateTestCases(
   orgId: string,
   suiteId: string,
   count = 40,
 ): Promise<{ taskId: string }> {
+  // Guard: API key must be configured
+  if (!env.GENERATION_LLM_API_KEY) {
+    throw Errors.validationError(
+      "GENERATION_LLM_API_KEY is not configured — cannot generate test cases",
+    );
+  }
+
   // Validate suite exists and has a linked SOP
   const suite = await forOrg(orgId, async (tx) => {
     const [s] = await tx
@@ -74,19 +84,7 @@ export async function enqueueGenerateTestCases(
     );
   }
 
-  // Delete old source: "auto" cases before enqueuing (AC 19)
-  await forOrg(orgId, async (tx) => {
-    await tx
-      .delete(evalSuiteTestCases)
-      .where(
-        and(
-          eq(evalSuiteTestCases.suiteId, suiteId),
-          eq(evalSuiteTestCases.source, "auto"),
-        ),
-      );
-  });
-
-  // Enqueue async generation
+  // Enqueue async generation (deletion happens inside the async handler)
   const taskId = taskRunner.enqueue<
     GenerateTestCasesPayload,
     GenerationProgress
@@ -121,18 +119,36 @@ async function executeGenerateTestCases(
     rejected: 0,
   });
 
-  // 1. Load suite + SOP
+  // 1. Load suite + SOP (re-validate inside async handler)
   const suite = await forOrg(orgId, async (tx) => {
     const [s] = await tx
       .select()
       .from(evalSuites)
       .where(eq(evalSuites.id, suiteId));
-    return s!;
+    if (!s) throw Errors.evalSuiteNotFound(suiteId);
+    return s;
   });
 
-  const sopDetail = await getSopById(orgId, suite.sopId!);
+  if (!suite.sopId) {
+    throw Errors.validationError("Suite has no linked SOP");
+  }
 
-  // 2. Derive dimensions (AC 1, AC 2, AC 21)
+  const sopDetail = await getSopById(orgId, suite.sopId);
+
+  // Delete old auto-generated cases (deferred into async handler
+  // so old cases survive if the pipeline fails early)
+  await forOrg(orgId, async (tx) => {
+    await tx
+      .delete(evalSuiteTestCases)
+      .where(
+        and(
+          eq(evalSuiteTestCases.suiteId, suiteId),
+          eq(evalSuiteTestCases.source, "auto"),
+        ),
+      );
+  });
+
+  // 2. Derive dimensions
   let dimensionResult: Awaited<ReturnType<typeof deriveDimensionsFromSop>>;
   try {
     dimensionResult = await deriveDimensionsFromSop(
@@ -150,12 +166,12 @@ async function executeGenerateTestCases(
       rejected: 0,
       error: err instanceof Error ? err.message : "Dimension derivation failed",
     });
-    throw err; // AC 21: pipeline cannot proceed
+    throw err;
   }
 
   const { dimensions, usage: dimUsage } = dimensionResult;
 
-  // 3. Select tuples (AC 4, AC 5, AC 6)
+  // 3. Select tuples
   const tuples = selectTuples(dimensions, { count });
 
   // 4. Generate + validate each tuple
@@ -178,7 +194,7 @@ async function executeGenerateTestCases(
     const tupleName = `${tuple.intent} - ${tuple.tone} - ${tuple.edgeCase}`;
 
     try {
-      // Generate test case (AC 7, AC 8, AC 9)
+      // Generate test case
       const genResult = await generateTestCase(
         tuple,
         sopDetail.name,
@@ -189,7 +205,7 @@ async function executeGenerateTestCases(
 
       const generated = genResult.testCase;
 
-      // Structural validation (AC 10)
+      // Structural validation
       const structuralResult = validateStructural(
         generated,
         sopDetail.definition.steps,
@@ -211,7 +227,7 @@ async function executeGenerateTestCases(
         continue;
       }
 
-      // Semantic validation (AC 11)
+      // Semantic validation
       const semanticResult = await validateSemantic(generated);
       validationTokens.input += semanticResult.usage.input;
       validationTokens.output += semanticResult.usage.output;
@@ -233,7 +249,7 @@ async function executeGenerateTestCases(
         continue;
       }
 
-      // Insert via createTestCase (AC 14, AC 23)
+      // Insert accepted test case
       const personaId = toneToPersonaId(tuple.tone);
       await createTestCase(orgId, suiteId, {
         name: generated.name,
@@ -248,7 +264,7 @@ async function executeGenerateTestCases(
 
       accepted++;
     } catch (err) {
-      // AC 20: single case LLM failure -> skip + count as structural rejection
+      // Single case LLM failure -> skip + count as structural rejection
       log.warn(
         { err, tupleName, suiteId },
         "test case generation/validation failed — skipping",
@@ -270,7 +286,7 @@ async function executeGenerateTestCases(
     });
   }
 
-  // 5. Build result (AC 13)
+  // 5. Build result
   const result = buildRunResult(
     accepted,
     rejected,
@@ -331,14 +347,24 @@ function buildRunResult(
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
-  // Cost estimation (Sonnet input: $3/MTok, output: $15/MTok;
-  // Haiku input: $0.80/MTok, output: $4/MTok)
-  const sonnetCost = (dimUsage.input * 3 + dimUsage.output * 15) / 1_000_000;
-  const haikuCost =
-    ((genUsage.input + valUsage.input) * 0.8 +
-      (genUsage.output + valUsage.output) * 4) /
-    1_000_000;
-  const estimatedCostUsd = Math.round((sonnetCost + haikuCost) * 1000) / 1000;
+  // Cost estimation using configured model pricing
+  const dimCost = estimateModelCost(
+    env.GENERATION_DIMENSION_MODEL,
+    dimUsage.input,
+    dimUsage.output,
+  );
+  const genCost = estimateModelCost(
+    env.GENERATION_CASE_MODEL,
+    genUsage.input,
+    genUsage.output,
+  );
+  const valCost = estimateModelCost(
+    env.GENERATION_CASE_MODEL,
+    valUsage.input,
+    valUsage.output,
+  );
+  const estimatedCostUsd =
+    Math.round((dimCost + genCost + valCost) * 1000) / 1000;
 
   const cost: GenerationCost = {
     dimensionTokens: dimUsage,

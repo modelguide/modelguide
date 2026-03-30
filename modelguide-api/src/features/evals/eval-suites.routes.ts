@@ -283,6 +283,7 @@ router.get(
   "/generation-tasks/:taskId",
   requireUser(),
   requirePermission("eval_suites:read"),
+  requireOrganization(),
 );
 router.post(
   "/:suiteId/test-cases",
@@ -308,7 +309,7 @@ const initSuiteRoute = createRoute({
   tags: ["Eval Suites"],
   summary: "Initialize eval suite from SOP",
   description:
-    "Creates or re-initializes an eval suite for an agent+SOP pair. Derives test cases from SOP steps and guardrails.",
+    "Creates or re-initializes an eval suite for an agent+SOP pair. Derives evaluators from SOP steps and guardrails.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {

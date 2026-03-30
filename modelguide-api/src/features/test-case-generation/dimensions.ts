@@ -1,22 +1,24 @@
 /**
  * Dimension derivation and tuple selection for test case generation.
  *
- * - deriveDimensionsFromSop() — LLM-derived dimensions via Sonnet generateObject()
+ * - deriveDimensionsFromSop() — LLM-derived dimensions via generateObject()
  * - selectTuples() — deterministic stratified sampling (no LLM)
  * - toneToPersonaId() — maps tones to existing persona IDs
  */
 
 import { env } from "@/env";
-import { anthropic } from "@ai-sdk/anthropic";
 import type { SopStep } from "@features/sops/sops.types";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { resolveGenerationModel } from "./model";
+import { parseFields } from "./parse-fields";
 import type {
   DimensionConfig,
   DimensionTuple,
   TokenUsage,
   ToolStateVariant,
 } from "./types";
+import { COMPLEXITIES, TONES } from "./types";
 
 // ============================================================================
 // Zod schema for LLM-derived dimensions
@@ -25,9 +27,9 @@ import type {
 /**
  * Tool state variant schema for LLM output.
  *
- * z.record() produces `additionalProperties: { ... }` in JSON Schema,
- * which the Anthropic API rejects. Instead we use an array of { key, value }
- * pairs and convert to a Record after generation.
+ * z.record() produces `additionalProperties` in JSON Schema which some
+ * providers reject. We use an array of { key, value } pairs instead
+ * and convert to a Record after generation.
  */
 const toolStateFieldSchema = z.object({
   key: z.string().describe("Field name (e.g. 'status', 'error', 'tracking')"),
@@ -72,14 +74,7 @@ const dimensionConfigSchema = z.object({
 });
 
 // ============================================================================
-// Fixed dimensions (not LLM-derived)
-// ============================================================================
-
-const FIXED_TONES = ["polite", "frustrated", "confused", "hostile", "terse"];
-const FIXED_COMPLEXITY = ["single_step", "multi_step", "requires_escalation"];
-
-// ============================================================================
-// Persona mapping (AC 15)
+// Persona mapping
 // ============================================================================
 
 const TONE_PERSONA_MAP: Record<string, string> = {
@@ -90,13 +85,13 @@ const TONE_PERSONA_MAP: Record<string, string> = {
   terse: "polite-buyer",
 };
 
-/** Map a dimension tone to an existing persona ID (AC 15, AC 24). */
+/** Map a dimension tone to an existing persona ID. */
 export function toneToPersonaId(tone: string): string {
   return TONE_PERSONA_MAP[tone] ?? "polite-buyer";
 }
 
 // ============================================================================
-// deriveDimensionsFromSop (AC 1, AC 2, AC 3)
+// deriveDimensionsFromSop
 // ============================================================================
 
 /** Extract tool slugs from SOP steps that reference connector tools. */
@@ -155,7 +150,7 @@ Make intents specific to this SOP's domain. Make edge cases relevant to the SOP'
 Tool slugs must match the exact slugs listed above.`;
 
   const { object, usage } = await generateObject({
-    model: anthropic(env.GENERATION_DIMENSION_MODEL),
+    model: resolveGenerationModel(env.GENERATION_DIMENSION_MODEL),
     schema: dimensionConfigSchema,
     prompt,
   });
@@ -164,26 +159,17 @@ Tool slugs must match the exact slugs listed above.`;
   const toolStatesRecord: Record<string, ToolStateVariant[]> = {};
   if (toolSlugs.length > 0) {
     for (const entry of object.toolStates) {
-      toolStatesRecord[entry.toolSlug] = entry.variants.map((v) => {
-        const record: ToolStateVariant = {};
-        for (const field of v.fields) {
-          // Parse "true"/"false" back to booleans, numbers back to numbers
-          if (field.value === "true") record[field.key] = true;
-          else if (field.value === "false") record[field.key] = false;
-          else if (field.value !== "" && !Number.isNaN(Number(field.value)))
-            record[field.key] = Number(field.value);
-          else record[field.key] = field.value;
-        }
-        return record;
-      });
+      toolStatesRecord[entry.toolSlug] = entry.variants.map((v) =>
+        parseFields(v.fields),
+      );
     }
   }
 
   // Merge LLM-derived fields with fixed dimensions
   const dimensions: DimensionConfig = {
     intents: object.intents,
-    tones: FIXED_TONES,
-    complexity: FIXED_COMPLEXITY,
+    tones: [...TONES],
+    complexity: [...COMPLEXITIES],
     edgeCases: object.edgeCases,
     toolStates: toolStatesRecord,
   };
@@ -198,7 +184,7 @@ Tool slugs must match the exact slugs listed above.`;
 }
 
 // ============================================================================
-// selectTuples (AC 4, AC 5, AC 6)
+// selectTuples
 // ============================================================================
 
 interface SelectTuplesOpts {
@@ -235,12 +221,12 @@ function pickToolState(
 /**
  * Select deduplicated dimension tuples using stratified sampling.
  *
- * Strategy (AC 5):
+ * Strategy:
  * 1. Happy path: intent x tool state (systematic coverage)
  * 2. Edge case: edge case x intent (each edge paired with each intent)
  * 3. Stress: hard tone + high complexity + edge case
  *
- * No LLM calls — pure deterministic code (AC 6).
+ * No LLM calls — pure deterministic code.
  */
 export function selectTuples(
   dims: DimensionConfig,
