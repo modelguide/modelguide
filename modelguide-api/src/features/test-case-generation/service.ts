@@ -264,7 +264,16 @@ async function executeGenerateTestCases(
 
       accepted++;
     } catch (err) {
-      // Single case LLM failure -> skip + count as structural rejection
+      // Distinguish infrastructure errors (abort pipeline) from per-case failures (skip)
+      if (isInfrastructureError(err)) {
+        log.error(
+          { err, tupleName, suiteId },
+          "infrastructure error during generation — aborting pipeline",
+        );
+        throw err;
+      }
+
+      // Per-case failure — skip and count as rejection
       log.warn(
         { err, tupleName, suiteId },
         "test case generation/validation failed — skipping",
@@ -272,7 +281,7 @@ async function executeGenerateTestCases(
       rejected++;
       rejections.push({
         tupleName,
-        issues: ["LLM generation failed"],
+        issues: [err instanceof Error ? err.message : "LLM generation failed"],
         rejectionSource: "structural",
       });
     }
@@ -320,6 +329,25 @@ async function executeGenerateTestCases(
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Detect infrastructure-level errors that should abort the entire pipeline
+ * (auth failures, rate limits, network errors) vs per-case LLM failures
+ * that can be safely skipped.
+ */
+function isInfrastructureError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("rate limit") ||
+    msg.includes("401") ||
+    msg.includes("403") ||
+    msg.includes("econnrefused") ||
+    msg.includes("enotfound") ||
+    msg.includes("authentication") ||
+    msg.includes("unauthorized")
+  );
+}
 
 function buildRunResult(
   accepted: number,
