@@ -11,7 +11,11 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-const SKIP = !process.env.GENERATION_LLM_API_KEY;
+// Skip unless a real API key is provided (the integration preload sets a
+// placeholder value that passes env validation but can't call real LLMs).
+const SKIP =
+  !process.env.GENERATION_LLM_API_KEY ||
+  process.env.GENERATION_LLM_API_KEY.startsWith("test-");
 import { forApp, forOrg } from "@db/rls";
 import {
   agentSops,
