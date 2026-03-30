@@ -3,34 +3,46 @@
  *
  * Accepts model strings in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514",
  * "openai/gpt-4o"). Bare model names (no slash) default to Anthropic for backwards compat.
+ *
+ * All providers are configured with GENERATION_LLM_API_KEY so a single env var
+ * controls API access for the generation feature.
  */
 
-import { anthropic } from "@ai-sdk/anthropic";
-import { openai } from "@ai-sdk/openai";
+import { env } from "@/env";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 
-const PROVIDERS: Record<string, (model: string) => LanguageModel> = {
-  anthropic: (model) => anthropic(model),
-  openai: (model) => openai(model),
-};
+/** Lazily-created provider instances keyed by GENERATION_LLM_API_KEY. */
+function getProviders(): Record<string, (model: string) => LanguageModel> {
+  const apiKey = env.GENERATION_LLM_API_KEY;
+  return {
+    anthropic: (model) => createAnthropic({ apiKey })(model),
+    openai: (model) => createOpenAI({ apiKey })(model),
+  };
+}
 
 /**
  * Resolve a "provider/model" string into a Vercel AI SDK LanguageModel.
  * Bare model names (no slash) default to Anthropic.
+ *
+ * Uses GENERATION_LLM_API_KEY for all providers.
  */
 export function resolveGenerationModel(modelId: string): LanguageModel {
+  const providers = getProviders();
   const slashIdx = modelId.indexOf("/");
+
   if (slashIdx === -1) {
-    return anthropic(modelId);
+    return providers.anthropic(modelId);
   }
 
   const provider = modelId.slice(0, slashIdx);
   const model = modelId.slice(slashIdx + 1);
 
-  const factory = PROVIDERS[provider];
+  const factory = providers[provider];
   if (!factory) {
     throw new Error(
-      `Unknown generation model provider "${provider}". Supported: ${Object.keys(PROVIDERS).join(", ")}`,
+      `Unknown generation model provider "${provider}". Supported: ${Object.keys(providers).join(", ")}`,
     );
   }
 
