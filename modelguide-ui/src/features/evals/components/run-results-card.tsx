@@ -62,6 +62,7 @@ export function RunResultsCard({
     })
   }
 
+  const pendingKeys = Array.from({ length: pendingCount }, (_, i) => `pending-${i}`)
   const totalCases = testCaseResults.length + pendingCount
   const passedCases = testCaseResults.filter((r) => r.passed === true).length
   const failedCases = testCaseResults.filter((r) => r.passed === false).length
@@ -281,26 +282,22 @@ export function RunResultsCard({
             </div>
           )
         })}
-        {pendingCount > 0
-          ? (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const)
-              .slice(0, Math.min(pendingCount, 8))
-              .map((id, i) => (
-                <div
-                  key={`pending-${id}`}
-                  className="overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated opacity-50"
-                >
-                  <div className="flex w-full items-center gap-3 px-4 py-3">
-                    <Loader2 className="h-5 w-5 shrink-0 animate-spin text-fg-muted" />
-                    <span className="flex-1 text-sm text-fg-muted">
-                      {i === 0
-                        ? 'Waiting for simulation to complete...'
-                        : 'Queued — will run after current test case'}
-                    </span>
-                    <span className="text-xs text-fg-muted">Pending</span>
-                  </div>
-                </div>
-              ))
-          : null}
+        {pendingKeys.map((key, i) => (
+          <div
+            key={key}
+            className="overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated opacity-50"
+          >
+            <div className="flex w-full items-center gap-3 px-4 py-3">
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-fg-muted" />
+              <span className="flex-1 text-sm text-fg-muted">
+                {i === 0
+                  ? 'Waiting for simulation to complete...'
+                  : 'Queued — will run after current test case'}
+              </span>
+              <span className="text-xs text-fg-muted">Pending</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

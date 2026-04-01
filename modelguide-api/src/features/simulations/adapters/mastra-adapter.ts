@@ -126,18 +126,13 @@ export class MastraAdapter implements AgentAdapter {
     const steps = result.steps ?? [];
     const responseText = extractResponseText(steps, result.text ?? "");
 
-    log.info(
+    log.debug(
       {
         agentId: this.config.agentId,
         sessionId,
         responseLength: responseText.length,
         toolCallCount: toolCalls.length,
         stepCount: steps.length,
-        stepTexts: steps.map((s, i) => ({
-          step: i,
-          textLength: s.text?.length ?? 0,
-          hasToolCalls: (s.toolCalls?.length ?? 0) > 0,
-        })),
       },
       "MastraAdapter received response",
     );
@@ -168,33 +163,16 @@ export class MastraAdapter implements AgentAdapter {
  *
  * Mastra's `result.text` concatenates text from ALL steps, causing
  * duplication when the agent produces text in multiple steps (e.g.,
- * before and after a tool call). We prefer the last step that has text.
- *
- * As a safety net, if the extracted text still looks duplicated
- * (first half === second half), we deduplicate.
+ * before and after a tool call). We prefer the last step that has text,
+ * falling back to the full concatenated text if no steps are available.
  */
 function extractResponseText(
   steps: Array<{ text?: string | null }>,
   fullText: string,
 ): string {
-  // Try to get just the last step's text
   for (let i = steps.length - 1; i >= 0; i--) {
     const text = steps[i].text?.trim();
     if (text) return text;
   }
-
-  // Fallback to full text with deduplication
-  const text = fullText.trim();
-  if (!text) return "";
-
-  // Detect exact duplication (text repeated with whitespace between)
-  const half = Math.floor(text.length / 2);
-  const firstHalf = text.slice(0, half).trim();
-  const secondHalf = text.slice(half).trim();
-  if (firstHalf.length > 50 && firstHalf === secondHalf) {
-    log.warn("detected duplicated response text, deduplicating");
-    return firstHalf;
-  }
-
-  return text;
+  return fullText.trim();
 }
