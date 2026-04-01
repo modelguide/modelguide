@@ -38,6 +38,11 @@ function RunDetailPage() {
   })
 
   const isRunning = run != null && !run.completedAt
+  const progress = run?.metadata as { progress?: { total?: number } } | null
+  const expectedTotal = progress?.progress?.total ?? 0
+  const pendingCount = isRunning
+    ? Math.max(expectedTotal - (run?.testCaseResults.length ?? 0), 0)
+    : 0
   const resultVariant = isRunning
     ? 'info'
     : run?.passed === true
@@ -122,6 +127,7 @@ function RunDetailPage() {
             testCaseResults={run.testCaseResults}
             testCases={suite?.testCases}
             isRunning={isRunning}
+            pendingCount={pendingCount}
           />
         </>
       ) : null}

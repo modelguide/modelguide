@@ -18,6 +18,8 @@ export interface RunResultsCardProps {
   testCaseResults: TestCaseResult[]
   testCases?: EvalSuiteTestCase[]
   isRunning?: boolean
+  /** Number of pending test cases still being simulated. */
+  pendingCount?: number
 }
 
 function getTestCaseName(result: TestCaseResult, testCases?: EvalSuiteTestCase[]): string {
@@ -40,7 +42,12 @@ function scoreIcon(score: EvalRunScore) {
   return <XCircle className="h-3.5 w-3.5 shrink-0 text-error" />
 }
 
-export function RunResultsCard({ testCaseResults, testCases, isRunning }: RunResultsCardProps) {
+export function RunResultsCard({
+  testCaseResults,
+  testCases,
+  isRunning,
+  pendingCount = 0,
+}: RunResultsCardProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const toggle = (index: number) => {
@@ -55,11 +62,7 @@ export function RunResultsCard({ testCaseResults, testCases, isRunning }: RunRes
     })
   }
 
-  // Determine total from suite test cases when running (results arrive incrementally)
-  const completedIds = new Set(testCaseResults.map((r) => r.testCaseId))
-  const pendingTestCases =
-    isRunning && testCases ? testCases.filter((tc) => !completedIds.has(tc.id)) : []
-  const totalCases = isRunning && testCases ? testCases.length : testCaseResults.length
+  const totalCases = testCaseResults.length + pendingCount
   const passedCases = testCaseResults.filter((r) => r.passed === true).length
   const failedCases = testCaseResults.filter((r) => r.passed === false).length
   const inconclusiveCases = testCaseResults.filter((r) => r.passed == null).length
@@ -278,18 +281,25 @@ export function RunResultsCard({ testCaseResults, testCases, isRunning }: RunRes
             </div>
           )
         })}
-        {pendingTestCases.map((tc) => (
-          <div
-            key={tc.id}
-            className="overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated opacity-50"
-          >
-            <div className="flex w-full items-center gap-3 px-4 py-3">
-              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-fg-muted" />
-              <span className="flex-1 text-sm font-medium text-fg-muted">{tc.name}</span>
-              <span className="text-xs text-fg-muted">Pending</span>
-            </div>
-          </div>
-        ))}
+        {pendingCount > 0
+          ? (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const)
+              .slice(0, Math.min(pendingCount, 8))
+              .map((id, i) => (
+                <div
+                  key={`pending-${id}`}
+                  className="overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated opacity-50"
+                >
+                  <div className="flex w-full items-center gap-3 px-4 py-3">
+                    <Loader2 className="h-5 w-5 shrink-0 animate-spin text-fg-muted" />
+                    <div
+                      className="h-4 rounded bg-fg-subtle/10 animate-shimmer"
+                      style={{ width: `${30 + ((i * 13) % 40)}%` }}
+                    />
+                    <span className="text-xs text-fg-muted">Pending</span>
+                  </div>
+                </div>
+              ))
+          : null}
       </div>
     </div>
   )
