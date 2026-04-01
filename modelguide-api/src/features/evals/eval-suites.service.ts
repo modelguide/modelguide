@@ -807,12 +807,18 @@ export async function runTestCaseEval(
       })
       .returning();
 
-    // Load messages
-    const messages = await tx
-      .select()
-      .from(sessionMessages)
-      .where(eq(sessionMessages.sessionId, sessionId))
-      .orderBy(asc(sessionMessages.occurredAt), asc(sessionMessages.createdAt));
+    // Load session + messages
+    const [[session], messages] = await Promise.all([
+      tx.select().from(sessions).where(eq(sessions.id, sessionId)),
+      tx
+        .select()
+        .from(sessionMessages)
+        .where(eq(sessionMessages.sessionId, sessionId))
+        .orderBy(
+          asc(sessionMessages.occurredAt),
+          asc(sessionMessages.createdAt),
+        ),
+    ]);
 
     // Execute assertions using shared scoring engine
     const evalStartTime = performance.now();
@@ -821,6 +827,13 @@ export async function runTestCaseEval(
       messages,
       evalRun.id,
       orgId,
+      session
+        ? {
+            userIdentifier: session.userIdentifier ?? undefined,
+            channelType: session.channelType,
+            mode: session.mode ?? undefined,
+          }
+        : undefined,
     );
 
     const failedRequired = scoreRows.filter(

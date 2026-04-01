@@ -16,6 +16,15 @@ import type {
 // EvalContext — what evaluators see
 // ============================================================================
 
+export interface EvalSessionContext {
+  /** Customer identifier (email, phone, etc.) associated with the session. */
+  userIdentifier?: string;
+  /** Channel type (api, email, voice, etc.). */
+  channelType?: string;
+  /** Session mode (live, simulation). */
+  mode?: string;
+}
+
 export interface EvalContext {
   /** All session messages in chronological order. */
   messages: SessionMessage[];
@@ -23,6 +32,8 @@ export interface EvalContext {
   toolMessages: SessionMessage[];
   /** connectorToolId → resolved runtime tool name ({connectorSlug}_{toolSlug}). */
   resolvedToolNames: Map<string, string>;
+  /** Optional session-level metadata for context-aware evaluation. */
+  sessionContext?: EvalSessionContext;
 }
 
 // ============================================================================

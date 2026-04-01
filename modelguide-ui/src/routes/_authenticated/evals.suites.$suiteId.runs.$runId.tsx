@@ -43,20 +43,26 @@ function RunDetailPage() {
   const pendingCount = isRunning
     ? Math.max(expectedTotal - (run?.testCaseResults.length ?? 0), 0)
     : 0
+  const completedResults = run?.testCaseResults ?? []
+  const passedCount = completedResults.filter((r) => r.passed === true).length
+  const totalCount = completedResults.length
+  const runPassPct = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0
+  const isInconclusive = run?.passed == null && !isRunning
+
   const resultVariant = isRunning
     ? 'info'
-    : run?.passed === true
-      ? 'success'
-      : run?.passed === false
-        ? 'error'
-        : 'warning'
+    : isInconclusive
+      ? 'warning'
+      : runPassPct >= 80
+        ? 'success'
+        : runPassPct >= 60
+          ? 'warning'
+          : 'error'
   const resultLabel = isRunning
     ? 'Running...'
-    : run?.passed === true
-      ? 'Passed'
-      : run?.passed === false
-        ? 'Failed'
-        : 'Inconclusive'
+    : isInconclusive
+      ? 'Inconclusive'
+      : `Completed · ${runPassPct}%`
 
   return (
     <div className="space-y-6">

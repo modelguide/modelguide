@@ -67,7 +67,6 @@ export function RunResultsCard({
   const passedCases = testCaseResults.filter((r) => r.passed === true).length
   const failedCases = testCaseResults.filter((r) => r.passed === false).length
   const inconclusiveCases = testCaseResults.filter((r) => r.passed == null).length
-  const allPassed = passedCases === totalCases && totalCases > 0 && !isRunning
   const allInconclusive = inconclusiveCases === totalCases && totalCases > 0 && !isRunning
   const completedCount = testCaseResults.length
   const passPct = totalCases > 0 ? Math.round((passedCases / totalCases) * 100) : 0
@@ -76,11 +75,13 @@ export function RunResultsCard({
 
   const summaryVariant = isRunning
     ? 'warning'
-    : allPassed
-      ? 'success'
-      : failedCases > 0
-        ? 'error'
-        : 'warning'
+    : allInconclusive
+      ? 'warning'
+      : passPct >= 80
+        ? 'success'
+        : passPct >= 60
+          ? 'warning'
+          : 'error'
 
   return (
     <div className="space-y-4">

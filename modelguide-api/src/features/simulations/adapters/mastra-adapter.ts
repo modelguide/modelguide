@@ -12,10 +12,7 @@
 
 import { getLogger } from "@lib/logger";
 import { Agent } from "@mastra/core/agent";
-import type { ToolsInput } from "@mastra/core/agent";
-import { RequestContext } from "@mastra/core/request-context";
 import { MCPClient } from "@mastra/mcp";
-import { z } from "zod";
 import type { AgentAdapter, AgentAdapterResponse } from "./agent-adapter";
 
 const log = getLogger();
@@ -33,37 +30,29 @@ export interface MastraAdapterConfig {
   simulationMcpUrl: string;
   /** JWT for authenticating with the simulation MCP route. */
   simulationToken: string;
-  /** Customer identifier (email/phone) — injected into agent context so it knows who the customer is. */
+  /** Customer identifier (email/phone) — injected as runtime context, matching real agent behavior. */
   userIdentifier?: string;
   /** Max steps for agent.generate() tool-calling loops. */
   maxSteps?: number;
 }
 
-const simulationContextSchema = z.object({
-  userIdentifier: z.string().optional(),
-});
-
-type SimulationContext = z.infer<typeof simulationContextSchema>;
-
 export class MastraAdapter implements AgentAdapter {
-  private agent: Agent<string, ToolsInput, undefined, SimulationContext>;
+  private agent: Agent;
   private mcpClient: MCPClient;
   private config: MastraAdapterConfig;
 
   constructor(config: MastraAdapterConfig) {
     this.config = config;
 
+    const instructions = config.userIdentifier
+      ? `${config.compiledInstructions}\n\n## Runtime context\n\nCustomer identifier: ${config.userIdentifier}\nAlways use "${config.userIdentifier}" as the customer email when calling tools. You do not need to ask for their email.\n\nCRITICAL: You MUST execute every workflow step in order, starting from step 1. Do NOT skip steps even if the customer's request can be answered immediately.`
+      : config.compiledInstructions;
+
     this.agent = new Agent({
       id: config.agentId,
       name: config.agentName,
       model: config.model,
-      requestContextSchema: simulationContextSchema,
-      instructions: async ({ requestContext }) => {
-        const base = config.compiledInstructions;
-        const identifier = requestContext.get("userIdentifier");
-        if (!identifier) return base;
-        return `${base}\n\n## Current Customer\nThe customer you are currently helping is identified as: ${identifier}\nUse this identifier for any tool calls that require a customer email or identifier. Do NOT ask the customer for their email address.`;
-      },
+      instructions,
     });
 
     this.mcpClient = new MCPClient({
@@ -95,16 +84,8 @@ export class MastraAdapter implements AgentAdapter {
 
     const toolsets = await this.mcpClient.listToolsets();
 
-    const requestContext = new RequestContext<
-      z.infer<typeof simulationContextSchema>
-    >();
-    if (this.config.userIdentifier) {
-      requestContext.set("userIdentifier", this.config.userIdentifier);
-    }
-
     const result = await this.agent.generate(message, {
       toolsets,
-      requestContext,
       maxSteps: this.config.maxSteps ?? 5,
     });
     // Extract tool calls from the generation steps

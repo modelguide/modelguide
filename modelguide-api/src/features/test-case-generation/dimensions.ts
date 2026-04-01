@@ -310,12 +310,20 @@ export function selectTuples(
 
   const toolSlugs = Object.keys(dims.toolStates);
 
-  // --- Layer 1: Happy path coverage (intent x tool state) ---
+  // --- Layer 1: Happy path coverage (intent x success tool states) ---
   for (const intent of dims.intents) {
     if (toolSlugs.length > 0) {
       for (const slug of toolSlugs) {
         const variants = dims.toolStates[slug];
-        for (let vi = 0; vi < variants.length; vi++) {
+        const successIndices = variants
+          .map((v, i) => (isErrorVariant(v) ? -1 : i))
+          .filter((i) => i >= 0);
+        // Only use success variants for happy path; fall back to all if none
+        const indices =
+          successIndices.length > 0
+            ? successIndices
+            : variants.map((_, i) => i);
+        for (const vi of indices) {
           addIfNew({
             intent,
             tone: pick(["polite", "terse"]),

@@ -293,24 +293,23 @@ async function executeSimulateAndRunInner(
         .where(eq(evalSuiteRuns.id, suiteRunId)),
     );
 
-    // 0. Personalize input message if persona is set
-    if (personaId) {
-      const persona = getPersona(personaId);
-      if (persona) {
-        try {
-          inputMessage = await personalizeInputMessage(inputMessage, persona);
-          log.info(
-            { testCaseId: testCase.id, persona: personaId },
-            "personalized input message",
-          );
-        } catch (err) {
-          log.warn(
-            { err, personaId, testCaseId: testCase.id },
-            "persona personalization failed — using raw message. Eval results may not reflect intended persona tone.",
-          );
-        }
-      } else {
-        log.warn({ personaId }, "unknown persona ID — using raw message");
+    // 0. Resolve persona for personalization + multi-turn follow-ups
+    const persona = personaId ? getPersona(personaId) : undefined;
+    if (personaId && !persona) {
+      log.warn({ personaId }, "unknown persona ID — using raw message");
+    }
+    if (persona) {
+      try {
+        inputMessage = await personalizeInputMessage(inputMessage, persona);
+        log.info(
+          { testCaseId: testCase.id, persona: personaId },
+          "personalized input message",
+        );
+      } catch (err) {
+        log.warn(
+          { err, personaId, testCaseId: testCase.id },
+          "persona personalization failed — using raw message. Eval results may not reflect intended persona tone.",
+        );
       }
     }
 
@@ -349,13 +348,14 @@ async function executeSimulateAndRunInner(
         userIdentifier,
       });
 
-      // 3. Run simulation
+      // 3. Run simulation (pass persona for multi-turn follow-ups)
       const simResult = await runEvalSimulation({
         orgId,
         agentId: suiteData.agent.id,
         adapter,
         inputMessage,
         sessionId,
+        persona,
       });
 
       if (simResult.status === "error") {

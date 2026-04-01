@@ -84,10 +84,16 @@ export function SuiteRunsTable({ runs, suiteId, isLoading }: SuiteRunsTableProps
         <tbody>
           {runs.map((run, index) => {
             const { passed, total } = getPassCount(run)
-            const resultVariant =
-              run.passed === true ? 'success' : run.passed === false ? 'error' : 'warning'
-            const resultLabel =
-              run.passed === true ? 'Passed' : run.passed === false ? 'Failed' : 'Inconclusive'
+            const passPct = total > 0 ? Math.round((passed / total) * 100) : 0
+            const isInconclusive = run.passed == null
+            const resultVariant = isInconclusive
+              ? 'warning'
+              : passPct >= 80
+                ? 'success'
+                : passPct >= 60
+                  ? 'warning'
+                  : 'error'
+            const resultLabel = isInconclusive ? 'Inconclusive' : `Completed · ${passPct}%`
 
             return (
               <tr

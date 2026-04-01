@@ -59,6 +59,8 @@ export interface LlmApiRequest {
   maxTokens?: number;
   tools?: LlmToolDef[];
   tool_choice?: { type: "tool"; name: string };
+  /** Request JSON output format (OpenAI only). */
+  jsonOutput?: boolean;
 }
 
 export type LlmApiResult =
@@ -145,6 +147,9 @@ function buildOpenAIRequest(req: LlmApiRequest) {
       },
     }));
   }
+  if (req.jsonOutput) {
+    body.response_format = { type: "json_object" };
+  }
   if (req.tool_choice) {
     body.tool_choice = {
       type: "function",
@@ -204,10 +209,17 @@ function parseOpenAIResponse(
 
   const text = message.content;
   if (!text) {
+    // Include finish_reason and any refusal for debugging
+    const choice = (data.choices as Array<Record<string, unknown>>)?.[0];
+    const finishReason = choice?.finish_reason ?? "unknown";
+    const refusal = (message as Record<string, unknown>).refusal;
+    const detail = refusal
+      ? `refusal=${JSON.stringify(refusal)}`
+      : `finish_reason=${finishReason}`;
     return {
       ok: false,
       kind: "permanent",
-      reasoning: "LLM returned empty response",
+      reasoning: `LLM returned empty response (${detail})`,
     };
   }
   return { ok: true, text };
