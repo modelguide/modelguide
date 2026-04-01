@@ -308,7 +308,12 @@ function SuiteDetailPage() {
           onClose={() => setShowSimulateRunDialog(false)}
           suiteId={suiteId}
           testCases={suite?.testCases ?? []}
-          onSuccess={() => setActiveTab('runs')}
+          onSuccess={(res) =>
+            navigate({
+              to: '/evals/suites/$suiteId/runs/$runId',
+              params: { suiteId, runId: res.suiteRunId },
+            })
+          }
         />
       ) : null}
 

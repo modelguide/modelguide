@@ -4,16 +4,20 @@ import { Button } from '~/components/ui/button'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Select } from '~/components/ui/select'
 import { api } from '~/lib/api'
-import type { EvalSuiteRun } from '~/schemas/eval-suites'
 import { PROMPT_SOURCE_LABELS } from '~/schemas/eval-suites'
 import type { EvalSuiteTestCase } from '~/schemas/eval-suites'
+
+interface SimulateAndRunResponse {
+  suiteRunId: string
+  status: 'running'
+}
 
 export interface SimulateRunDialogProps {
   open: boolean
   onClose: () => void
   suiteId: string
   testCases: EvalSuiteTestCase[]
-  onSuccess?: () => void
+  onSuccess?: (response: SimulateAndRunResponse) => void
 }
 
 export function SimulateRunDialog({
@@ -45,14 +49,14 @@ export function SimulateRunDialog({
       }
       return api
         .post(`eval-suites/${suiteId}/simulate-and-run`, { json: body })
-        .json<EvalSuiteRun>()
+        .json<SimulateAndRunResponse>()
     },
-    onSuccess: () => {
+    onSuccess: (run) => {
       queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId, 'runs'] })
       onClose()
       setPromptSource('compiled')
       setSelectedTestCaseIds(new Set(testCases.map((tc) => tc.id)))
-      onSuccess?.()
+      onSuccess?.(run)
     },
   })
 

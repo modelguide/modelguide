@@ -94,18 +94,27 @@ export class MastraAdapter implements AgentAdapter {
       }
     }
 
+    // Use the last step's text to avoid duplicated responses.
+    // result.text concatenates text from ALL steps, so when the agent
+    // produces text before AND after a tool call, it gets duplicated.
+    const steps = result.steps ?? [];
+    const lastStepText =
+      steps.length > 0 ? (steps[steps.length - 1].text ?? "") : "";
+    const responseText = lastStepText || result.text || "";
+
     log.debug(
       {
         agentId: this.config.agentId,
         sessionId,
-        responseLength: result.text?.length ?? 0,
+        responseLength: responseText.length,
         toolCallCount: toolCalls.length,
+        stepCount: steps.length,
       },
       "MastraAdapter received response",
     );
 
     return {
-      response: result.text ?? "",
+      response: responseText,
       toolCalls,
       // Mastra is single-response — each generate() call is one turn
       conversationEnded: true,

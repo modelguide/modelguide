@@ -103,3 +103,17 @@ export function getPersona(id: string): Persona | undefined {
 export function listPersonas(): Persona[] {
   return personas;
 }
+
+/** Realistic customer identifiers per persona (email for now, could be phone later). */
+const PERSONA_IDENTIFIERS: Record<string, string> = {
+  "polite-buyer": "sarah.johnson@modelguide.ai",
+  "impatient-returner": "mike.chen@modelguide.ai",
+  "terse-buyer": "alex.thompson@modelguide.ai",
+  "confused-browser": "jamie.rodriguez@modelguide.ai",
+};
+
+/** Map a persona ID to a realistic customer identifier for simulation sessions. */
+export function personaToIdentifier(personaId: string | undefined): string {
+  if (!personaId) return "customer@modelguide.ai";
+  return PERSONA_IDENTIFIERS[personaId] ?? "customer@modelguide.ai";
+}

@@ -18,7 +18,10 @@ import { createSession } from "@features/sessions/sessions.service";
 import { MastraAdapter } from "@features/simulations/adapters/mastra-adapter";
 import { runEvalSimulation } from "@features/simulations/eval-orchestrator";
 import { personalizeInputMessage } from "@features/simulations/llm-client";
-import { getPersona } from "@features/simulations/personas";
+import {
+  getPersona,
+  personaToIdentifier,
+} from "@features/simulations/personas";
 import { Errors } from "@lib/errors";
 import { generateSimulationJWT } from "@lib/jwt";
 import { getLogger } from "@lib/logger";
@@ -317,7 +320,7 @@ async function executeSimulateAndRunInner(
     try {
       const session = await createSession(orgId, suiteData.agent.id, {
         channelType: "api",
-        userIdentifier: "simulation:eval",
+        userIdentifier: personaToIdentifier(personaId),
         mode: "simulation",
         metadata: {
           source: "simulate-and-run",

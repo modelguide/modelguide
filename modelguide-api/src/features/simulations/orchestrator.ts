@@ -24,6 +24,7 @@ import {
   generatePersonaMessage,
   toOpenAiTools,
 } from "./llm-client";
+import { personaToIdentifier } from "./personas";
 import type { Persona } from "./personas";
 
 export interface SimulationResult {
@@ -72,7 +73,7 @@ export async function runSimulation(params: {
   // Create simulation session via session service
   const session = await createSession(orgId, agentId, {
     channelType: "api",
-    userIdentifier: `simulation:${persona.id}`,
+    userIdentifier: personaToIdentifier(persona.id),
     mode: "simulation",
     metadata: {
       personaId: persona.id,
