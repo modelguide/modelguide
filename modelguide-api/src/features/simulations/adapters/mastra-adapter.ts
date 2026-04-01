@@ -12,7 +12,10 @@
 
 import { getLogger } from "@lib/logger";
 import { Agent } from "@mastra/core/agent";
+import type { ToolsInput } from "@mastra/core/agent";
+import { RequestContext } from "@mastra/core/request-context";
 import { MCPClient } from "@mastra/mcp";
+import { z } from "zod";
 import type { AgentAdapter, AgentAdapterResponse } from "./agent-adapter";
 
 const log = getLogger();
@@ -30,12 +33,20 @@ export interface MastraAdapterConfig {
   simulationMcpUrl: string;
   /** JWT for authenticating with the simulation MCP route. */
   simulationToken: string;
+  /** Customer identifier (email/phone) — injected into agent context so it knows who the customer is. */
+  userIdentifier?: string;
   /** Max steps for agent.generate() tool-calling loops. */
   maxSteps?: number;
 }
 
+const simulationContextSchema = z.object({
+  userIdentifier: z.string().optional(),
+});
+
+type SimulationContext = z.infer<typeof simulationContextSchema>;
+
 export class MastraAdapter implements AgentAdapter {
-  private agent: Agent;
+  private agent: Agent<string, ToolsInput, undefined, SimulationContext>;
   private mcpClient: MCPClient;
   private config: MastraAdapterConfig;
 
@@ -46,7 +57,13 @@ export class MastraAdapter implements AgentAdapter {
       id: config.agentId,
       name: config.agentName,
       model: config.model,
-      instructions: config.compiledInstructions,
+      requestContextSchema: simulationContextSchema,
+      instructions: async ({ requestContext }) => {
+        const base = config.compiledInstructions;
+        const identifier = requestContext.get("userIdentifier");
+        if (!identifier) return base;
+        return `${base}\n\n## Current Customer\nThe customer you are currently helping is identified as: ${identifier}\nUse this identifier for any tool calls that require a customer email or identifier. Do NOT ask the customer for their email address.`;
+      },
     });
 
     this.mcpClient = new MCPClient({
@@ -78,8 +95,16 @@ export class MastraAdapter implements AgentAdapter {
 
     const toolsets = await this.mcpClient.listToolsets();
 
+    const requestContext = new RequestContext<
+      z.infer<typeof simulationContextSchema>
+    >();
+    if (this.config.userIdentifier) {
+      requestContext.set("userIdentifier", this.config.userIdentifier);
+    }
+
     const result = await this.agent.generate(message, {
       toolsets,
+      requestContext,
       maxSteps: this.config.maxSteps ?? 5,
     });
     // Extract tool calls from the generation steps
@@ -94,21 +119,25 @@ export class MastraAdapter implements AgentAdapter {
       }
     }
 
-    // Use the last step's text to avoid duplicated responses.
+    // Extract the final response text, avoiding Mastra's concatenation.
     // result.text concatenates text from ALL steps, so when the agent
     // produces text before AND after a tool call, it gets duplicated.
+    // We prefer the last step's text (the final agent utterance).
     const steps = result.steps ?? [];
-    const lastStepText =
-      steps.length > 0 ? (steps[steps.length - 1].text ?? "") : "";
-    const responseText = lastStepText || result.text || "";
+    const responseText = extractResponseText(steps, result.text ?? "");
 
-    log.debug(
+    log.info(
       {
         agentId: this.config.agentId,
         sessionId,
         responseLength: responseText.length,
         toolCallCount: toolCalls.length,
         stepCount: steps.length,
+        stepTexts: steps.map((s, i) => ({
+          step: i,
+          textLength: s.text?.length ?? 0,
+          hasToolCalls: (s.toolCalls?.length ?? 0) > 0,
+        })),
       },
       "MastraAdapter received response",
     );
@@ -132,4 +161,40 @@ export class MastraAdapter implements AgentAdapter {
       // Ignore disconnect errors
     }
   }
+}
+
+/**
+ * Extract the agent's final response text from generation steps.
+ *
+ * Mastra's `result.text` concatenates text from ALL steps, causing
+ * duplication when the agent produces text in multiple steps (e.g.,
+ * before and after a tool call). We prefer the last step that has text.
+ *
+ * As a safety net, if the extracted text still looks duplicated
+ * (first half === second half), we deduplicate.
+ */
+function extractResponseText(
+  steps: Array<{ text?: string | null }>,
+  fullText: string,
+): string {
+  // Try to get just the last step's text
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const text = steps[i].text?.trim();
+    if (text) return text;
+  }
+
+  // Fallback to full text with deduplication
+  const text = fullText.trim();
+  if (!text) return "";
+
+  // Detect exact duplication (text repeated with whitespace between)
+  const half = Math.floor(text.length / 2);
+  const firstHalf = text.slice(0, half).trim();
+  const secondHalf = text.slice(half).trim();
+  if (firstHalf.length > 50 && firstHalf === secondHalf) {
+    log.warn("detected duplicated response text, deduplicating");
+    return firstHalf;
+  }
+
+  return text;
 }

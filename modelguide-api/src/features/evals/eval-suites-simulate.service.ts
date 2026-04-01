@@ -315,12 +315,13 @@ async function executeSimulateAndRunInner(
     }
 
     // 1. Pre-create simulation session with mock config in metadata
+    const userIdentifier = personaToIdentifier(personaId);
     let adapter: MastraAdapter | null = null;
     let sessionId: string | null = null;
     try {
       const session = await createSession(orgId, suiteData.agent.id, {
         channelType: "api",
-        userIdentifier: personaToIdentifier(personaId),
+        userIdentifier,
         mode: "simulation",
         metadata: {
           source: "simulate-and-run",
@@ -345,6 +346,7 @@ async function executeSimulateAndRunInner(
         agentName: suiteData.agent.name,
         simulationMcpUrl,
         simulationToken,
+        userIdentifier,
       });
 
       // 3. Run simulation

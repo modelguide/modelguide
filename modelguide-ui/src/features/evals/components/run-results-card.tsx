@@ -291,10 +291,11 @@ export function RunResultsCard({
                 >
                   <div className="flex w-full items-center gap-3 px-4 py-3">
                     <Loader2 className="h-5 w-5 shrink-0 animate-spin text-fg-muted" />
-                    <div
-                      className="h-4 rounded bg-fg-subtle/10 animate-shimmer"
-                      style={{ width: `${30 + ((i * 13) % 40)}%` }}
-                    />
+                    <span className="flex-1 text-sm text-fg-muted">
+                      {i === 0
+                        ? 'Waiting for simulation to complete...'
+                        : 'Queued — will run after current test case'}
+                    </span>
                     <span className="text-xs text-fg-muted">Pending</span>
                   </div>
                 </div>
