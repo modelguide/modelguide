@@ -1,15 +1,17 @@
 /**
  * Unit tests for dimension derivation helpers and tuple selection.
  *
- * Tests selectTuples() (pure deterministic logic) and toneToPersonaId().
+ * Tests selectTuples() (in-process tuple selection) and toneToPersonaId().
  * deriveDimensionsFromSop() is LLM-dependent and tested via integration.
  */
 
 import { describe, expect, test } from "bun:test";
+import { getPersona } from "@features/simulations/personas";
 import {
   selectTuples,
   toneToPersonaId,
 } from "@features/test-case-generation/dimensions";
+import { TONES } from "@features/test-case-generation/types";
 import type { DimensionConfig } from "@features/test-case-generation/types";
 
 // ============================================================================
@@ -26,6 +28,7 @@ const dimsWithTools: DimensionConfig = {
     "ambiguous_intent",
     "missing_order_number",
     "contradictory_request",
+    "tool_returns_error",
     "out_of_scope_request",
   ],
   toolStates: {
@@ -130,6 +133,41 @@ describe("selectTuples", () => {
     }
   });
 
+  test("error edge cases get error tool states", () => {
+    const tuples = selectTuples(dimsWithTools, { count: 50 });
+    const errorEdgeCases = tuples.filter(
+      (t) =>
+        t.edgeCase === "tool_returns_error" ||
+        t.edgeCase === "missing_order_number",
+    );
+
+    for (const t of errorEdgeCases) {
+      // Every tool slug in the tuple should have an error variant
+      for (const variant of Object.values(t.toolState)) {
+        expect(variant.error === true || variant.error === "true").toBe(true);
+      }
+    }
+  });
+
+  test("straightforward edge cases get success tool states", () => {
+    const tuples = selectTuples(dimsWithTools, { count: 50 });
+    const straightforward = tuples.filter(
+      (t) => t.edgeCase === "straightforward",
+    );
+
+    // Layer 1 systematically iterates all variants (including error),
+    // but non-Layer-1 straightforward tuples should prefer success.
+    // Soft check: at least some straightforward tuples have all-success states.
+
+    // At least one straightforward tuple should have all-success tool states
+    const allSuccess = straightforward.filter((t) =>
+      Object.values(t.toolState).every(
+        (v) => v.error !== true && v.error !== "true",
+      ),
+    );
+    expect(allSuccess.length).toBeGreaterThan(0);
+  });
+
   test("returns fewer tuples than requested when space is exhausted", () => {
     // Very small dimension space: 1 intent * 5 tones * 3 complexity * 1 edge * 1 tool variant
     const tiny: DimensionConfig = {
@@ -156,6 +194,7 @@ describe("toneToPersonaId", () => {
       "impatient-returner",
       "confused-browser",
       "polite-buyer",
+      "terse-buyer",
     ];
 
     for (const tone of [
@@ -179,9 +218,28 @@ describe("toneToPersonaId", () => {
     expect(toneToPersonaId("confused")).toBe("confused-browser");
   });
 
-  test("polite and terse map to polite-buyer", () => {
+  test("polite maps to polite-buyer", () => {
     expect(toneToPersonaId("polite")).toBe("polite-buyer");
-    expect(toneToPersonaId("terse")).toBe("polite-buyer");
+  });
+
+  test("terse maps to terse-buyer", () => {
+    expect(toneToPersonaId("terse")).toBe("terse-buyer");
+  });
+
+  test("each non-shared tone maps to a persona containing the tone name", () => {
+    // Ensures persona IDs stay consistent with tone semantics
+    expect(toneToPersonaId("polite")).toContain("polite");
+    expect(toneToPersonaId("terse")).toContain("terse");
+    expect(toneToPersonaId("confused")).toContain("confused");
+  });
+
+  test("every tone maps to a persona that exists in the persona registry", () => {
+    for (const tone of TONES) {
+      const personaId = toneToPersonaId(tone);
+      const persona = getPersona(personaId);
+      expect(persona).toBeDefined();
+      expect(persona!.id).toBe(personaId);
+    }
   });
 
   test("unknown tone falls back to polite-buyer", () => {

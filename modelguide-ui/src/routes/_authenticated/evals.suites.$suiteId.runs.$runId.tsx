@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, FlaskConical } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Card, CardContent } from '~/components/ui/card'
@@ -25,6 +25,11 @@ function RunDetailPage() {
   } = useQuery({
     queryKey: ['eval-suites', suiteId, 'runs', runId],
     queryFn: () => api.get(`eval-suites/${suiteId}/runs/${runId}`).json<EvalSuiteRun>(),
+    refetchInterval: (query) => {
+      const completedAt = query.state.data?.completedAt
+      if (completedAt) return false
+      return 2000
+    },
   })
 
   const { data: suite } = useQuery({
@@ -32,10 +37,21 @@ function RunDetailPage() {
     queryFn: () => api.get(`eval-suites/${suiteId}`).json<EvalSuiteDetail>(),
   })
 
-  const resultVariant =
-    run?.passed === true ? 'success' : run?.passed === false ? 'error' : 'warning'
-  const resultLabel =
-    run?.passed === true ? 'Passed' : run?.passed === false ? 'Failed' : 'Inconclusive'
+  const isRunning = run != null && !run.completedAt
+  const resultVariant = isRunning
+    ? 'info'
+    : run?.passed === true
+      ? 'success'
+      : run?.passed === false
+        ? 'error'
+        : 'warning'
+  const resultLabel = isRunning
+    ? 'Running...'
+    : run?.passed === true
+      ? 'Passed'
+      : run?.passed === false
+        ? 'Failed'
+        : 'Inconclusive'
 
   return (
     <div className="space-y-6">
@@ -54,7 +70,9 @@ function RunDetailPage() {
         </div>
         {run ? (
           <div className="flex items-center gap-2">
-            <Badge variant={resultVariant}>{resultLabel}</Badge>
+            <Badge variant={resultVariant} className={isRunning ? 'animate-pulse' : ''}>
+              {resultLabel}
+            </Badge>
             <Badge variant="info">
               {PROMPT_SOURCE_LABELS[run.promptSource] ?? run.promptSource}
             </Badge>
@@ -90,22 +108,21 @@ function RunDetailPage() {
                   {run.completedAt ? formatDate(run.completedAt, { format: 'full' }) : '\u2014'}
                 </p>
               </InfoItem>
-              {run.sessionId ? (
-                <InfoItem label="Session">
-                  <Link
-                    to="/sessions/$id"
-                    params={{ id: run.sessionId }}
-                    className="truncate font-mono text-xs text-brand-400 hover:text-brand-300"
-                  >
-                    {run.sessionId}
-                  </Link>
-                </InfoItem>
-              ) : null}
+              <InfoItem label="Type">
+                <span className="inline-flex items-center gap-1.5 text-sm text-fg-secondary">
+                  <FlaskConical className="h-3.5 w-3.5" />
+                  Simulated
+                </span>
+              </InfoItem>
             </CardContent>
           </Card>
 
           {/* Results */}
-          <RunResultsCard testCaseResults={run.testCaseResults} testCases={suite?.testCases} />
+          <RunResultsCard
+            testCaseResults={run.testCaseResults}
+            testCases={suite?.testCases}
+            isRunning={isRunning}
+          />
         </>
       ) : null}
     </div>

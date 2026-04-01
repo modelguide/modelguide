@@ -33,13 +33,17 @@ export function EvaluateSessionDialog({
 
   const [sessionId, setSessionId] = useState('')
   const [promptSource, setPromptSource] = useState('compiled')
+  const [sessionMode, setSessionMode] = useState<'all' | 'live' | 'simulation'>('all')
 
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
-    queryKey: ['sessions', { agentId, pageSize: 10 }],
-    queryFn: () =>
-      api
-        .get('sessions', { searchParams: { agentId: agentId ?? '', pageSize: 10 } })
-        .json<PaginatedResponse<SessionListItem>>(),
+    queryKey: ['sessions', { agentId, pageSize: 10, mode: sessionMode }],
+    queryFn: () => {
+      const params: Record<string, string> = { agentId: agentId ?? '', pageSize: '10' }
+      if (sessionMode !== 'all') params.mode = sessionMode
+      return api
+        .get('sessions', { searchParams: params })
+        .json<PaginatedResponse<SessionListItem>>()
+    },
     enabled: open && !!agentId,
   })
 
@@ -70,6 +74,27 @@ export function EvaluateSessionDialog({
       description="Pick an existing live session to evaluate against this suite's evaluators."
     >
       <div className="space-y-4">
+        {/* Session mode filter */}
+        {agentId ? (
+          <div className="flex gap-1 rounded-lg bg-bg-subtle p-0.5">
+            {(['all', 'live', 'simulation'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setSessionMode(mode)}
+                className={cn(
+                  'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                  sessionMode === mode
+                    ? 'bg-bg-elevated text-fg-primary shadow-sm'
+                    : 'text-fg-secondary hover:text-fg-primary',
+                )}
+              >
+                {mode === 'all' ? 'All' : mode === 'live' ? 'Live' : 'Simulated'}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         {/* Recent sessions picker */}
         {agentId && recentSessions.length > 0 ? (
           <div>
@@ -88,6 +113,16 @@ export function EvaluateSessionDialog({
                   )}
                 >
                   <span className="flex-1 truncate">{session.userIdentifier}</span>
+                  <span
+                    className={cn(
+                      'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+                      session.mode === 'simulation'
+                        ? 'bg-warning/10 text-warning'
+                        : 'bg-success/10 text-success',
+                    )}
+                  >
+                    {session.mode === 'simulation' ? 'Sim' : 'Live'}
+                  </span>
                   <span className="shrink-0 text-fg-muted">{session.status}</span>
                   {session.durationSeconds != null ? (
                     <span className="shrink-0 font-mono tabular-nums text-fg-muted">

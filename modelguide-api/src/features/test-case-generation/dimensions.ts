@@ -8,6 +8,7 @@
 
 import { env } from "@/env";
 import type { SopStep } from "@features/sops/sops.types";
+import { getLogger } from "@lib/logger";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { resolveGenerationModel } from "./model";
@@ -50,6 +51,7 @@ const toolStatesEntrySchema = z.object({
   toolSlug: z.string().describe("Exact tool slug from the SOP"),
   variants: z
     .array(toolVariantSchema)
+    .min(1)
     .describe(
       "3-4 response variants for this tool, including one error state with fields: key='error' value='true', key='message' value='<error description>'",
     ),
@@ -84,7 +86,7 @@ const TONE_PERSONA_MAP: Record<string, string> = {
   hostile: "impatient-returner",
   confused: "confused-browser",
   polite: "polite-buyer",
-  terse: "polite-buyer",
+  terse: "terse-buyer",
 };
 
 /** Map a dimension tone to an existing persona ID. */
@@ -203,9 +205,17 @@ function tupleKey(t: DimensionTuple): string {
   return `${t.intent}|${t.tone}|${t.complexity}|${t.edgeCase}|${sortedState}`;
 }
 
-/** Pick a random element from an array. */
+/** Pick a random element from a non-empty array. */
 function pick<T>(arr: T[]): T {
+  if (arr.length === 0) {
+    throw new Error("pick() called with empty array");
+  }
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Check if a tool state variant represents an error response. */
+function isErrorVariant(variant: ToolStateVariant): boolean {
+  return variant.error === true || variant.error === "true";
 }
 
 /** Build a toolState record by picking one variant per tool slug. */
@@ -218,6 +228,53 @@ function pickToolState(
   for (const [slug, variants] of Object.entries(toolStates)) {
     if (slug === specificSlug && specificIdx !== undefined) {
       result[slug] = variants[specificIdx % variants.length];
+    } else {
+      result[slug] = pick(variants);
+    }
+  }
+  return result;
+}
+
+/**
+ * Pick tool state variants correlated with the edge case.
+ *
+ * - `tool_returns_error`, `missing_order_number` → error variants
+ * - `straightforward` → success variants
+ * - everything else → random
+ */
+const ERROR_EDGE_CASES = new Set([
+  "tool_returns_error",
+  "missing_order_number",
+]);
+
+const dimensionLog = getLogger();
+
+function pickToolStateForEdgeCase(
+  toolStates: Record<string, ToolStateVariant[]>,
+  edgeCase: string,
+): Record<string, ToolStateVariant> {
+  const result: Record<string, ToolStateVariant> = {};
+  for (const [slug, variants] of Object.entries(toolStates)) {
+    if (ERROR_EDGE_CASES.has(edgeCase)) {
+      const errorVariants = variants.filter(isErrorVariant);
+      if (errorVariants.length === 0) {
+        dimensionLog.warn(
+          { slug, edgeCase },
+          "no error variants found for tool — falling back to random variant",
+        );
+      }
+      result[slug] =
+        errorVariants.length > 0 ? pick(errorVariants) : pick(variants);
+    } else if (edgeCase === "straightforward") {
+      const successVariants = variants.filter((v) => !isErrorVariant(v));
+      if (successVariants.length === 0) {
+        dimensionLog.warn(
+          { slug, edgeCase },
+          "no success variants found for tool — falling back to random variant",
+        );
+      }
+      result[slug] =
+        successVariants.length > 0 ? pick(successVariants) : pick(variants);
     } else {
       result[slug] = pick(variants);
     }
@@ -291,7 +348,7 @@ export function selectTuples(
         tone: pick(dims.tones),
         complexity: pick(dims.complexity),
         edgeCase,
-        toolState: pickToolState(dims.toolStates),
+        toolState: pickToolStateForEdgeCase(dims.toolStates, edgeCase),
       });
     }
   }
@@ -305,7 +362,7 @@ export function selectTuples(
         tone,
         complexity: "requires_escalation",
         edgeCase,
-        toolState: pickToolState(dims.toolStates),
+        toolState: pickToolStateForEdgeCase(dims.toolStates, edgeCase),
       });
     }
   }
@@ -315,12 +372,13 @@ export function selectTuples(
   const maxAttempts = opts.count * 3;
   while (tuples.length < opts.count && attempts < maxAttempts) {
     attempts++;
+    const edgeCase = pick(dims.edgeCases);
     addIfNew({
       intent: pick(dims.intents),
       tone: pick(dims.tones),
       complexity: pick(dims.complexity),
-      edgeCase: pick(dims.edgeCases),
-      toolState: pickToolState(dims.toolStates),
+      edgeCase,
+      toolState: pickToolStateForEdgeCase(dims.toolStates, edgeCase),
     });
   }
 

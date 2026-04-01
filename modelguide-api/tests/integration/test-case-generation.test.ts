@@ -51,7 +51,7 @@ const mockDimensionConfig = {
 const mockGeneratedTestCase = {
   name: "order_status - polite - straightforward",
   scenario: "Customer wants to know the status of their recent order.",
-  input_email:
+  customer_message:
     "Hi there, I placed an order last week and was wondering about its current status. My order number is ORD-001. Thanks!",
   mock_tool_responses: {
     wf_gen_store_look_up_order: {
@@ -76,7 +76,7 @@ const TONE_PERSONA_MAP: Record<string, string> = {
   hostile: "impatient-returner",
   confused: "confused-browser",
   polite: "polite-buyer",
-  terse: "polite-buyer",
+  terse: "terse-buyer",
 };
 
 function toneToPersonaId(tone: string): string {
@@ -573,6 +573,7 @@ describe("Full generation pipeline", () => {
         "polite-buyer",
         "impatient-returner",
         "confused-browser",
+        "terse-buyer",
       ]);
       expect(validPersonas.has(input!.persona!)).toBe(true);
 

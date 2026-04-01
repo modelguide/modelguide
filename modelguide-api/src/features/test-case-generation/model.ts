@@ -59,6 +59,7 @@ const MODEL_PRICING: Record<string, [number, number]> = {
   "claude-haiku-4-5-20251001": [0.8, 4],
   "gpt-4o": [2.5, 10],
   "gpt-4o-mini": [0.15, 0.6],
+  "gpt-5.4-mini": [0.15, 0.6],
   "o4-mini": [1.1, 4.4],
 };
 

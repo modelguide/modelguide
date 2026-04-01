@@ -348,6 +348,7 @@ describeE2E("E2E: Synthetic test case generation", () => {
           "polite-buyer",
           "impatient-returner",
           "confused-browser",
+          "terse-buyer",
         ]);
         expect(validPersonas.has(input!.persona!)).toBe(true);
 

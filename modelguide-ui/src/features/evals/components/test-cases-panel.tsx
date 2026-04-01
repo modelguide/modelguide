@@ -6,11 +6,12 @@ import type { EvalSuiteTestCase } from '~/schemas/eval-suites'
 
 export interface TestCasesPanelProps {
   testCases: EvalSuiteTestCase[]
+  pendingCount?: number
 }
 
 type SourceFilter = 'all' | 'auto' | 'manual'
 
-export function TestCasesPanel({ testCases }: TestCasesPanelProps) {
+export function TestCasesPanel({ testCases, pendingCount = 0 }: TestCasesPanelProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -39,7 +40,7 @@ export function TestCasesPanel({ testCases }: TestCasesPanelProps) {
     return result
   }, [testCases, sourceFilter, searchQuery])
 
-  if (testCases.length === 0) {
+  if (testCases.length === 0 && pendingCount === 0) {
     return (
       <div className="rounded-lg border border-fg-subtle/10 bg-bg-elevated px-6 py-12 text-center">
         <p className="text-sm text-fg-muted">No test cases yet</p>
@@ -154,6 +155,29 @@ export function TestCasesPanel({ testCases }: TestCasesPanelProps) {
               </div>
             )
           })}
+          {/* Skeleton placeholders for cases being generated */}
+          {pendingCount > 0
+            ? (['a', 'b', 'c'] as const).slice(0, Math.min(pendingCount, 3)).map((id, i) => (
+                <div
+                  key={`skeleton-${id}`}
+                  className="overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated"
+                  style={{ animationDelay: `${i * 80}ms` }}
+                >
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-bg-subtle">
+                      <span className="h-3 w-3 rounded-sm bg-fg-subtle/10 animate-pulse" />
+                    </span>
+                    <div className="flex-1 space-y-1.5">
+                      <div
+                        className="h-3.5 rounded bg-fg-subtle/10 animate-shimmer"
+                        style={{ width: `${45 + ((i * 17) % 35)}%` }}
+                      />
+                    </div>
+                    <div className="h-5 w-10 rounded bg-fg-subtle/10 animate-pulse" />
+                  </div>
+                </div>
+              ))
+            : null}
         </div>
       )}
     </div>

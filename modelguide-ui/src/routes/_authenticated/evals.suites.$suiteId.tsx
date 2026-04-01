@@ -3,15 +3,16 @@ import { Link, Outlet, createFileRoute, useMatch, useNavigate } from '@tanstack/
 import {
   ArrowLeft,
   Bot,
+  ExternalLink,
   FileText,
   FlaskConical,
+  MoreVertical,
   Play,
   RefreshCw,
   Search,
   Trash2,
 } from 'lucide-react'
-import { useState } from 'react'
-import { Badge } from '~/components/ui/badge'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { Spinner } from '~/components/ui/spinner'
@@ -42,6 +43,21 @@ function SuiteDetailPage() {
   const [showEvalSessionDialog, setShowEvalSessionDialog] = useState(false)
   const [showSimulateRunDialog, setShowSimulateRunDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showReinitDialog, setShowReinitDialog] = useState(false)
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false)
+  const [generatingRemaining, setGeneratingRemaining] = useState(0)
+  const overflowRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showOverflowMenu) return
+    const handler = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setShowOverflowMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showOverflowMenu])
 
   // If a child route (e.g. runs/$runId) is active, render it instead
   const childMatch = useMatch({
@@ -107,15 +123,10 @@ function SuiteDetailPage() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2">
+            {suite ? <FlaskConical className="h-5 w-5 text-fg-secondary" /> : null}
             <h1 className="font-display text-2xl font-bold text-fg-primary">
               {suite?.name ?? 'Suite Detail'}
             </h1>
-            {suite ? (
-              <Badge variant="info">
-                <FlaskConical className="h-3 w-3" />
-                eval suite
-              </Badge>
-            ) : null}
           </div>
           {suite?.description ? (
             <p className="mt-1 font-sans text-sm text-fg-secondary">{suite.description}</p>
@@ -123,17 +134,12 @@ function SuiteDetailPage() {
         </div>
         {isAdmin && suite ? (
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => reinitMutation.mutate()}
-              loading={reinitMutation.isPending}
-              title="Re-generate test cases and evaluators from SOP"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Re-init
-            </Button>
             {suite.sopId ? (
-              <GenerateTestCasesButton suiteId={suiteId} hasSop={!!suite.sopId} />
+              <GenerateTestCasesButton
+                suiteId={suiteId}
+                hasSop={!!suite.sopId}
+                onProgress={setGeneratingRemaining}
+              />
             ) : null}
             <Button variant="secondary" onClick={() => setShowEvalSessionDialog(true)}>
               <Search className="h-4 w-4" />
@@ -143,16 +149,43 @@ function SuiteDetailPage() {
               <Play className="h-4 w-4" />
               Simulate & Run
             </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                deleteMutation.reset()
-                setShowDeleteDialog(true)
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
+            <div className="relative" ref={overflowRef}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+              {showOverflowMenu ? (
+                <div className="absolute -right-2 top-full z-50 mt-3 w-36 rounded-lg border border-fg-subtle/20 bg-bg-elevated p-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOverflowMenu(false)
+                      reinitMutation.reset()
+                      setShowReinitDialog(true)
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-fg-secondary hover:bg-bg-subtle disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Re-init
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOverflowMenu(false)
+                      deleteMutation.reset()
+                      setShowDeleteDialog(true)
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-error hover:bg-error/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
@@ -164,20 +197,22 @@ function SuiteDetailPage() {
             <Link
               to="/agents/$id"
               params={{ id: suite.agentId }}
-              className="flex items-center gap-1.5 rounded-lg border border-fg-subtle/10 bg-bg-elevated px-3 py-1.5 text-fg-secondary transition-colors hover:border-fg-subtle/20 hover:text-fg-primary"
+              className="flex items-center gap-1.5 rounded-md border border-fg-subtle/10 bg-bg-elevated px-2 py-1 text-xs text-fg-secondary transition-colors hover:border-fg-subtle/20 hover:text-fg-primary"
             >
-              <Bot className="h-3.5 w-3.5 text-fg-muted" />
+              <Bot className="h-3 w-3 text-fg-muted" />
               {agent.name}
+              <ExternalLink className="h-2.5 w-2.5 text-fg-muted" />
             </Link>
           ) : null}
           {sop ? (
             <Link
               to="/sops/$id"
               params={{ id: suite.sopId ?? '' }}
-              className="flex items-center gap-1.5 rounded-lg border border-fg-subtle/10 bg-bg-elevated px-3 py-1.5 text-fg-secondary transition-colors hover:border-fg-subtle/20 hover:text-fg-primary"
+              className="flex items-center gap-1.5 rounded-md border border-fg-subtle/10 bg-bg-elevated px-2 py-1 text-xs text-fg-secondary transition-colors hover:border-fg-subtle/20 hover:text-fg-primary"
             >
-              <FileText className="h-3.5 w-3.5 text-fg-muted" />
+              <FileText className="h-3 w-3 text-fg-muted" />
               {sop.name}
+              <ExternalLink className="h-2.5 w-2.5 text-fg-muted" />
             </Link>
           ) : null}
         </div>
@@ -246,7 +281,7 @@ function SuiteDetailPage() {
 
           {/* Tab Content */}
           {activeTab === 'test-cases' ? (
-            <TestCasesPanel testCases={suite.testCases ?? []} />
+            <TestCasesPanel testCases={suite.testCases ?? []} pendingCount={generatingRemaining} />
           ) : activeTab === 'evaluators' ? (
             <EvaluatorsPanel evaluators={suite.evaluators ?? []} />
           ) : (
@@ -276,6 +311,36 @@ function SuiteDetailPage() {
           onSuccess={() => setActiveTab('runs')}
         />
       ) : null}
+
+      {/* Re-init Confirmation Dialog */}
+      <Dialog
+        open={showReinitDialog}
+        onClose={() => setShowReinitDialog(false)}
+        title="Re-initialize Suite"
+        description="This will regenerate all evaluators from the linked SOP and delete all existing test cases. Run history will be preserved. This action cannot be undone."
+      >
+        {reinitMutation.error ? (
+          <p className="mb-3 text-xs text-error">
+            Failed to re-initialize suite. Please try again.
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setShowReinitDialog(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() =>
+              reinitMutation.mutate(undefined, {
+                onSuccess: () => setShowReinitDialog(false),
+              })
+            }
+            loading={reinitMutation.isPending}
+          >
+            Re-init
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog

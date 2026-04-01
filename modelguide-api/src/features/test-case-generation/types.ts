@@ -76,7 +76,7 @@ export interface DimensionTuple {
 export interface GeneratedTestCase {
   name: string;
   scenario: string;
-  input_email: string;
+  customer_message: string;
   mock_tool_responses: Record<string, ToolStateVariant>;
 }
 

@@ -106,6 +106,7 @@ export interface TestCaseRunDetail {
   testCaseId: string | null;
   testCaseName: string | null;
   evalRunId: string;
+  sessionId: string;
   passed: boolean | null;
   status: string;
   scores: EvalRunScore[];

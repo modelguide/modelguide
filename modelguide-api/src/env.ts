@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+function getGenerationModelProvider(modelId: string): string {
+  const slashIdx = modelId.indexOf("/");
+  return slashIdx === -1 ? "anthropic" : modelId.slice(0, slashIdx);
+}
+
 const envSchema = z
   .object({
     PORT: z.coerce.number().default(3000),
@@ -75,9 +80,9 @@ const envSchema = z
     // Test case generation — LLM API key for generateObject() calls (Anthropic or OpenAI)
     GENERATION_LLM_API_KEY: z.string().optional(),
     // Model for dimension derivation (format: "provider/model")
-    GENERATION_DIMENSION_MODEL: z.string().default("openai/gpt-4o"),
+    GENERATION_DIMENSION_MODEL: z.string().default("openai/gpt-5.4-mini"),
     // Model for per-case generation + validation
-    GENERATION_CASE_MODEL: z.string().default("openai/gpt-4o-mini"),
+    GENERATION_CASE_MODEL: z.string().default("openai/gpt-5.4-mini"),
   })
   .refine(
     (data) => {
@@ -114,6 +119,16 @@ const envSchema = z
       message:
         "RESEND_FROM_EMAIL is required when MAGIC_LINK_STRATEGY is 'resend'",
       path: ["RESEND_FROM_EMAIL"],
+    },
+  )
+  .refine(
+    (data) =>
+      getGenerationModelProvider(data.GENERATION_DIMENSION_MODEL) ===
+      getGenerationModelProvider(data.GENERATION_CASE_MODEL),
+    {
+      message:
+        "GENERATION_DIMENSION_MODEL and GENERATION_CASE_MODEL must use the same provider because generation shares one GENERATION_LLM_API_KEY",
+      path: ["GENERATION_CASE_MODEL"],
     },
   );
 

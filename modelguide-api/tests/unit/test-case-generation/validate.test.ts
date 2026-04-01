@@ -65,7 +65,7 @@ const sopStepsNoTools: SopStep[] = [
 const validTestCase: GeneratedTestCase = {
   name: "order_status - polite - straightforward",
   scenario: "Customer wants to check their order status.",
-  input_email:
+  customer_message:
     "Hi there, I would like to check on my order please. My order number is ORD-12345.",
   mock_tool_responses: {
     glowbox_store_get_order: { status: "delivered", tracking: "1Z999" },
@@ -115,13 +115,13 @@ describe("validateStructural", () => {
       );
     });
 
-    test("(c) input_email is fewer than 5 words", () => {
-      const shortEmail: GeneratedTestCase = {
+    test("(c) customer_message is fewer than 5 words", () => {
+      const shortMessage: GeneratedTestCase = {
         ...validTestCase,
-        input_email: "Order status please",
+        customer_message: "Order status please",
       };
 
-      const result = validateStructural(shortEmail, sopSteps);
+      const result = validateStructural(shortMessage, sopSteps);
       expect(result.valid).toBe(false);
       expect(result.source).toBe("structural");
       expect(result.issues).toEqual(
@@ -133,7 +133,7 @@ describe("validateStructural", () => {
       const multipleIssues: GeneratedTestCase = {
         name: "bad case",
         scenario: "Bad",
-        input_email: "Hi",
+        customer_message: "Hi",
         mock_tool_responses: {
           fake_tool: { data: true },
         },
@@ -174,7 +174,7 @@ describe("validateStructural", () => {
       const noToolCase: GeneratedTestCase = {
         name: "greeting - polite - straightforward",
         scenario: "Customer greets the agent.",
-        input_email:
+        customer_message:
           "Hello, I have a question about your products and services.",
         mock_tool_responses: {},
       };
@@ -184,10 +184,10 @@ describe("validateStructural", () => {
       expect(result.issues).toEqual([]);
     });
 
-    test("email with exactly 5 words passes", () => {
+    test("message with exactly 5 words passes", () => {
       const fiveWords: GeneratedTestCase = {
         ...validTestCase,
-        input_email: "Please check my order status",
+        customer_message: "Please check my order status",
       };
 
       const result = validateStructural(fiveWords, sopSteps);
@@ -208,12 +208,12 @@ describe("GenerationRunResult aggregation", () => {
     const rejections = [
       {
         tupleName: "order_status - frustrated - ambiguous",
-        issues: ["input_email too short — likely degenerate"],
+        issues: ["customer_message too short — likely degenerate"],
         rejectionSource: "structural" as const,
       },
       {
         tupleName: "return - hostile - missing_order",
-        issues: ["Scenario doesn't match email tone"],
+        issues: ["Scenario doesn't match message tone"],
         rejectionSource: "semantic" as const,
       },
       {
@@ -241,12 +241,12 @@ describe("GenerationRunResult aggregation", () => {
     const rejections = [
       {
         tupleName: "t1",
-        issues: ["short email", "bad slug"],
+        issues: ["short message", "bad slug"],
         rejectionSource: "structural" as const,
       },
       {
         tupleName: "t2",
-        issues: ["short email"],
+        issues: ["short message"],
         rejectionSource: "structural" as const,
       },
       {
@@ -261,7 +261,7 @@ describe("GenerationRunResult aggregation", () => {
       },
       {
         tupleName: "t5",
-        issues: ["short email"],
+        issues: ["short message"],
         rejectionSource: "structural" as const,
       },
     ];
@@ -278,7 +278,7 @@ describe("GenerationRunResult aggregation", () => {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    expect(topIssues[0]).toEqual({ issue: "short email", count: 3 });
+    expect(topIssues[0]).toEqual({ issue: "short message", count: 3 });
     expect(topIssues[1]).toEqual({ issue: "bad slug", count: 2 });
     expect(topIssues.length).toBe(4);
   });

@@ -32,7 +32,7 @@ const semanticValidationSchema = z.object({
  * Rejects when:
  * (a) mock tool slug doesn't match any SOP tool reference
  * (b) a required SOP tool has no mock response
- * (c) input_email is fewer than 5 words
+ * (c) customer_message is fewer than 5 words
  */
 export function validateStructural(
   testCase: GeneratedTestCase,
@@ -68,10 +68,10 @@ export function validateStructural(
     }
   }
 
-  // (c) Check input_email word count
-  const wordCount = testCase.input_email.trim().split(/\s+/).length;
+  // (c) Check customer_message word count
+  const wordCount = testCase.customer_message.trim().split(/\s+/).length;
   if (wordCount < 5) {
-    issues.push("input_email too short — likely degenerate");
+    issues.push("customer_message too short — likely degenerate");
   }
 
   return {
@@ -89,7 +89,7 @@ export function validateStructural(
  * Validate internal consistency of a generated test case via LLM
  * (model configurable via GENERATION_CASE_MODEL).
  *
- * Checks that the email matches the scenario and mock data make sense together.
+ * Checks that the customer message matches the scenario and mock data make sense together.
  */
 export async function validateSemantic(
   testCase: GeneratedTestCase,
@@ -99,17 +99,18 @@ export async function validateSemantic(
 Test case:
 - Name: ${testCase.name}
 - Scenario: ${testCase.scenario}
-- Customer email: "${testCase.input_email}"
+- Customer message: "${testCase.customer_message}"
 - Mock tool responses: ${JSON.stringify(testCase.mock_tool_responses)}
 
-Check for:
-1. Does the email match the described scenario?
-2. Does the email tone match what the name suggests?
-3. Are the mock tool responses consistent with the scenario?
-4. Is the email realistic and could plausibly be from a real customer?
-5. Does the email contain enough context for an agent to respond?
+IMPORTANT CONTEXT: Mock tool responses are pre-configured fixtures that define what backend tools will return DURING the simulation — they are NOT what the customer has said or knows about. For example, a customer may ask about "my order" without providing a number, and the mock tool response defines what the order lookup tool will return when the agent eventually calls it. This is expected and correct — do NOT flag mismatches between the customer message and mock tool data.
 
-Set "passes" to true if the test case is internally consistent. Only flag real issues — minor style differences are acceptable.`;
+Check for:
+1. Does the customer message match the described scenario?
+2. Does the message tone match what the name suggests (e.g. "terse" = short/direct, "polite" = friendly)?
+3. Is the message realistic and could plausibly be from a real customer?
+4. Does the message contain enough context for an agent to start a conversation?
+
+Set "passes" to true if the test case is internally consistent. Only flag real issues — be lenient. Minor style differences, short messages for terse tones, and missing details that the agent would ask for are all acceptable.`;
 
   const { object, usage } = await generateObject({
     model: resolveGenerationModel(env.GENERATION_CASE_MODEL),

@@ -1135,6 +1135,7 @@ export async function getEvalSuiteRuns(
               ? (testCaseNameMap.get(er.testCaseId) ?? null)
               : null,
             evalRunId: er.id,
+            sessionId: er.sessionId,
             passed: er.passed,
             status: er.status,
             scores: scoresByRun.get(er.id) ?? [],
@@ -1223,6 +1224,7 @@ export async function getEvalSuiteRunById(
         ? (testCaseNameMap.get(er.testCaseId) ?? null)
         : null,
       evalRunId: er.id,
+      sessionId: er.sessionId,
       passed: er.passed,
       status: er.status,
       scores: scoresByRun.get(er.id) ?? [],

@@ -23,8 +23,12 @@ export function GenerationProgressBar({
       : status === 'generating'
         ? `Generating case ${completed}/${total}...`
         : status === 'completed'
-          ? `Done - ${accepted} accepted, ${rejected} rejected`
-          : 'Processing...'
+          ? rejected > 0
+            ? `Done — ${accepted} accepted, ${rejected} rejected`
+            : `Done — ${accepted} test cases generated`
+          : status === 'failed'
+            ? 'Generation failed'
+            : 'Processing...'
 
   return (
     <div className="w-full space-y-1.5">
@@ -33,17 +37,21 @@ export function GenerationProgressBar({
         {total > 0 ? <span className="font-mono text-fg-muted">{percent}%</span> : null}
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-bg-subtle">
-        <div
-          className={cn(
-            'h-full rounded-full transition-all duration-500 ease-out',
-            status === 'completed'
-              ? 'bg-success'
-              : status === 'failed'
-                ? 'bg-error'
-                : 'bg-brand-500',
-          )}
-          style={{ width: `${percent}%` }}
-        />
+        {status === 'deriving_dimensions' ? (
+          <div className="h-full w-1/4 animate-[indeterminate_1.5s_ease-in-out_infinite] rounded-full bg-brand-500" />
+        ) : (
+          <div
+            className={cn(
+              'h-full rounded-full transition-all duration-500 ease-out',
+              status === 'completed'
+                ? 'bg-success'
+                : status === 'failed'
+                  ? 'bg-error'
+                  : 'bg-brand-500 animate-pulse',
+            )}
+            style={{ width: `${percent}%` }}
+          />
+        )}
       </div>
       {total > 0 && status === 'generating' ? (
         <div className="flex gap-3 text-xs text-fg-muted">

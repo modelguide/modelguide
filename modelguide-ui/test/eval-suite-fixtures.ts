@@ -123,6 +123,7 @@ export function makeTestCaseResult(overrides: Partial<TestCaseResult> = {}): Tes
   return {
     testCaseId: '00000000-0000-0000-0000-b00000000001',
     evalRunId: '00000000-0000-0000-0000-200000000001',
+    sessionId: '00000000-0000-0000-0000-500000000001',
     passed: true,
     status: 'completed',
     scores: [makeEvalRunScore()],

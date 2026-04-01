@@ -85,6 +85,7 @@ export const testCaseResultSchema = z.object({
   testCaseId: z.string().uuid().nullable().optional(),
   testCaseName: z.string().nullable().optional(),
   evalRunId: z.string().uuid(),
+  sessionId: z.string().uuid(),
   passed: z.boolean().nullable().optional(),
   status: z.string(),
   scores: z.array(evalRunScoreSchema),

@@ -2,7 +2,7 @@
  * Test case generation — per-tuple LLM generation via generateObject().
  *
  * Each tuple produces one GeneratedTestCase with:
- * - name, scenario, input_email, mock_tool_responses
+ * - name, scenario, customer_message, mock_tool_responses
  */
 
 import { env } from "@/env";
@@ -45,10 +45,11 @@ const generatedTestCaseSchema = z.object({
     .describe(
       "1-2 sentence scenario describing the customer situation and what they want",
     ),
-  input_email: z
+  customer_message: z
     .string()
+    .min(20)
     .describe(
-      "A realistic customer email (at least 5 words) written in the specified tone, reflecting the edge case",
+      "A realistic customer message (at least 8-15 words, even for terse tones) written in the specified tone, reflecting the edge case. Must be a complete sentence, not just a few words.",
     ),
   mock_tool_responses: z
     .array(mockToolEntrySchema)
@@ -83,7 +84,7 @@ export async function generateTestCase(
   const toolStateInfo =
     Object.keys(tuple.toolState).length > 0
       ? `\nTool states to use as mock_tool_responses:\n${JSON.stringify(tuple.toolState, null, 2)}`
-      : "\nNo tools — mock_tool_responses should be an empty object {}.";
+      : "\nNo tools — mock_tool_responses should be an empty array [].";
 
   const toneGuidance = getToneGuidance(tuple.tone);
   const edgeCaseGuidance = getEdgeCaseGuidance(tuple.edgeCase);
@@ -102,15 +103,16 @@ Dimension tuple:
 ${toolStateInfo}
 
 Requirements:
-1. "name" should be: "${tuple.intent} - ${tuple.tone} - ${tuple.edgeCase}"
+1. "name" should be exactly: "${tuple.intent} - ${tuple.tone} - ${tuple.edgeCase}"
 2. "scenario" — 1-2 sentences describing the customer's situation
-3. "input_email" — write a realistic customer email (minimum 5 words) that:
+3. "customer_message" — write a realistic customer message (minimum 8 words) that:
    ${toneGuidance}
    ${edgeCaseGuidance}
-4. "mock_tool_responses" — array of { toolSlug, fields: [{ key, value }] } entries matching the tool states above.
-   If no tools, return an empty array [].
+4. "mock_tool_responses" — array of { toolSlug, fields: [{ key, value }] } entries.
+   CRITICAL: toolSlug values MUST exactly match the tool slugs from the SOP steps above. Do not invent new slugs.
+   Copy the exact tool states provided above. If no tools, return an empty array [].
 
-The email should feel like a real customer wrote it, not a template.`;
+The message should feel like a real customer wrote it, not a template.`;
 
   const { object, usage } = await generateObject({
     model: resolveGenerationModel(env.GENERATION_CASE_MODEL),
@@ -127,7 +129,7 @@ The email should feel like a real customer wrote it, not a template.`;
   const testCase: GeneratedTestCase = {
     name: object.name,
     scenario: object.scenario,
-    input_email: object.input_email,
+    customer_message: object.customer_message,
     mock_tool_responses: mockToolResponses,
   };
 
@@ -155,7 +157,7 @@ function getToneGuidance(tone: string): string {
     case "polite":
       return '- Write politely with greetings, "please" and "thank you"';
     case "terse":
-      return "- Write very briefly, minimal words, no pleasantries";
+      return "- Write briefly and directly, no pleasantries, but still a complete sentence (8+ words)";
     default:
       return "- Write in a neutral customer tone";
   }
@@ -168,16 +170,16 @@ function getEdgeCaseGuidance(edgeCase: string): string {
     case "ambiguous_intent":
       return "- Make the request unclear so the agent must clarify";
     case "missing_order_number":
-      return "- Do NOT include an order number in the email";
+      return "- Do NOT include an order number in the message";
     case "contradictory_request":
       return "- Include contradictory information (e.g., want refund but also replacement)";
     case "tool_returns_error":
       return "- Write normally — the mock tool will return an error for the agent to handle";
     case "multiple_issues_single_email":
-      return "- Include 2-3 separate issues in one email";
+      return "- Include 2-3 separate issues in one message";
     case "out_of_scope_request":
       return "- Ask for something outside this SOP's scope";
     default:
-      return `- Incorporate the "${edgeCase}" edge case naturally into the email`;
+      return `- Incorporate the "${edgeCase}" edge case naturally into the message`;
   }
 }

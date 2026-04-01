@@ -149,8 +149,8 @@ Optional:
 - `EVAL_LLM_BASE_URL` — custom base URL for eval LLM endpoint. Falls back to `SIMULATION_LLM_BASE_URL`
 - `EVAL_LLM_MODEL` — model for eval scoring. Falls back to `SIMULATION_LLM_MODEL`
 - `GENERATION_LLM_API_KEY` — API key for synthetic test case generation (Anthropic or OpenAI)
-- `GENERATION_DIMENSION_MODEL` — model for dimension derivation (format: `provider/model`, defaults to `openai/gpt-4o`)
-- `GENERATION_CASE_MODEL` — model for per-case generation + validation (format: `provider/model`, defaults to `openai/gpt-4o-mini`)
+- `GENERATION_DIMENSION_MODEL` — model for dimension derivation (format: `provider/model`, defaults to `openai/gpt-5.4-mini`)
+- `GENERATION_CASE_MODEL` — model for per-case generation + validation (format: `provider/model`, defaults to `openai/gpt-5.4-mini`)
 
 ## 9. Verify
 

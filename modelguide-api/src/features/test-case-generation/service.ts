@@ -186,114 +186,128 @@ async function executeGenerateTestCases(
   for (let i = 0; i < tuples.length; i++) {
     const tuple = tuples[i];
     const tupleName = `${tuple.intent} - ${tuple.tone} - ${tuple.edgeCase}`;
+    const MAX_ATTEMPTS = 2;
 
-    try {
-      // Generate test case
-      const genResult = await generateTestCase(
-        tuple,
-        sopDetail.name,
-        sopDetail.definition.steps,
-      );
-      generationTokens.input += genResult.usage.input;
-      generationTokens.output += genResult.usage.output;
-
-      const generated = genResult.testCase;
-
-      // Structural validation
-      const structuralResult = validateStructural(
-        generated,
-        sopDetail.definition.steps,
-      );
-      if (!structuralResult.valid) {
-        rejected++;
-        rejections.push({
-          tupleName,
-          issues: structuralResult.issues,
-          rejectionSource: "structural",
-        });
-        updateProgress({
-          status: "generating",
-          completed: i + 1,
-          total: tuples.length,
-          accepted,
-          rejected,
-        });
-        continue;
-      }
-
-      // Semantic validation
-      const semanticResult = await validateSemantic(generated);
-      validationTokens.input += semanticResult.usage.input;
-      validationTokens.output += semanticResult.usage.output;
-
-      if (!semanticResult.result.valid) {
-        rejected++;
-        rejections.push({
-          tupleName,
-          issues: semanticResult.result.issues,
-          rejectionSource: "semantic",
-        });
-        updateProgress({
-          status: "generating",
-          completed: i + 1,
-          total: tuples.length,
-          accepted,
-          rejected,
-        });
-        continue;
-      }
-
-      // Delete old auto cases on first accepted insert (avoids data loss
-      // if the pipeline fails before producing any replacements)
-      if (!deletedOldCases) {
-        await forOrg(orgId, async (tx) => {
-          await tx
-            .delete(evalSuiteTestCases)
-            .where(
-              and(
-                eq(evalSuiteTestCases.suiteId, suiteId),
-                eq(evalSuiteTestCases.source, "auto"),
-              ),
-            );
-        });
-        deletedOldCases = true;
-      }
-
-      // Insert accepted test case
-      const personaId = toneToPersonaId(tuple.tone);
-      await createTestCase(orgId, suiteId, {
-        name: generated.name,
-        description: generated.scenario,
-        source: "auto",
-        input: {
-          message: generated.input_email,
-          persona: personaId,
-        },
-        mockToolResponses: generated.mock_tool_responses,
-      });
-
-      accepted++;
-    } catch (err) {
-      // Distinguish infrastructure errors (abort pipeline) from per-case failures (skip)
-      if (isInfrastructureError(err)) {
-        log.error(
-          { err, tupleName, suiteId },
-          "infrastructure error during generation — aborting pipeline",
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      try {
+        // Generate test case
+        const genResult = await generateTestCase(
+          tuple,
+          sopDetail.name,
+          sopDetail.definition.steps,
         );
-        throw err;
-      }
+        generationTokens.input += genResult.usage.input;
+        generationTokens.output += genResult.usage.output;
 
-      // Per-case failure — skip and count as rejection
-      log.warn(
-        { err, tupleName, suiteId },
-        "test case generation/validation failed — skipping",
-      );
-      rejected++;
-      rejections.push({
-        tupleName,
-        issues: [err instanceof Error ? err.message : "LLM generation failed"],
-        rejectionSource: "error",
-      });
+        const generated = genResult.testCase;
+
+        // Structural validation
+        const structuralResult = validateStructural(
+          generated,
+          sopDetail.definition.steps,
+        );
+        if (!structuralResult.valid) {
+          if (attempt < MAX_ATTEMPTS - 1) {
+            log.debug(
+              { tupleName, issues: structuralResult.issues },
+              "structural validation failed — retrying",
+            );
+            continue;
+          }
+          rejected++;
+          rejections.push({
+            tupleName,
+            issues: structuralResult.issues,
+            rejectionSource: "structural",
+          });
+          break;
+        }
+
+        // Semantic validation
+        const semanticResult = await validateSemantic(generated);
+        validationTokens.input += semanticResult.usage.input;
+        validationTokens.output += semanticResult.usage.output;
+
+        if (!semanticResult.result.valid) {
+          if (attempt < MAX_ATTEMPTS - 1) {
+            log.debug(
+              { tupleName, issues: semanticResult.result.issues },
+              "semantic validation failed — retrying",
+            );
+            continue;
+          }
+          rejected++;
+          rejections.push({
+            tupleName,
+            issues: semanticResult.result.issues,
+            rejectionSource: "semantic",
+          });
+          break;
+        }
+
+        // Delete old auto cases on first accepted insert (avoids data loss
+        // if the pipeline fails before producing any replacements)
+        if (!deletedOldCases) {
+          await forOrg(orgId, async (tx) => {
+            await tx
+              .delete(evalSuiteTestCases)
+              .where(
+                and(
+                  eq(evalSuiteTestCases.suiteId, suiteId),
+                  eq(evalSuiteTestCases.source, "auto"),
+                ),
+              );
+          });
+          deletedOldCases = true;
+        }
+
+        // Insert accepted test case
+        const personaId = toneToPersonaId(tuple.tone);
+        await createTestCase(orgId, suiteId, {
+          name: generated.name,
+          description: generated.scenario,
+          source: "auto",
+          input: {
+            message: generated.customer_message,
+            persona: personaId,
+          },
+          mockToolResponses: generated.mock_tool_responses,
+        });
+
+        accepted++;
+        break;
+      } catch (err) {
+        // Distinguish infrastructure errors (abort pipeline) from per-case failures (skip)
+        if (isInfrastructureError(err)) {
+          log.error(
+            { err, tupleName, suiteId },
+            "infrastructure error during generation — aborting pipeline",
+          );
+          throw err;
+        }
+
+        if (attempt < MAX_ATTEMPTS - 1) {
+          log.debug(
+            { err, tupleName },
+            "test case generation failed — retrying",
+          );
+          continue;
+        }
+
+        // Per-case failure — skip and count as rejection
+        log.warn(
+          { err, tupleName, suiteId },
+          "test case generation/validation failed — skipping after retry",
+        );
+        rejected++;
+        rejections.push({
+          tupleName,
+          issues: [
+            err instanceof Error ? err.message : "LLM generation failed",
+          ],
+          rejectionSource: "error",
+        });
+      }
     }
 
     updateProgress({
@@ -315,25 +329,42 @@ async function executeGenerateTestCases(
     validationTokens,
   );
 
-  updateProgress({
-    status: "completed",
-    completed: tuples.length,
-    total: tuples.length,
-    accepted,
-    rejected,
-    result,
-  });
-
-  log.info(
-    {
-      suiteId,
+  if (accepted === 0) {
+    const topReason =
+      result.topIssues[0]?.issue ?? "Unknown — check generation logs";
+    updateProgress({
+      status: "failed",
+      completed: tuples.length,
+      total: tuples.length,
+      accepted: 0,
+      rejected,
+      error: `All ${rejected} test cases were rejected. Top issue: ${topReason}`,
+      result,
+    });
+    log.warn(
+      { suiteId, rejected, topIssues: result.topIssues },
+      "test case generation produced 0 accepted cases",
+    );
+  } else {
+    updateProgress({
+      status: "completed",
+      completed: tuples.length,
+      total: tuples.length,
       accepted,
       rejected,
-      total: tuples.length,
-      cost: result.cost.estimatedCostUsd,
-    },
-    "test case generation completed",
-  );
+      result,
+    });
+    log.info(
+      {
+        suiteId,
+        accepted,
+        rejected,
+        total: tuples.length,
+        cost: result.cost.estimatedCostUsd,
+      },
+      "test case generation completed",
+    );
+  }
 }
 
 // ============================================================================
@@ -349,7 +380,8 @@ async function executeGenerateTestCases(
  * these), then falls back to message substring matching. May need updating
  * as LLM provider error formats evolve.
  */
-function isInfrastructureError(err: unknown): boolean {
+/** @internal Exported for testing only. */
+export function isInfrastructureError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
 
   // Check structured status code if available (AI SDK errors carry these)
