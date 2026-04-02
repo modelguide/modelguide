@@ -675,65 +675,21 @@ export async function upsertLivekitConfig(
   agentId: string,
   data: {
     url: string;
-    apiKey: string;
-    apiSecret: string;
+    apiKeySecretId: string;
+    apiSecretSecretId: string;
     agentName?: string;
   },
 ) {
   return forOrg(orgId, async (tx) => {
     const agent = await requireAgent(tx, agentId);
     const secretsMap = (agent.secrets ?? {}) as EntitySecretsMap;
+    const isUpdate = !!secretsMap.livekit_api_key;
 
-    // --- API Key ---
-    const encryptedKey = await encryptSecret(data.apiKey);
-    const existingKeyId = secretsMap.livekit_api_key;
-    let keyAction: "created" | "updated";
+    // Store secret references in agent secrets map
+    secretsMap.livekit_api_key = data.apiKeySecretId;
+    secretsMap.livekit_api_secret = data.apiSecretSecretId;
 
-    if (existingKeyId) {
-      await tx
-        .update(secrets)
-        .set({ encryptedValue: encryptedKey })
-        .where(eq(secrets.id, existingKeyId));
-      keyAction = "updated";
-    } else {
-      const [newSecret] = await tx
-        .insert(secrets)
-        .values({
-          organizationId: orgId,
-          name: "LiveKit API Key",
-          secretType: "credentials",
-          encryptedValue: encryptedKey,
-          scope: "agent",
-        })
-        .returning({ id: secrets.id });
-      secretsMap.livekit_api_key = newSecret.id;
-      keyAction = "created";
-    }
-
-    // --- API Secret ---
-    const encryptedSecret = await encryptSecret(data.apiSecret);
-    const existingSecretId = secretsMap.livekit_api_secret;
-
-    if (existingSecretId) {
-      await tx
-        .update(secrets)
-        .set({ encryptedValue: encryptedSecret })
-        .where(eq(secrets.id, existingSecretId));
-    } else {
-      const [newSecret] = await tx
-        .insert(secrets)
-        .values({
-          organizationId: orgId,
-          name: "LiveKit API Secret",
-          secretType: "credentials",
-          encryptedValue: encryptedSecret,
-          scope: "agent",
-        })
-        .returning({ id: secrets.id });
-      secretsMap.livekit_api_secret = newSecret.id;
-    }
-
-    // --- Metadata + secrets map ---
+    // Store non-secret config in metadata
     const metadata = (agent.metadata ?? {}) as Record<string, unknown>;
     metadata.livekit = {
       url: data.url,
@@ -745,7 +701,7 @@ export async function upsertLivekitConfig(
       .set({ secrets: secretsMap, metadata })
       .where(eq(agents.id, agentId));
 
-    return { action: keyAction };
+    return { action: isUpdate ? ("updated" as const) : ("created" as const) };
   });
 }
 

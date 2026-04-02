@@ -47,7 +47,7 @@ const agentResponseSchema = z.object({
   slug: z.string(),
   description: z.string().nullable(),
   modality: z.enum(["voice", "text"]),
-  agentPlatform: z.enum(["custom", "elevenlabs"]),
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string()).openapi({
@@ -106,7 +106,10 @@ const createAgentSchema = z.object({
     .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
   modality: z.enum(["voice", "text"]).default("voice").optional(),
-  agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
+  agentPlatform: z
+    .enum(["custom", "elevenlabs", "livekit"])
+    .default("custom")
+    .optional(),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string().uuid()).optional().openapi({
     description: "Secret ref map: { fieldName: secretId }",
@@ -118,7 +121,7 @@ const updateAgentSchema = z
     name: z.string().min(1).max(255).optional(),
     description: z.string().optional(),
     metadata: z.record(z.unknown()).optional(),
-    agentPlatform: z.enum(["custom", "elevenlabs"]).optional(),
+    agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]).optional(),
     secrets: z.record(z.string().uuid()).optional().openapi({
       description: "Secret ref map: { fieldName: secretId }",
     }),
@@ -878,8 +881,14 @@ const upsertLivekitConfigSchema = z.object({
       message: "URL must use wss:// or https://",
     })
     .openapi({ description: "LiveKit Cloud WebSocket URL" }),
-  apiKey: z.string().min(1).openapi({ description: "LiveKit API Key" }),
-  apiSecret: z.string().min(1).openapi({ description: "LiveKit API Secret" }),
+  apiKeySecretId: z
+    .string()
+    .uuid()
+    .openapi({ description: "Secret ID referencing the LiveKit API Key" }),
+  apiSecretSecretId: z
+    .string()
+    .uuid()
+    .openapi({ description: "Secret ID referencing the LiveKit API Secret" }),
   agentName: z
     .string()
     .optional()
@@ -892,7 +901,7 @@ const upsertLivekitConfigRoute = createRoute({
   tags: ["Agents"],
   summary: "Upsert LiveKit config",
   description:
-    "Creates or updates the LiveKit credentials and config for an agent. Credentials are stored encrypted.",
+    "Creates or updates the LiveKit config for an agent. References existing secrets by ID.",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type { PaginatedResponse } from '~/lib/pagination'
 
-export const agentPlatforms = ['custom', 'elevenlabs'] as const
+export const agentPlatforms = ['custom', 'elevenlabs', 'livekit'] as const
 export type AgentPlatform = (typeof agentPlatforms)[number]
 
 export const compiledFromSchema = z

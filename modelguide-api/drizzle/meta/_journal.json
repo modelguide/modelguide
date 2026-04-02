@@ -218,6 +218,13 @@
       "when": 1774060800000,
       "tag": "0030_lift-evaluators-to-suite",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1775130374977,
+      "tag": "0031_add-livekit-platform",
+      "breakpoints": true
     }
   ]
 }
