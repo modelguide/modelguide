@@ -30,7 +30,7 @@ import {
 import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { dispatchAgentToRoom } from "./livekit";
+import { dispatchAgentToRoom, pingLivekit } from "./livekit";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
@@ -703,6 +703,32 @@ export async function upsertLivekitConfig(
 
     return { action: isUpdate ? ("updated" as const) : ("created" as const) };
   });
+}
+
+export async function pingLivekitConfig(orgId: string, agentId: string) {
+  const agent = await forOrg(orgId, (tx) => requireAgent(tx, agentId));
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+
+  if (!livekitUrl) {
+    throw Errors.invalidInput("LiveKit URL not configured");
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput("LiveKit credentials not configured");
+  }
+
+  await pingLivekit(livekitUrl, apiKey, apiSecret);
+  return { ok: true };
 }
 
 // ============================================================================

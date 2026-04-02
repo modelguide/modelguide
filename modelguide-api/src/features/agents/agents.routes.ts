@@ -23,6 +23,7 @@ import {
   getAgentById,
   listAgentConnectors,
   listAgents,
+  pingLivekitConfig,
   regenerateApiKey,
   removeConnectorFromAgent,
   setAgentActive,
@@ -934,6 +935,52 @@ router.openapi(upsertLivekitConfigRoute, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
   const result = await upsertLivekitConfig(orgId, id, body);
+
+  return c.json(result, 200);
+});
+
+// ============================================================================
+// LiveKit Ping
+// ============================================================================
+
+router.post(
+  "/:id/livekit-ping",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const livekitPingRoute = createRoute({
+  method: "post",
+  path: "/{id}/livekit-ping",
+  tags: ["Agents"],
+  summary: "Test LiveKit connection",
+  description:
+    "Tests the LiveKit connection by attempting to list rooms with the configured credentials.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    200: {
+      description: "Connection successful",
+      content: {
+        "application/json": {
+          schema: z.object({ ok: z.boolean() }),
+        },
+      },
+    },
+    400: errorResponse("LiveKit not configured"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(livekitPingRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const result = await pingLivekitConfig(orgId, id);
 
   return c.json(result, 200);
 });

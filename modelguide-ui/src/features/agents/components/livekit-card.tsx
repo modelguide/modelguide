@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Radio } from 'lucide-react'
+import { CheckCircle2, Radio, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -63,6 +63,10 @@ export function LivekitCard({ agent, isAdmin }: LivekitCardProps) {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       setShowForm(false)
     },
+  })
+
+  const pingMutation = useMutation({
+    mutationFn: () => api.post(`agents/${agent.id}/livekit-ping`).json<{ ok: boolean }>(),
   })
 
   const canSave = urlInput.trim() && apiKeySecretId && apiSecretSecretId
@@ -165,6 +169,33 @@ export function LivekitCard({ agent, isAdmin }: LivekitCardProps) {
                 </p>
               </div>
             )}
+            {isConfigured ? (
+              <div className="space-y-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    pingMutation.reset()
+                    pingMutation.mutate()
+                  }}
+                  loading={pingMutation.isPending}
+                  className="w-full"
+                >
+                  Test Connection
+                </Button>
+                {pingMutation.isSuccess ? (
+                  <p className="flex items-center gap-1.5 text-xs text-success">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Connection successful
+                  </p>
+                ) : null}
+                {pingMutation.isError ? (
+                  <p className="flex items-center gap-1.5 text-xs text-error">
+                    <XCircle className="h-3.5 w-3.5" />
+                    Connection failed — check URL and credentials
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {isAdmin ? (
               <Button variant="secondary" onClick={() => setShowForm(true)} className="w-full">
                 {isConfigured ? 'Update Config' : 'Configure LiveKit'}

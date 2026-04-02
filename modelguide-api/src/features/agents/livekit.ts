@@ -1,4 +1,13 @@
-import { AgentDispatchClient } from "livekit-server-sdk";
+import { AgentDispatchClient, RoomServiceClient } from "livekit-server-sdk";
+
+export async function pingLivekit(
+  livekitUrl: string,
+  apiKey: string,
+  apiSecret: string,
+): Promise<void> {
+  const client = new RoomServiceClient(livekitUrl, apiKey, apiSecret);
+  await client.listRooms();
+}
 
 export async function dispatchAgentToRoom(
   livekitUrl: string,
