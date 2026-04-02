@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { FlaskConical } from 'lucide-react'
 import { Badge } from '~/components/ui/badge'
+import { passRateVariant } from '~/lib/pass-rate'
 import { formatDate, formatDuration } from '~/lib/utils'
 import type { EvalSuiteRun } from '~/schemas/eval-suites'
 import { PROMPT_SOURCE_LABELS } from '~/schemas/eval-suites'
@@ -86,13 +87,7 @@ export function SuiteRunsTable({ runs, suiteId, isLoading }: SuiteRunsTableProps
             const { passed, total } = getPassCount(run)
             const passPct = total > 0 ? Math.round((passed / total) * 100) : 0
             const isInconclusive = run.passed == null
-            const resultVariant = isInconclusive
-              ? 'warning'
-              : passPct >= 80
-                ? 'success'
-                : passPct >= 60
-                  ? 'warning'
-                  : 'error'
+            const resultVariant = isInconclusive ? 'warning' : passRateVariant(passPct)
             const resultLabel = isInconclusive ? 'Inconclusive' : `Completed · ${passPct}%`
 
             return (

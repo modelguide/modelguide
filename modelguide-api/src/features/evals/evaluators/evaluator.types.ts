@@ -5,7 +5,7 @@
  * No side effects, no network calls (except llm_judge).
  */
 
-import type { SessionMessage } from "@db/schema";
+import type { SessionMessage, channelTypeEnum } from "@db/schema";
 import type {
   EvalScoreResult,
   FailureClassification,
@@ -19,8 +19,8 @@ import type {
 export interface EvalSessionContext {
   /** Customer identifier (email, phone, etc.) associated with the session. */
   userIdentifier?: string;
-  /** Channel type (api, email, voice, etc.). */
-  channelType?: string;
+  /** Channel type from session. */
+  channelType?: (typeof channelTypeEnum.enumValues)[number];
   /** Session mode (live, simulation). */
   mode?: string;
 }

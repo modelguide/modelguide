@@ -12,6 +12,7 @@ import {
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/cn'
+import { passRateVariant } from '~/lib/pass-rate'
 import type { EvalRunScore, EvalSuiteTestCase, TestCaseResult } from '~/schemas/eval-suites'
 
 export interface RunResultsCardProps {
@@ -77,11 +78,7 @@ export function RunResultsCard({
     ? 'warning'
     : allInconclusive
       ? 'warning'
-      : passPct >= 80
-        ? 'success'
-        : passPct >= 60
-          ? 'warning'
-          : 'error'
+      : passRateVariant(passPct)
 
   return (
     <div className="space-y-4">

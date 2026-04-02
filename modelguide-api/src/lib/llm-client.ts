@@ -59,7 +59,7 @@ export interface LlmApiRequest {
   maxTokens?: number;
   tools?: LlmToolDef[];
   tool_choice?: { type: "tool"; name: string };
-  /** Request JSON output format (OpenAI only). */
+  /** Request JSON output format. Only applied for OpenAI provider; silently ignored for Anthropic. */
   jsonOutput?: boolean;
 }
 

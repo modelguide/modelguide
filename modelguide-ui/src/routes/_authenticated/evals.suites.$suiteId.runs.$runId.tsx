@@ -7,6 +7,7 @@ import { Card, CardContent } from '~/components/ui/card'
 import { Spinner } from '~/components/ui/spinner'
 import { RunResultsCard } from '~/features/evals/components/run-results-card'
 import { api } from '~/lib/api'
+import { passRateVariant } from '~/lib/pass-rate'
 import { formatDate, formatDuration } from '~/lib/utils'
 import type { EvalSuiteDetail, EvalSuiteRun } from '~/schemas/eval-suites'
 import { PROMPT_SOURCE_LABELS } from '~/schemas/eval-suites'
@@ -53,11 +54,7 @@ function RunDetailPage() {
     ? 'info'
     : isInconclusive
       ? 'warning'
-      : runPassPct >= 80
-        ? 'success'
-        : runPassPct >= 60
-          ? 'warning'
-          : 'error'
+      : passRateVariant(runPassPct)
   const resultLabel = isRunning
     ? 'Running...'
     : isInconclusive

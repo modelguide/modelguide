@@ -121,8 +121,9 @@ export class MastraAdapter implements AgentAdapter {
     return {
       response: responseText,
       toolCalls,
-      // Mastra is single-response — each generate() call is one turn
-      conversationEnded: true,
+      // Mastra is single-response per generate() call, but the orchestrator
+      // drives multi-turn via persona — never signal conversation ended.
+      conversationEnded: false,
     };
   }
 

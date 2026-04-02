@@ -14,6 +14,11 @@ import {
   secrets,
 } from "@db/schema";
 import type { EntitySecretsMap } from "@db/schema";
+import { getAgentSecretByType } from "@features/secrets";
+import {
+  createSession,
+  updateSession,
+} from "@features/sessions/sessions.service";
 import { generateApiKey } from "@lib/crypto";
 import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
@@ -24,6 +29,7 @@ import {
 } from "@lib/pagination";
 import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
+import { dispatchAgentToRoom } from "./livekit";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
@@ -657,4 +663,182 @@ export async function removeConnectorFromAgent(
       throw Errors.notFound("Agent connector assignment");
     }
   });
+}
+
+// ============================================================================
+// LiveKit Config
+// ============================================================================
+
+export async function upsertLivekitConfig(
+  orgId: string,
+  agentId: string,
+  data: {
+    url: string;
+    apiKey: string;
+    apiSecret: string;
+    agentName?: string;
+  },
+) {
+  return forOrg(orgId, async (tx) => {
+    const agent = await requireAgent(tx, agentId);
+    const secretsMap = (agent.secrets ?? {}) as EntitySecretsMap;
+
+    // --- API Key ---
+    const encryptedKey = await encryptSecret(data.apiKey);
+    const existingKeyId = secretsMap.livekit_api_key;
+    let keyAction: "created" | "updated";
+
+    if (existingKeyId) {
+      await tx
+        .update(secrets)
+        .set({ encryptedValue: encryptedKey })
+        .where(eq(secrets.id, existingKeyId));
+      keyAction = "updated";
+    } else {
+      const [newSecret] = await tx
+        .insert(secrets)
+        .values({
+          organizationId: orgId,
+          name: "LiveKit API Key",
+          secretType: "credentials",
+          encryptedValue: encryptedKey,
+          scope: "agent",
+        })
+        .returning({ id: secrets.id });
+      secretsMap.livekit_api_key = newSecret.id;
+      keyAction = "created";
+    }
+
+    // --- API Secret ---
+    const encryptedSecret = await encryptSecret(data.apiSecret);
+    const existingSecretId = secretsMap.livekit_api_secret;
+
+    if (existingSecretId) {
+      await tx
+        .update(secrets)
+        .set({ encryptedValue: encryptedSecret })
+        .where(eq(secrets.id, existingSecretId));
+    } else {
+      const [newSecret] = await tx
+        .insert(secrets)
+        .values({
+          organizationId: orgId,
+          name: "LiveKit API Secret",
+          secretType: "credentials",
+          encryptedValue: encryptedSecret,
+          scope: "agent",
+        })
+        .returning({ id: secrets.id });
+      secretsMap.livekit_api_secret = newSecret.id;
+    }
+
+    // --- Metadata (non-secret config) ---
+    const currentMeta = (agent.metadata ?? {}) as Record<string, unknown>;
+    const livekitMeta = {
+      ...(currentMeta.livekit as Record<string, unknown> | undefined),
+      url: data.url,
+      agentName: data.agentName || undefined,
+    };
+
+    await tx
+      .update(agents)
+      .set({
+        secrets: secretsMap,
+        metadata: { ...currentMeta, livekit: livekitMeta },
+      })
+      .where(eq(agents.id, agentId));
+
+    return { action: keyAction };
+  });
+}
+
+// ============================================================================
+// Outbound Calls
+// ============================================================================
+
+export async function createOutboundCall(
+  orgId: string,
+  agentId: string,
+  data: {
+    phoneNumber: string;
+    email?: string;
+    name?: string;
+  },
+) {
+  // 1. Validate agent
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+
+    if (!a.isActive) {
+      throw Errors.invalidInput("Agent is not active");
+    }
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Outbound calls require a voice agent");
+    }
+
+    return a;
+  });
+
+  // 2. Read LiveKit config
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+  const agentName = (lkMeta.agentName as string) || agent.slug;
+
+  if (!livekitUrl) {
+    throw Errors.invalidInput("LiveKit URL not configured for this agent");
+  }
+
+  // 3. Decrypt credentials
+  const [apiKey, apiSecret] = await Promise.all([
+    getAgentSecretByType(orgId, agentId, "livekit_api_key"),
+    getAgentSecretByType(orgId, agentId, "livekit_api_secret"),
+  ]);
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not configured for this agent",
+    );
+  }
+
+  // 4. Generate room name
+  const roomName = `outbound-${crypto.randomUUID().slice(0, 8)}`;
+
+  // 5. Create MG session
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: data.phoneNumber,
+    userMetadata: {
+      phone: data.phoneNumber,
+      ...(data.email && { email: data.email }),
+      ...(data.name && { name: data.name }),
+    },
+  });
+
+  // 6. Dispatch agent with metadata
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      agentName,
+      roomName,
+      {
+        phone_number: data.phoneNumber,
+        email: data.email,
+        name: data.name,
+        session_id: session.id,
+        user_identifier: data.phoneNumber,
+      },
+    );
+  } catch (err) {
+    // Clean up orphaned session if dispatch fails
+    await updateSession(orgId, session.id, agentId, {
+      status: "abandoned",
+    });
+    throw err;
+  }
+
+  return { sessionId: session.id, roomName, dispatchId };
 }
