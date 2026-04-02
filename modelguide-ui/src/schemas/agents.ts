@@ -99,9 +99,3 @@ export interface AgentConnector {
   connectorIconUrl: string | null
   tools: AgentConnectorTool[]
 }
-
-export interface OutboundCallResponse {
-  sessionId: string
-  roomName: string
-  dispatchId: string
-}
