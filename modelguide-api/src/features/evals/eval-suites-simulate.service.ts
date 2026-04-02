@@ -348,14 +348,13 @@ async function executeSimulateAndRunInner(
         userIdentifier,
       });
 
-      // 3. Run simulation (pass persona for multi-turn follow-ups)
+      // 3. Run simulation (single-turn only — no persona follow-ups)
       const simResult = await runEvalSimulation({
         orgId,
         agentId: suiteData.agent.id,
         adapter,
         inputMessage,
         sessionId,
-        persona,
       });
 
       if (simResult.status === "error") {
