@@ -6,13 +6,15 @@ A WebRTC voice agent powered by [LiveKit Agents](https://github.com/livekit/agen
 
 | Component | Service |
 |-----------|---------|
-| Transport | LiveKit Cloud WebRTC |
+| Transport | LiveKit Cloud WebRTC + SIP (phone) |
 | VAD | Silero |
 | Turn Detection | End-of-Utterance Model |
 | STT | Deepgram Nova-3 |
 | LLM | OpenAI GPT-4.1-mini (function calling) |
 | TTS | ElevenLabs Flash v2.5 |
 | Tools | ModelGuide MCP (11 tools) |
+| Phone (inbound) | LiveKit native phone number |
+| Phone (outbound) | Twilio SIP trunk |
 
 ## Prerequisites
 
@@ -112,10 +114,31 @@ docker logs -f livekit-agent-livekit-server-1
 | `make livekit-down` | Stop Docker LiveKit server |
 | `make livekit-token` | Generate token + open meet.livekit.io |
 
+## Phone Calls (SIP)
+
+The agent supports phone calls via SIP in addition to browser WebRTC. See [`sip/README.md`](./sip/README.md) for setup and [`DEPLOY.md`](./DEPLOY.md) for deployment.
+
+- **Inbound:** Purchase a LiveKit phone number and create a dispatch rule — callers are routed to the agent automatically
+- **Outbound:** Configure a Twilio SIP trunk — the agent (or external API) can dial out to phone numbers
+
+When a SIP call comes in, the agent detects the caller's phone number from participant attributes and uses it as the session identifier (instead of the hardcoded `USER_EMAIL`).
+
+**Quick test (outbound):**
+
+```bash
+# Dispatch agent to a room, then dial out
+lk dispatch create --agent-name buildpro-sam --room outbound-test-1
+lk sip participant create \
+  --trunk ST_xxxx \
+  --call +1XXXXXXXXXX \
+  --room outbound-test-1 \
+  --identity callee
+```
+
 ## How it works
 
 ```
-LiveKit Cloud Room (WebRTC)
+LiveKit Cloud Room (WebRTC or SIP)
   ↕
 AgentSession
   ├── Silero VAD (voice activity detection)
@@ -143,7 +166,7 @@ ModelGuide API
 
 ```
 src/
-  agent.py        # CLI entry point, session lifecycle, event handlers
+  agent.py        # CLI entry point, session lifecycle, SIP detection, event handlers
   mcp_agent.py    # MCPAgent base class (tool execution, tracing, transcripts)
   buildpro.py     # BuildProAgent — tools + hooks for contractor supply scenario
   config.py       # Environment variables (AGENT_NAME, CONNECTOR_PREFIX, etc.)
@@ -153,6 +176,11 @@ src/
   mg_client.py    # ModelGuide REST + MCP client
   transcript.py   # In-memory transcript collector
   prompts/        # System prompt (base + 7 auto-discovered workflow modules)
+sip/
+  dispatch-rule.json                # Inbound call routing config
+  twilio-outbound-trunk.example.json  # Twilio outbound template
+  telnyx-outbound-trunk.example.json       # Telnyx outbound template (backup)
+  README.md                          # SIP setup guide
 ```
 
 ### Key differences from Pipecat agent

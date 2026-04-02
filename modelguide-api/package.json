@@ -33,6 +33,7 @@
     "ai": "^6.0.138",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0",
+    "livekit-server-sdk": "^2.15.0",
     "openai": "^6.25.0",
     "pino": "^10.3.1",
     "postgres": "^3.4.0",

@@ -18,6 +18,7 @@ import { errorResponse } from "@lib/schemas";
 import {
   assignConnectorToAgent,
   createAgent,
+  createOutboundCall,
   deleteAgent,
   getAgentById,
   listAgentConnectors,
@@ -28,6 +29,7 @@ import {
   updateAgent,
   updateAgentConnectorTools,
   upsertAgentPlatformKey,
+  upsertLivekitConfig,
 } from "./agents.service";
 import { syncAgentToElevenLabs } from "./agents.sync";
 
@@ -855,6 +857,143 @@ router.openapi(removeConnectorRoute, async (c) => {
   await removeConnectorFromAgent(orgId, id, connectorId);
 
   return c.body(null, 204);
+});
+
+// ============================================================================
+// LiveKit Config
+// ============================================================================
+
+router.put(
+  "/:id/livekit-config",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const upsertLivekitConfigSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith("wss://") || u.startsWith("https://"), {
+      message: "URL must use wss:// or https://",
+    })
+    .openapi({ description: "LiveKit Cloud WebSocket URL" }),
+  apiKey: z.string().min(1).openapi({ description: "LiveKit API Key" }),
+  apiSecret: z.string().min(1).openapi({ description: "LiveKit API Secret" }),
+  agentName: z
+    .string()
+    .optional()
+    .openapi({ description: "Agent name registered in LiveKit" }),
+});
+
+const upsertLivekitConfigRoute = createRoute({
+  method: "put",
+  path: "/{id}/livekit-config",
+  tags: ["Agents"],
+  summary: "Upsert LiveKit config",
+  description:
+    "Creates or updates the LiveKit credentials and config for an agent. Credentials are stored encrypted.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": { schema: upsertLivekitConfigSchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "LiveKit config upserted",
+      content: {
+        "application/json": {
+          schema: z.object({
+            action: z.enum(["created", "updated"]),
+          }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(upsertLivekitConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const result = await upsertLivekitConfig(orgId, id, body);
+
+  return c.json(result, 200);
+});
+
+// ============================================================================
+// Outbound Calls
+// ============================================================================
+
+router.post(
+  "/:id/outbound-call",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const outboundCallSchema = z.object({
+  phoneNumber: z.string().min(1).openapi({ example: "+14155551234" }),
+  email: z
+    .string()
+    .email()
+    .optional()
+    .openapi({ example: "customer@example.com" }),
+  name: z.string().optional().openapi({ example: "John Doe" }),
+});
+
+const outboundCallRoute = createRoute({
+  method: "post",
+  path: "/{id}/outbound-call",
+  tags: ["Agents"],
+  summary: "Initiate outbound call",
+  description:
+    "Dispatches the agent to dial an outbound call via SIP trunk. Creates a session and returns its ID.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": { schema: outboundCallSchema },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Call dispatched",
+      content: {
+        "application/json": {
+          schema: z.object({
+            sessionId: z.string().uuid(),
+            roomName: z.string(),
+            dispatchId: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse("Agent not active or not a voice agent"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(outboundCallRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const result = await createOutboundCall(orgId, id, body);
+
+  return c.json(result, 201);
 });
 
 export default router;

@@ -7,6 +7,7 @@ import {
   FlaskConical,
   Key,
   Link2,
+  Phone,
   Plug,
   Plus,
   RefreshCw,
@@ -24,6 +25,8 @@ import { Toggle } from '~/components/ui/toggle'
 import { AddConnectorDialog } from '~/features/agents/components/add-connector-dialog'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
 import { ElevenLabsCard } from '~/features/agents/components/elevenlabs-card'
+import { LivekitCard } from '~/features/agents/components/livekit-card'
+import { OutboundCallDialog } from '~/features/agents/components/outbound-call-dialog'
 import { CompiledPromptCard } from '~/features/prompt-compiler/components/compiled-prompt-card'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
@@ -323,6 +326,17 @@ function AgentDetailPage() {
         </div>
         {isAdmin && agent ? (
           <div className="flex items-center gap-2">
+            {agent.isActive && agent.modality === 'voice' ? (
+              <OutboundCallDialog
+                agentId={agent.id}
+                trigger={
+                  <Button variant="secondary">
+                    <Phone className="h-4 w-4" />
+                    Make Call
+                  </Button>
+                }
+              />
+            ) : null}
             {agent.isActive ? (
               <Button
                 variant="secondary"
@@ -423,6 +437,7 @@ function AgentDetailPage() {
 
           {/* Platform */}
           <ElevenLabsCard agent={agent} isAdmin={isAdmin} />
+          <LivekitCard agent={agent} isAdmin={isAdmin} />
 
           {/* Integration URLs */}
           <Card className="lg:col-span-2">
