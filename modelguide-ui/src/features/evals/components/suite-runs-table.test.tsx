@@ -22,20 +22,28 @@ describe('SuiteRunsTable', () => {
     expect(screen.getByText('No runs yet')).toBeInTheDocument()
   })
 
-  it('renders passed run with success badge', () => {
+  it('renders completed run with pass rate badge', () => {
     const runs = [makeEvalSuiteRun({ passed: true })]
 
     render(<SuiteRunsTable runs={runs} suiteId={suiteId} />)
 
-    expect(screen.getByText('Passed')).toBeInTheDocument()
+    expect(screen.getByText('Completed · 100%')).toBeInTheDocument()
   })
 
-  it('renders failed run with error badge', () => {
-    const runs = [makeEvalSuiteRun({ passed: false })]
+  it('renders low pass-rate run with error styling', () => {
+    const runs = [
+      makeEvalSuiteRun({
+        passed: false,
+        testCaseResults: [
+          makeTestCaseResult({ testCaseId: 'tc-1', passed: false }),
+          makeTestCaseResult({ testCaseId: 'tc-2', passed: false }),
+        ],
+      }),
+    ]
 
     render(<SuiteRunsTable runs={runs} suiteId={suiteId} />)
 
-    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('Completed · 0%')).toBeInTheDocument()
   })
 
   it('renders inconclusive run (passed=null) with warning badge', () => {
