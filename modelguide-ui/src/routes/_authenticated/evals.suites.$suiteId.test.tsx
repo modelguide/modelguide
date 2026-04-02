@@ -2,7 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeEvalSuiteDetail, makeEvalSuiteRun } from '../../../test/eval-suite-fixtures'
+import {
+  makeEvalSuiteDetail,
+  makeEvalSuiteRun,
+  makeTestCaseResult,
+} from '../../../test/eval-suite-fixtures'
 import type { EvalSuiteDetail, EvalSuiteRun } from '../../schemas/eval-suites'
 
 // --- Mocks ---
@@ -136,7 +140,11 @@ describe('SuiteDetailPage', () => {
   it('switches to Runs tab and shows run history', async () => {
     runsFixture = [
       makeEvalSuiteRun({ id: 'run-1', passed: true }),
-      makeEvalSuiteRun({ id: 'run-2', passed: false }),
+      makeEvalSuiteRun({
+        id: 'run-2',
+        passed: false,
+        testCaseResults: [makeTestCaseResult({ testCaseId: 'tc-1', passed: false })],
+      }),
     ]
 
     renderPage()
@@ -148,10 +156,10 @@ describe('SuiteDetailPage', () => {
     fireEvent.click(screen.getByText('Runs'))
 
     await waitFor(() => {
-      expect(screen.getByText('Passed')).toBeInTheDocument()
+      expect(screen.getByText('Completed · 100%')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('Completed · 0%')).toBeInTheDocument()
   })
 
   it('shows "Evaluate Session" and "Simulate & Run" buttons for admin', async () => {
