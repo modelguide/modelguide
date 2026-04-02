@@ -1,11 +1,19 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import type { ReactNode } from 'react'
+import { describe, expect, it, vi } from 'vitest'
 import {
   makeEvalRunScore,
   makeEvalSuiteTestCase,
   makeTestCaseResult,
 } from '../../../../test/eval-suite-fixtures'
 import { RunResultsCard } from './run-results-card'
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, className }: { children: ReactNode; className?: string }) => (
+    // biome-ignore lint/a11y/useValidAnchor: mock Link for tests
+    <a className={className}>{children}</a>
+  ),
+}))
 
 describe('RunResultsCard', () => {
   it('renders summary bar with pass count', () => {
@@ -166,6 +174,6 @@ describe('RunResultsCard', () => {
 
     render(<RunResultsCard testCaseResults={results} testCases={[]} />)
 
-    expect(screen.getByText('Test Case abcdef01…')).toBeInTheDocument()
+    expect(screen.getByText('Removed test case (abcdef01…)')).toBeInTheDocument()
   })
 })

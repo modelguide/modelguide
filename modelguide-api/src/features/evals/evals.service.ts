@@ -17,6 +17,7 @@ import type { EvalScoreResult, ResolvedAssertion } from "./evals.types";
 import { getEvaluator } from "./evaluators";
 import type {
   EvalContext,
+  EvalSessionContext,
   EvaluatorResult,
 } from "./evaluators/evaluator.types";
 
@@ -37,6 +38,7 @@ export async function executeAssertions(
   messages: SessionMessage[],
   evalRunId: string,
   orgId: string,
+  sessionContext?: EvalSessionContext,
 ): Promise<{ scoreRows: ScoreInsert[]; metadata: Record<string, unknown> }> {
   const toolMsgs = messages.filter((m) => m.role === "tool");
   const scoreRows: ScoreInsert[] = [];
@@ -47,6 +49,7 @@ export async function executeAssertions(
       messages,
       toolMessages: toolMsgs,
       resolvedToolNames,
+      sessionContext,
     };
 
     // Parse + validate config against the evaluator's runtime shape before dispatch.

@@ -16,3 +16,6 @@ process.env.APP_URL = "http://localhost:3000";
 process.env.MAGIC_LINK_SECRET =
   "test-magic-link-secret-that-is-at-least-32-characters-long";
 process.env.LOG_LEVEL = "silent";
+process.env.GENERATION_LLM_API_KEY = "test-generation-api-key";
+process.env.GENERATION_DIMENSION_MODEL = "openai/gpt-4o";
+process.env.GENERATION_CASE_MODEL = "openai/gpt-4o-mini";

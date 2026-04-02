@@ -60,7 +60,7 @@ export async function storeSyntheticSession(
     generationResult,
     userInput,
     channelType = "api",
-    userIdentifier = "eval-synthetic",
+    userIdentifier = "customer@modelguide.ai",
   } = opts;
 
   // 1. Create session

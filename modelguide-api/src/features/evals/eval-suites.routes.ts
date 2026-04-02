@@ -13,6 +13,11 @@ import {
 import { paginatedResponseSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
 
+import {
+  enqueueGenerateTestCases,
+  getGenerationStatus,
+} from "@features/test-case-generation";
+import { Errors } from "@lib/errors";
 import { enqueueSimulateAndRun } from "./eval-suites-simulate.service";
 import {
   createEvaluatorSchema,
@@ -23,6 +28,9 @@ import {
   evalSuiteRunResponseSchema,
   evalSuiteRunsQuerySchema,
   evalSuiteSummaryResponseSchema,
+  generateTestCasesResponseSchema,
+  generateTestCasesSchema,
+  generationTaskStatusResponseSchema,
   initSuiteFromSopSchema,
   runEvalSuiteSchema,
   simulateAndRunResponseSchema,
@@ -56,9 +64,8 @@ const runIdParams = z.object({
   runId: z.string().uuid().openapi({ description: "Eval Suite Run ID" }),
 });
 
-const testCaseParams = z.object({
-  suiteId: z.string().uuid().openapi({ description: "Eval Suite ID" }),
-  testCaseId: z.string().uuid().openapi({ description: "Test Case ID" }),
+const taskIdParams = z.object({
+  taskId: z.string().uuid().openapi({ description: "Generation Task ID" }),
 });
 
 // ============================================================================
@@ -68,12 +75,10 @@ const testCaseParams = z.object({
 type SuiteDetail = Awaited<ReturnType<typeof getEvalSuiteById>>;
 type SuiteRunDetail = Awaited<ReturnType<typeof getEvalSuiteRunById>>;
 
-function formatEvaluator(
-  a: SuiteDetail["testCases"][number]["evaluators"][number],
-) {
+function formatEvaluator(a: SuiteDetail["evaluators"][number]) {
   return {
     id: a.id,
-    testCaseId: a.testCaseId,
+    suiteId: a.suiteId,
     evalConfigId: a.evalConfigId,
     name: a.name,
     sopStepId: a.sopStepId,
@@ -94,7 +99,6 @@ function formatTestCase(tc: SuiteDetail["testCases"][number]) {
     input: tc.input as Record<string, unknown> | null,
     expectedBehavior: tc.expectedBehavior,
     order: tc.order,
-    evaluators: tc.evaluators.map(formatEvaluator),
     createdAt: tc.createdAt.toISOString(),
     updatedAt: tc.updatedAt?.toISOString() ?? null,
   };
@@ -108,6 +112,7 @@ function formatSuiteDetail(s: SuiteDetail) {
     name: s.name,
     description: s.description,
     testCases: s.testCases.map(formatTestCase),
+    evaluators: s.evaluators.map(formatEvaluator),
     createdBy: s.createdBy,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt?.toISOString() ?? null,
@@ -177,6 +182,7 @@ function formatSuiteRun(r: SuiteRunDetail) {
       testCaseId: tc.testCaseId,
       testCaseName: tc.testCaseName ?? null,
       evalRunId: tc.evalRunId,
+      sessionId: tc.sessionId,
       passed: tc.passed,
       status: tc.status,
       scores: tc.scores.map(formatScore),
@@ -203,6 +209,7 @@ function formatSuiteRunSummary(
       testCaseId: tc.testCaseId,
       testCaseName: tc.testCaseName ?? null,
       evalRunId: tc.evalRunId,
+      sessionId: tc.sessionId,
       passed: tc.passed,
       status: tc.status,
       scores: tc.scores.map(formatScore),
@@ -269,13 +276,25 @@ router.get(
   requireOrganization(),
 );
 router.post(
+  "/:suiteId/generate-test-cases",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.get(
+  "/generation-tasks/:taskId",
+  requireUser(),
+  requirePermission("eval_suites:read"),
+  requireOrganization(),
+);
+router.post(
   "/:suiteId/test-cases",
   requireUser(),
   requirePermission("eval_suites:create"),
   requireOrganization(),
 );
 router.post(
-  "/:suiteId/test-cases/:testCaseId/evaluators",
+  "/:suiteId/evaluators",
   requireUser(),
   requirePermission("eval_suites:create"),
   requireOrganization(),
@@ -292,7 +311,7 @@ const initSuiteRoute = createRoute({
   tags: ["Eval Suites"],
   summary: "Initialize eval suite from SOP",
   description:
-    "Creates or re-initializes an eval suite for an agent+SOP pair. Derives test cases from SOP steps and guardrails.",
+    "Creates or re-initializes an eval suite for an agent+SOP pair. Derives evaluators from SOP steps and guardrails.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -543,6 +562,7 @@ router.openapi(simulateAndRunRoute, async (c) => {
     body.promptSource,
     {
       triggeredBy,
+      testCaseIds: body.testCaseIds,
     },
   );
 
@@ -621,6 +641,98 @@ router.openapi(getRunRoute, async (c) => {
   return c.json(formatSuiteRun(detail), 200);
 });
 
+// POST /:suiteId/generate-test-cases — async test case generation
+const generateTestCasesRoute = createRoute({
+  method: "post",
+  path: "/{suiteId}/generate-test-cases",
+  tags: ["Eval Suites"],
+  summary: "Generate synthetic test cases",
+  description:
+    "Derives scenario dimensions from the suite's linked SOP and generates synthetic test cases via LLM. Returns immediately with a task ID (HTTP 202). Poll the task status for progress.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: suiteIdParams,
+    body: {
+      content: { "application/json": { schema: generateTestCasesSchema } },
+    },
+  },
+  responses: {
+    202: {
+      description: "Generation task enqueued",
+      content: {
+        "application/json": { schema: generateTestCasesResponseSchema },
+      },
+    },
+    400: errorResponse("Suite has no linked SOP"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Eval suite not found"),
+  },
+});
+
+router.openapi(generateTestCasesRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId } = c.req.valid("param");
+  const body = c.req.valid("json");
+
+  const result = await enqueueGenerateTestCases(orgId, suiteId, body.count);
+
+  return c.json({ taskId: result.taskId, status: "running" as const }, 202);
+});
+
+// GET /generation-tasks/:taskId — poll generation task status
+const getGenerationTaskStatusRoute = createRoute({
+  method: "get",
+  path: "/generation-tasks/{taskId}",
+  tags: ["Eval Suites"],
+  summary: "Get generation task status",
+  description:
+    "Returns the current status and progress of a test case generation task.",
+  security: [{ bearerAuth: [] }],
+  request: { params: taskIdParams },
+  responses: {
+    200: {
+      description: "Generation task status",
+      content: {
+        "application/json": { schema: generationTaskStatusResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    404: errorResponse("Task not found"),
+  },
+});
+
+router.openapi(getGenerationTaskStatusRoute, async (c) => {
+  const { taskId } = c.req.valid("param");
+  const state = getGenerationStatus(taskId);
+
+  if (!state) {
+    throw Errors.notFound("Generation task not found");
+  }
+
+  const progress = state.progress as
+    | {
+        status: "deriving_dimensions" | "generating" | "completed" | "failed";
+        completed: number;
+        total: number;
+        accepted: number;
+        rejected: number;
+        error?: string;
+        result?: Record<string, unknown>;
+      }
+    | undefined;
+
+  return c.json(
+    {
+      id: state.id,
+      status: state.status,
+      progress,
+      error: state.error,
+    },
+    200,
+  );
+});
+
 // POST /:suiteId/test-cases — create manual test case
 const createTestCaseRoute = createRoute({
   method: "post",
@@ -679,17 +791,17 @@ router.openapi(createTestCaseRoute, async (c) => {
   );
 });
 
-// POST /:suiteId/test-cases/:testCaseId/evaluators — create manual evaluator
+// POST /:suiteId/evaluators — create manual evaluator
 const createEvaluatorRoute = createRoute({
   method: "post",
-  path: "/{suiteId}/test-cases/{testCaseId}/evaluators",
+  path: "/{suiteId}/evaluators",
   tags: ["Eval Suites"],
   summary: "Create manual evaluator",
   description:
-    "Creates a manual evaluator for an existing test case. Links to an eval_config.",
+    "Creates a manual evaluator for an existing suite. Links to an eval_config.",
   security: [{ bearerAuth: [] }],
   request: {
-    params: testCaseParams,
+    params: suiteIdParams,
     body: {
       content: { "application/json": { schema: createEvaluatorSchema } },
     },
@@ -701,7 +813,7 @@ const createEvaluatorRoute = createRoute({
         "application/json": {
           schema: z.object({
             id: z.string().uuid(),
-            testCaseId: z.string().uuid(),
+            suiteId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
             name: z.string(),
             source: z.enum(["auto", "manual"]),
@@ -714,21 +826,21 @@ const createEvaluatorRoute = createRoute({
     },
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
-    404: errorResponse("Suite or test case not found"),
+    404: errorResponse("Suite not found"),
   },
 });
 
 router.openapi(createEvaluatorRoute, async (c) => {
   const orgId = getOrganizationId(c);
-  const { suiteId, testCaseId } = c.req.valid("param");
+  const { suiteId } = c.req.valid("param");
   const body = c.req.valid("json");
 
-  const evaluator = await createEvaluator(orgId, suiteId, testCaseId, body);
+  const evaluator = await createEvaluator(orgId, suiteId, body);
 
   return c.json(
     {
       id: evaluator.id,
-      testCaseId: evaluator.testCaseId,
+      suiteId: evaluator.suiteId,
       evalConfigId: evaluator.evalConfigId,
       name: evaluator.name,
       source: evaluator.source,

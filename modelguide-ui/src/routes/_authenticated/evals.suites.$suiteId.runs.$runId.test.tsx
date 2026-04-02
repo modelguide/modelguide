@@ -98,23 +98,29 @@ describe('RunDetailPage', () => {
     })
   })
 
-  it('shows result badge (Passed/Failed)', async () => {
+  it('shows result badge with pass rate', async () => {
     runFixture = makeEvalSuiteRun({ passed: true })
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByText('Passed')).toBeInTheDocument()
+      expect(screen.getByText('Completed · 100%')).toBeInTheDocument()
     })
   })
 
-  it('shows Failed badge when run failed', async () => {
-    runFixture = makeEvalSuiteRun({ passed: false })
+  it('shows low pass-rate badge when run failed', async () => {
+    runFixture = makeEvalSuiteRun({
+      passed: false,
+      testCaseResults: [
+        makeTestCaseResult({ testCaseId: 'tc-1', passed: false }),
+        makeTestCaseResult({ testCaseId: 'tc-2', passed: false }),
+      ],
+    })
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByText('Failed')).toBeInTheDocument()
+      expect(screen.getByText('Completed · 0%')).toBeInTheDocument()
     })
   })
 
@@ -143,20 +149,6 @@ describe('RunDetailPage', () => {
 
     expect(screen.getByText('Started')).toBeInTheDocument()
     expect(screen.getByText('Completed')).toBeInTheDocument()
-  })
-
-  it('renders session link when sessionId is present', async () => {
-    runFixture = makeEvalSuiteRun({
-      sessionId: '99999999-9999-9999-9999-999999999999',
-    })
-
-    renderPage()
-
-    await waitFor(() => {
-      expect(screen.getByText('Session')).toBeInTheDocument()
-    })
-
-    expect(screen.getByText('99999999-9999-9999-9999-999999999999')).toBeInTheDocument()
   })
 
   it('renders test case results', async () => {

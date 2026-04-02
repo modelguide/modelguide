@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { makeEvalSuiteAssertion, makeEvalSuiteTestCase } from '../../../../test/eval-suite-fixtures'
+import { makeEvalSuiteTestCase } from '../../../../test/eval-suite-fixtures'
 import { TestCasesPanel } from './test-cases-panel'
 
 describe('TestCasesPanel', () => {
@@ -28,77 +28,6 @@ describe('TestCasesPanel', () => {
     expect(screen.getByText('manual')).toBeInTheDocument()
   })
 
-  it('shows evaluator count per test case', () => {
-    const testCases = [
-      makeEvalSuiteTestCase({
-        id: 'tc-1',
-        evaluators: [
-          makeEvalSuiteAssertion({ id: 'a-1' }),
-          makeEvalSuiteAssertion({ id: 'a-2' }),
-          makeEvalSuiteAssertion({ id: 'a-3' }),
-        ],
-      }),
-    ]
-
-    render(<TestCasesPanel testCases={testCases} />)
-
-    expect(screen.getByText('3 evaluators')).toBeInTheDocument()
-  })
-
-  it('shows singular "evaluator" for single evaluator', () => {
-    const testCases = [
-      makeEvalSuiteTestCase({
-        id: 'tc-1',
-        evaluators: [makeEvalSuiteAssertion({ id: 'a-1' })],
-      }),
-    ]
-
-    render(<TestCasesPanel testCases={testCases} />)
-
-    expect(screen.getByText('1 evaluator')).toBeInTheDocument()
-  })
-
-  it('expands test case on click and shows evaluators', () => {
-    const testCases = [
-      makeEvalSuiteTestCase({
-        id: 'tc-1',
-        name: 'Happy Path',
-        evaluators: [makeEvalSuiteAssertion({ id: 'a-1', name: 'tool_called: get_order' })],
-      }),
-    ]
-
-    render(<TestCasesPanel testCases={testCases} />)
-
-    // Evaluator details should not be visible yet
-    expect(screen.queryByText('tool_called: get_order')).not.toBeInTheDocument()
-
-    // Click to expand
-    fireEvent.click(screen.getByText('Happy Path'))
-
-    // Now evaluators should be visible
-    expect(screen.getByText('tool_called: get_order')).toBeInTheDocument()
-  })
-
-  it('shows required/optional badges on evaluators', () => {
-    const testCases = [
-      makeEvalSuiteTestCase({
-        id: 'tc-1',
-        evaluators: [
-          makeEvalSuiteAssertion({ id: 'a-1', required: true }),
-          makeEvalSuiteAssertion({ id: 'a-2', required: false }),
-        ],
-      }),
-    ]
-
-    render(<TestCasesPanel testCases={testCases} />)
-
-    // Expand
-    fireEvent.click(screen.getByRole('button'))
-
-    expect(screen.getByText('required')).toBeInTheDocument()
-    expect(screen.getByText('optional')).toBeInTheDocument()
-  })
-
   it('shows expected behavior when expanded', () => {
     const testCases = [
       makeEvalSuiteTestCase({
@@ -109,7 +38,7 @@ describe('TestCasesPanel', () => {
 
     render(<TestCasesPanel testCases={testCases} />)
 
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('Happy Path'))
 
     expect(screen.getByText('Agent looks up order and reports status')).toBeInTheDocument()
   })
@@ -124,7 +53,7 @@ describe('TestCasesPanel', () => {
 
     render(<TestCasesPanel testCases={testCases} />)
 
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('Happy Path'))
 
     expect(screen.getByText(/Where is my order/)).toBeInTheDocument()
   })
@@ -153,5 +82,46 @@ describe('TestCasesPanel', () => {
     render(<TestCasesPanel testCases={[]} />)
 
     expect(screen.getByText('No test cases yet')).toBeInTheDocument()
+  })
+
+  it('filters test cases by source', () => {
+    const testCases = [
+      makeEvalSuiteTestCase({ id: 'tc-1', name: 'Auto Test', source: 'auto' }),
+      makeEvalSuiteTestCase({ id: 'tc-2', name: 'Manual Test', source: 'manual' }),
+    ]
+
+    render(<TestCasesPanel testCases={testCases} />)
+
+    // Click "Manual" filter
+    fireEvent.click(screen.getByText('Manual'))
+
+    expect(screen.queryByText('Auto Test')).not.toBeInTheDocument()
+    expect(screen.getByText('Manual Test')).toBeInTheDocument()
+  })
+
+  it('filters test cases by search query', () => {
+    const testCases = [
+      makeEvalSuiteTestCase({ id: 'tc-1', name: 'Order Lookup Flow' }),
+      makeEvalSuiteTestCase({ id: 'tc-2', name: 'Escalation Edge Case' }),
+    ]
+
+    render(<TestCasesPanel testCases={testCases} />)
+
+    const input = screen.getByPlaceholderText('Search test cases...')
+    fireEvent.change(input, { target: { value: 'escalation' } })
+
+    expect(screen.queryByText('Order Lookup Flow')).not.toBeInTheDocument()
+    expect(screen.getByText('Escalation Edge Case')).toBeInTheDocument()
+  })
+
+  it('shows no results message when filters match nothing', () => {
+    const testCases = [makeEvalSuiteTestCase({ id: 'tc-1', name: 'Happy Path' })]
+
+    render(<TestCasesPanel testCases={testCases} />)
+
+    const input = screen.getByPlaceholderText('Search test cases...')
+    fireEvent.change(input, { target: { value: 'nonexistent' } })
+
+    expect(screen.getByText('No test cases match your filters')).toBeInTheDocument()
   })
 })

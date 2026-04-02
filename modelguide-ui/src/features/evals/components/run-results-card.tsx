@@ -1,19 +1,26 @@
+import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Loader2,
   MinusCircle,
+  Radio,
   XCircle,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/cn'
+import { passRateVariant } from '~/lib/pass-rate'
 import type { EvalRunScore, EvalSuiteTestCase, TestCaseResult } from '~/schemas/eval-suites'
 
 export interface RunResultsCardProps {
   testCaseResults: TestCaseResult[]
   testCases?: EvalSuiteTestCase[]
+  isRunning?: boolean
+  /** Number of pending test cases still being simulated. */
+  pendingCount?: number
 }
 
 function getTestCaseName(result: TestCaseResult, testCases?: EvalSuiteTestCase[]): string {
@@ -24,8 +31,10 @@ function getTestCaseName(result: TestCaseResult, testCases?: EvalSuiteTestCase[]
     const tc = testCases.find((t) => t.id === result.testCaseId)
     if (tc) return tc.name
   }
-  // Test case may have been removed after a suite re-init
-  return result.testCaseId ? `Test Case ${result.testCaseId.slice(0, 8)}…` : 'Unknown Test Case'
+  // Test case was removed (e.g. after re-init or regeneration)
+  return result.testCaseId
+    ? `Removed test case (${result.testCaseId.slice(0, 8)}…)`
+    : 'Unknown Test Case'
 }
 
 function scoreIcon(score: EvalRunScore) {
@@ -34,7 +43,12 @@ function scoreIcon(score: EvalRunScore) {
   return <XCircle className="h-3.5 w-3.5 shrink-0 text-error" />
 }
 
-export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardProps) {
+export function RunResultsCard({
+  testCaseResults,
+  testCases,
+  isRunning,
+  pendingCount = 0,
+}: RunResultsCardProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const toggle = (index: number) => {
@@ -49,15 +63,22 @@ export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardPro
     })
   }
 
-  const totalCases = testCaseResults.length
+  const pendingKeys = Array.from({ length: pendingCount }, (_, i) => `pending-${i}`)
+  const totalCases = testCaseResults.length + pendingCount
   const passedCases = testCaseResults.filter((r) => r.passed === true).length
   const failedCases = testCaseResults.filter((r) => r.passed === false).length
   const inconclusiveCases = testCaseResults.filter((r) => r.passed == null).length
-  const allPassed = passedCases === totalCases && totalCases > 0
-  const allInconclusive = inconclusiveCases === totalCases && totalCases > 0
-  const pct = totalCases > 0 ? Math.round((passedCases / totalCases) * 100) : 0
+  const allInconclusive = inconclusiveCases === totalCases && totalCases > 0 && !isRunning
+  const completedCount = testCaseResults.length
+  const passPct = totalCases > 0 ? Math.round((passedCases / totalCases) * 100) : 0
+  const failPct = totalCases > 0 ? Math.round((failedCases / totalCases) * 100) : 0
+  const progressPct = totalCases > 0 ? Math.round((completedCount / totalCases) * 100) : 0
 
-  const summaryVariant = allPassed ? 'success' : failedCases > 0 ? 'error' : 'warning'
+  const summaryVariant = isRunning
+    ? 'warning'
+    : allInconclusive
+      ? 'warning'
+      : passRateVariant(passPct)
 
   return (
     <div className="space-y-4">
@@ -94,7 +115,11 @@ export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardPro
               <XCircle className="h-5 w-5 text-error" />
             )}
             <span className="font-display text-sm font-semibold text-fg-primary">
-              {allInconclusive ? (
+              {isRunning ? (
+                <span className="text-fg-secondary">
+                  Running {completedCount}/{totalCases} test cases...
+                </span>
+              ) : allInconclusive ? (
                 <span className="text-warning">
                   {totalCases} test {totalCases === 1 ? 'case' : 'cases'} inconclusive
                 </span>
@@ -109,19 +134,38 @@ export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardPro
             </span>
           </div>
           <div className="flex-1">
-            <div className="h-2 overflow-hidden rounded-full bg-bg-subtle">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all duration-500',
-                  summaryVariant === 'success' && 'bg-gradient-to-r from-success/80 to-success',
-                  summaryVariant === 'warning' && 'bg-gradient-to-r from-warning/80 to-warning',
-                  summaryVariant === 'error' && 'bg-gradient-to-r from-error/80 to-error',
-                )}
-                style={{ width: allInconclusive ? '100%' : `${pct}%` }}
-              />
+            <div className="flex h-2 overflow-hidden rounded-full bg-bg-subtle">
+              {isRunning ? (
+                <div
+                  className="h-full animate-pulse rounded-full bg-gradient-to-r from-brand-500/80 to-brand-500 transition-all duration-500"
+                  style={{ width: `${Math.max(progressPct, 3)}%` }}
+                />
+              ) : allInconclusive ? (
+                <div className="h-full w-full rounded-full bg-gradient-to-r from-warning/80 to-warning" />
+              ) : (
+                <>
+                  {passPct > 0 && (
+                    <div
+                      className="h-full bg-success transition-all duration-500"
+                      style={{ width: `${passPct}%` }}
+                    />
+                  )}
+                  {failPct > 0 && (
+                    <div
+                      className="h-full bg-error transition-all duration-500"
+                      style={{ width: `${failPct}%` }}
+                    />
+                  )}
+                </>
+              )}
             </div>
           </div>
-          <Badge variant={summaryVariant}>{allInconclusive ? 'Inconclusive' : `${pct}%`}</Badge>
+          <Badge
+            variant={isRunning ? 'info' : summaryVariant}
+            className={isRunning ? 'animate-pulse' : ''}
+          >
+            {isRunning ? `${progressPct}%` : allInconclusive ? 'Inconclusive' : `${passPct}%`}
+          </Badge>
         </div>
       </div>
 
@@ -181,6 +225,18 @@ export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardPro
 
               {isExpanded ? (
                 <div className="border-t border-fg-subtle/10 px-4 py-3 animate-fade-in">
+                  {result.sessionId ? (
+                    <div className="mb-3">
+                      <Link
+                        to="/sessions/$id"
+                        params={{ id: result.sessionId }}
+                        className="inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-brand-400 transition-colors"
+                      >
+                        <Radio className="h-3 w-3" />
+                        Session {result.sessionId}
+                      </Link>
+                    </div>
+                  ) : null}
                   {allScoresSkipped ? (
                     <div className="mb-3 flex items-center gap-2 rounded-lg border border-warning/20 bg-warning/5 px-3 py-2">
                       <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
@@ -224,6 +280,22 @@ export function RunResultsCard({ testCaseResults, testCases }: RunResultsCardPro
             </div>
           )
         })}
+        {pendingKeys.map((key, i) => (
+          <div
+            key={key}
+            className="overflow-hidden rounded-xl border border-fg-subtle/10 bg-bg-elevated opacity-50"
+          >
+            <div className="flex w-full items-center gap-3 px-4 py-3">
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-fg-muted" />
+              <span className="flex-1 text-sm text-fg-muted">
+                {i === 0
+                  ? 'Waiting for simulation to complete...'
+                  : 'Queued — will run after current test case'}
+              </span>
+              <span className="text-xs text-fg-muted">Pending</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

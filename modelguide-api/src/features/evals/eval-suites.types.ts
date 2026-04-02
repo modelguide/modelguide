@@ -41,6 +41,10 @@ export interface CreateTestCaseInput {
   description?: string;
   input?: Record<string, unknown>;
   expectedBehavior?: string;
+  /** Test case source — "auto" for generated, "manual" for user-created. Defaults to "manual". */
+  source?: "auto" | "manual";
+  /** Mock tool responses for deterministic simulation testing. */
+  mockToolResponses?: Record<string, unknown>;
 }
 
 export interface CreateEvaluatorInput {
@@ -67,6 +71,7 @@ export interface SimulateAndRunPayload {
   suiteRunId: string;
   promptSource: string;
   triggeredBy?: string;
+  testCaseIds?: string[];
 }
 
 export interface SimulateAndRunProgress {
@@ -101,6 +106,7 @@ export interface TestCaseRunDetail {
   testCaseId: string | null;
   testCaseName: string | null;
   evalRunId: string;
+  sessionId: string;
   passed: boolean | null;
   status: string;
   scores: EvalRunScore[];

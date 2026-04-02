@@ -5,7 +5,7 @@
  * No side effects, no network calls (except llm_judge).
  */
 
-import type { SessionMessage } from "@db/schema";
+import type { SessionMessage, channelTypeEnum } from "@db/schema";
 import type {
   EvalScoreResult,
   FailureClassification,
@@ -16,6 +16,15 @@ import type {
 // EvalContext — what evaluators see
 // ============================================================================
 
+export interface EvalSessionContext {
+  /** Customer identifier (email, phone, etc.) associated with the session. */
+  userIdentifier?: string;
+  /** Channel type from session. */
+  channelType?: (typeof channelTypeEnum.enumValues)[number];
+  /** Session mode (live, simulation). */
+  mode?: string;
+}
+
 export interface EvalContext {
   /** All session messages in chronological order. */
   messages: SessionMessage[];
@@ -23,6 +32,8 @@ export interface EvalContext {
   toolMessages: SessionMessage[];
   /** connectorToolId → resolved runtime tool name ({connectorSlug}_{toolSlug}). */
   resolvedToolNames: Map<string, string>;
+  /** Optional session-level metadata for context-aware evaluation. */
+  sessionContext?: EvalSessionContext;
 }
 
 // ============================================================================

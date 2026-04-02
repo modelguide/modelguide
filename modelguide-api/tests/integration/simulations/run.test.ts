@@ -54,11 +54,12 @@ describe("GET /api/simulations/personas", () => {
 
     const body = await response.json();
     expect(body.data).toBeArray();
-    expect(body.data.length).toBe(3);
+    expect(body.data.length).toBe(4);
 
     const ids = body.data.map((p: { id: string }) => p.id);
     expect(ids).toContain("polite-buyer");
     expect(ids).toContain("impatient-returner");
+    expect(ids).toContain("terse-buyer");
     expect(ids).toContain("confused-browser");
 
     // Each persona has required fields

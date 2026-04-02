@@ -30,6 +30,8 @@ export interface MastraAdapterConfig {
   simulationMcpUrl: string;
   /** JWT for authenticating with the simulation MCP route. */
   simulationToken: string;
+  /** Customer identifier (email/phone) — injected as runtime context, matching real agent behavior. */
+  userIdentifier?: string;
   /** Max steps for agent.generate() tool-calling loops. */
   maxSteps?: number;
 }
@@ -42,11 +44,15 @@ export class MastraAdapter implements AgentAdapter {
   constructor(config: MastraAdapterConfig) {
     this.config = config;
 
+    const instructions = config.userIdentifier
+      ? `${config.compiledInstructions}\n\n## Runtime context\n\nCustomer identifier: ${config.userIdentifier}\nAlways use "${config.userIdentifier}" as the customer email when calling tools. You do not need to ask for their email.\n\nCRITICAL: You MUST execute every workflow step in order, starting from step 1. Do NOT skip steps even if the customer's request can be answered immediately.`
+      : config.compiledInstructions;
+
     this.agent = new Agent({
       id: config.agentId,
       name: config.agentName,
       model: config.model,
-      instructions: config.compiledInstructions,
+      instructions,
     });
 
     this.mcpClient = new MCPClient({
@@ -94,21 +100,30 @@ export class MastraAdapter implements AgentAdapter {
       }
     }
 
+    // Extract the final response text, avoiding Mastra's concatenation.
+    // result.text concatenates text from ALL steps, so when the agent
+    // produces text before AND after a tool call, it gets duplicated.
+    // We prefer the last step's text (the final agent utterance).
+    const steps = result.steps ?? [];
+    const responseText = extractResponseText(steps, result.text ?? "");
+
     log.debug(
       {
         agentId: this.config.agentId,
         sessionId,
-        responseLength: result.text?.length ?? 0,
+        responseLength: responseText.length,
         toolCallCount: toolCalls.length,
+        stepCount: steps.length,
       },
       "MastraAdapter received response",
     );
 
     return {
-      response: result.text ?? "",
+      response: responseText,
       toolCalls,
-      // Mastra is single-response — each generate() call is one turn
-      conversationEnded: true,
+      // Mastra is single-response per generate() call, but the orchestrator
+      // drives multi-turn via persona — never signal conversation ended.
+      conversationEnded: false,
     };
   }
 
@@ -123,4 +138,23 @@ export class MastraAdapter implements AgentAdapter {
       // Ignore disconnect errors
     }
   }
+}
+
+/**
+ * Extract the agent's final response text from generation steps.
+ *
+ * Mastra's `result.text` concatenates text from ALL steps, causing
+ * duplication when the agent produces text in multiple steps (e.g.,
+ * before and after a tool call). We prefer the last step that has text,
+ * falling back to the full concatenated text if no steps are available.
+ */
+function extractResponseText(
+  steps: Array<{ text?: string | null }>,
+  fullText: string,
+): string {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const text = steps[i].text?.trim();
+    if (text) return text;
+  }
+  return fullText.trim();
 }

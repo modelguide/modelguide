@@ -24,6 +24,7 @@ interface SopForPrompt {
     steps: Array<{
       order: number;
       instruction: string;
+      required: boolean;
       tool?: { resolvedName?: string };
     }>;
     metadata: {
@@ -93,9 +94,12 @@ export function buildSystemPrompt(
         const toolSuffix = s.tool?.resolvedName
           ? ` → \`${s.tool.resolvedName}\``
           : "";
-        return `${s.order}. ${s.instruction}${toolSuffix}`;
+        const requiredTag = s.required ? " *(required)*" : "";
+        return `${s.order}. ${s.instruction}${toolSuffix}${requiredTag}`;
       });
-    sections.push(`### Steps\n${stepLines.join("\n")}`);
+    const enforcement =
+      "Follow these steps in order. Every step must be reflected in your response — do not skip steps.";
+    sections.push(`### Steps\n${enforcement}\n${stepLines.join("\n")}`);
   }
 
   // 3. Tools

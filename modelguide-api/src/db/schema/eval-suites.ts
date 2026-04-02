@@ -4,7 +4,7 @@
  * Tables:
  *  - eval_suites:             suite metadata (agent + SOP pair)
  *  - eval_suite_test_cases:   individual test cases per suite
- *  - eval_suite_evaluators:   evaluators per test case (FK to eval_configs)
+ *  - eval_suite_evaluators:   evaluators per suite (FK to eval_configs)
  *  - eval_suite_runs:         thin aggregator for a full suite execution
  *
  * All tables have organization_id + RLS enabled.
@@ -87,6 +87,7 @@ export const evalSuitesRelations = relations(evalSuites, ({ one, many }) => ({
     references: [users.id],
   }),
   testCases: many(evalSuiteTestCases),
+  evaluators: many(evalSuiteEvaluators),
   runs: many(evalSuiteRuns),
 }));
 
@@ -132,7 +133,7 @@ export const evalSuiteTestCases = pgTable(
 
 export const evalSuiteTestCasesRelations = relations(
   evalSuiteTestCases,
-  ({ one, many }) => ({
+  ({ one }) => ({
     organization: one(organizations, {
       fields: [evalSuiteTestCases.organizationId],
       references: [organizations.id],
@@ -141,12 +142,11 @@ export const evalSuiteTestCasesRelations = relations(
       fields: [evalSuiteTestCases.suiteId],
       references: [evalSuites.id],
     }),
-    evaluators: many(evalSuiteEvaluators),
   }),
 );
 
 // ============================================================================
-// Eval Suite Evaluators (per test case, FK to eval_configs — NO CASCADE)
+// Eval Suite Evaluators (per suite, FK to eval_configs — NO CASCADE)
 // ============================================================================
 
 export const evalSuiteEvaluators = pgTable(
@@ -156,9 +156,9 @@ export const evalSuiteEvaluators = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    testCaseId: uuid("test_case_id")
+    suiteId: uuid("suite_id")
       .notNull()
-      .references(() => evalSuiteTestCases.id, { onDelete: "cascade" }),
+      .references(() => evalSuites.id, { onDelete: "cascade" }),
     evalConfigId: uuid("eval_config_id")
       .notNull()
       .references(() => evalConfigs.id), // NO ACTION — no cascade
@@ -172,7 +172,7 @@ export const evalSuiteEvaluators = pgTable(
       .notNull(),
   },
   (table) => [
-    index("eval_suite_evaluators_test_case_idx").on(table.testCaseId),
+    index("eval_suite_evaluators_suite_idx").on(table.suiteId),
     index("eval_suite_evaluators_config_idx").on(table.evalConfigId),
     index("eval_suite_evaluators_org_idx").on(table.organizationId),
   ],
@@ -185,9 +185,9 @@ export const evalSuiteEvaluatorsRelations = relations(
       fields: [evalSuiteEvaluators.organizationId],
       references: [organizations.id],
     }),
-    testCase: one(evalSuiteTestCases, {
-      fields: [evalSuiteEvaluators.testCaseId],
-      references: [evalSuiteTestCases.id],
+    suite: one(evalSuites, {
+      fields: [evalSuiteEvaluators.suiteId],
+      references: [evalSuites.id],
     }),
     evalConfig: one(evalConfigs, {
       fields: [evalSuiteEvaluators.evalConfigId],

@@ -202,8 +202,8 @@ describe("Workflow 1: Re-init preserves manual evaluators", () => {
     const suite1 = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
     expect(suite1.testCases.length).toBe(1);
 
-    const autoTc = suite1.testCases[0];
-    const autoEvalCount = autoTc.evaluators.length;
+    const autoTcId = suite1.testCases[0].id;
+    const autoEvalCount = suite1.evaluators.length;
     expect(autoEvalCount).toBeGreaterThan(0);
 
     // 2. Create a manual test case (simulating user-added test)
@@ -228,10 +228,10 @@ describe("Workflow 1: Re-init preserves manual evaluators", () => {
     expect(manualAfter[0].id).toBe(manualTc.id);
 
     // Auto test case has new ID (replaced, not updated)
-    expect(autoAfter[0].id).not.toBe(autoTc.id);
+    expect(autoAfter[0].id).not.toBe(autoTcId);
 
-    // Auto evaluators were recreated
-    expect(autoAfter[0].evaluators.length).toBe(autoEvalCount);
+    // Auto evaluators were recreated at suite level
+    expect(suite2.evaluators.length).toBe(autoEvalCount);
 
     // Cleanup
     await deleteEvalSuite(ctx.orgId, suite2.id);
@@ -265,14 +265,14 @@ describe("Workflow 1: Re-init preserves manual evaluators", () => {
     );
 
     const suite1 = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
-    const suite1ToolEval = suite1.testCases[0].evaluators.find(
-      (e) => e.sopStepId === "lookup-order",
+    const suite1ToolEval = suite1.evaluators.find(
+      (e: { sopStepId: string | null }) => e.sopStepId === "lookup-order",
     );
     expect(suite1ToolEval).toBeDefined();
 
     const suite2 = await initSuiteFromSop(ctx.orgId, ctx.agentId, sop2.id);
-    const suite2ToolEval = suite2.testCases[0].evaluators.find(
-      (e) => e.sopStepId === "lookup-order",
+    const suite2ToolEval = suite2.evaluators.find(
+      (e: { sopStepId: string | null }) => e.sopStepId === "lookup-order",
     );
     expect(suite2ToolEval).toBeDefined();
 
@@ -340,18 +340,18 @@ describe("Workflow 2: Manual suite lifecycle", () => {
         .returning(),
     );
 
-    // 4. Create evaluator
-    const evaluator = await createEvaluator(ctx.orgId, suite.id, tc1.id, {
+    // 4. Create evaluator (now at suite level)
+    const evaluator = await createEvaluator(ctx.orgId, suite.id, {
       evalConfigId: config.id,
       name: "must-call-lookup",
     });
-    expect(evaluator.testCaseId).toBe(tc1.id);
+    expect(evaluator.suiteId).toBe(suite.id);
     expect(evaluator.evalConfigId).toBe(config.id);
 
-    // 5. Verify: 1 test case with 1 evaluator
+    // 5. Verify: 1 test case and 1 evaluator at suite level
     const detail1 = await getEvalSuiteById(ctx.orgId, suite.id);
     expect(detail1.testCases.length).toBe(1);
-    expect(detail1.testCases[0].evaluators.length).toBe(1);
+    expect(detail1.evaluators.length).toBe(1);
 
     // 6. Create second test case
     const tc2 = await createTestCase(ctx.orgId, suite.id, {
@@ -741,11 +741,10 @@ describe("Workflow 6: Technical failure → completed_with_errors", () => {
         "wf6@example.com",
       );
 
-      // 3. Pick the auto test case, find one of its evaluators
-      const autoTc = suite.testCases[0];
-      expect(autoTc.evaluators.length).toBeGreaterThan(0);
+      // 3. Find one of the suite's evaluators
+      expect(suite.evaluators.length).toBeGreaterThan(0);
 
-      const targetEvaluator = autoTc.evaluators[0];
+      const targetEvaluator = suite.evaluators[0];
 
       // 4. Delete that evaluator's eval_config directly from DB (sabotage)
       //    First, remove FK references (evaluators pointing to this config)

@@ -18,7 +18,10 @@ import { createSession } from "@features/sessions/sessions.service";
 import { MastraAdapter } from "@features/simulations/adapters/mastra-adapter";
 import { runEvalSimulation } from "@features/simulations/eval-orchestrator";
 import { personalizeInputMessage } from "@features/simulations/llm-client";
-import { getPersona } from "@features/simulations/personas";
+import {
+  getPersona,
+  personaToIdentifier,
+} from "@features/simulations/personas";
 import { Errors } from "@lib/errors";
 import { generateSimulationJWT } from "@lib/jwt";
 import { getLogger } from "@lib/logger";
@@ -51,7 +54,7 @@ export async function enqueueSimulateAndRun(
   orgId: string,
   suiteId: string,
   promptSource: string,
-  opts?: RunEvalSuiteOpts,
+  opts?: RunEvalSuiteOpts & { testCaseIds?: string[] },
 ): Promise<{ suiteRunId: string }> {
   // Validate + create suite run in a single transaction (avoids TOCTOU race)
   const suiteRun = await forOrg(orgId, async (tx) => {
@@ -82,7 +85,7 @@ export async function enqueueSimulateAndRun(
       );
     }
 
-    const testCases = await tx
+    let testCases = await tx
       .select({
         id: evalSuiteTestCases.id,
         name: evalSuiteTestCases.name,
@@ -95,6 +98,17 @@ export async function enqueueSimulateAndRun(
       throw Errors.validationError(
         `Eval suite "${suiteId}" has no test cases — initialize the suite first`,
       );
+    }
+
+    // Filter to specific test cases if requested
+    if (opts?.testCaseIds && opts.testCaseIds.length > 0) {
+      const requestedIds = new Set(opts.testCaseIds);
+      testCases = testCases.filter((tc) => requestedIds.has(tc.id));
+      if (testCases.length === 0) {
+        throw Errors.validationError(
+          "None of the specified testCaseIds match test cases in this suite",
+        );
+      }
     }
 
     for (const tc of testCases) {
@@ -136,6 +150,7 @@ export async function enqueueSimulateAndRun(
       suiteRunId: suiteRun.id,
       promptSource,
       triggeredBy: opts?.triggeredBy,
+      testCaseIds: opts?.testCaseIds,
     },
     executeSimulateAndRun,
   );
@@ -171,7 +186,7 @@ async function executeSimulateAndRun(
     currentTestCase: string | null;
   }) => void,
 ): Promise<void> {
-  const { orgId, suiteId, suiteRunId, triggeredBy } = payload;
+  const { orgId, suiteId, suiteRunId, triggeredBy, testCaseIds } = payload;
   const startTime = performance.now();
 
   try {
@@ -182,6 +197,7 @@ async function executeSimulateAndRun(
       triggeredBy,
       startTime,
       updateProgress,
+      testCaseIds,
     );
   } catch (err) {
     log.error({ err, suiteRunId, suiteId }, "simulate-and-run task failed");
@@ -196,8 +212,15 @@ async function executeSimulateAndRun(
           })
           .where(eq(evalSuiteRuns.id, suiteRunId)),
       );
-    } catch {
-      log.error({ suiteRunId }, "failed to mark suite run as failed");
+    } catch (dbErr) {
+      log.error(
+        {
+          err: dbErr,
+          suiteRunId,
+          originalError: err instanceof Error ? err.message : String(err),
+        },
+        "failed to mark suite run as failed in database",
+      );
     }
   }
 }
@@ -213,6 +236,7 @@ async function executeSimulateAndRunInner(
     total: number;
     currentTestCase: string | null;
   }) => void,
+  testCaseIds?: string[],
 ): Promise<void> {
   const suiteData = await forOrg(orgId, async (tx) => {
     const [suite] = await tx
@@ -229,11 +253,17 @@ async function executeSimulateAndRunInner(
       .from(agents)
       .where(eq(agents.id, suite!.agentId));
 
-    const testCases = await tx
+    let testCases = await tx
       .select()
       .from(evalSuiteTestCases)
       .where(eq(evalSuiteTestCases.suiteId, suiteId))
       .orderBy(asc(evalSuiteTestCases.order));
+
+    // Filter to specific test cases if requested
+    if (testCaseIds && testCaseIds.length > 0) {
+      const requestedIds = new Set(testCaseIds);
+      testCases = testCases.filter((tc) => requestedIds.has(tc.id));
+    }
 
     return { suite: suite!, agent: agent!, testCases };
   });
@@ -263,34 +293,34 @@ async function executeSimulateAndRunInner(
         .where(eq(evalSuiteRuns.id, suiteRunId)),
     );
 
-    // 0. Personalize input message if persona is set
-    if (personaId) {
-      const persona = getPersona(personaId);
-      if (persona) {
-        try {
-          inputMessage = await personalizeInputMessage(inputMessage, persona);
-          log.info(
-            { testCaseId: testCase.id, persona: personaId },
-            "personalized input message",
-          );
-        } catch (err) {
-          log.warn(
-            { err, personaId },
-            "persona personalization failed — using raw message",
-          );
-        }
-      } else {
-        log.warn({ personaId }, "unknown persona ID — using raw message");
+    // 0. Resolve persona for personalization + multi-turn follow-ups
+    const persona = personaId ? getPersona(personaId) : undefined;
+    if (personaId && !persona) {
+      log.warn({ personaId }, "unknown persona ID — using raw message");
+    }
+    if (persona) {
+      try {
+        inputMessage = await personalizeInputMessage(inputMessage, persona);
+        log.info(
+          { testCaseId: testCase.id, persona: personaId },
+          "personalized input message",
+        );
+      } catch (err) {
+        log.warn(
+          { err, personaId, testCaseId: testCase.id },
+          "persona personalization failed — using raw message. Eval results may not reflect intended persona tone.",
+        );
       }
     }
 
     // 1. Pre-create simulation session with mock config in metadata
+    const userIdentifier = personaToIdentifier(personaId);
     let adapter: MastraAdapter | null = null;
     let sessionId: string | null = null;
     try {
       const session = await createSession(orgId, suiteData.agent.id, {
         channelType: "api",
-        userIdentifier: "simulation:eval",
+        userIdentifier,
         mode: "simulation",
         metadata: {
           source: "simulate-and-run",
@@ -315,9 +345,10 @@ async function executeSimulateAndRunInner(
         agentName: suiteData.agent.name,
         simulationMcpUrl,
         simulationToken,
+        userIdentifier,
       });
 
-      // 3. Run simulation
+      // 3. Run simulation (single-turn only — no persona follow-ups)
       const simResult = await runEvalSimulation({
         orgId,
         agentId: suiteData.agent.id,
@@ -372,6 +403,10 @@ async function executeSimulateAndRunInner(
           ),
         );
       } else {
+        log.error(
+          { testCaseId: testCase.id, suiteRunId },
+          "test case failed before session creation — result will not be persisted",
+        );
         results.push(erroredTestCaseResult(testCase));
       }
     } finally {

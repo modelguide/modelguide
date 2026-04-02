@@ -1,8 +1,8 @@
 /**
  * Eval suite service — init, run, and query operations for evaluation suites.
  *
- * Evaluators belong to test cases, not suites. Each test case carries
- * only the evaluators relevant to the SOP path it exercises.
+ * Evaluators belong to suites, not individual test cases. All test cases
+ * in a suite share the same set of evaluators.
  */
 
 import { type Transaction, forOrg } from "@db/rls";
@@ -72,10 +72,9 @@ function buildAutoEvalConfigName(
 /**
  * Initialize (or re-initialize) an eval suite for an agent+SOP pair.
  *
- * - Derives test cases from SOP steps
- * - Creates evaluators per test case from step eval configs
- * - Loads agent guardrails and creates llm_judge evaluators for all test cases
- * - On re-init: preserves manual test cases, replaces auto-generated ones
+ * - Creates evaluators from SOP step eval configs (suite-level, not per test case)
+ * - Loads agent guardrails and creates llm_judge evaluators
+ * - On re-init: preserves manual evaluators, replaces auto-generated ones
  */
 export async function initSuiteFromSop(
   orgId: string,
@@ -84,7 +83,8 @@ export async function initSuiteFromSop(
   opts?: InitEvalSuiteOpts,
 ): Promise<
   EvalSuite & {
-    testCases: Awaited<ReturnType<typeof loadTestCasesWithEvaluators>>;
+    testCases: EvalSuiteTestCase[];
+    evaluators: EvalSuiteEvaluator[];
   }
 > {
   return forOrg(orgId, async (tx) => {
@@ -136,12 +136,22 @@ export async function initSuiteFromSop(
           ),
         );
 
-      // Delete auto test cases (cascade deletes their evaluators)
+      // Delete auto test cases
       for (const tc of autoTestCases) {
         await tx
           .delete(evalSuiteTestCases)
           .where(eq(evalSuiteTestCases.id, tc.id));
       }
+
+      // Delete auto evaluators from the suite (re-init replaces them)
+      await tx
+        .delete(evalSuiteEvaluators)
+        .where(
+          and(
+            eq(evalSuiteEvaluators.suiteId, suiteId),
+            eq(evalSuiteEvaluators.source, "auto"),
+          ),
+        );
     } else {
       // Create new suite
       const [newSuite] = await tx
@@ -197,8 +207,8 @@ export async function initSuiteFromSop(
 
     const evalConfigMap = new Map(evalConfigRows.map((c) => [c.id, c]));
 
-    // 6. Build single test case with evaluators for ALL steps
-    const [testCase] = await tx
+    // 6. Build single test case for ALL steps
+    await tx
       .insert(evalSuiteTestCases)
       .values({
         organizationId: orgId,
@@ -309,7 +319,7 @@ export async function initSuiteFromSop(
 
       await tx.insert(evalSuiteEvaluators).values({
         organizationId: orgId,
-        testCaseId: testCase.id,
+        suiteId,
         evalConfigId: configId!,
         name: `${stepLabel} (${evaluatorType})`,
         sopStepId: step.stepId,
@@ -324,7 +334,7 @@ export async function initSuiteFromSop(
       const guardConfig = guardrailEvaluatorConfigs[gi];
       await tx.insert(evalSuiteEvaluators).values({
         organizationId: orgId,
-        testCaseId: testCase.id,
+        suiteId,
         evalConfigId: guardConfig.id,
         name: `${guardConfig.guardrailName} (guardrail)`,
         source: "auto",
@@ -333,15 +343,19 @@ export async function initSuiteFromSop(
       });
     }
 
-    // Return the suite with test cases
+    // Return the suite with test cases and evaluators
     const [suite] = await tx
       .select()
       .from(evalSuites)
       .where(eq(evalSuites.id, suiteId));
 
+    const testCases = await loadTestCases(tx, suiteId);
+    const evaluators = await loadSuiteEvaluators(tx, suiteId);
+
     return {
       ...suite,
-      testCases: await loadTestCasesWithEvaluators(tx, suiteId),
+      testCases,
+      evaluators,
     };
   });
 }
@@ -458,34 +472,28 @@ async function loadGuardrailEvaluators(
   return configs;
 }
 
-/** Load test cases for a suite with their evaluators. */
-async function loadTestCasesWithEvaluators(tx: Transaction, suiteId: string) {
-  const cases = await tx
+/** Load test cases for a suite (without evaluators). */
+async function loadTestCases(
+  tx: Transaction,
+  suiteId: string,
+): Promise<EvalSuiteTestCase[]> {
+  return tx
     .select()
     .from(evalSuiteTestCases)
     .where(eq(evalSuiteTestCases.suiteId, suiteId))
     .orderBy(asc(evalSuiteTestCases.order));
+}
 
-  if (cases.length === 0) return [];
-
-  const caseIds = cases.map((c) => c.id);
-  const evaluators = await tx
+/** Load evaluators for a suite. */
+async function loadSuiteEvaluators(
+  tx: Transaction,
+  suiteId: string,
+): Promise<EvalSuiteEvaluator[]> {
+  return tx
     .select()
     .from(evalSuiteEvaluators)
-    .where(inArray(evalSuiteEvaluators.testCaseId, caseIds))
+    .where(eq(evalSuiteEvaluators.suiteId, suiteId))
     .orderBy(asc(evalSuiteEvaluators.order));
-
-  const evaluatorsByCase = new Map<string, EvalSuiteEvaluator[]>();
-  for (const a of evaluators) {
-    const list = evaluatorsByCase.get(a.testCaseId) ?? [];
-    list.push(a);
-    evaluatorsByCase.set(a.testCaseId, list);
-  }
-
-  return cases.map((c) => ({
-    ...c,
-    evaluators: evaluatorsByCase.get(c.id) ?? [],
-  }));
 }
 
 // ============================================================================
@@ -493,18 +501,18 @@ async function loadTestCasesWithEvaluators(tx: Transaction, suiteId: string) {
 // ============================================================================
 
 /**
- * Resolve evaluators for a specific test case into ready-to-execute form.
+ * Resolve evaluators for a suite into ready-to-execute form.
  * Loads eval_configs and resolves connector tool names.
  */
 export async function resolveAssertions(
   tx: Transaction,
-  testCaseId: string,
+  suiteId: string,
 ): Promise<ResolvedAssertion[]> {
-  // Load assertions for this test case
+  // Load assertions for this suite
   const assertions = await tx
     .select()
     .from(evalSuiteEvaluators)
-    .where(eq(evalSuiteEvaluators.testCaseId, testCaseId))
+    .where(eq(evalSuiteEvaluators.suiteId, suiteId))
     .orderBy(asc(evalSuiteEvaluators.order));
 
   if (assertions.length === 0) return [];
@@ -554,14 +562,21 @@ export async function resolveAssertions(
   return assertions.map((a) => {
     const cfg = configMap.get(a.evalConfigId);
     if (!cfg) {
+      log.error(
+        { evalConfigId: a.evalConfigId, suiteId },
+        "evaluator references missing eval config — data integrity issue",
+      );
       return {
         order: a.order,
-        name: a.name || `assertion:${a.order}:unknown`,
+        name: a.name || `assertion:${a.order}:missing_config`,
         required: a.required,
         evaluator: {
           configId: a.evalConfigId,
           evaluatorType: "llm_judge" as const,
-          config: { criterion: "Unknown eval config" },
+          config: {
+            criterion:
+              "ERROR: This evaluator references a deleted eval config. Result should be treated as 'error', not 'pass'.",
+          },
         },
         toolNameMap: {},
       };
@@ -683,25 +698,14 @@ export async function runEvalSuite(
       );
     }
 
-    const testCaseIds = testCases.map((tc) => tc.id);
-    const evaluatorCounts = await tx
-      .select({
-        testCaseId: evalSuiteEvaluators.testCaseId,
-        count: count(),
-      })
+    // Validate suite has evaluators
+    const [{ evaluatorCount }] = await tx
+      .select({ evaluatorCount: count() })
       .from(evalSuiteEvaluators)
-      .where(inArray(evalSuiteEvaluators.testCaseId, testCaseIds))
-      .groupBy(evalSuiteEvaluators.testCaseId);
+      .where(eq(evalSuiteEvaluators.suiteId, suiteId));
 
-    const evaluatorCountMap = new Map(
-      evaluatorCounts.map((a) => [a.testCaseId, a.count]),
-    );
-    for (const tc of testCases) {
-      if (!evaluatorCountMap.has(tc.id) || evaluatorCountMap.get(tc.id) === 0) {
-        throw Errors.validationError(
-          `Test case "${tc.name}" has no evaluators`,
-        );
-      }
+    if (evaluatorCount === 0) {
+      throw Errors.validationError(`Eval suite "${suiteId}" has no evaluators`);
     }
 
     return { suite, testCases };
@@ -785,8 +789,8 @@ export async function runTestCaseEval(
   opts?: RunEvalSuiteOpts,
 ): Promise<TestCaseEvalResult> {
   return forOrg(orgId, async (tx) => {
-    // Resolve assertions for this test case
-    const resolved = await resolveAssertions(tx, testCase.id);
+    // Resolve assertions for this suite
+    const resolved = await resolveAssertions(tx, suite.id);
 
     // Create eval run linked to suite run and test case
     const [evalRun] = await tx
@@ -803,12 +807,18 @@ export async function runTestCaseEval(
       })
       .returning();
 
-    // Load messages
-    const messages = await tx
-      .select()
-      .from(sessionMessages)
-      .where(eq(sessionMessages.sessionId, sessionId))
-      .orderBy(asc(sessionMessages.occurredAt), asc(sessionMessages.createdAt));
+    // Load session + messages
+    const [[session], messages] = await Promise.all([
+      tx.select().from(sessions).where(eq(sessions.id, sessionId)),
+      tx
+        .select()
+        .from(sessionMessages)
+        .where(eq(sessionMessages.sessionId, sessionId))
+        .orderBy(
+          asc(sessionMessages.occurredAt),
+          asc(sessionMessages.createdAt),
+        ),
+    ]);
 
     // Execute assertions using shared scoring engine
     const evalStartTime = performance.now();
@@ -817,6 +827,13 @@ export async function runTestCaseEval(
       messages,
       evalRun.id,
       orgId,
+      session
+        ? {
+            userIdentifier: session.userIdentifier ?? undefined,
+            channelType: session.channelType,
+            mode: session.mode ?? undefined,
+          }
+        : undefined,
     );
 
     const failedRequired = scoreRows.filter(
@@ -862,7 +879,8 @@ export async function getEvalSuiteById(
   suiteId: string,
 ): Promise<
   EvalSuite & {
-    testCases: Awaited<ReturnType<typeof loadTestCasesWithEvaluators>>;
+    testCases: EvalSuiteTestCase[];
+    evaluators: EvalSuiteEvaluator[];
   }
 > {
   return forOrg(orgId, async (tx) => {
@@ -873,9 +891,10 @@ export async function getEvalSuiteById(
 
     if (!suite) throw Errors.evalSuiteNotFound(suiteId);
 
-    const testCases = await loadTestCasesWithEvaluators(tx, suiteId);
+    const testCases = await loadTestCases(tx, suiteId);
+    const evaluators = await loadSuiteEvaluators(tx, suiteId);
 
-    return { ...suite, testCases };
+    return { ...suite, testCases, evaluators };
   });
 }
 
@@ -982,9 +1001,10 @@ export async function createTestCase(
         suiteId,
         name: data.name,
         description: data.description ?? null,
-        source: "manual",
+        source: data.source ?? "manual",
         input: data.input ?? null,
         expectedBehavior: data.expectedBehavior ?? null,
+        mockToolResponses: data.mockToolResponses ?? {},
         order: nextOrder,
       })
       .returning();
@@ -993,11 +1013,10 @@ export async function createTestCase(
   });
 }
 
-/** Create a manual evaluator for an existing test case. */
+/** Create a manual evaluator for an existing suite. */
 export async function createEvaluator(
   orgId: string,
   suiteId: string,
-  testCaseId: string,
   data: CreateEvaluatorInput,
 ): Promise<EvalSuiteEvaluator> {
   return forOrg(orgId, async (tx) => {
@@ -1008,23 +1027,6 @@ export async function createEvaluator(
       .where(eq(evalSuites.id, suiteId));
 
     if (!suite) throw Errors.evalSuiteNotFound(suiteId);
-
-    // Validate test case belongs to suite
-    const [testCase] = await tx
-      .select({ id: evalSuiteTestCases.id })
-      .from(evalSuiteTestCases)
-      .where(
-        and(
-          eq(evalSuiteTestCases.id, testCaseId),
-          eq(evalSuiteTestCases.suiteId, suiteId),
-        ),
-      );
-
-    if (!testCase) {
-      throw Errors.notFound(
-        `Test case "${testCaseId}" not found in suite "${suiteId}"`,
-      );
-    }
 
     // Validate eval config exists
     const [config] = await tx
@@ -1040,7 +1042,7 @@ export async function createEvaluator(
     const existing = await tx
       .select({ order: evalSuiteEvaluators.order })
       .from(evalSuiteEvaluators)
-      .where(eq(evalSuiteEvaluators.testCaseId, testCaseId))
+      .where(eq(evalSuiteEvaluators.suiteId, suiteId))
       .orderBy(desc(evalSuiteEvaluators.order))
       .limit(1);
 
@@ -1050,7 +1052,7 @@ export async function createEvaluator(
       .insert(evalSuiteEvaluators)
       .values({
         organizationId: orgId,
-        testCaseId,
+        suiteId,
         evalConfigId: data.evalConfigId,
         name: data.name,
         source: "manual",
@@ -1146,6 +1148,7 @@ export async function getEvalSuiteRuns(
               ? (testCaseNameMap.get(er.testCaseId) ?? null)
               : null,
             evalRunId: er.id,
+            sessionId: er.sessionId,
             passed: er.passed,
             status: er.status,
             scores: scoresByRun.get(er.id) ?? [],
@@ -1234,6 +1237,7 @@ export async function getEvalSuiteRunById(
         ? (testCaseNameMap.get(er.testCaseId) ?? null)
         : null,
       evalRunId: er.id,
+      sessionId: er.sessionId,
       passed: er.passed,
       status: er.status,
       scores: scoresByRun.get(er.id) ?? [],
