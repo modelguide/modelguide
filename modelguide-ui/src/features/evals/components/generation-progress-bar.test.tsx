@@ -43,16 +43,16 @@ describe('GenerationProgressBar', () => {
       />,
     )
 
-    expect(screen.getByText('Done - 8 accepted, 2 rejected')).toBeInTheDocument()
+    expect(screen.getByText('Done — 8 accepted, 2 rejected')).toBeInTheDocument()
     expect(screen.getByText('100%')).toBeInTheDocument()
   })
 
-  it('shows fallback status text for unknown status', () => {
+  it('shows failed status text', () => {
     render(
       <GenerationProgressBar completed={0} total={0} accepted={0} rejected={0} status="failed" />,
     )
 
-    expect(screen.getByText('Processing...')).toBeInTheDocument()
+    expect(screen.getByText('Generation failed')).toBeInTheDocument()
   })
 
   it('hides percentage when total is 0', () => {

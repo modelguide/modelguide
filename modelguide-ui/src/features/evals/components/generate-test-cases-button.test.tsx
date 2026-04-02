@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // --- Mocks ---
@@ -45,6 +45,12 @@ function renderButton(props: { suiteId?: string; hasSop?: boolean } = {}) {
 describe('GenerateTestCasesButton', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
+      this.setAttribute('open', '')
+    })
+    HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
+      this.removeAttribute('open')
+    })
     mockPostResponse = () => Promise.resolve({ taskId: 'task-1', status: 'running' })
     mockGetResponse = () => Promise.resolve({})
   })
@@ -99,8 +105,13 @@ describe('GenerateTestCasesButton', () => {
 
     renderButton()
 
+    // Open confirmation dialog
+    fireEvent.click(screen.getByRole('button', { name: /generate cases/i }))
+
+    // Wait for dialog and confirm
+    const confirmBtn = await screen.findByRole('button', { name: 'Generate' })
     await act(async () => {
-      screen.getByRole('button', { name: /generate/i }).click()
+      fireEvent.click(confirmBtn)
     })
 
     await waitFor(() => {
@@ -119,8 +130,11 @@ describe('GenerateTestCasesButton', () => {
 
     renderButton()
 
+    fireEvent.click(screen.getByRole('button', { name: /generate cases/i }))
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Generate' })
     await act(async () => {
-      screen.getByRole('button', { name: /generate/i }).click()
+      fireEvent.click(confirmBtn)
     })
 
     await waitFor(() => {
@@ -139,8 +153,11 @@ describe('GenerateTestCasesButton', () => {
 
     renderButton()
 
+    fireEvent.click(screen.getByRole('button', { name: /generate cases/i }))
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Generate' })
     await act(async () => {
-      screen.getByRole('button', { name: /generate/i }).click()
+      fireEvent.click(confirmBtn)
     })
 
     await waitFor(() => {
@@ -153,8 +170,11 @@ describe('GenerateTestCasesButton', () => {
 
     renderButton()
 
+    fireEvent.click(screen.getByRole('button', { name: /generate cases/i }))
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Generate' })
     await act(async () => {
-      screen.getByRole('button', { name: /generate/i }).click()
+      fireEvent.click(confirmBtn)
     })
 
     await waitFor(() => {

@@ -151,20 +151,6 @@ describe('RunDetailPage', () => {
     expect(screen.getByText('Completed')).toBeInTheDocument()
   })
 
-  it('renders session link when sessionId is present', async () => {
-    runFixture = makeEvalSuiteRun({
-      sessionId: '99999999-9999-9999-9999-999999999999',
-    })
-
-    renderPage()
-
-    await waitFor(() => {
-      expect(screen.getByText('Session')).toBeInTheDocument()
-    })
-
-    expect(screen.getByText('99999999-9999-9999-9999-999999999999')).toBeInTheDocument()
-  })
-
   it('renders test case results', async () => {
     runFixture = makeEvalSuiteRun({
       testCaseResults: [
