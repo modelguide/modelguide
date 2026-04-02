@@ -348,6 +348,20 @@ describe("POST /api/eval-suites/:suiteId/generate-test-cases", () => {
     expect(body).toHaveProperty("taskId");
     expect(body.taskId).toBeString();
     expect(body.status).toBe("running");
+
+    // Wait for async task to complete so it doesn't race with subsequent tests
+    const { taskRunner } = await import("@lib/task-runner");
+    const start = Date.now();
+    let state = taskRunner.getStatus(body.taskId);
+    while (
+      state &&
+      state.status !== "completed" &&
+      state.status !== "failed" &&
+      Date.now() - start < 10_000
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      state = taskRunner.getStatus(body.taskId);
+    }
   });
 
   test("returns 400 when suite has no linked SOP", async () => {
