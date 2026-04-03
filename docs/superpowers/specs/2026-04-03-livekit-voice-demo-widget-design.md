@@ -304,16 +304,27 @@ Note: `@livekit/components-styles` is not needed — we use fully custom styling
 | `LIVEKIT_API_SECRET` | From LiveKit Cloud project settings |
 | `KV_REST_API_URL` | Auto-set when Vercel KV is linked |
 | `KV_REST_API_TOKEN` | Auto-set when Vercel KV is linked |
+| `DEMO_DAILY_LIMIT` | Max demo sessions per day (default: 100) |
 
 ---
 
-## Rate Limiting
+## Rate Limiting & Spend Control
 
+### Per-IP Rate Limit
 - **Limit:** 5 sessions per IP per rolling hour
 - **Enforcement:** Token endpoint (`/api/livekit-token`)
 - **Storage:** Vercel KV (Redis) — required for production (in-memory is no-op on serverless)
 - **Local dev fallback:** In-memory Map (single-process, acceptable for development)
 - **UI after limit reached:** Widget shows "You've used all demo sessions. Want to see what Sam can really do?" with CTA to founders calendar
+
+### Global Daily Cap
+- **Limit:** 100 demo sessions per day (configurable via `DEMO_DAILY_LIMIT` env var)
+- **Storage:** Vercel KV — key `demo-global:{YYYY-MM-DD}`, value: counter, TTL: 24 hours
+- **Cost ceiling:** 100 x $0.30 = $30/day worst case
+- **UI when hit:** "We're popular today! All demo slots are taken. Book a call instead." + founders calendar link
+
+### Vercel Spend Management
+- **Setup step:** Enable Vercel spend management in project settings with a monthly hard cap (e.g., $50/month) as a final safety net. This shuts down serverless functions if the cap is reached.
 
 ---
 
@@ -322,6 +333,8 @@ Note: `@livekit/components-styles` is not needed — we use fully custom styling
 - **Per-session cost:** ~$0.10-0.15/min for LLM + STT + TTS = ~$0.20-0.30 per 2-min demo session
 - **Max cost per IP per hour:** 5 sessions x $0.30 = $1.50
 - **Token TTL of 180s** is the server-side safety net — even if client JS fails, LiveKit kills the connection after 3 minutes
+- **Global daily cap:** 100 sessions/day = $30/day max ($900/month theoretical ceiling, but realistic usage far lower)
+- **Vercel spend management:** Hard monthly cap as final safety net
 - **No auth required** — acceptable for a marketing demo with these cost constraints
 - **Monitoring:** Demo sessions visible via room name prefix `demo-` in LiveKit Cloud dashboard and agent logs
 
