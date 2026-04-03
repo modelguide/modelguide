@@ -53,17 +53,17 @@ Add an interactive voice demo widget to the ModelGuide marketing website ([model
 | File | Type | Purpose |
 |------|------|---------|
 | `app/api/livekit-token/route.ts` | API route | Token generation + IP rate limiting |
-| `components/voice-demo.tsx` | Client component | LiveKit room, timer, state machine, controls |
-| `components/voice-orb.tsx` | Client component | Animated SVG/canvas orb driven by audio data |
-| `app/page.tsx` | Modified | Replace disabled Retail button with live widget trigger |
+| `components/voice-demo.tsx` | Client component | LiveKit room connection, timer, state machine, controls |
+| `components/voice-orb.tsx` | Client component | Animated SVG/canvas orb driven by audio amplitude |
+| `app/page.tsx` | Modified | Replace disabled Retail button with live widget trigger, open Retail accordion by default |
 
 **Agent (LiveKit Cloud) — no changes:**
 
-The `buildpro-sam` agent handles demo participants identically to any WebRTC participant. It creates an MG session using the participant identity (`demo-guest-{nanoid}`), runs the conversation, posts the transcript, and marks the session complete on disconnect.
+The `buildpro-sam` agent handles demo participants identically to any WebRTC participant. It creates an MG session using `config.USER_EMAIL` (defaults to `"voice-caller"`), runs the conversation, posts the transcript, and marks the session complete on disconnect. Demo sessions are identifiable by their room name prefix `demo-` (visible in LiveKit Cloud dashboard and agent logs).
 
 **MG API — no changes:**
 
-Receives session and transcript data from the agent as usual. Demo sessions are identifiable in the dashboard by the `demo-guest-` identity prefix.
+Receives session and transcript data from the agent as usual.
 
 ---
 
@@ -93,26 +93,31 @@ Receives session and transcript data from the agent as usual. Demo sessions are 
 
 **Logic:**
 1. Extract client IP from `x-forwarded-for` header
-2. Check rate limit: max 5 sessions per IP per rolling hour
+2. Check rate limit via Vercel KV: max 5 sessions per IP per rolling hour
 3. Generate identity: `demo-guest-{nanoid(8)}`
 4. Generate room name: `demo-{nanoid(8)}`
-5. Create `AccessToken` with:
+5. Create `AccessToken` (from `livekit-server-sdk`) with:
    - Identity: the generated guest identity
+   - Name: `"Guest"` (display name — avoids agent greeting with raw identity string)
    - Room: the generated room name
    - Grant: `{ roomJoin: true, room: roomName }`
-   - `roomConfig` with `RoomAgentDispatch({ agentName: "buildpro-sam" })`
-   - TTL: 130 seconds (2 min + 10s buffer)
-6. Return token + wsUrl
+   - `roomConfig` with `RoomAgentDispatch` (from `@livekit/protocol`): `{ agentName: "buildpro-sam" }`
+   - TTL: 180 seconds (3 minutes — covers mic permission prompt, connection setup, agent cold start, plus the full 2-min conversation)
+6. Increment rate limit counter in Vercel KV
+7. Return token + wsUrl
 
-**Rate limiting approach:**
-- Vercel KV (Redis) if available, otherwise in-memory Map as fallback
+**Rate limiting:**
+- **Storage:** Vercel KV (Redis) — hard requirement, not optional
 - Key: `demo-rate:{ip}`, value: list of timestamps, TTL: 1 hour
 - Check: filter timestamps within last hour, reject if count >= 5
+- For local dev: in-memory Map fallback (acceptable since it's single-process)
 
 **Environment variables (Vercel):**
 - `LIVEKIT_URL` — e.g., `wss://modelguide-yxrkr4h6.livekit.cloud`
 - `LIVEKIT_API_KEY` — from LiveKit Cloud project
 - `LIVEKIT_API_SECRET` — from LiveKit Cloud project
+- `KV_REST_API_URL` — Vercel KV connection (auto-set when KV is linked)
+- `KV_REST_API_TOKEN` — Vercel KV token (auto-set when KV is linked)
 
 ---
 
@@ -121,36 +126,72 @@ Receives session and transcript data from the agent as usual. Demo sessions are 
 ### State Machine
 
 ```
-IDLE → CONNECTING → CONNECTED → ENDING → ENDED → RATE_LIMITED
+IDLE → CONNECTING → CONNECTED → ENDING → ENDED
+                 ↘                           ↗
+                  ERROR ────────────────────→
+                                    RATE_LIMITED
 ```
 
 | State | Trigger | UI |
 |-------|---------|-----|
 | `IDLE` | Initial / after "Try again" | "Talk to agent →" button in accordion |
-| `CONNECTING` | Button click | Button disabled, "Connecting..." text, orb fades in with heartbeat pulse |
-| `CONNECTED` | Room connected + agent joined | Orb animates with audio, timer counting up, mic + end buttons visible |
+| `CONNECTING` | Button click | Button disabled, "Connecting..." text, orb fades in with heartbeat pulse. 15-second timeout — if agent doesn't join within 15s, transition to `ERROR`. |
+| `CONNECTED` | Room connected + agent joined (detected via `participant.kind === ParticipantKind.AGENT`) | Orb animates with audio, timer counting up, mic + end buttons visible |
 | `ENDING` | Timer hits 2:00 or user clicks end | Room disconnects, orb contracts to dot |
 | `ENDED` | Disconnect confirmed | CTA: "Liked what you heard? →" typed out, link to founders calendar, "Try again" button |
+| `ERROR` | Token fetch fails (non-429), WebSocket error, agent join timeout | "Something went wrong. Try again?" with retry button |
 | `RATE_LIMITED` | Token endpoint returns 429 | "You've used all demo sessions. Want to see what Sam can really do? →" + founders calendar link |
+
+### Component Hierarchy
+
+The widget must wrap interactive elements in `<LiveKitRoom>` from `@livekit/components-react`:
+
+```tsx
+<VoiceDemo>                          {/* state machine, token fetch, timer */}
+  {state === "IDLE" && <button>Talk to agent →</button>}
+  {(state === "CONNECTING" || state === "CONNECTED") && (
+    <LiveKitRoom                     {/* provides room context for hooks */}
+      serverUrl={wsUrl}
+      token={token}
+      connect={true}
+      audio={true}
+    >
+      <RoomAudioRenderer />          {/* plays agent audio */}
+      <VoiceOrb />                   {/* uses useVoiceAssistant/useTrackVolume */}
+      <Controls />                   {/* mic toggle, end, timer */}
+    </LiveKitRoom>
+  )}
+  {state === "ENDED" && <EndCTA />}
+  {state === "ERROR" && <ErrorRetry />}
+  {state === "RATE_LIMITED" && <RateLimitCTA />}
+</VoiceDemo>
+```
 
 ### Timer Behavior
 
 - Starts counting from `0:00` when state enters `CONNECTED`
 - Displayed as `M:SS` in `JetBrains Mono`, small, below the orb
-- At `1:50`: no visible UI change, but optionally send a data message to the agent to wrap up (stretch goal — not required for v1)
+- At `1:50`: no visible UI change (stretch goal for v2: nudge agent to wrap up)
 - At `2:00`: trigger transition to `ENDING`, disconnect the room
 
 ### Controls
 
 Minimal, appearing below the orb when `CONNECTED`:
 
-- **Mic toggle** — mute/unmute, ghost button style
-- **End call** — ghost button, ends session early
-- **Timer** — passive display, not a button
+- **Mic toggle** — mute/unmute, ghost button style, `aria-label="Mute microphone"` / `"Unmute microphone"`
+- **End call** — ghost button, ends session early, `aria-label="End call"`
+- **Timer** — `<time>` element with `aria-live="off"` (visual only, not announced)
 
 ### Mic Permission
 
-Browser mic permission is requested when the LiveKit room connects (standard browser prompt). If denied, show a brief message: "Mic access is needed to talk to Sam." with a retry option.
+Browser mic permission is requested when the LiveKit room connects (`audio={true}`). If denied, transition to `ERROR` with message: "Mic access is needed to talk to Sam." and a retry option.
+
+### Accessibility
+
+- State changes announced via `aria-live="polite"` region: "Connecting...", "Connected. Sam is listening.", "Session ended."
+- Mic toggle and end button have descriptive `aria-label` attributes
+- Timer uses `<time>` element
+- All interactive elements are keyboard-focusable
 
 ---
 
@@ -175,12 +216,31 @@ The visual centerpiece. A glowing orb that reacts to audio.
 | Processing (agent thinking) | Slow rotation or shimmer effect |
 | Session ending | Contracts to a dot (scale → 0.1), fades out |
 
-### Implementation
+### `prefers-reduced-motion`
 
-- Use `useAudioWaveform` hook from `@livekit/components-react` to get amplitude data
-- Drive orb scale/glow via CSS custom properties updated per animation frame
-- SVG circle with CSS transforms and transitions, or canvas for smoother animation
-- Prefer CSS animations where possible for performance (GPU-accelerated transforms)
+When the user has reduced motion enabled, disable all scale/pulse/shimmer animations. Use color-only state changes instead:
+- Connecting: static orb, slightly dimmer
+- Speaking: glow brightens (no scale)
+- Listening: glow dims
+- Ending: fade to transparent
+
+### Audio Amplitude Implementation
+
+Use `useVoiceAssistant()` to get the agent's audio track, then either:
+- `useTrackVolume(agentTrack)` for a single normalized amplitude value (0-1) — simplest, maps directly to orb scale
+- Or raw `AudioContext.analyser` on the track's `MediaStream` for finer control
+
+Avoid `useAudioWaveform` — it returns an array of bar values designed for bar visualizers, not a single amplitude. The mapping from bars to a single orb scale adds unnecessary complexity.
+
+Drive orb scale/glow via CSS custom properties updated per animation frame:
+```css
+.orb {
+  transform: scale(var(--orb-scale, 1));
+  box-shadow: 0 0 calc(var(--orb-glow, 20) * 1px) var(--accent);
+}
+```
+
+SVG circle with CSS transforms preferred over canvas for simplicity. Canvas only if SVG performance is insufficient.
 
 ---
 
@@ -194,9 +254,13 @@ The visual centerpiece. A glowing orb that reacts to audio.
 </button>
 ```
 
+The Retail vertical is the 4th accordion item (index 3), currently closed by default (Insurance at index 0 opens by default).
+
 ### New State
 
-Replace the Retail accordion's disabled button with the `VoiceDemo` component:
+1. **Open Retail by default** — change `open={index === 0}` to `open={index === 0 || vertical.title === "Retail"}` so the demo is visible on page load.
+
+2. **Replace the Retail button** with the `VoiceDemo` component:
 
 ```tsx
 {vertical.title === "Retail" ? (
@@ -209,7 +273,7 @@ Replace the Retail accordion's disabled button with the `VoiceDemo` component:
 ```
 
 The `VoiceDemo` component renders:
-- In `IDLE` state: a styled button matching the existing `inactiveButton` appearance but enabled and clickable
+- In `IDLE` state: a styled button matching the existing button appearance but enabled and clickable
 - In all other states: the orb + controls + timer below the accordion content
 
 The widget expands the accordion body when active. No modal, no overlay.
@@ -223,10 +287,13 @@ The widget expands the accordion body when active. No modal, no overlay.
 | Package | Purpose |
 |---------|---------|
 | `@livekit/components-react` | React hooks + components for LiveKit rooms |
-| `@livekit/components-styles` | Default styles (we'll override most) |
-| `livekit-client` | WebRTC client SDK |
-| `livekit-server-sdk` | Server-side token generation (used in API route only) |
+| `livekit-client` | WebRTC client SDK (peer dep of components-react) |
+| `livekit-server-sdk` | Server-side token generation (API route only) |
+| `@livekit/protocol` | `RoomAgentDispatch` + `RoomConfiguration` for agent dispatch in token |
 | `nanoid` | Short unique IDs for room names and guest identities |
+| `@vercel/kv` | Vercel KV client for rate limiting |
+
+Note: `@livekit/components-styles` is not needed — we use fully custom styling for the orb widget.
 
 ### Environment Variables (Vercel)
 
@@ -235,6 +302,8 @@ The widget expands the accordion body when active. No modal, no overlay.
 | `LIVEKIT_URL` | `wss://modelguide-yxrkr4h6.livekit.cloud` |
 | `LIVEKIT_API_KEY` | From LiveKit Cloud project settings |
 | `LIVEKIT_API_SECRET` | From LiveKit Cloud project settings |
+| `KV_REST_API_URL` | Auto-set when Vercel KV is linked |
+| `KV_REST_API_TOKEN` | Auto-set when Vercel KV is linked |
 
 ---
 
@@ -242,7 +311,8 @@ The widget expands the accordion body when active. No modal, no overlay.
 
 - **Limit:** 5 sessions per IP per rolling hour
 - **Enforcement:** Token endpoint (`/api/livekit-token`)
-- **Storage:** Vercel KV (Redis) preferred; in-memory Map fallback for local dev
+- **Storage:** Vercel KV (Redis) — required for production (in-memory is no-op on serverless)
+- **Local dev fallback:** In-memory Map (single-process, acceptable for development)
 - **UI after limit reached:** Widget shows "You've used all demo sessions. Want to see what Sam can really do?" with CTA to founders calendar
 
 ---
@@ -251,9 +321,9 @@ The widget expands the accordion body when active. No modal, no overlay.
 
 - **Per-session cost:** ~$0.10-0.15/min for LLM + STT + TTS = ~$0.20-0.30 per 2-min demo session
 - **Max cost per IP per hour:** 5 sessions x $0.30 = $1.50
-- **Token TTL of 130s** is the server-side safety net — even if client JS fails, LiveKit kills the connection
+- **Token TTL of 180s** is the server-side safety net — even if client JS fails, LiveKit kills the connection after 3 minutes
 - **No auth required** — acceptable for a marketing demo with these cost constraints
-- **Monitoring:** Demo sessions visible in MG dashboard via `demo-guest-` prefix
+- **Monitoring:** Demo sessions visible via room name prefix `demo-` in LiveKit Cloud dashboard and agent logs
 
 ---
 
@@ -262,24 +332,29 @@ The widget expands the accordion body when active. No modal, no overlay.
 Per the LiveKit agents skill, every implementation must include tests:
 
 1. **Token endpoint tests:**
-   - Generates valid token with correct agent dispatch
-   - Rate limiting rejects after 5 requests
-   - Returns correct response shape
+   - Generates valid token with correct agent dispatch config
+   - Sets participant name to "Guest"
+   - Rate limiting rejects after 5 requests from same IP
+   - Returns correct response shape (200 and 429 cases)
+   - Handles missing IP header gracefully
 
 2. **Widget component tests:**
    - State machine transitions (IDLE → CONNECTING → CONNECTED → ENDING → ENDED)
+   - ERROR state on connection failure
+   - ERROR state on agent join timeout (15s)
    - Timer counts up and triggers disconnect at 2:00
    - Rate limit state shown on 429 response
    - Mic permission denial handled gracefully
 
 3. **Orb animation tests:**
    - Renders without crashing
-   - Responds to audio amplitude changes (visual regression optional)
+   - Respects `prefers-reduced-motion`
+   - Responds to amplitude changes (visual regression optional)
 
 ---
 
 ## Open Questions
 
-1. **Vercel KV availability** — Does the website project have Vercel KV set up? If not, in-memory rate limiting works for v1 (stateless functions reset, so it's leaky — but acceptable for a marketing demo).
-2. **Agent wrap-up nudge at 1:50** — Worth implementing for v1 or defer? The agent's existing auto-hangup logic may handle this naturally if the user says goodbye.
-3. **Mobile experience** — The orb + controls should work on mobile but may need specific touch/mic testing on iOS Safari (known WebRTC quirks).
+1. **Agent wrap-up nudge at 1:50** — Worth implementing for v1 or defer? The agent's existing auto-hangup logic may handle this naturally if the user says goodbye.
+2. **Mobile experience** — The orb + controls should work on mobile but may need specific touch/mic testing on iOS Safari (known WebRTC quirks).
+3. **nanoid alphabet** — Confirm default nanoid characters are all valid LiveKit room name characters. If not, use `nanoid/url` or a custom alphabet.
