@@ -45,7 +45,7 @@ export function LivekitCard({ agent, isAdmin }: LivekitCardProps) {
     setAgentNameInput((m?.agentName as string) ?? '')
     setApiKeySecretId(s?.livekit_api_key ?? '')
     setApiSecretSecretId(s?.livekit_api_secret ?? '')
-  }, [agent.metadata, agent])
+  }, [agent])
 
   const saveMutation = useMutation({
     mutationFn: () =>

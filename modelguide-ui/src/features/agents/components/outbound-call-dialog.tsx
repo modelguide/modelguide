@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { HTTPError } from 'ky'
 import { Phone, PhoneOff } from 'lucide-react'
 import { type ReactNode, useCallback, useState } from 'react'
 import { Button } from '~/components/ui/button'
@@ -45,9 +46,18 @@ export function OutboundCallDialog({ agentId, trigger }: OutboundCallDialogProps
       setPhase('ringing')
       setSessionId(data.sessionId)
     },
-    onError: (err) => {
+    onError: async (err) => {
       setPhase('error')
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to initiate call')
+      if (err instanceof HTTPError) {
+        try {
+          const body = await err.response.json<{ message?: string }>()
+          setErrorMessage(body.message || 'Failed to initiate call')
+        } catch {
+          setErrorMessage('Failed to initiate call')
+        }
+      } else {
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to initiate call')
+      }
     },
   })
 

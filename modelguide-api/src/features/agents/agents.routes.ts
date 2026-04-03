@@ -171,7 +171,7 @@ const listAgentsQuerySchema = paginationSchema.extend({
     .optional()
     .openapi({ description: "Filter by modality" }),
   agentPlatform: z
-    .enum(["custom", "elevenlabs"])
+    .enum(["custom", "elevenlabs", "livekit"])
     .optional()
     .openapi({ description: "Filter by agent platform" }),
 });
