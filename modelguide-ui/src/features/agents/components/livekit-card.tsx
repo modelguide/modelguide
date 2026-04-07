@@ -55,7 +55,7 @@ export function LivekitCard({ agent, isAdmin }: LivekitCardProps) {
             url: urlInput,
             apiKeySecretId,
             apiSecretSecretId,
-            agentName: agentNameInput || undefined,
+            agentName: agentNameInput,
           },
         })
         .json<{ action: string }>(),
@@ -69,7 +69,7 @@ export function LivekitCard({ agent, isAdmin }: LivekitCardProps) {
     mutationFn: () => api.post(`agents/${agent.id}/livekit-ping`).json<{ ok: boolean }>(),
   })
 
-  const canSave = urlInput.trim() && apiKeySecretId && apiSecretSecretId
+  const canSave = urlInput.trim() && agentNameInput.trim() && apiKeySecretId && apiSecretSecretId
 
   if (agent.agentPlatform !== 'livekit') return null
 
@@ -103,9 +103,9 @@ export function LivekitCard({ agent, isAdmin }: LivekitCardProps) {
               label="Agent Name"
               value={agentNameInput}
               onChange={(e) => setAgentNameInput(e.target.value)}
-              placeholder={agent.slug}
-              hint={`Defaults to agent slug: ${agent.slug}`}
+              placeholder="e.g. glowbox-voice-agent"
               disabled={!isAdmin}
+              required
             />
             <SecretSelector
               label="LiveKit API Key"

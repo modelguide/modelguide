@@ -677,7 +677,7 @@ export async function upsertLivekitConfig(
     url: string;
     apiKeySecretId: string;
     apiSecretSecretId: string;
-    agentName?: string;
+    agentName: string;
   },
 ) {
   return forOrg(orgId, async (tx) => {
@@ -693,7 +693,7 @@ export async function upsertLivekitConfig(
     const metadata = (agent.metadata ?? {}) as Record<string, unknown>;
     metadata.livekit = {
       url: data.url,
-      ...(data.agentName && { agentName: data.agentName }),
+      agentName: data.agentName,
     };
 
     await tx
@@ -752,7 +752,7 @@ export async function createOutboundCall(
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
   const livekitUrl = lkMeta.url as string | undefined;
-  const agentName = (lkMeta.agentName as string) || agent.slug;
+  const agentName = lkMeta.agentName as string;
 
   if (!livekitUrl) {
     throw Errors.invalidInput(

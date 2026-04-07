@@ -892,7 +892,7 @@ const upsertLivekitConfigSchema = z.object({
     .openapi({ description: "Secret ID referencing the LiveKit API Secret" }),
   agentName: z
     .string()
-    .optional()
+    .min(1)
     .openapi({ description: "Agent name registered in LiveKit" }),
 });
 

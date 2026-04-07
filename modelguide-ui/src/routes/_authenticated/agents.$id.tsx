@@ -326,7 +326,7 @@ function AgentDetailPage() {
         </div>
         {isAdmin && agent ? (
           <div className="flex items-center gap-2">
-            {agent.isActive && agent.modality === 'voice' ? (
+            {agent.isActive && agent.modality === 'voice' && agent.agentPlatform === 'livekit' ? (
               <OutboundCallDialog
                 agentId={agent.id}
                 trigger={
