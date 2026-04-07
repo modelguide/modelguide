@@ -41,6 +41,9 @@ drizzle/meta/
 .claude/local/
 **/.claude/settings.local.json
 
+# Superpowers plans/specs (local-only)
+docs/superpowers/
+
 # TanStack Router
 .tanstack/
 .vite/
