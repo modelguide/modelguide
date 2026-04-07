@@ -57,6 +57,7 @@ beforeAll(async () => {
         platform: "custom",
         active: false,
         tools: [],
+        secrets: [],
       },
     ],
     { registry },
