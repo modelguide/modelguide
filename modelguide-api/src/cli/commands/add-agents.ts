@@ -15,12 +15,14 @@ import {
   listConnectorTools,
   listConnectors,
 } from "@features/connectors/connectors.service";
+import { createSecret } from "@features/secrets/secrets.service";
 import { listUsers } from "@features/users/users.service";
 import type { Command } from "commander";
 import { eq } from "drizzle-orm";
 import { getErrorMessage, isDuplicateError } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log, table } from "../lib/logger";
+import { generatePlaceholder, promptSecret } from "../lib/prompt";
 import { resolveInput } from "../lib/resolve-input";
 import { resolveOrgId } from "../lib/resolve-org";
 import {
@@ -66,7 +68,11 @@ export interface AddAgentsResult {
 export async function handleAddAgents(
   orgId: string,
   items: AgentItemInput[],
-  options?: { registry?: IdRegistry; createdBy?: string },
+  options?: {
+    registry?: IdRegistry;
+    createdBy?: string;
+    skipSecrets?: boolean;
+  },
 ): Promise<AddAgentsResult> {
   const connectorMap = await resolveConnectors(orgId, options?.registry);
   let created = 0;
@@ -79,6 +85,35 @@ export async function handleAddAgents(
 
   for (const item of items) {
     try {
+      // Create secrets and build secretsMap (mirrors connector pattern)
+      const secretsMap: Record<string, string> = {};
+      for (const secretDef of item.secrets) {
+        let value = secretDef.value;
+        if (!value) {
+          if (options?.skipSecrets) {
+            value = generatePlaceholder(secretDef.name);
+          } else {
+            value = await promptSecret(secretDef.name);
+          }
+        }
+
+        const secretResult = await createSecret(orgId, {
+          name: secretDef.name,
+          value,
+          secretType: secretDef.type,
+          scope: "agent",
+        });
+        secretsMap[secretDef.field] = secretResult.id;
+
+        if (options?.registry) {
+          options.registry.set("secret", secretDef.name, secretResult.id);
+        }
+      }
+
+      // Build metadata from platform-specific config
+      const metadata =
+        item.platform === "livekit" ? { livekit: item.config } : undefined;
+
       const result = await createAgent(
         orgId,
         {
@@ -87,6 +122,8 @@ export async function handleAddAgents(
           description: item.description,
           modality: item.modality,
           agentPlatform: item.platform,
+          metadata,
+          secrets: Object.keys(secretsMap).length > 0 ? secretsMap : undefined,
         },
         createdBy,
       );

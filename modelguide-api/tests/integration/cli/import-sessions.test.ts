@@ -15,7 +15,7 @@ import {
   sessions,
   users,
 } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { handleAddAgents } from "../../../src/cli/commands/add-agents";
 import { handleAddUsers } from "../../../src/cli/commands/add-users";
 import { handleCreateOrg } from "../../../src/cli/commands/create-org";
@@ -57,6 +57,7 @@ beforeAll(async () => {
         platform: "custom",
         active: false,
         tools: [],
+        secrets: [],
       },
     ],
     { registry },
@@ -183,19 +184,24 @@ describe("import-sessions", () => {
 
     expect(result.created).toBe(1);
 
-    // Verify feedback in DB
-    const orgSessions = await forApp(async (tx) => {
+    // Verify feedback in DB — query by userIdentifier to avoid ordering assumptions
+    const [feedbackSession] = await forApp(async (tx) => {
       return tx
         .select()
         .from(sessions)
-        .where(eq(sessions.organizationId, orgId));
+        .where(
+          and(
+            eq(sessions.organizationId, orgId),
+            eq(sessions.userIdentifier, "user-456"),
+          ),
+        );
     });
 
     const feedbackRows = await forApp(async (tx) => {
       return tx
         .select()
         .from(sessionFeedback)
-        .where(eq(sessionFeedback.sessionId, orgSessions[1].id));
+        .where(eq(sessionFeedback.sessionId, feedbackSession.id));
     });
     expect(feedbackRows.length).toBe(1);
     expect(feedbackRows[0].rating).toBe(2);

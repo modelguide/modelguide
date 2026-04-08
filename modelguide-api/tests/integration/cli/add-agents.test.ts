@@ -107,6 +107,7 @@ describe("add-agents", () => {
           platform: "custom",
           active: false,
           tools: [],
+          secrets: [],
         },
       ],
       { registry },
@@ -131,6 +132,7 @@ describe("add-agents", () => {
           platform: "custom",
           active: false,
           tools: [{ connectorSlug: "agent_test_store" }],
+          secrets: [],
         },
       ],
       { registry },
@@ -159,6 +161,7 @@ describe("add-agents", () => {
         platform: "custom",
         active: false,
         tools: [],
+        secrets: [],
       },
     ]);
 
@@ -175,6 +178,7 @@ describe("add-agents", () => {
         platform: "custom",
         active: false,
         tools: [],
+        secrets: [],
       },
     ]);
 
@@ -194,6 +198,7 @@ describe("add-agents", () => {
           platform: "custom",
           active: false,
           tools: [{ connectorSlug: "nonexistent_connector" }],
+          secrets: [],
         },
       ],
       { registry },

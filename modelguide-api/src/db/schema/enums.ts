@@ -47,6 +47,7 @@ export const modalityEnum = pgEnum("modality", ["voice", "text"]);
 export const agentPlatformEnum = pgEnum("agent_platform", [
   "custom",
   "elevenlabs",
+  "livekit",
 ]);
 
 /**

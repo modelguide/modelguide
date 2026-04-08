@@ -145,6 +145,7 @@ describe("agentItemSchema", () => {
       expect(result.data.modality).toBe("voice");
       expect(result.data.platform).toBe("custom");
       expect(result.data.tools).toEqual([]);
+      expect(result.data.secrets).toEqual([]);
     }
   });
 
@@ -161,6 +162,75 @@ describe("agentItemSchema", () => {
     const result = agentItemSchema.safeParse({
       name: "Agent",
       modality: "video",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts livekit platform with config", () => {
+    const result = agentItemSchema.safeParse({
+      name: "LiveKit Agent",
+      platform: "livekit",
+      config: { url: "wss://my-app.livekit.cloud", agentName: "voice-bot" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.platform).toBe("livekit");
+      expect(result.data.config).toEqual({
+        url: "wss://my-app.livekit.cloud",
+        agentName: "voice-bot",
+      });
+    }
+  });
+
+  test("rejects livekit platform without config", () => {
+    const result = agentItemSchema.safeParse({
+      name: "LiveKit Agent",
+      platform: "livekit",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects livekit config with missing fields", () => {
+    const result = agentItemSchema.safeParse({
+      name: "LiveKit Agent",
+      platform: "livekit",
+      config: { url: "wss://my-app.livekit.cloud" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("allows config to be omitted for non-livekit platforms", () => {
+    const result = agentItemSchema.safeParse({
+      name: "Custom Agent",
+      platform: "custom",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.config).toBeUndefined();
+    }
+  });
+
+  test("validates agent with secrets", () => {
+    const result = agentItemSchema.safeParse({
+      name: "LiveKit Agent",
+      platform: "livekit",
+      config: { url: "wss://app.livekit.cloud", agentName: "bot" },
+      secrets: [
+        { field: "apiKey", name: "LK API Key", type: "api_key" },
+        { field: "apiSecret", name: "LK API Secret", type: "credentials" },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.secrets).toHaveLength(2);
+      expect(result.data.secrets[0].field).toBe("apiKey");
+    }
+  });
+
+  test("rejects secret with invalid type", () => {
+    const result = agentItemSchema.safeParse({
+      name: "Agent",
+      secrets: [{ field: "key", name: "Key", type: "password" }],
     });
     expect(result.success).toBe(false);
   });

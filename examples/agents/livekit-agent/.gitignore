@@ -6,3 +6,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# SIP trunk configs with real credentials
+sip/telnyx-outbound-trunk.json
+sip/twilio-outbound-trunk.json

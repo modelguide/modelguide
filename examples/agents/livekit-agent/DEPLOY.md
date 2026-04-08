@@ -9,11 +9,15 @@
 ## Deployment Architecture
 
 ```
-User ←WebRTC→ LiveKit Edge (nearest) ←relay→ LiveKit Agent (eu-central)
-                                                ├── Deepgram STT (US)
-                                                ├── OpenAI LLM (US)
-                                                ├── ElevenLabs / Cartesia TTS (US)
-                                                └── ModelGuide API (Railway)
+Phone (PSTN) ──→ LiveKit Phone Number ──→┐
+Browser ←WebRTC→ LiveKit Edge (nearest) ─┤
+                                         ↕
+                                    LiveKit Agent (eu-central)
+                                      ├── Deepgram STT (US)
+                                      ├── OpenAI LLM (US)
+                                      ├── ElevenLabs / Cartesia TTS (US)
+                                      ├── ModelGuide API (Railway)
+                                      └── Twilio SIP Trunk (outbound calls)
 ```
 
 LiveKit's global edge network connects users to the nearest edge node via WebRTC. The edge node relays media to the agent — users never experience cross-region latency directly. All inference services (STT, LLM, TTS) and the ModelGuide API should be co-located in the same region as the agent to minimize the voice pipeline latency.
@@ -94,6 +98,13 @@ lk agent update-secrets \
   LANGFUSE_HOST=https://cloud.langfuse.com
 ```
 
+Optional — SIP / Telephony (omit if not using phone calls):
+
+```bash
+lk agent update-secrets \
+  SIP_OUTBOUND_TRUNK_ID=ST_xxxx
+```
+
 No `LIVEKIT_URL`, `LIVEKIT_API_KEY`, or `LIVEKIT_API_SECRET` needed — LiveKit Cloud injects these automatically.
 
 ### 3. Create and deploy
@@ -121,7 +132,7 @@ lk agent logs                    # Tail startup logs
 
 ### 5. Test
 
-Create a token with agent dispatch and open the LiveKit Meet playground:
+**WebRTC (browser)** — create a token with agent dispatch and open the LiveKit Meet playground:
 
 ```bash
 lk token create --room test-room --identity user --join --valid-for 1h --agent buildpro-sam --open meet
@@ -129,15 +140,95 @@ lk token create --room test-room --identity user --join --valid-for 1h --agent b
 
 This opens `meet.livekit.io` with the token pre-filled. Allow microphone access — Sam will greet you automatically.
 
+**Inbound phone call** — call the LiveKit phone number from a real phone. The dispatch rule routes the call to the agent. Check the agent logs for:
+
+```
+SIP caller: phone=+1... trunk=... callID=...
+ModelGuide session: ... (user: +1...)
+```
+
+**Outbound phone call** — dispatch the agent to a room, then dial out via the Twilio trunk:
+
+```bash
+# 1. Dispatch the agent to a room (creates the room automatically)
+lk dispatch create \
+  --agent-name buildpro-sam \
+  --room outbound-test-1
+
+# 2. Dial out — the callee's phone rings, then joins the same room
+lk sip participant create \
+  --trunk ST_xxxx \
+  --call +1XXXXXXXXXX \
+  --room outbound-test-1 \
+  --identity callee
+
+# The agent and callee are now in the same room — agent starts talking
+```
+
+Replace `ST_xxxx` with your trunk ID and `+1XXXXXXXXXX` with the phone number to call.
+
+## SIP Setup
+
+Phone call support requires a one-time SIP configuration. See [`sip/README.md`](./sip/README.md) for the full guide. Quick summary:
+
+**Inbound (LiveKit phone number):**
+
+```bash
+# Purchase a US phone number
+lk number purchase --numbers +1XXXXXXXXXX
+
+# Create dispatch rule (routes calls to the agent)
+lk sip dispatch-rule create sip/dispatch-rule.json
+
+# Link number to dispatch rule
+lk number update --id <NUMBER_ID> --sip-dispatch-rule-id <DR_ID>
+
+# Verify
+lk number list
+lk sip dispatch-rule list
+```
+
+**Outbound (Twilio SIP trunk):**
+
+```bash
+# 1. Set up trunk + credentials in Twilio Console (see sip/README.md)
+
+# 2. Create the trunk config
+cp sip/twilio-outbound-trunk.example.json sip/twilio-outbound-trunk.json
+# Edit: address, numbers, auth_username, auth_password
+
+# 3. Register in LiveKit
+lk sip outbound create sip/twilio-outbound-trunk.json
+# Returns trunk ID: ST_xxxx
+
+# 4. Set the secret
+lk agent update-secrets SIP_OUTBOUND_TRUNK_ID=ST_xxxx
+
+# 5. Deploy
+lk agent deploy
+
+# 6. Verify
+lk sip outbound list
+```
+
+> To switch to Telnyx or another provider, see the "Switching Outbound Providers" section in [`sip/README.md`](./sip/README.md).
+
 ## Useful commands
 
 ```bash
+# Agent management
 lk agent versions                # List deployed versions
 lk agent rollback                # Roll back to previous version
 lk agent update-secrets          # Update secrets (triggers restart)
 lk agent restart                 # Restart without redeploying
 lk agent delete                  # Remove the agent
 lk agent logs                    # Tail logs (streaming)
+
+# SIP / Phone
+lk number list                   # List purchased phone numbers
+lk sip dispatch-rule list        # List inbound dispatch rules
+lk sip outbound list             # List outbound SIP trunks
+lk sip participant create ...    # Dial out (see Test section above)
 ```
 
 ## Dockerfile

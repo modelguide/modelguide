@@ -200,6 +200,7 @@ export async function handleSetup(
   if (files.agents) {
     log.step("Creating agents...");
     agentResult = await handleAddAgents(orgId, files.agents.agents, {
+      skipSecrets: options.skipSecrets,
       registry,
     });
     log.success(

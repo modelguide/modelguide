@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type { PaginatedResponse } from '~/lib/pagination'
 
-export const agentPlatforms = ['custom', 'elevenlabs'] as const
+export const agentPlatforms = ['custom', 'elevenlabs', 'livekit'] as const
 export type AgentPlatform = (typeof agentPlatforms)[number]
 
 export const compiledFromSchema = z
@@ -98,4 +98,10 @@ export interface AgentConnector {
   connectorName: string
   connectorIconUrl: string | null
   tools: AgentConnectorTool[]
+}
+
+export interface OutboundCallResponse {
+  sessionId: string
+  roomName: string
+  dispatchId: string
 }

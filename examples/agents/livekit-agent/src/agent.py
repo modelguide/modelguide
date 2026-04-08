@@ -11,9 +11,10 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
-from livekit import agents
+from livekit import agents, api, rtc
 from livekit.agents import AgentSession
 from livekit.plugins import openai, silero
 from livekit.plugins.turn_detector.english import EnglishModel
@@ -26,10 +27,42 @@ from prompts import GREETING
 from providers import create_stt, create_tts
 from tracing import setup_langfuse
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("agent")
+
+
+# ---------------------------------------------------------------------------
+# SIP detection
+# ---------------------------------------------------------------------------
+
+
+def _resolve_caller_identity(participant: rtc.RemoteParticipant) -> tuple[str, str | None, bool]:
+    """Determine caller identity from participant attributes.
+
+    Returns:
+        (user_identifier, caller_phone, is_sip)
+
+    SIP participants have ``sip.trunkPhoneNumber`` and ``sip.phoneNumber``
+    attributes set by LiveKit. WebRTC participants have neither.
+    """
+    attrs = participant.attributes or {}
+    trunk_phone = attrs.get("sip.trunkPhoneNumber")
+    caller_phone = attrs.get("sip.phoneNumber")
+
+    if trunk_phone or caller_phone:
+        # SIP call — use caller's phone number as the user identifier
+        user_id = caller_phone or config.USER_EMAIL
+        logger.info(
+            "SIP caller: phone=%s trunk=%s callID=%s",
+            caller_phone,
+            trunk_phone,
+            attrs.get("sip.callID", "n/a"),
+        )
+        return user_id, caller_phone, True
+
+    return config.USER_EMAIL, None, False
 
 
 # ---------------------------------------------------------------------------
@@ -51,18 +84,19 @@ async def entrypoint(ctx: agents.JobContext):
             trace_provider.force_flush()
         ctx.add_shutdown_callback(_flush_traces)
 
+    # Parse dispatch metadata (outbound calls include phone_number)
+    outbound_phone = None
+    dispatch_metadata: dict = {}
+    if ctx.job.metadata:
+        try:
+            dispatch_metadata = json.loads(ctx.job.metadata)
+            outbound_phone = dispatch_metadata.get("phone_number")
+        except json.JSONDecodeError:
+            logger.warning("Invalid JSON in job metadata: %s", ctx.job.metadata[:100])
+
     await ctx.connect()
 
-    # Concurrent init — session + MCP + participant wait overlap
-    async def _init_session():
-        try:
-            sid = await mg_client.create_session(config.USER_EMAIL)
-            logger.info("ModelGuide session: %s", sid)
-            return sid
-        except Exception:
-            logger.exception("Failed to create ModelGuide session — running without tracking")
-            return None
-
+    # MCP init helper (shared by both flows)
     async def _init_mcp():
         conn = mg_client.MCPConnection()
         try:
@@ -72,15 +106,59 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to open persistent MCP connection — falling back to one-shot")
             return None
 
-    participant, session_id, mcp = await asyncio.gather(
-        ctx.wait_for_participant(),
-        _init_session(),
-        _init_mcp(),
-    )
+    if outbound_phone:
+        # --- Outbound flow: dial first, then handle participant ---
+        logger.info("Outbound call to %s (room: %s)", outbound_phone, ctx.room.name)
+
+        if not config.SIP_OUTBOUND_TRUNK_ID:
+            logger.error("SIP_OUTBOUND_TRUNK_ID not set — cannot dial out")
+            return
+
+        mcp_task = asyncio.create_task(_init_mcp())
+
+        try:
+            await ctx.api.sip.create_sip_participant(
+                api.CreateSIPParticipantRequest(
+                    room_name=ctx.room.name,
+                    sip_trunk_id=config.SIP_OUTBOUND_TRUNK_ID,
+                    sip_call_to=outbound_phone,
+                    participant_identity=outbound_phone,
+                    wait_until_answered=True,
+                )
+            )
+            logger.info("Outbound call answered: %s", outbound_phone)
+        except Exception:
+            logger.exception("Outbound call failed to %s", outbound_phone)
+            mcp_task.cancel()
+            return
+
+        participant = await ctx.wait_for_participant()
+        mcp = await mcp_task
+
+        user_identifier = dispatch_metadata.get("email") or outbound_phone
+        session_id = dispatch_metadata.get("session_id")
+        is_sip = True
+    else:
+        # --- Inbound / WebRTC flow ---
+        participant, mcp = await asyncio.gather(
+            ctx.wait_for_participant(),
+            _init_mcp(),
+        )
+        user_identifier, _caller_phone, is_sip = _resolve_caller_identity(participant)
+        session_id = None
+
     logger.info("Participant joined: %s", participant.identity)
 
+    # Create ModelGuide session (skip if pre-created by API for outbound)
+    if not session_id:
+        try:
+            session_id = await mg_client.create_session(user_identifier)
+        except Exception:
+            logger.exception("Failed to create ModelGuide session — running without tracking")
+    logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
+
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=config.USER_EMAIL, mcp=mcp)
+    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
     stt = create_stt()
     tts = create_tts()
 
@@ -159,26 +237,29 @@ async def entrypoint(ctx: agents.JobContext):
     # --- Start session ---
     await session.start(room=ctx.room, agent=agent)
 
-    # TTS greeting + prompt cache warmup run concurrently
-    name = participant.name or participant.identity or "there"
+    # Greeting: skip for outbound (callee speaks first), greet for inbound/WebRTC
+    if outbound_phone:
+        pass  # Don't greet — wait for callee to speak, agent responds naturally
+    else:
+        name = "there" if is_sip else (participant.name or participant.identity or "there")
 
-    async def _warmup_prompt_cache():
-        try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
-            resp = await client.chat.completions.create(
-                model=config.LLM_MODEL,
-                messages=[{"role": "system", "content": agent.instructions}],
-                max_tokens=1,
-            )
-            logger.info("Prompt cache warmed (%d prompt tokens)", resp.usage.prompt_tokens)
-        except Exception:
-            logger.debug("Prompt cache warmup failed (non-critical)")
+        async def _warmup_prompt_cache():
+            try:
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+                resp = await client.chat.completions.create(
+                    model=config.LLM_MODEL,
+                    messages=[{"role": "system", "content": agent.instructions}],
+                    max_tokens=1,
+                )
+                logger.info("Prompt cache warmed (%d prompt tokens)", resp.usage.prompt_tokens)
+            except Exception:
+                logger.debug("Prompt cache warmup failed (non-critical)")
 
-    await asyncio.gather(
-        session.say(GREETING.format(name=name)),
-        _warmup_prompt_cache(),
-    )
+        await asyncio.gather(
+            session.say(GREETING.format(name=name)),
+            _warmup_prompt_cache(),
+        )
 
     # Keep alive until session/room ends, then cleanup
     try:

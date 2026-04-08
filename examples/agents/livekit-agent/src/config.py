@@ -71,6 +71,9 @@ LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 # Stubbed tools (comma-separated names with no MCP backend yet — returns fake success)
 STUBBED_TOOLS: str = "send_email"
 
+# SIP / Telephony
+SIP_OUTBOUND_TRUNK_ID: str = ""  # Twilio outbound trunk ID (ST_xxxx)
+
 # Other
 GOOGLE_API_KEY: str = ""
 REGION: str = "us"
@@ -119,6 +122,8 @@ def validate() -> None:
         "LANGFUSE_HOST": os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
         # Stubbed tools
         "STUBBED_TOOLS": os.getenv("STUBBED_TOOLS", "send_email"),
+        # SIP / Telephony
+        "SIP_OUTBOUND_TRUNK_ID": os.getenv("SIP_OUTBOUND_TRUNK_ID", ""),
         # Other
         "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY", ""),
         "REGION": os.getenv("REGION", "us"),

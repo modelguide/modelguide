@@ -111,6 +111,7 @@ export function ElevenLabsCard({ agent, isAdmin }: ElevenLabsCardProps) {
                 >
                   <option value="custom">Custom</option>
                   <option value="elevenlabs">ElevenLabs</option>
+                  <option value="livekit">LiveKit</option>
                 </Select>
               ) : (
                 <dl>

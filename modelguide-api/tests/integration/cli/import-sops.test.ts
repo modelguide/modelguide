@@ -69,6 +69,7 @@ beforeAll(async () => {
         platform: "custom",
         active: false,
         tools: [{ connectorSlug: "sop_test_store" }],
+        secrets: [],
       },
     ],
     { registry },

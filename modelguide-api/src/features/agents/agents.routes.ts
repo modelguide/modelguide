@@ -18,16 +18,19 @@ import { errorResponse } from "@lib/schemas";
 import {
   assignConnectorToAgent,
   createAgent,
+  createOutboundCall,
   deleteAgent,
   getAgentById,
   listAgentConnectors,
   listAgents,
+  pingLivekitConfig,
   regenerateApiKey,
   removeConnectorFromAgent,
   setAgentActive,
   updateAgent,
   updateAgentConnectorTools,
   upsertAgentPlatformKey,
+  upsertLivekitConfig,
 } from "./agents.service";
 import { syncAgentToElevenLabs } from "./agents.sync";
 
@@ -45,7 +48,7 @@ const agentResponseSchema = z.object({
   slug: z.string(),
   description: z.string().nullable(),
   modality: z.enum(["voice", "text"]),
-  agentPlatform: z.enum(["custom", "elevenlabs"]),
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string()).openapi({
@@ -104,7 +107,10 @@ const createAgentSchema = z.object({
     .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
   modality: z.enum(["voice", "text"]).default("voice").optional(),
-  agentPlatform: z.enum(["custom", "elevenlabs"]).default("custom").optional(),
+  agentPlatform: z
+    .enum(["custom", "elevenlabs", "livekit"])
+    .default("custom")
+    .optional(),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string().uuid()).optional().openapi({
     description: "Secret ref map: { fieldName: secretId }",
@@ -116,7 +122,7 @@ const updateAgentSchema = z
     name: z.string().min(1).max(255).optional(),
     description: z.string().optional(),
     metadata: z.record(z.unknown()).optional(),
-    agentPlatform: z.enum(["custom", "elevenlabs"]).optional(),
+    agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]).optional(),
     secrets: z.record(z.string().uuid()).optional().openapi({
       description: "Secret ref map: { fieldName: secretId }",
     }),
@@ -165,7 +171,7 @@ const listAgentsQuerySchema = paginationSchema.extend({
     .optional()
     .openapi({ description: "Filter by modality" }),
   agentPlatform: z
-    .enum(["custom", "elevenlabs"])
+    .enum(["custom", "elevenlabs", "livekit"])
     .optional()
     .openapi({ description: "Filter by agent platform" }),
 });
@@ -855,6 +861,195 @@ router.openapi(removeConnectorRoute, async (c) => {
   await removeConnectorFromAgent(orgId, id, connectorId);
 
   return c.body(null, 204);
+});
+
+// ============================================================================
+// LiveKit Config
+// ============================================================================
+
+router.put(
+  "/:id/livekit-config",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const upsertLivekitConfigSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith("wss://") || u.startsWith("https://"), {
+      message: "URL must use wss:// or https://",
+    })
+    .openapi({ description: "LiveKit Cloud WebSocket URL" }),
+  apiKeySecretId: z
+    .string()
+    .uuid()
+    .openapi({ description: "Secret ID referencing the LiveKit API Key" }),
+  apiSecretSecretId: z
+    .string()
+    .uuid()
+    .openapi({ description: "Secret ID referencing the LiveKit API Secret" }),
+  agentName: z
+    .string()
+    .min(1)
+    .openapi({ description: "Agent name registered in LiveKit" }),
+});
+
+const upsertLivekitConfigRoute = createRoute({
+  method: "put",
+  path: "/{id}/livekit-config",
+  tags: ["Agents"],
+  summary: "Upsert LiveKit config",
+  description:
+    "Creates or updates the LiveKit config for an agent. References existing secrets by ID.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": { schema: upsertLivekitConfigSchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "LiveKit config upserted",
+      content: {
+        "application/json": {
+          schema: z.object({
+            action: z.enum(["created", "updated"]),
+          }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(upsertLivekitConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const result = await upsertLivekitConfig(orgId, id, body);
+
+  return c.json(result, 200);
+});
+
+// ============================================================================
+// LiveKit Ping
+// ============================================================================
+
+router.post(
+  "/:id/livekit-ping",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const livekitPingRoute = createRoute({
+  method: "post",
+  path: "/{id}/livekit-ping",
+  tags: ["Agents"],
+  summary: "Test LiveKit connection",
+  description:
+    "Tests the LiveKit connection by attempting to list rooms with the configured credentials.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    200: {
+      description: "Connection successful",
+      content: {
+        "application/json": {
+          schema: z.object({ ok: z.boolean() }),
+        },
+      },
+    },
+    400: errorResponse("LiveKit not configured"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(livekitPingRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const result = await pingLivekitConfig(orgId, id);
+
+  return c.json(result, 200);
+});
+
+// ============================================================================
+// Outbound Calls
+// ============================================================================
+
+router.post(
+  "/:id/outbound-call",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const outboundCallSchema = z.object({
+  phoneNumber: z.string().min(1).openapi({ example: "+14155551234" }),
+  email: z
+    .string()
+    .email()
+    .optional()
+    .openapi({ example: "customer@example.com" }),
+  name: z.string().optional().openapi({ example: "John Doe" }),
+});
+
+const outboundCallRoute = createRoute({
+  method: "post",
+  path: "/{id}/outbound-call",
+  tags: ["Agents"],
+  summary: "Initiate outbound call",
+  description:
+    "Dispatches the agent to dial an outbound call via SIP trunk. Creates a session and returns its ID.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": { schema: outboundCallSchema },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Call dispatched",
+      content: {
+        "application/json": {
+          schema: z.object({
+            sessionId: z.string().uuid(),
+            roomName: z.string(),
+            dispatchId: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse("Agent not active or not a voice agent"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(outboundCallRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const result = await createOutboundCall(orgId, id, body);
+
+  return c.json(result, 201);
 });
 
 export default router;
