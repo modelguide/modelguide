@@ -745,6 +745,10 @@ export async function createOutboundCall(
     if (!a.isActive) throw Errors.invalidInput("Agent is not active");
     if (a.modality !== "voice")
       throw Errors.invalidInput("Outbound calls require a voice agent");
+    if (a.agentPlatform !== "livekit")
+      throw Errors.invalidInput(
+        "Outbound calls are only supported for LiveKit agents",
+      );
     return a;
   });
 
@@ -752,9 +756,9 @@ export async function createOutboundCall(
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
   const livekitUrl = lkMeta.url as string | undefined;
-  const agentName = lkMeta.agentName as string;
+  const agentName = lkMeta.agentName as string | undefined;
 
-  if (!livekitUrl) {
+  if (!livekitUrl || !agentName) {
     throw Errors.invalidInput(
       "LiveKit is not configured for this agent. Configure it first.",
     );
