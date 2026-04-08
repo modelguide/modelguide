@@ -93,7 +93,17 @@ agents:
     slug: "acme-voice-agent"
     description: "Handles phone orders and support"
     modality: voice
-    platform: custom
+    platform: livekit
+    config:
+      url: "wss://acme-project.livekit.cloud"
+      agentName: "acme-voice-agent"
+    secrets:
+      - field: "livekit_api_key"
+        name: "Acme LiveKit API Key"
+        type: platform_api_key
+      - field: "livekit_api_secret"
+        name: "Acme LiveKit API Secret"
+        type: platform_api_key
     tools:
       - connectorSlug: "acme_store"
       - connectorSlug: "acme_support"

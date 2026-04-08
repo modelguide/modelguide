@@ -101,9 +101,29 @@ Wrapper key: `agents` (array, min 1 item).
 | `slug` | string | no | — | auto-generated from name if omitted |
 | `description` | string | no | — | |
 | `modality` | enum | no | `"voice"` | `"voice"` \| `"text"` |
-| `platform` | enum | no | `"custom"` | `"custom"` \| `"elevenlabs"` |
+| `platform` | enum | no | `"custom"` | `"custom"` \| `"elevenlabs"` \| `"livekit"` |
 | `active` | boolean | no | `false` | whether to activate the agent immediately after creation |
 | `tools` | array | no | `[]` | tool assignments (see below) |
+| `config` | object | conditional | — | **required** when `platform: "livekit"` (see LiveKit config below) |
+| `secrets` | array | no | `[]` | agent-scoped secrets (see below) |
+
+### LiveKit config
+
+Required when `platform: "livekit"`.
+
+| Field | Type | Required | Constraint |
+|-------|------|----------|------------|
+| `url` | string | yes | LiveKit server WebSocket URL (e.g., `wss://my-project.livekit.cloud`) |
+| `agentName` | string | yes | Agent name registered in LiveKit (min 1 char) |
+
+### Agent secret
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `field` | string | yes | — | field name in the agent's secrets map that references this secret |
+| `name` | string | yes | — | human-readable secret name |
+| `type` | enum | yes | — | same enum as standalone secrets |
+| `value` | string | no | — | if omitted: prompted or placeholder |
 
 ### Tool link
 
@@ -112,7 +132,7 @@ Wrapper key: `agents` (array, min 1 item).
 | `connectorSlug` | string | yes | — | must match a connector created earlier in the pipeline |
 | `toolSlugs` | string[] | no | — | if omitted, **all tools** from the connector are assigned |
 
-**Behavior:** Auto-generates an API key on creation (printed once in a table). Duplicates detected by slug. On re-run, existing agents are found and their IDs registered but tool assignments are NOT re-applied.
+**Behavior:** Auto-generates an API key on creation (printed once in a table). Duplicates detected by slug. On re-run, existing agents are found and their IDs registered but tool assignments are NOT re-applied. Each agent secret becomes a separate secret entity; the `field → secretId` mapping is stored in the agent's `secrets` map.
 
 **Important:** Agents require a `createdBy` user ID. In `mg setup`, this is automatically resolved from the first user in the registry. When running standalone, the first user in the org is used.
 
