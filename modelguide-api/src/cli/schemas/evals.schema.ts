@@ -50,7 +50,7 @@ const yamlTestCaseSchema = z.object({
   id: z.string().min(1).max(255),
   sop_slug: z.string().min(1),
   scenario_key: z.string().optional(),
-  campaign: z.string().optional(),
+  description: z.string().optional(),
   tags: z.array(z.string()).default([]),
   guardrails_tested: z.array(z.string()).default([]),
   evaluators: z.array(z.string().min(1)).min(1),
@@ -88,7 +88,7 @@ export const evalsYamlFileSchema = z
 
 const jsonEvalScenarioSchema = z.object({
   id: z.string().min(1).max(255),
-  campaign: z.string().optional(),
+  description: z.string().optional(),
   scenario_key: z.string().optional(),
   sop_slug: z.string().min(1),
   input: evalInputSchema,
@@ -115,7 +115,7 @@ export interface NormalizedTestCase {
   id: string;
   sopSlug: string;
   scenarioKey?: string;
-  campaign?: string;
+  description?: string;
   tags: string[];
   guardrailsTested: string[];
   evaluatorNames: string[];
@@ -167,7 +167,7 @@ export function normalizeYaml(
       id: tc.id,
       sopSlug: tc.sop_slug,
       scenarioKey: tc.scenario_key,
-      campaign: tc.campaign,
+      description: tc.description,
       tags: tc.tags,
       guardrailsTested: tc.guardrails_tested,
       evaluatorNames: tc.evaluators,
@@ -217,7 +217,7 @@ export function normalizeJson(
       id: s.id,
       sopSlug: s.sop_slug,
       scenarioKey: s.scenario_key,
-      campaign: s.campaign,
+      description: s.description,
       tags: s.tags,
       guardrailsTested: s.guardrails_tested,
       evaluatorNames: s.expected_output.criteria.map(

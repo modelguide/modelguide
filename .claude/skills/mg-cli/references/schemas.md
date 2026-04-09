@@ -245,7 +245,7 @@ Top-level object with `agentSlug`, `evaluators`, and `test_cases`. One file per 
 | `id` | string | yes | — | min 1, max 255 chars. Used as `externalId` for dedup |
 | `sop_slug` | string | yes | — | must match an existing SOP slug |
 | `scenario_key` | string | no | — | grouping key (e.g., `order_status`, `return_flow`) |
-| `campaign` | string | no | — | campaign identifier |
+| `description` | string | no | — | human-readable description of the test case |
 | `tags` | string[] | no | `[]` | arbitrary tags for filtering |
 | `guardrails_tested` | string[] | no | `[]` | guardrail slugs this test case validates |
 | `evaluators` | string[] | yes | — | min 1. Must reference evaluator names defined in the `evaluators` section |

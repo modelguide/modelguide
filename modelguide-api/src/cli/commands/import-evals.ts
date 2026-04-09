@@ -352,7 +352,7 @@ export async function handleImportEvals(
       // Build description from metadata
       const descParts: string[] = [];
       if (tc.scenarioKey) descParts.push(`scenario: ${tc.scenarioKey}`);
-      if (tc.campaign) descParts.push(`campaign: ${tc.campaign}`);
+      if (tc.description) descParts.push(tc.description);
       if (tc.tags.length > 0) descParts.push(`tags: ${tc.tags.join(", ")}`);
       if (tc.guardrailsTested.length > 0)
         descParts.push(`guardrails: ${tc.guardrailsTested.join(", ")}`);

@@ -62,7 +62,7 @@ describe("evalsYamlFileSchema", () => {
           id: "tc-01",
           sop_slug: "order-lookup",
           scenario_key: "order_status",
-          campaign: "test-campaign",
+          description: "Happy path for order lookup flow",
           tags: ["happy-path"],
           guardrails_tested: ["no-medical-claims"],
           evaluators: ["checks-order"],
