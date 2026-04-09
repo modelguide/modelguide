@@ -22,6 +22,15 @@ export function EvaluatorsPanel({ evaluators }: EvaluatorsPanelProps) {
           className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-bg-subtle/40"
         >
           <span className="flex-1 font-mono text-xs text-fg-secondary">{evaluator.name}</span>
+          {evaluator.tags?.length > 0 ? (
+            <div className="flex gap-1">
+              {evaluator.tags.map((tag) => (
+                <Badge key={tag} variant="default">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
           <Badge variant={evaluator.source === 'auto' ? 'info' : 'default'}>
             {evaluator.source}
           </Badge>

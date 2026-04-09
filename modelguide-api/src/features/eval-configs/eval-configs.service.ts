@@ -11,7 +11,7 @@ import {
   buildPaginationMeta,
   getOffset,
 } from "@lib/pagination";
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, arrayContains, count, eq, inArray } from "drizzle-orm";
 import type { EvaluatorType } from "../evals/evals.types";
 import { validateEvalConfig } from "./eval-configs.schemas";
 
@@ -23,9 +23,9 @@ const log = getLogger();
 
 export async function listEvalConfigs(
   orgId: string,
-  params: { evaluatorType?: string } & PaginationParams,
+  params: { evaluatorType?: string; tag?: string } & PaginationParams,
 ) {
-  const { page, pageSize, evaluatorType } = params;
+  const { page, pageSize, evaluatorType, tag } = params;
   const offset = getOffset(page, pageSize);
 
   return forOrg(orgId, async (tx) => {
@@ -34,6 +34,9 @@ export async function listEvalConfigs(
       conditions.push(
         eq(evalConfigs.evaluatorType, evaluatorType as EvaluatorType),
       );
+    }
+    if (tag) {
+      conditions.push(arrayContains(evalConfigs.tags, [tag]));
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -82,6 +85,7 @@ export async function createEvalConfig(
     description?: string;
     evaluatorType: string;
     config: Record<string, unknown>;
+    tags?: string[];
   },
   createdBy?: string,
 ) {
@@ -94,6 +98,7 @@ export async function createEvalConfig(
         description: data.description,
         evaluatorType: data.evaluatorType as EvaluatorType,
         config: data.config,
+        tags: data.tags ?? [],
         createdBy,
       })
       .returning();
@@ -109,6 +114,7 @@ export async function updateEvalConfig(
     name?: string;
     description?: string;
     config?: Record<string, unknown>;
+    tags?: string[];
   },
 ) {
   return forOrg(orgId, async (tx) => {

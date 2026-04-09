@@ -1,0 +1,63 @@
+agentSlug: acme-voice-agent
+
+evaluators:
+  - name: confirms-order-id
+    criterion: Agent confirms the order ID back to the customer
+    tags: [accuracy]
+  - name: retrieves-order-details
+    criterion: Agent retrieves and presents the order status or tracking details
+    tags: [accuracy]
+  - name: does-not-fabricate
+    criterion: Agent does NOT make up order details or tracking information
+    tags: [compliance, accuracy]
+  - name: offers-next-steps
+    criterion: Agent offers next steps or asks if there is anything else
+    tags: [quality]
+  - name: acknowledges-return-request
+    criterion: Agent acknowledges the return request and confirms the item
+    tags: [quality, tone-of-voice]
+  - name: explains-return-policy
+    criterion: Agent explains the return policy or timeframe
+    tags: [compliance]
+
+test_cases:
+  - id: order-lookup-happy-path-01
+    sop_slug: order-lookup
+    scenario_key: order_status
+    tags: [order-lookup, happy-path]
+    evaluators:
+      - confirms-order-id
+      - retrieves-order-details
+      - does-not-fabricate
+      - offers-next-steps
+    input:
+      customer_message: Hi, I placed an order last week, number ACM-12345. Can you tell me where it is?
+      conversation_history:
+        - role: assistant
+          content: Thanks for calling Acme Corp. How can I help you today?
+
+  - id: order-lookup-missing-id-02
+    sop_slug: order-lookup
+    scenario_key: order_status
+    tags: [order-lookup, edge-case]
+    evaluators:
+      - does-not-fabricate
+    input:
+      customer_message: I want to check on my order but I can't find the order number anywhere.
+      conversation_history:
+        - role: assistant
+          content: Thanks for calling Acme Corp. How can I help you today?
+
+  - id: return-request-within-window-03
+    sop_slug: return-request
+    scenario_key: return_flow
+    tags: [returns, happy-path]
+    evaluators:
+      - acknowledges-return-request
+      - explains-return-policy
+      - offers-next-steps
+    input:
+      customer_message: I got the wrong size on order ACM-12345, I need to return the jacket.
+      conversation_history:
+        - role: assistant
+          content: Thanks for calling Acme Corp. How can I help you today?

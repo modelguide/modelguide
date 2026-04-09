@@ -3,7 +3,7 @@
  * Loads YAML files from directory, validates, executes pipeline in dependency order.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { getErrorMessage } from "../lib/errors";
@@ -14,6 +14,8 @@ import type { AgentItemInput } from "../schemas/agents.schema";
 import { agentsFileSchema } from "../schemas/agents.schema";
 import type { ConnectorItemInput } from "../schemas/connectors.schema";
 import { connectorsFileSchema } from "../schemas/connectors.schema";
+import type { NormalizedEvalsInput } from "../schemas/evals.schema";
+import { evalsYamlFileSchema, normalizeYaml } from "../schemas/evals.schema";
 import type { GuardrailItemInput } from "../schemas/guardrails.schema";
 import { guardrailsFileSchema } from "../schemas/guardrails.schema";
 import type { OrgInput } from "../schemas/org.schema";
@@ -32,6 +34,7 @@ import { handleAddSecrets } from "./add-secrets";
 import { handleAddUsers } from "./add-users";
 import { handleCompileAgents } from "./compile-agents";
 import { handleCreateOrg } from "./create-org";
+import { handleImportEvals } from "./import-evals";
 import { handleImportGuardrails } from "./import-guardrails";
 import { handleImportSessions } from "./import-sessions";
 import { handleImportSops } from "./import-sops";
@@ -41,6 +44,7 @@ interface SetupOptions {
   skipSecrets?: boolean;
   skipCompile?: boolean;
   skipSessions?: boolean;
+  skipEvals?: boolean;
 }
 
 interface SetupFiles {
@@ -51,6 +55,7 @@ interface SetupFiles {
   agents?: { agents: AgentItemInput[] };
   sops?: { sops: SopItemInput[] };
   guardrails?: { guardrails: GuardrailItemInput[] };
+  evals?: NormalizedEvalsInput[];
   sessions?: { sessions: SessionItemInput[] };
 }
 
@@ -62,6 +67,17 @@ function tryLoadYaml<S extends import("zod").ZodTypeAny>(
   const filePath = path.join(dir, filename);
   if (!existsSync(filePath)) return undefined;
   return loadYaml(filePath, schema);
+}
+
+/** Load all evals*.yaml files from a directory (e.g. evals.yaml, evals-insurance.yaml). */
+function loadEvalsFiles(dir: string): NormalizedEvalsInput[] | undefined {
+  const files = readdirSync(dir).filter((f) => /^evals.*\.ya?ml$/i.test(f));
+  if (files.length === 0) return undefined;
+
+  return files.map((f) => {
+    const raw = loadYaml(path.join(dir, f), evalsYamlFileSchema);
+    return normalizeYaml(raw);
+  });
 }
 
 function loadSetupFiles(dir: string): SetupFiles {
@@ -78,6 +94,7 @@ function loadSetupFiles(dir: string): SetupFiles {
     agents: tryLoadYaml(dir, "agents.yaml", agentsFileSchema),
     sops: tryLoadYaml(dir, "sops.yaml", sopsFileSchema),
     guardrails: tryLoadYaml(dir, "guardrails.yaml", guardrailsFileSchema),
+    evals: loadEvalsFiles(dir),
     sessions: tryLoadYaml(dir, "sessions.yaml", sessionsFileSchema),
   };
 }
@@ -123,6 +140,17 @@ function printDryRun(files: SetupFiles): void {
       `${s.name} (${s.templateSlug ? `template: ${s.templateSlug}` : "inline"})`,
   );
   printSection("Guardrails", files.guardrails?.guardrails);
+  if (files.evals) {
+    for (const evalsInput of files.evals) {
+      log.step(`Evals (${evalsInput.agentSlug}):`);
+      printSection(
+        "  Evaluators",
+        evalsInput.evaluators,
+        (e) => `${e.name}: ${e.criterion.slice(0, 60)}`,
+      );
+      printSection("  Test Cases", evalsInput.testCases, (tc) => tc.id);
+    }
+  }
   printSection("Sessions", files.sessions?.sessions);
 }
 
@@ -232,7 +260,20 @@ export async function handleSetup(
     );
   }
 
-  // 10. Compile agents
+  // 10. Import evals
+  if (files.evals && !options.skipEvals) {
+    log.step("Importing evals...");
+    for (const evalsInput of files.evals) {
+      const evalResult = await handleImportEvals(orgId, evalsInput, {
+        registry,
+      });
+      log.success(
+        `Evals (${evalsInput.agentSlug}): ${evalResult.suitesCreated} suites, ${evalResult.testCasesCreated} test cases, ${evalResult.evalConfigsCreated} evaluators`,
+      );
+    }
+  }
+
+  // 11. Compile agents
   if (!options.skipCompile) {
     log.step("Compiling agents...");
     const compileResult = await handleCompileAgents(orgId, { registry });
@@ -241,7 +282,7 @@ export async function handleSetup(
     );
   }
 
-  // 11. Import sessions
+  // 12. Import sessions
   if (files.sessions && !options.skipSessions) {
     log.step("Importing sessions...");
     const sessionResult = await handleImportSessions(
@@ -284,6 +325,7 @@ export function registerSetupCommand(program: Command): void {
     .option("--skip-secrets", "Use placeholder values for secrets")
     .option("--skip-compile", "Skip agent compilation")
     .option("--skip-sessions", "Skip session import")
+    .option("--skip-evals", "Skip eval import")
     .action(async (dir: string, opts) => {
       try {
         await handleSetup(dir, {
@@ -291,6 +333,7 @@ export function registerSetupCommand(program: Command): void {
           skipSecrets: opts.skipSecrets,
           skipCompile: opts.skipCompile,
           skipSessions: opts.skipSessions,
+          skipEvals: opts.skipEvals,
         });
       } catch (err) {
         log.error(`Setup failed: ${getErrorMessage(err)}`);

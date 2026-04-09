@@ -103,6 +103,7 @@ const evalSuiteEvaluatorResponseSchema = z.object({
   source: z.enum(["auto", "manual"]),
   order: z.number(),
   required: z.boolean(),
+  tags: z.array(z.string()),
   createdAt: z.string(),
 });
 

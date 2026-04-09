@@ -28,6 +28,7 @@ export const evalConfigs = pgTable(
     description: text("description"),
     evaluatorType: evaluatorTypeEnum("evaluator_type").notNull(),
     config: jsonb("config").$type<Record<string, unknown>>().notNull(),
+    tags: text("tags").array().default([]),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

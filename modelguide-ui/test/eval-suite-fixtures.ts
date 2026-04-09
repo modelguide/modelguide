@@ -20,6 +20,7 @@ export function makeEvalSuiteAssertion(
     source: 'auto',
     order: 1,
     required: true,
+    tags: [],
     createdAt: '2026-02-15T10:00:00Z',
     ...overrides,
   }

@@ -13,7 +13,9 @@ export type EntityType =
   | "guardrail"
   | "session"
   | "sopTemplate"
-  | "catalogEntry";
+  | "catalogEntry"
+  | "evalSuite"
+  | "evalConfig";
 
 export class IdRegistry {
   private map = new Map<EntityType, Map<string, string>>();

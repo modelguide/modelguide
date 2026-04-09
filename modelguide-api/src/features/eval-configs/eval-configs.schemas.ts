@@ -139,6 +139,7 @@ export const createEvalConfigSchema = z
     description: z.string().max(2000).optional(),
     evaluatorType: evaluatorTypeEnum,
     config: z.record(z.string(), z.unknown()),
+    tags: z.array(z.string().min(1).max(100)).max(20).default([]),
   })
   .superRefine((data, ctx) => {
     for (const issue of validateEvalConfig(data.evaluatorType, data.config)) {
@@ -151,17 +152,20 @@ export const updateEvalConfigSchema = z
     name: z.string().min(1).max(255).optional(),
     description: z.string().max(2000).optional(),
     config: z.record(z.string(), z.unknown()).optional(),
+    tags: z.array(z.string().min(1).max(100)).max(20).optional(),
   })
   .refine(
     (data) =>
       data.name !== undefined ||
       data.description !== undefined ||
-      data.config !== undefined,
+      data.config !== undefined ||
+      data.tags !== undefined,
     { message: "At least one field must be provided" },
   );
 
 export const evalConfigListQuerySchema = z.object({
   evaluatorType: evaluatorTypeEnum.optional(),
+  tag: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -176,6 +180,7 @@ export const evalConfigResponseSchema = z.object({
   description: z.string().nullable(),
   evaluatorType: z.string(),
   config: z.record(z.string(), z.unknown()),
+  tags: z.array(z.string()),
   createdBy: z.string().uuid().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),

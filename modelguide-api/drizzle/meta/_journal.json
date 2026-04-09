@@ -225,6 +225,13 @@
       "when": 1775130374977,
       "tag": "0031_add-livekit-platform",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1775731684794,
+      "tag": "0032_eval-config-tags",
+      "breakpoints": true
     }
   ]
 }

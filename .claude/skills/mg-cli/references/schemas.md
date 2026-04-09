@@ -11,6 +11,7 @@ Complete field-by-field specification for every CLI YAML file. Source of truth: 
 - [agents.yaml](#agentsyaml)
 - [sops.yaml](#sopsyaml)
 - [guardrails.yaml](#guardrailsyaml)
+- [evals.yaml](#evalsyaml)
 - [sessions.yaml](#sessionsyaml)
 
 ---
@@ -216,6 +217,59 @@ Wrapper key: `guardrails` (array, min 1 item).
 | `agents` | string[] | no | `[]` | agent slugs to assign |
 
 **Behavior:** Creates a knowledge base entry with type `"guardrail"`. Duplicates detected by slug.
+
+---
+
+## evals.yaml
+
+Top-level object with `agentSlug`, `evaluators`, and `test_cases`. One file per agent. For multi-agent orgs, use multiple files with the `evals*.yaml` naming pattern (e.g., `evals-insurance.yaml`, `evals-booking.yaml`).
+
+| Field | Type | Required | Constraint |
+|-------|------|----------|------------|
+| `agentSlug` | string | yes | must match an existing agent slug |
+| `evaluators` | array | yes | at least 1 evaluator |
+| `test_cases` | array | yes | at least 1 test case |
+
+### Evaluator item
+
+| Field | Type | Required | Constraint |
+|-------|------|----------|------------|
+| `name` | string | yes | min 1, max 255 chars. Used as reference key in test cases |
+| `criterion` | string | yes | min 1 char. The judgment criterion for the LLM judge evaluator |
+| `tags` | string[] | no | `[]` | max 20 tags, each max 100 chars. Grouping labels (e.g., `compliance`, `quality`, `tone-of-voice`) |
+
+### Test case item
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `id` | string | yes | — | min 1, max 255 chars. Used as `externalId` for dedup |
+| `sop_slug` | string | yes | — | must match an existing SOP slug |
+| `scenario_key` | string | no | — | grouping key (e.g., `order_status`, `return_flow`) |
+| `description` | string | no | — | human-readable description of the test case |
+| `tags` | string[] | no | `[]` | arbitrary tags for filtering |
+| `guardrails_tested` | string[] | no | `[]` | guardrail slugs this test case validates |
+| `evaluators` | string[] | yes | — | min 1. Must reference evaluator names defined in the `evaluators` section |
+| `input` | object | yes | — | see input object below |
+
+### Input object
+
+| Field | Type | Required | Constraint |
+|-------|------|----------|------------|
+| `customer_message` | string | conditional | min 1 char. Either this or `candidate_message` required |
+| `candidate_message` | string | conditional | min 1 char. Either this or `customer_message` required |
+| `conversation_history` | array | no | array of `{role, content}` messages |
+| `context` | object | no | arbitrary key-value context data |
+
+### Conversation history message
+
+| Field | Type | Required | Constraint |
+|-------|------|----------|------------|
+| `role` | enum | yes | `"user"` \| `"assistant"` \| `"system"` \| `"tool"` |
+| `content` | string | yes | min 1 char |
+
+**Behavior:** Groups test cases by `sop_slug` — one eval suite per (agent, SOP) pair. Evaluators become `llm_judge` eval configs (prefixed `import:<name>`). All evaluators referenced by any test case in a group become suite-level evaluators. Per-test-case evaluator references are stored in `expectedBehavior`. Suites deduped by (agentId, sopId). Test cases deduped by `externalId` in JSONB input. Eval configs deduped by name.
+
+**Also supports JSON format** (`eval-scenarios.json`) for standalone import with `--agent` flag. JSON scenarios have inline `expected_output.criteria` arrays that are auto-extracted as evaluators.
 
 ---
 
