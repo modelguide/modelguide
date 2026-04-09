@@ -17,7 +17,7 @@ The `mg` CLI is a thin orchestration layer over ModelGuide's service layer. It r
 - User wants to onboard a new organization (customer, demo, test)
 - User wants to prepare YAML config files for the CLI
 - User wants to run individual CLI commands or the full `mg setup` pipeline
-- User wants to import SOPs, guardrails, sessions, or other entities
+- User wants to import SOPs, guardrails, evals, sessions, or other entities
 - User asks about available connectors, SOP templates, or schema fields
 
 ## Workflow Overview
@@ -37,12 +37,13 @@ bun run src/cli/mg.ts setup /path/to/my-org/ --dry-run  # validate and preview w
 The directory can live anywhere — it does not need to be inside the modelguide repo. Pass an absolute or relative path.
 
 **Required file:** `org.yaml`
-**Optional files:** `users.yaml`, `secrets.yaml`, `connectors.yaml`, `agents.yaml`, `sops.yaml`, `guardrails.yaml`, `sessions.yaml`
+**Optional files:** `users.yaml`, `secrets.yaml`, `connectors.yaml`, `agents.yaml`, `sops.yaml`, `guardrails.yaml`, `evals.yaml` (or `evals-*.yaml` for multi-agent orgs), `sessions.yaml`
 
 **Flags:**
 - `--dry-run` — validate all YAML files against schemas and print the plan without touching the database. Use this to verify files are correct before running for real.
 - `--skip-secrets` — use placeholder values (useful for CI/testing)
 - `--skip-compile` — skip agent compilation step
+- `--skip-evals` — skip eval import
 - `--skip-sessions` — skip demo session import
 
 ### Option B: Individual Commands
@@ -58,6 +59,7 @@ bun run src/cli/mg.ts add-connectors --org acme --from /path/to/connectors.yaml
 bun run src/cli/mg.ts add-agents --org acme --from /path/to/agents.yaml
 bun run src/cli/mg.ts import-sops --org acme /path/to/sops.yaml
 bun run src/cli/mg.ts import-guardrails --org acme /path/to/guardrails.yaml
+bun run src/cli/mg.ts import-evals --org acme /path/to/evals.yaml
 bun run src/cli/mg.ts compile-agents --org acme
 bun run src/cli/mg.ts import-sessions --org acme /path/to/sessions.yaml
 ```
@@ -74,8 +76,9 @@ The order matters because later steps reference entities created earlier:
 5. agents.yaml     — agents + tool assignments (references connectors)
 6. sops.yaml       — SOPs (references agents + connector tools)
 7. guardrails.yaml — guardrails (references agents)
-8. compile-agents  — compiles each agent against its active SOPs (skipped with --skip-compile)
-9. sessions.yaml   — demo sessions (references agents)
+8. evals.yaml     — eval suites, evaluators, test cases (references agents + SOPs)
+9. compile-agents  — compiles each agent against its active SOPs (skipped with --skip-compile)
+10. sessions.yaml  — demo sessions (references agents)
 ```
 
 The `mg setup` command handles this order automatically and threads an `IdRegistry` (slug-to-UUID map) across all steps so cross-references resolve without extra DB queries.
@@ -85,6 +88,7 @@ The `mg setup` command handles this order automatically and threads an `IdRegist
 Re-running is safe:
 - **Orgs:** upsert on slug (updates settings if exists, warns)
 - **Users/Agents/Connectors/SOPs/Guardrails:** duplicate errors are caught and counted as "existing"
+- **Evals:** suites deduped by (agent, SOP) pair; test cases by `externalId` in JSONB; eval configs by name
 - **Sessions:** deduped by `externalId` (explicit or derived from payload hash)
 - **Secrets:** append-only (no stable dedup key — use `--skip-secrets` on re-runs)
 
@@ -195,6 +199,41 @@ guardrails:
     agents: ["acme-voice-agent", "acme-chat-assistant"]
 ```
 
+### evals.yaml
+
+One file per agent. For multi-agent orgs, use multiple files: `evals-insurance.yaml`, `evals-booking.yaml`, etc. The `mg setup` pipeline globs for `evals*.yaml`.
+
+```yaml
+agentSlug: acme-voice-agent
+
+evaluators:
+  - name: confirms-order-id
+    criterion: Agent confirms the order ID back to the customer
+    tags: [accuracy]                    # optional
+  - name: does-not-fabricate
+    criterion: Agent does NOT make up order details or tracking information
+    tags: [compliance, accuracy]        # optional
+
+test_cases:
+  - id: order-lookup-happy-path-01
+    sop_slug: order-lookup
+    scenario_key: order_status          # optional
+    tags: [order-lookup, happy-path]    # optional
+    evaluators:                         # references by name
+      - confirms-order-id
+      - does-not-fabricate
+    input:
+      customer_message: Hi, I placed an order last week, number ACM-12345.
+      conversation_history:
+        - role: assistant
+          content: Thanks for calling Acme Corp. How can I help you today?
+```
+
+Also supports standalone import via JSON (`eval-scenarios.json`) with `--agent` flag:
+```bash
+bun run src/cli/mg.ts import-evals --org acme --agent acme-voice-agent /path/to/eval-scenarios.json
+```
+
 ### sessions.yaml
 ```yaml
 sessions:
@@ -224,7 +263,7 @@ When the user describes their organization, follow this process:
 
 1. **Gather requirements:** What connectors do they need? What agents? What workflows (SOPs)?
 2. **Create the directory:** anywhere the user wants (e.g., `~/onboarding/my-customer/`)
-3. **Write files in dependency order:** org → users → secrets → connectors → agents → sops → guardrails → sessions
+3. **Write files in dependency order:** org → users → secrets → connectors → agents → sops → guardrails → evals → sessions
 4. **Validate with dry-run:** `cd modelguide-api && bun run src/cli/mg.ts setup /path/to/dir --dry-run`
 5. **Run the import:** add `--skip-secrets` for testing, or run without flags for production
 

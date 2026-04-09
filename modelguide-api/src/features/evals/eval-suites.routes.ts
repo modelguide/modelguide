@@ -85,6 +85,7 @@ function formatEvaluator(a: SuiteDetail["evaluators"][number]) {
     source: a.source,
     order: a.order,
     required: a.required,
+    tags: a.tags ?? [],
     createdAt: a.createdAt.toISOString(),
   };
 }

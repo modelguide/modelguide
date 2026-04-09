@@ -84,7 +84,7 @@ export async function initSuiteFromSop(
 ): Promise<
   EvalSuite & {
     testCases: EvalSuiteTestCase[];
-    evaluators: EvalSuiteEvaluator[];
+    evaluators: (EvalSuiteEvaluator & { tags: string[] })[];
   }
 > {
   return forOrg(orgId, async (tx) => {
@@ -484,16 +484,25 @@ async function loadTestCases(
     .orderBy(asc(evalSuiteTestCases.order));
 }
 
-/** Load evaluators for a suite. */
+/** Load evaluators for a suite, joined with eval config tags. */
 async function loadSuiteEvaluators(
   tx: Transaction,
   suiteId: string,
-): Promise<EvalSuiteEvaluator[]> {
-  return tx
-    .select()
+): Promise<(EvalSuiteEvaluator & { tags: string[] })[]> {
+  const rows = await tx
+    .select({
+      evaluator: evalSuiteEvaluators,
+      tags: evalConfigs.tags,
+    })
     .from(evalSuiteEvaluators)
+    .leftJoin(evalConfigs, eq(evalSuiteEvaluators.evalConfigId, evalConfigs.id))
     .where(eq(evalSuiteEvaluators.suiteId, suiteId))
     .orderBy(asc(evalSuiteEvaluators.order));
+
+  return rows.map((r) => ({
+    ...r.evaluator,
+    tags: r.tags ?? [],
+  }));
 }
 
 // ============================================================================
@@ -880,7 +889,7 @@ export async function getEvalSuiteById(
 ): Promise<
   EvalSuite & {
     testCases: EvalSuiteTestCase[];
-    evaluators: EvalSuiteEvaluator[];
+    evaluators: (EvalSuiteEvaluator & { tags: string[] })[];
   }
 > {
   return forOrg(orgId, async (tx) => {

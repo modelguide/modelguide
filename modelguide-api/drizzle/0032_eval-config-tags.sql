@@ -1,0 +1,1 @@
+ALTER TABLE "eval_configs" ADD COLUMN "tags" text[] DEFAULT '{}';

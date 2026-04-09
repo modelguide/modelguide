@@ -50,6 +50,7 @@ function formatConfig(c: ServiceConfig) {
     description: c.description,
     evaluatorType: c.evaluatorType,
     config: c.config,
+    tags: c.tags ?? [],
     createdBy: c.createdBy,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt?.toISOString() ?? null,

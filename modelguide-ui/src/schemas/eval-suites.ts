@@ -11,6 +11,7 @@ export const evalSuiteAssertionSchema = z.object({
   source: z.enum(['auto', 'manual']),
   order: z.number(),
   required: z.boolean(),
+  tags: z.array(z.string()).default([]),
   createdAt: z.string(),
 })
 
