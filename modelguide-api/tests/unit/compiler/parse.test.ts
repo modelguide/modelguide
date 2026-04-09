@@ -58,6 +58,18 @@ describe("parseSop", () => {
     ]);
   });
 
+  it("accepts a SOP with no tool steps (conversational-only)", () => {
+    const sop = cloneSop(emailOrderNotArrivedSop);
+    // Remove all tool references — pure conversational SOP
+    for (const step of sop.definition.steps) {
+      step.tool = undefined;
+    }
+
+    const { sop: parsed, tools } = parseSop([sop]);
+    expect(parsed.id).toBe("sop-email-order-not-arrived-001");
+    expect(tools).toHaveLength(0);
+  });
+
   it("rejects when not exactly one SOP is provided", () => {
     expect(() => parseSop([])).toThrow(CompilerError);
     expect(() => parseSop([])).toThrow("exactly one SOP");

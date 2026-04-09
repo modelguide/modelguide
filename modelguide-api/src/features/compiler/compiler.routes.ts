@@ -92,7 +92,7 @@ const compileRoute = createRoute({
       },
     },
     404: errorResponse("Agent or SOP not found"),
-    422: errorResponse("SOP has no steps with resolved tool names"),
+    422: errorResponse("Invalid SOP definition or guardrail config"),
   },
 });
 
