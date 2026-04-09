@@ -107,6 +107,7 @@ Wrapper key: `agents` (array, min 1 item).
 | `tools` | array | no | `[]` | tool assignments (see below) |
 | `config` | object | conditional | — | **required** when `platform: "livekit"` (see LiveKit config below) |
 | `secrets` | array | no | `[]` | agent-scoped secrets (see below) |
+| `compiledPrompt` | string | no | — | pre-compiled system prompt to import directly, bypassing the compiler. Useful for agents with hand-tuned prompts or tool-less conversational SOPs |
 
 ### LiveKit config
 

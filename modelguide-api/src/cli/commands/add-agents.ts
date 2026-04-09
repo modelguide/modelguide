@@ -97,8 +97,9 @@ export async function handleAddAgents(
           }
         }
 
+        const secretName = `${item.name} — ${secretDef.name}`;
         const secretResult = await createSecret(orgId, {
-          name: secretDef.name,
+          name: secretName,
           value,
           secretType: secretDef.type,
           scope: "agent",
@@ -106,7 +107,7 @@ export async function handleAddAgents(
         secretsMap[secretDef.field] = secretResult.id;
 
         if (options?.registry) {
-          options.registry.set("secret", secretDef.name, secretResult.id);
+          options.registry.set("secret", secretName, secretResult.id);
         }
       }
 
@@ -164,6 +165,16 @@ export async function handleAddAgents(
             tools,
           });
         }
+      }
+
+      // Import pre-compiled prompt if provided
+      if (item.compiledPrompt) {
+        await forOrg(orgId, (tx) =>
+          tx
+            .update(agentsTable)
+            .set({ compiledInstructions: item.compiledPrompt })
+            .where(eq(agentsTable.id, agentId)),
+        );
       }
 
       if (item.active) {
