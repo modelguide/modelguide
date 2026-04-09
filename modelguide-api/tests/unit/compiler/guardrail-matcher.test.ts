@@ -114,6 +114,7 @@ describe("matchGuardrails — Appendix A.3 verification", () => {
       {
         id: "gr-medium-test",
         name: "Medium Test",
+        description: null,
         content: "scope ticket refund replacement escalation helpdesk",
         config: { category: "operational", priority: "medium" },
       },

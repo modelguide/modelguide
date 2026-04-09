@@ -113,6 +113,7 @@ export function parseGuardrails(
     return {
       id: kb.id,
       name: kb.name,
+      description: kb.description,
       content: kb.content,
       config: configResult.data,
     };

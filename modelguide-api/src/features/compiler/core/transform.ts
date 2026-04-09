@@ -125,5 +125,13 @@ export function transform(
     systemPrompt,
     tools,
     guardrails,
+    // Placeholder metadata — compile() replaces this after strategy execution
+    metadata: {
+      systemPromptTokens: 0,
+      estimatedToolSchemaTokens: 0,
+      totalEstimatedTokens: 0,
+      cacheablePrefix: 0,
+      warnings: [],
+    },
   };
 }

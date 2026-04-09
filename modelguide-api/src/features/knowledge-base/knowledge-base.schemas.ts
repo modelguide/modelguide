@@ -24,6 +24,10 @@ const guardrailPrioritySchema = z.enum(["critical", "high", "medium", "low"]);
 export const guardrailConfigSchema = z.object({
   category: guardrailCategorySchema.optional(),
   priority: guardrailPrioritySchema,
+  /** Why this guardrail exists — used by strategy renderers (e.g. Claude: "{rule} because {reason}"). */
+  reason: z.string().optional(),
+  /** When true, guardrail is emitted at both top and bottom of compiled prompt. */
+  critical: z.boolean().optional(),
 });
 
 /** Config schema resolved by type. Currently only guardrails. */

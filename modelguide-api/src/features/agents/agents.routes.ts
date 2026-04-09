@@ -42,12 +42,22 @@ const router = createRouter();
 
 const compiledFromSchema = z.record(z.unknown()).nullable();
 
+const promptConfigSchema = z.object({
+  persona: z.string().optional(),
+  fillerPhrases: z.array(z.string()).optional(),
+  language: z.string().optional(),
+});
+
+const modelFamilySchema = z.enum(["gpt", "claude", "gemini", "generic"]);
+
 const agentResponseSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
   modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  promptConfig: promptConfigSchema,
   agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
@@ -107,6 +117,8 @@ const createAgentSchema = z.object({
     .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
   modality: z.enum(["voice", "text"]).default("voice").optional(),
+  modelFamily: modelFamilySchema.default("generic").optional(),
+  promptConfig: promptConfigSchema.optional(),
   agentPlatform: z
     .enum(["custom", "elevenlabs", "livekit"])
     .default("custom")
@@ -121,6 +133,8 @@ const updateAgentSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     description: z.string().optional(),
+    modelFamily: modelFamilySchema.optional(),
+    promptConfig: promptConfigSchema.optional(),
     metadata: z.record(z.unknown()).optional(),
     agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]).optional(),
     secrets: z.record(z.string().uuid()).optional().openapi({
@@ -132,6 +146,8 @@ const updateAgentSchema = z
     (data) =>
       data.name !== undefined ||
       data.description !== undefined ||
+      data.modelFamily !== undefined ||
+      data.promptConfig !== undefined ||
       data.metadata !== undefined ||
       data.agentPlatform !== undefined ||
       data.secrets !== undefined,
@@ -218,6 +234,8 @@ function formatAgent(
     slug: agent.slug,
     description: agent.description,
     modality: agent.modality,
+    modelFamily: agent.modelFamily,
+    promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
     metadata,

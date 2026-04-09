@@ -4,7 +4,14 @@
  */
 
 import { forOrg } from "@db/rls";
-import { agentKnowledgeBase, agents, knowledgeBase } from "@db/schema";
+import {
+  agentConnectorTools,
+  agentKnowledgeBase,
+  agents,
+  connectorTools,
+  connectors,
+  knowledgeBase,
+} from "@db/schema";
 import { Errors } from "@lib/errors";
 import { getLogger } from "@lib/logger";
 import { and, eq } from "drizzle-orm";
@@ -12,7 +19,12 @@ import { and, eq } from "drizzle-orm";
 import { resolveAgentSops } from "@features/mcp/mcp.service";
 import { getSopById } from "@features/sops/sops.service";
 import { compile } from "./core/compile";
-import type { CompilerInput, KnowledgeBaseDetailResponse } from "./core/types";
+import type {
+  Channel,
+  CompilerInput,
+  KnowledgeBaseDetailResponse,
+  ModelFamily,
+} from "./core/types";
 
 const log = getLogger();
 
@@ -51,6 +63,9 @@ export async function compileAgent(input: CompileAgentInput) {
         id: agents.id,
         name: agents.name,
         description: agents.description,
+        modality: agents.modality,
+        modelFamily: agents.modelFamily,
+        promptConfig: agents.promptConfig,
       })
       .from(agents)
       .where(eq(agents.id, agentId));
@@ -106,10 +121,33 @@ export async function compileAgent(input: CompileAgentInput) {
     }),
   );
 
-  // 4. Load all active SOPs assigned to the agent (for intent classification)
+  // 4. Load tool confirmation settings from agent_connector_tools (AC6)
+  const toolConfirmationMap: Record<string, boolean> = {};
+  const agentToolSettings = await forOrg(orgId, async (tx) => {
+    return tx
+      .select({
+        slug: connectorTools.slug,
+        connectorSlug: connectors.slug,
+        requiresConfirmation: agentConnectorTools.requiresConfirmation,
+      })
+      .from(agentConnectorTools)
+      .innerJoin(
+        connectorTools,
+        eq(agentConnectorTools.connectorToolId, connectorTools.id),
+      )
+      .innerJoin(connectors, eq(connectorTools.connectorId, connectors.id))
+      .where(eq(agentConnectorTools.agentId, agentId));
+  });
+
+  for (const row of agentToolSettings) {
+    const resolvedName = `${row.connectorSlug}_${row.slug}`;
+    toolConfirmationMap[resolvedName] = row.requiresConfirmation;
+  }
+
+  // 5. Load all active SOPs assigned to the agent (for intent classification)
   const agentSopRows = await resolveAgentSops(orgId, agentId);
 
-  // 5. Convert SOP DB result to SopDetailResponse shape
+  // 6. Convert SOP DB result to SopDetailResponse shape
   const sopResponse = {
     id: sopDetail.id,
     name: sopDetail.name,
@@ -130,7 +168,10 @@ export async function compileAgent(input: CompileAgentInput) {
     updatedAt: sopDetail.updatedAt?.toISOString() ?? null,
   };
 
-  // 6. Run compiler
+  // 7. Derive channel from modality (AC4)
+  const channel: Channel = agent.modality === "voice" ? "voice" : "text";
+
+  // 8. Run compiler
   const compilerInput: CompilerInput = {
     sops: [sopResponse],
     guardrails: guardrailResponses,
@@ -140,13 +181,17 @@ export async function compileAgent(input: CompileAgentInput) {
       model: agentModel ?? "anthropic/claude-haiku-4-5-20251001",
       description:
         agentDescription ?? agent.description ?? "AI customer support agent",
+      promptConfig: agent.promptConfig ?? {},
+      modelFamily: agent.modelFamily as ModelFamily,
+      channel,
     },
     agentSops: agentSopRows,
+    toolConfirmationMap,
   };
 
   const ir = compile(compilerInput);
 
-  // 7. Build provenance metadata
+  // 9. Build provenance metadata
   const compiledFrom = {
     sopId,
     sopName: sopDetail.name,
@@ -155,7 +200,7 @@ export async function compileAgent(input: CompileAgentInput) {
     stepCount: ir.sop.steps.length,
   };
 
-  // 7. Dry-run: return result without persisting
+  // 10. Dry-run: return result without persisting
   if (dryRun) {
     log.info(
       {
@@ -176,7 +221,7 @@ export async function compileAgent(input: CompileAgentInput) {
     };
   }
 
-  // 8. Persist compiled instructions
+  // 11. Persist compiled instructions
   const updatedAgent = await forOrg(orgId, async (tx) => {
     const [row] = await tx
       .update(agents)

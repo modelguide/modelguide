@@ -29,6 +29,7 @@ import {
   knowledgeBaseTypeEnum,
   messageRoleEnum,
   modalityEnum,
+  modelFamilyEnum,
   secretScopeEnum,
   secretTypeEnum,
   sessionModeEnum,
@@ -43,6 +44,19 @@ import {
  * Used to look up secrets by field name from the org vault.
  */
 export type EntitySecretsMap = Record<string, string>;
+
+/**
+ * Prompt configuration stored as JSONB on agents.
+ * Used by the compiler to build model- and channel-optimized system prompts.
+ */
+export interface PromptConfig {
+  /** Free-form text defining personality, tone, behavioral rules. */
+  persona?: string;
+  /** Approved filler phrases for voice tool preambles. */
+  fillerPhrases?: string[];
+  /** Free-form language instructions (e.g. "English only" or multi-line rules). */
+  language?: string;
+}
 
 // ============================================================================
 // Organizations
@@ -381,6 +395,11 @@ export const agents = pgTable(
     slug: varchar("slug", { length: 100 }).notNull(),
     description: text("description"),
     modality: modalityEnum("modality").notNull().default("voice"),
+    modelFamily: modelFamilyEnum("model_family").notNull().default("generic"),
+    promptConfig: jsonb("prompt_config")
+      .$type<PromptConfig>()
+      .notNull()
+      .default({}),
     agentPlatform: agentPlatformEnum("agent_platform")
       .notNull()
       .default("custom"),
