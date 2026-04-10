@@ -94,7 +94,7 @@ Open `http://localhost:3001`. Authentication uses **magic links** — enter your
 - **Support:** `delivered+support-glowbox@resend.dev`
 - **Viewer:** `delivered+viewer-glowbox@resend.dev`
 
-The seed creates three organizations (GlowBox Beauty, ClearHealth, SteelPoint Supply) spanning retail, medical, and B2B verticals — each with Medusa + Zendesk connectors and ~300 sessions. See the [Seed Data](README.md#seed-data) section in the README for all accounts and details.
+The seed creates three organizations (GlowBox Beauty, ClearHealth, SteelPoint Supply) spanning retail, medical, and B2B verticals — each with Medusa + Zendesk connectors and ~300 sessions. See [Seed Data](docs/guide/seed-data.md) for all accounts, session scenarios, and the full org matrix.
 
 API docs are auto-generated at `http://localhost:3000/docs`.
 
@@ -178,14 +178,45 @@ Run `make help` to see every available command.
 
 ### Project structure
 
-Both API and UI use **feature-based directories**. Related routes, services, schemas, and components live together:
+Both API and UI use **feature-based directories**. Related routes, services, schemas, and components live together — everything a feature needs is colocated:
 
 ```
-src/features/
-├── agents/          # Routes, service, schemas, tests
-├── connectors/      # Routes, service, catalog/
-├── sessions/        # Routes, service, schemas
-└── ...
+modelguide/
+├── modelguide-api/              # Hono API + MCP server
+│   └── src/
+│       ├── cli/                 # mg CLI — org provisioning tool
+│       │   ├── commands/        # One file per command
+│       │   ├── examples/acme/   # Sample YAML configs
+│       │   ├── lib/             # IdRegistry, YAML loader, logger
+│       │   └── schemas/         # Zod validation for YAML files
+│       ├── features/
+│       │   ├── agents/          # Agent CRUD, tool assignment
+│       │   ├── compiler/        # Prompt compiler + voice strategies
+│       │   ├── connectors/      # Connector config + catalog/
+│       │   │   └── catalog/
+│       │   │       ├── medusa/  # Medusa manifest + handlers
+│       │   │       ├── zendesk/ # Zendesk manifest + handlers
+│       │   │       ├── registry.ts
+│       │   │       └── sync.ts
+│       │   ├── mcp/             # MCP handler, core tools, schema conversion
+│       │   ├── sops/            # SOP templates, definitions, agent assignment
+│       │   ├── sessions/        # Session lifecycle, messages, feedback
+│       │   ├── simulations/     # Personas, orchestrator, eval harness
+│       │   ├── secrets/         # Encrypted credential storage
+│       │   └── users/           # Auth, RBAC, user management
+│       ├── db/                  # Drizzle schema, RLS, seed verticals
+│       └── lib/                 # Middleware, crypto, errors, pagination
+├── modelguide-ui/               # Dashboard (TanStack Start)
+│   └── src/
+│       ├── features/            # agents, connectors, sessions, analytics
+│       ├── components/          # Primitives + layout
+│       ├── routes/              # File-based routing
+│       └── stores/              # Zustand (auth, theme)
+├── examples/agents/             # Reference voice agents (LiveKit, Pipecat, ElevenLabs, Mastra)
+├── docker/                      # PostgreSQL init (RLS roles)
+├── docs/                        # Guides, ADRs, design system
+├── railway/                     # Railway deployment configs + DEPLOY.md
+└── Makefile                     # All dev commands
 ```
 
 ### File naming
