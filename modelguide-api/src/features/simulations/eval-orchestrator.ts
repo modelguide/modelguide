@@ -33,6 +33,12 @@ export interface EvalOrchestrationInput {
   inputMessage: string;
   /** Optional persona for generating follow-up messages after the agent responds. */
   persona?: Persona;
+  /**
+   * Optional prior conversation turns for replay tests.
+   * When provided, these are stored in the session as context messages
+   * and passed to the adapter so the model sees full conversational history.
+   */
+  conversationHistory?: Array<{ role: string; content: string }>;
   /** Timeout in ms (defaults to SIMULATION_TIMEOUT_MS env var). */
   timeoutMs?: number;
   /** Max conversation turns (defaults to SIMULATION_MAX_TURNS env var). */
@@ -121,8 +127,28 @@ async function runConversationLoop(
   input: EvalOrchestrationInput,
   startTime: number,
 ): Promise<EvalOrchestrationResult> {
-  const { orgId, agentId, sessionId, adapter, inputMessage, persona } = input;
+  const {
+    orgId,
+    agentId,
+    sessionId,
+    adapter,
+    inputMessage,
+    persona,
+    conversationHistory: priorHistory,
+  } = input;
   const maxTurns = input.maxTurns ?? env.SIMULATION_MAX_TURNS;
+
+  // Store prior conversation history in the session so evaluators
+  // (especially llm_judge) see the full transcript when scoring.
+  if (priorHistory && priorHistory.length > 0) {
+    for (const msg of priorHistory) {
+      await addMessage(orgId, sessionId, agentId, {
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+        occurredAt: new Date(),
+      });
+    }
+  }
 
   let currentMessage = inputMessage;
   let turnCount = 0;
@@ -139,8 +165,14 @@ async function runConversationLoop(
       occurredAt: new Date(),
     });
 
-    // Send to agent via adapter
-    const agentResponse = await adapter.sendMessage(sessionId, currentMessage);
+    // Send to agent via adapter — include prior history on the first turn
+    // so the model sees full conversational context for replay tests.
+    const historyForAdapter = turn === 0 ? priorHistory : undefined;
+    const agentResponse = await adapter.sendMessage(
+      sessionId,
+      currentMessage,
+      historyForAdapter,
+    );
 
     // Store agent response with tool calls
     if (agentResponse.toolCalls.length > 0) {

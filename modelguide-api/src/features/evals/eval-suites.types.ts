@@ -57,6 +57,8 @@ export interface CreateEvaluatorInput {
 export interface SimulationTestCaseInput {
   message?: string;
   persona?: string;
+  /** Prior conversation turns for replay tests — stored in session before the live turn. */
+  conversationHistory?: Array<{ role: string; content: string }>;
 }
 
 /** Expected shape of sessions.metadata for simulation sessions. */

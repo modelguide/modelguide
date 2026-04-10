@@ -12,6 +12,7 @@
 
 import { getLogger } from "@lib/logger";
 import { Agent } from "@mastra/core/agent";
+import type { CoreMessage } from "@mastra/core/llm";
 import { MCPClient } from "@mastra/mcp";
 import type { AgentAdapter, AgentAdapterResponse } from "./agent-adapter";
 
@@ -72,22 +73,41 @@ export class MastraAdapter implements AgentAdapter {
   async sendMessage(
     sessionId: string,
     message: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
   ): Promise<AgentAdapterResponse> {
     log.debug(
       {
         agentId: this.config.agentId,
         sessionId,
         messageLength: message.length,
+        historyTurns: conversationHistory?.length ?? 0,
       },
       "MastraAdapter sending message",
     );
 
     const toolsets = await this.mcpClient.listToolsets();
 
-    const result = await this.agent.generate(message, {
+    // When conversation history is provided (replay tests), build a structured
+    // CoreMessage[] so the model sees prior turns as proper user/assistant messages.
+    // Otherwise, pass the raw string (original single-turn behavior).
+    const generateOpts = {
       toolsets,
       maxSteps: this.config.maxSteps ?? 5,
-    });
+    };
+
+    const result =
+      conversationHistory && conversationHistory.length > 0
+        ? await this.agent.generate(
+            [
+              ...conversationHistory.map((msg) => ({
+                role: msg.role as "user" | "assistant" | "system",
+                content: msg.content,
+              })),
+              { role: "user" as const, content: message },
+            ] as CoreMessage[],
+            generateOpts,
+          )
+        : await this.agent.generate(message, generateOpts);
     // Extract tool calls from the generation steps
     const toolCalls: AgentAdapterResponse["toolCalls"] = [];
     for (const step of result.steps ?? []) {

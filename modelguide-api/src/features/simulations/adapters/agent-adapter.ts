@@ -29,10 +29,14 @@ export interface AgentAdapter {
    *
    * @param sessionId - The simulation session ID (for tool calls that need it)
    * @param message - The user message to send
+   * @param conversationHistory - Optional prior conversation turns for replay tests.
+   *   When provided, the adapter passes these as structured messages to the model
+   *   so it sees full conversational context before generating a response.
    * @returns The agent's response including any tool calls
    */
   sendMessage(
     sessionId: string,
     message: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
   ): Promise<AgentAdapterResponse>;
 }
