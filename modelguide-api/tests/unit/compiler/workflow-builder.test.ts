@@ -19,6 +19,9 @@ const input: CompilerInput = {
     name: "Test Agent",
     model: "openai:gpt-4o-mini",
     description: "Test agent",
+    promptConfig: {},
+    modelFamily: "generic" as const,
+    modality: "text" as const,
   },
 };
 

@@ -185,6 +185,16 @@ export const evalSuiteTestCaseSourceEnum = pgEnum(
 // ============================================================================
 
 /**
+ * Model family — which prompting conventions the compiler should follow
+ */
+export const modelFamilyEnum = pgEnum("model_family", [
+  "gpt",
+  "claude",
+  "gemini",
+  "generic",
+]);
+
+/**
  * Knowledge base item types — discriminator for the unified KB table
  */
 export const knowledgeBaseTypeEnum = pgEnum("knowledge_base_type", [

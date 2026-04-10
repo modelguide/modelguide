@@ -5,6 +5,7 @@
  * Guardrail types from knowledge-base feature (PR #140).
  */
 
+import type { PromptConfig } from "@db/schema/core";
 import type { knowledgeBaseDetailResponseSchema } from "@features/knowledge-base/knowledge-base.schemas";
 import type {
   GuardrailCategory,
@@ -23,6 +24,7 @@ import type { z } from "zod";
 
 // Re-export API types for consumers
 export type {
+  PromptConfig,
   SopStep,
   SopStepTool,
   SopTrigger,
@@ -32,6 +34,16 @@ export type {
   GuardrailCategory,
   GuardrailPriority,
 };
+
+// ============================================================================
+// Strategy types
+// ============================================================================
+
+/** Model families supported by the compiler strategy selector. */
+export type ModelFamily = "gpt" | "claude" | "gemini" | "generic";
+
+/** Agent modality — determines strategy selection and token budget. */
+export type Modality = "voice" | "text";
 
 // ============================================================================
 // API response types (inferred from Zod schemas)
@@ -53,6 +65,8 @@ export type SopDetailResponse = z.infer<typeof sopDetailResponseSchema>;
 export interface ParsedGuardrail {
   id: string;
   name: string;
+  /** Short summary — used by voice strategies instead of full content. */
+  description: string | null;
   content: string;
   config: GuardrailConfig;
 }
@@ -74,9 +88,17 @@ export interface CompilerInput {
     model: string;
     /** Role context, e.g. "You are a customer support agent..." */
     description: string;
+    /** Prompt configuration (persona, fillerPhrases, language). */
+    promptConfig: PromptConfig;
+    /** Model family for strategy selection. */
+    modelFamily: ModelFamily;
+    /** Agent modality — determines strategy selection and token budget. */
+    modality: Modality;
   };
   /** All active SOPs assigned to the agent (for intent classification). */
   agentSops?: AgentSopInfo[];
+  /** Map of tool resolvedName → requiresConfirmation from agent_connector_tools. */
+  toolConfirmationMap?: Record<string, boolean>;
 }
 
 /** A tool referenced by at least one SOP step. */
@@ -84,6 +106,8 @@ export interface ResolvedTool {
   resolvedName: string;
   connectorToolId?: string;
   connectorId?: string;
+  /** Whether the tool requires user confirmation before execution. */
+  requiresConfirmation?: boolean;
 }
 
 /** SOP step enriched with computed fields from the transform stage. */
@@ -106,11 +130,43 @@ export interface EnrichedSop {
   steps: EnrichedStep[];
 }
 
-/** Intermediate representation — output of core, input to emitters. */
-export interface CompilerIR {
+/** Warning emitted by the compiler (e.g. budget overruns). */
+export type CompilerWarningCode =
+  | "VOICE_BUDGET_EXCEEDED"
+  | "TEXT_BUDGET_EXCEEDED"
+  | "TOOL_BLOCK_OVER_BUDGET";
+
+export interface CompilerWarning {
+  code: CompilerWarningCode;
+  message: string;
+  tokens?: number;
+}
+
+/** Output metadata — token estimates, cache boundary, warnings. */
+export interface CompilerMetadata {
+  /** Estimated system prompt tokens (chars / 4). */
+  systemPromptTokens: number;
+  /** Estimated tool schema tokens (toolCount * 180). */
+  estimatedToolSchemaTokens: number;
+  /** Sum of system prompt + tool schema tokens. */
+  totalEstimatedTokens: number;
+  /** JS string offset (UTF-16 code units) where static content ends, before the Reminders section. Non-JS consumers must convert to byte offset. */
+  cacheablePrefix: number;
+  /** Warnings (e.g. VOICE_BUDGET_EXCEEDED). */
+  warnings: CompilerWarning[];
+}
+
+/** Output of transform() — structured data for strategies to build prompts from. */
+export interface TransformResult {
   agentConfig: CompilerInput["agentConfig"];
   sop: EnrichedSop;
-  systemPrompt: string;
   tools: ResolvedTool[];
   guardrails: ParsedGuardrail[];
+}
+
+/** Final compiled output — transform result + strategy-built prompt + metadata. */
+export interface CompilerIR extends TransformResult {
+  systemPrompt: string;
+  /** Output metadata — token estimates, cache boundary, warnings. */
+  metadata: CompilerMetadata;
 }

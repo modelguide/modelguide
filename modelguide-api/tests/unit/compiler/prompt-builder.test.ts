@@ -1,5 +1,5 @@
 /**
- * Unit tests for the prompt builder.
+ * Unit tests for prompt building — GenericStrategy and buildScopedPrompt.
  *
  * ACs covered: 6-8 (guardrail placement in prompts),
  * 10 (system prompt groups by priority), 12 (escalation triggers).
@@ -7,11 +7,12 @@
 
 import { describe, expect, it } from "bun:test";
 import { parseGuardrails } from "@features/compiler/core/parse";
-import {
-  buildScopedPrompt,
-  buildSystemPrompt,
-} from "@features/compiler/core/prompt-builder";
-import type { ResolvedTool } from "@features/compiler/core/types";
+import { buildScopedPrompt } from "@features/compiler/core/prompt-builder";
+import { GenericStrategy } from "@features/compiler/core/prompt-strategies/generic-strategy";
+import type {
+  ResolvedTool,
+  TransformResult,
+} from "@features/compiler/core/types";
 import type { SopStep } from "@features/sops/sops.types";
 import { emailOrderNotArrivedSop } from "../../fixtures/compiler/email-wismo-sop";
 import { sampleGuardrails } from "../../fixtures/compiler/sample-guardrails";
@@ -33,13 +34,32 @@ const sampleTools: ResolvedTool[] = [
   },
 ];
 
-describe("buildSystemPrompt", () => {
-  const prompt = buildSystemPrompt(
-    agentDescription,
-    emailOrderNotArrivedSop,
-    parsedGuardrails,
-    sampleTools,
-  );
+const makeIr = (toolsOverride?: ResolvedTool[]): TransformResult => ({
+  agentConfig: {
+    id: "test-agent",
+    name: "Test Agent",
+    model: "test-model",
+    description: agentDescription,
+    promptConfig: {},
+    modelFamily: "generic",
+    modality: "text",
+  },
+  sop: {
+    id: emailOrderNotArrivedSop.id,
+    name: emailOrderNotArrivedSop.name,
+    slug: emailOrderNotArrivedSop.slug,
+    description: emailOrderNotArrivedSop.description,
+    definition:
+      emailOrderNotArrivedSop.definition as TransformResult["sop"]["definition"],
+    steps: [],
+  },
+  tools: toolsOverride ?? sampleTools,
+  guardrails: parsedGuardrails,
+});
+
+describe("GenericStrategy.buildPrompt", () => {
+  const strategy = new GenericStrategy();
+  const { prompt } = strategy.buildPrompt(makeIr());
 
   it("starts with agentConfig.description as preamble", () => {
     expect(prompt.startsWith(agentDescription)).toBe(true);
@@ -59,8 +79,6 @@ describe("buildSystemPrompt", () => {
   it("appends tool name to steps that have tools", () => {
     expect(prompt).toContain("→ `store_look_up_order`");
     expect(prompt).toContain("→ `helpdesk_create_ticket`");
-    // Steps without tools should not have arrows
-    expect(prompt).toMatch(/1\. Determine if this email.*(?<!→)/);
   });
 
   it("includes tools section with resolved names", () => {
@@ -70,12 +88,7 @@ describe("buildSystemPrompt", () => {
   });
 
   it("omits tools section when no tools provided", () => {
-    const noToolsPrompt = buildSystemPrompt(
-      agentDescription,
-      emailOrderNotArrivedSop,
-      parsedGuardrails,
-      [],
-    );
+    const { prompt: noToolsPrompt } = strategy.buildPrompt(makeIr([]));
     expect(noToolsPrompt).not.toContain("## Tools");
   });
 
@@ -110,6 +123,11 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain(
       "**Brand Tone — Warm Professional:** Always greet the customer",
     );
+  });
+
+  it("cacheablePrefix equals prompt length (no dynamic sections)", () => {
+    const result = strategy.buildPrompt(makeIr());
+    expect(result.cacheablePrefix).toBe(result.prompt.length);
   });
 });
 

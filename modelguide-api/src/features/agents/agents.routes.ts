@@ -42,12 +42,24 @@ const router = createRouter();
 
 const compiledFromSchema = z.record(z.unknown()).nullable();
 
+const promptConfigSchema = z
+  .object({
+    persona: z.string().max(5000).optional(),
+    fillerPhrases: z.array(z.string().max(200)).max(20).optional(),
+    language: z.string().max(100).optional(),
+  })
+  .strict();
+
+const modelFamilySchema = z.enum(["gpt", "claude", "gemini", "generic"]);
+
 const agentResponseSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
   modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  promptConfig: promptConfigSchema,
   agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
   isActive: z.boolean(),
   metadata: z.record(z.unknown()).optional(),
@@ -106,11 +118,10 @@ const createAgentSchema = z.object({
     .optional()
     .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
-  modality: z.enum(["voice", "text"]).default("voice").optional(),
-  agentPlatform: z
-    .enum(["custom", "elevenlabs", "livekit"])
-    .default("custom")
-    .optional(),
+  modality: z.enum(["voice", "text"]).default("voice"),
+  modelFamily: modelFamilySchema.default("generic"),
+  promptConfig: promptConfigSchema.optional(),
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]).default("custom"),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string().uuid()).optional().openapi({
     description: "Secret ref map: { fieldName: secretId }",
@@ -121,6 +132,8 @@ const updateAgentSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     description: z.string().optional(),
+    modelFamily: modelFamilySchema.optional(),
+    promptConfig: promptConfigSchema.optional(),
     metadata: z.record(z.unknown()).optional(),
     agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]).optional(),
     secrets: z.record(z.string().uuid()).optional().openapi({
@@ -132,6 +145,8 @@ const updateAgentSchema = z
     (data) =>
       data.name !== undefined ||
       data.description !== undefined ||
+      data.modelFamily !== undefined ||
+      data.promptConfig !== undefined ||
       data.metadata !== undefined ||
       data.agentPlatform !== undefined ||
       data.secrets !== undefined,
@@ -145,8 +160,8 @@ const assignConnectorSchema = z.object({
   tools: z.array(
     z.object({
       slug: z.string().openapi({ description: "Tool slug" }),
-      isEnabled: z.boolean().optional().default(true),
-      requiresConfirmation: z.boolean().optional().default(false),
+      isEnabled: z.boolean().default(true),
+      requiresConfirmation: z.boolean().default(false),
     }),
   ),
 });
@@ -218,6 +233,8 @@ function formatAgent(
     slug: agent.slug,
     description: agent.description,
     modality: agent.modality,
+    modelFamily: agent.modelFamily,
+    promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
     metadata,

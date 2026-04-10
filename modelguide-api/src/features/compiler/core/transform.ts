@@ -1,23 +1,22 @@
 /**
  * Transform stage — enriches SOP steps with type, scoped prompts,
- * and matched guardrail IDs. Assembles the system prompt.
+ * and matched guardrail IDs.
  *
  * Input: parsed SOP + guardrails from the parse stage.
- * Output: CompilerIR ready for emitters.
+ * Output: TransformResult — structured data for strategies to build prompts from.
  */
 
 import type { SopStep } from "@features/sops/sops.types";
 import { matchGuardrails } from "./guardrail-matcher";
-import { buildScopedPrompt, buildSystemPrompt } from "./prompt-builder";
+import { buildScopedPrompt } from "./prompt-builder";
 import type {
-  AgentSopInfo,
-  CompilerIR,
   CompilerInput,
   EnrichedSop,
   EnrichedStep,
   ParsedGuardrail,
   ResolvedTool,
   SopDetailResponse,
+  TransformResult,
 } from "./types";
 
 // ============================================================================
@@ -78,8 +77,7 @@ export function transform(
   tools: ResolvedTool[],
   guardrails: ParsedGuardrail[],
   agentConfig: CompilerInput["agentConfig"],
-  agentSops?: AgentSopInfo[],
-): CompilerIR {
+): TransformResult {
   // Normalize and enrich each step
   const normalizedSteps = sop.definition.steps
     .slice()
@@ -96,19 +94,6 @@ export function transform(
     steps: normalizedSteps,
   };
 
-  // Build system prompt
-  const systemPrompt = buildSystemPrompt(
-    agentConfig.description,
-    {
-      name: sop.name,
-      description: sop.description,
-      definition: normalizedDefinition,
-    },
-    guardrails,
-    tools,
-    agentSops,
-  );
-
   // Assemble enriched SOP
   const enrichedSop: EnrichedSop = {
     id: sop.id,
@@ -122,7 +107,6 @@ export function transform(
   return {
     agentConfig,
     sop: enrichedSop,
-    systemPrompt,
     tools,
     guardrails,
   };

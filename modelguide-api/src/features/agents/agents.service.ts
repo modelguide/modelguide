@@ -13,7 +13,7 @@ import {
   connectorsCatalog,
   secrets,
 } from "@db/schema";
-import type { EntitySecretsMap } from "@db/schema";
+import type { EntitySecretsMap, PromptConfig } from "@db/schema";
 import { getAgentSecretByType } from "@features/secrets/secrets.service";
 import {
   createSession,
@@ -33,6 +33,7 @@ import { nanoid } from "nanoid";
 import { dispatchAgentToRoom, pingLivekit } from "./livekit";
 
 type Modality = (typeof agents.modality.enumValues)[number];
+type ModelFamily = (typeof agents.modelFamily.enumValues)[number];
 type AgentPlatform = (typeof agents.agentPlatform.enumValues)[number];
 
 // ============================================================================
@@ -141,6 +142,8 @@ export async function createAgent(
     slug?: string;
     description?: string;
     modality?: Modality;
+    modelFamily?: ModelFamily;
+    promptConfig?: PromptConfig;
     agentPlatform?: AgentPlatform;
     metadata?: Record<string, unknown>;
     secrets?: EntitySecretsMap;
@@ -189,6 +192,8 @@ export async function createAgent(
         slug,
         description: data.description,
         modality: data.modality ?? "voice",
+        modelFamily: data.modelFamily ?? "generic",
+        promptConfig: data.promptConfig ?? {},
         agentPlatform: data.agentPlatform ?? "custom",
         metadata: data.metadata ?? {},
         secrets: secretsMap,
@@ -217,6 +222,8 @@ export async function updateAgent(
   data: {
     name?: string;
     description?: string;
+    modelFamily?: ModelFamily;
+    promptConfig?: PromptConfig;
     metadata?: Record<string, unknown>;
     agentPlatform?: AgentPlatform;
     secrets?: EntitySecretsMap;

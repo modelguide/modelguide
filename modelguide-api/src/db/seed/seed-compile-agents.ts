@@ -185,6 +185,10 @@ export async function seedCompileAgents(db: SeedDb): Promise<void> {
         name: agent.name,
         model: "anthropic/claude-haiku-4-5-20251001",
         description: agent.description ?? "AI customer support agent",
+        promptConfig: agent.promptConfig ?? {},
+        modelFamily: agent.modelFamily ?? "generic",
+        modality:
+          agent.modality === "voice" ? ("voice" as const) : ("text" as const),
       },
     };
 

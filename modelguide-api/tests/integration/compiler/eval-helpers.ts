@@ -36,6 +36,9 @@ export const agentConfig = {
   model: "anthropic/claude-haiku-4-5-20251001",
   description:
     "You are a customer support agent for an e-commerce store handling inbound support emails. You process one email per run and send a single reply.",
+  promptConfig: {},
+  modelFamily: "generic" as const,
+  modality: "text" as const,
 };
 
 /** Compile the fixture SOP and run the agent against a test email. */

@@ -45,6 +45,20 @@ const compileAgentBodySchema = z.object({
     .openapi({ description: "Override agent description/role context" }),
 });
 
+const compilerWarningSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  tokens: z.number().optional(),
+});
+
+const compilerMetadataSchema = z.object({
+  systemPromptTokens: z.number(),
+  estimatedToolSchemaTokens: z.number(),
+  totalEstimatedTokens: z.number(),
+  cacheablePrefix: z.number(),
+  warnings: z.array(compilerWarningSchema),
+});
+
 const compileAgentResponseSchema = z.object({
   agentId: z.string().uuid(),
   compiledAt: z.string(),
@@ -52,6 +66,7 @@ const compileAgentResponseSchema = z.object({
   compiledPrompt: z.string(),
   promptLength: z.number(),
   toolCount: z.number(),
+  metadata: compilerMetadataSchema,
 });
 
 // ============================================================================
@@ -129,6 +144,7 @@ router.openapi(compileRoute, async (c) => {
       compiledPrompt: result.ir.systemPrompt,
       promptLength: result.ir.systemPrompt.length,
       toolCount: result.ir.tools.length,
+      metadata: result.ir.metadata,
     },
     200,
   );

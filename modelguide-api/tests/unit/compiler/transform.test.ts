@@ -17,6 +17,9 @@ const agentConfig = {
   name: "Test Agent",
   model: "openai:gpt-4o-mini",
   description: "Test agent description",
+  promptConfig: {},
+  modelFamily: "generic" as const,
+  modality: "text" as const,
 };
 
 const ir = transform(sop, tools, guardrails, agentConfig);
@@ -70,13 +73,12 @@ describe("transform — enriched steps", () => {
   });
 });
 
-describe("transform — IR structure", () => {
-  it("IR has systemPrompt", () => {
-    expect(ir.systemPrompt).toBeTruthy();
-    expect(ir.systemPrompt).toContain("Test agent description");
+describe("transform — result structure", () => {
+  it("result has no systemPrompt (strategies build it)", () => {
+    expect("systemPrompt" in ir).toBe(false);
   });
 
-  it("IR has tools", () => {
+  it("result has tools", () => {
     expect(ir.tools).toHaveLength(2);
     expect(ir.tools.map((t) => t.resolvedName)).toEqual([
       "store_look_up_order",
