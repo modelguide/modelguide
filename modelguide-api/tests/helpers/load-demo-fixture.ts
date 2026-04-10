@@ -178,7 +178,7 @@ export function loadDemoFixture(
     agentConfig: {
       id: `agent-${agent.slug}`,
       name: agent.name,
-      model: "openai:gpt-4o-realtime",
+      model: "openai:gpt-4.1-mini",
       description: agent.description,
       promptConfig,
       modelFamily: agent.modelFamily as ModelFamily,

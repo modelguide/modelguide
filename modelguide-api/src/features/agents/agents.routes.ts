@@ -121,9 +121,7 @@ const createAgentSchema = z.object({
   modality: z.enum(["voice", "text"]).default("voice"),
   modelFamily: modelFamilySchema.default("generic"),
   promptConfig: promptConfigSchema.optional(),
-  agentPlatform: z
-    .enum(["custom", "elevenlabs", "livekit"])
-    .default("custom"),
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]).default("custom"),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string().uuid()).optional().openapi({
     description: "Secret ref map: { fieldName: secretId }",

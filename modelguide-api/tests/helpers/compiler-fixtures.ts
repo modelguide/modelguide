@@ -120,7 +120,7 @@ export const gptVoiceOnboardingFixture: CompilerInput = {
   agentConfig: {
     id: "agent-onboarding",
     name: "Onboarding Agent",
-    model: "openai:gpt-4o-realtime",
+    model: "openai:gpt-4.1-mini",
     description:
       "Voice agent conducting structured customer onboarding calls. Guides customers through account verification and product setup.",
     promptConfig: {

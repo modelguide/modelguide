@@ -25,7 +25,7 @@ function makeAgentConfig(
   return {
     id: "test-agent",
     name: "Test Agent",
-    model: "openai:gpt-4o-realtime",
+    model: "openai:gpt-4.1-mini",
     description: "a pre-screening voice agent for candidate recruitment",
     promptConfig: {},
     modelFamily: "generic" as const,

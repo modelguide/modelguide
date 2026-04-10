@@ -1,7 +1,7 @@
 /**
- * GptVoiceStrategy — optimized for GPT Realtime voice agents.
+ * GptVoiceStrategy — optimized for GPT voice agents (e.g. gpt-4.1-mini).
  *
- * Section ordering follows the OpenAI Realtime Prompting Guide:
+ * Section ordering follows the OpenAI voice prompting best practices:
  *   # Role & Objective
  *   # Personality & Tone (persona + response rules)
  *   # Reference Pronunciations (vocal normalization)
