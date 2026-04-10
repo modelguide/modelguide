@@ -235,6 +235,15 @@ export async function compileAgent(input: CompileAgentInput) {
     return row;
   });
 
+  if (ir.metadata?.warnings?.length) {
+    for (const w of ir.metadata.warnings) {
+      log.warn(
+        { agentId, sopId, warningCode: w.code, tokens: w.tokens },
+        `compiler warning: ${w.message}`,
+      );
+    }
+  }
+
   log.info(
     {
       agentId,
@@ -242,6 +251,7 @@ export async function compileAgent(input: CompileAgentInput) {
       promptLength: ir.systemPrompt.length,
       toolCount: ir.tools.length,
       guardrailCount: guardrails.length,
+      warningCount: ir.metadata?.warnings?.length ?? 0,
     },
     "agent compiled successfully",
   );
