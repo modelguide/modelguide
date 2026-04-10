@@ -18,6 +18,7 @@
  * - Safety & escalation at agent level, not per SOP step
  */
 
+import { getLogger } from "@lib/logger";
 import type {
   CompilerWarning,
   EnrichedStep,
@@ -227,7 +228,12 @@ export class GptVoiceStrategy implements PromptStrategy {
   private renderSafetyAndEscalation(
     triggers: string[] | undefined,
   ): string | null {
-    if (!triggers || triggers.length === 0) return null;
+    if (!triggers || triggers.length === 0) {
+      getLogger().warn(
+        "no escalation triggers defined — Safety & Escalation section omitted from voice prompt",
+      );
+      return null;
+    }
 
     const lines: string[] = ["# Safety & Escalation"];
     for (const trigger of triggers) {
