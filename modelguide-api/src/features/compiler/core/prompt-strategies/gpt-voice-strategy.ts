@@ -96,7 +96,14 @@ export class GptVoiceStrategy implements PromptStrategy {
 
   /** 1. Role & Objective — AC3: description first */
   private renderRoleAndObjective(description: string): string {
-    return `# Role & Objective\nYou are ${description}.`;
+    const trimmed = description.trim();
+    if (!trimmed) {
+      return "# Role & Objective\nYou are a helpful AI assistant.";
+    }
+    const body = /^you are\b/i.test(trimmed) ? trimmed : `You are ${trimmed}`;
+    // Ensure it ends with punctuation
+    const punctuated = /[.!?]$/.test(body) ? body : `${body}.`;
+    return `# Role & Objective\n${punctuated}`;
   }
 
   /** 2. Personality & Tone — AC3: persona second, AC11-14: response rules */
