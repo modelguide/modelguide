@@ -80,12 +80,12 @@ ModelGuide is the infrastructure layer between your voice agent and your busines
     <tr>
       <td align="center"><strong>SOPs</strong></td>
       <td align="center"><strong>Analytics</strong></td>
-      <td></td>
+      <td align="center"><strong>Evals</strong></td>
     </tr>
     <tr>
       <td><a href="./docs/SOPs.png"><img src="./docs/SOPs.png" alt="SOPs" width="260"></a></td>
       <td><a href="./docs/Optimize.png"><img src="./docs/Optimize.png" alt="Analytics" width="260"></a></td>
-      <td></td>
+      <td><a href="./docs/evals.png"><img src="./docs/evals.png" alt="Evals" width="260"></a></td>
     </tr>
   </tbody>
 </table>
@@ -94,21 +94,12 @@ ModelGuide is the infrastructure layer between your voice agent and your busines
 
 Every framework ships with a working example. Fork one, point it at your ModelGuide MCP endpoint, and you have a voice agent with business context, tools, guardrails, and session tracking — without rebuilding the harness.
 
-### LiveKit Agents · [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/)
-
-**The flagship reference.** Production Python agent for WebRTC and phone — LiveKit Cloud transport, Silero VAD, Deepgram Nova-3 STT, GPT-4.1-mini with function calling, ElevenLabs Flash v2.5 TTS. SIP trunking (inbound via LiveKit phone numbers, outbound via Twilio), 11 MCP tools wired up, eval tests under `tests/`, Dockerfile, and [`DEPLOY.md`](examples/agents/livekit-agent/DEPLOY.md) walking through LiveKit Cloud region deployment.
-
-### Pipecat · [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/)
-
-Python agent for Pipecat Cloud. Same MCP tool wiring, different voice runtime — pick this if your team already runs on Pipecat.
-
-### ElevenLabs Conversational AI · [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/)
-
-TypeScript management CLI for ElevenLabs Agents. Sync the ElevenLabs platform agent config, tools, and prompt from a local definition. Pair with the ModelGuide UI sync flow for production — see [`docs/elevenlabs-setup.md`](docs/elevenlabs-setup.md).
-
-### Mastra · [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/)
-
-Mastra TypeScript agent for the email "Where Is My Order?" workflow — Resend inbound webhook → Hono handler → ModelGuide MCP session + tool calls → reply. Shows that the same orchestration layer serves non-voice channels when the business needs them.
+| Runtime | Language | What you get | Path |
+|---|---|---|---|
+| **LiveKit Agents** *(flagship)* | Python | LiveKit Cloud WebRTC + SIP trunking (inbound LiveKit numbers, outbound Twilio), Silero VAD, Deepgram Nova-3 STT, GPT-4.1-mini with function calling, ElevenLabs Flash v2.5 TTS, 11 MCP tools, eval tests, Dockerfile, [`DEPLOY.md`](examples/agents/livekit-agent/DEPLOY.md) for LiveKit Cloud | [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/) |
+| **Pipecat** | Python | Pipecat Cloud deployment, same MCP tool wiring — pick this if your team already runs on Pipecat | [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/) |
+| **ElevenLabs Conversational AI** | TypeScript | CLI that syncs ElevenLabs platform agent config, tools, and prompt from a local definition; pair with the ModelGuide UI sync flow — see [`docs/elevenlabs-setup.md`](docs/elevenlabs-setup.md) | [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/) |
+| **Mastra** | TypeScript | Email "Where Is My Order?" workflow — Resend inbound webhook → Hono handler → MCP session + tool calls → reply. Proves the same orchestration layer works for non-voice channels | [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/) |
 
 ## Tech Stack
 
