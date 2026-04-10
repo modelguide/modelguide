@@ -2,6 +2,7 @@
  * Strategy selection — picks the right PromptStrategy for (modelFamily, channel).
  */
 
+import { getLogger } from "@lib/logger";
 import type { Channel, ModelFamily } from "../types";
 import { GenericStrategy } from "./generic-strategy";
 import { GptVoiceStrategy } from "./gpt-voice-strategy";
@@ -25,5 +26,9 @@ export function getStrategy(
     return new GptVoiceStrategy();
   }
 
+  getLogger().warn(
+    { modelFamily, channel },
+    `no dedicated prompt strategy for (${modelFamily}, ${channel}) — falling back to GenericStrategy`,
+  );
   return new GenericStrategy();
 }
