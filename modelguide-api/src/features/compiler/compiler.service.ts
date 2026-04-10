@@ -64,16 +64,6 @@ export async function compileAgent(input: CompileAgentInput) {
   // 2. Load SOP detail
   const sopDetail = await getSopById(orgId, sopId);
 
-  // Validate SOP has steps with tool references (at least one resolved tool name)
-  const stepsWithTools = sopDetail.definition.steps.filter(
-    (s) => s.tool?.resolvedName,
-  );
-  if (stepsWithTools.length === 0) {
-    throw Errors.validationError(
-      "SOP has no steps with resolved tool names. Cannot compile.",
-    );
-  }
-
   // 3. Load active guardrails assigned to the agent
   const guardrails = await forOrg(orgId, async (tx) => {
     const assignedIds = await tx

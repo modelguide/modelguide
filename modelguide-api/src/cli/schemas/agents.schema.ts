@@ -29,6 +29,7 @@ export const agentItemSchema = z
     modality: z.enum(modalities).default("voice"),
     platform: z.enum(agentPlatforms).default("custom"),
     active: z.boolean().default(false),
+    compiledPrompt: z.string().min(1).optional(),
     tools: z.array(agentToolLinkSchema).default([]),
     config: livekitConfigSchema.optional(),
     secrets: z.array(agentSecretSchema).default([]),
