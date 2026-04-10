@@ -275,6 +275,7 @@ async function executeSimulateAndRunInner(
     const input = testCase.input as SimulationTestCaseInput;
     let inputMessage = input.message!; // validated in enqueueSimulateAndRun
     const personaId = input.persona;
+    const conversationHistory = input.conversationHistory;
     const mockToolResponses =
       (testCase.mockToolResponses as Record<string, unknown>) ?? {};
 
@@ -348,13 +349,14 @@ async function executeSimulateAndRunInner(
         userIdentifier,
       });
 
-      // 3. Run simulation (single-turn only — no persona follow-ups)
+      // 3. Run simulation — includes conversation history for replay tests
       const simResult = await runEvalSimulation({
         orgId,
         agentId: suiteData.agent.id,
         adapter,
         inputMessage,
         sessionId,
+        conversationHistory,
       });
 
       if (simResult.status === "error") {

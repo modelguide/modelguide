@@ -398,4 +398,261 @@ describe("simulate-and-run E2E pipeline", () => {
     },
     120_000, // 2 min timeout for LLM calls
   );
+
+  it.skipIf(!HAS_API_KEY)(
+    "replay test: conversationHistory is stored and scored",
+    async () => {
+      // Tests that a test case with conversationHistory produces a session
+      // containing N history messages + 1 user message + 1 assistant response,
+      // and evaluators score the final response with full context.
+
+      // 1. Compile agent
+      await compileAgent({
+        orgId: ctx.orgId,
+        agentId: ctx.agentId,
+        sopId,
+      });
+
+      // 2. Init eval suite from SOP
+      const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
+      const autoTc = suite.testCases.find((tc) => tc.source === "auto");
+      expect(autoTc).toBeDefined();
+
+      // 3. Populate test case with conversationHistory + input message + mocks
+      //    The history sets up a prior exchange where the customer already
+      //    mentioned an order, and the agent asked for details. The new message
+      //    provides the order number — the agent should look it up.
+      const conversationHistory = [
+        {
+          role: "user",
+          content: "I need help with my order. It hasn't arrived yet.",
+        },
+        {
+          role: "assistant",
+          content:
+            "I'm sorry to hear that! Could you please provide me with your order number so I can look it up for you?",
+        },
+      ];
+
+      await forOrg(ctx.orgId, (tx) =>
+        tx
+          .update(evalSuiteTestCases)
+          .set({
+            input: {
+              message: "Sure, it's ORD-777.",
+              conversationHistory,
+            },
+            mockToolResponses: {
+              sim_store_look_up_order: {
+                order_id: "ORD-777",
+                status: "in_transit",
+                shipping_date: "2026-04-05",
+                estimated_delivery: "2026-04-12",
+                carrier: "UPS",
+                tracking_number: "UPS-12345",
+              },
+            },
+          })
+          .where(eq(evalSuiteTestCases.id, autoTc!.id)),
+      );
+
+      // 4. Run simulate-and-run
+      const result = await enqueueSimulateAndRun(
+        ctx.orgId,
+        suite.id,
+        "compiled",
+      );
+      expect(result.suiteRunId).toBeDefined();
+
+      // 5. Poll for completion
+      let runDetail: Awaited<ReturnType<typeof getEvalSuiteRunById>> | null =
+        null;
+
+      for (let i = 0; i < 45; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        runDetail = await getEvalSuiteRunById(
+          ctx.orgId,
+          suite.id,
+          result.suiteRunId,
+        );
+        if (runDetail.status !== "running") break;
+      }
+
+      expect(runDetail).toBeDefined();
+      expect(runDetail!.status).toBe("completed");
+
+      // 6. Verify test case has eval scores
+      const tcResults = runDetail!.testCaseResults;
+      expect(tcResults).toHaveLength(1);
+      expect(tcResults[0].scores.length).toBeGreaterThan(0);
+
+      // 7. Find the simulation session and verify message count
+      //    Expected: 2 history messages + 1 user message + 1+ assistant response
+      const simSessions = await forApp((tx) =>
+        tx
+          .select({ id: sessions.id, startedAt: sessions.startedAt })
+          .from(sessions)
+          .where(
+            and(
+              eq(sessions.organizationId, ctx.orgId),
+              eq(sessions.mode, "simulation"),
+              eq(sessions.agentId, ctx.agentId),
+            ),
+          ),
+      );
+      // Sort by createdAt desc to get the most recent session (from this test)
+      simSessions.sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
+      const latestSessionId = simSessions[0].id;
+
+      const messages = await forApp((tx) =>
+        tx
+          .select({
+            id: sessionMessages.id,
+            role: sessionMessages.role,
+            content: sessionMessages.content,
+          })
+          .from(sessionMessages)
+          .where(eq(sessionMessages.sessionId, latestSessionId)),
+      );
+
+      // 2 history messages + 1 user message + at least 1 assistant response = 4+
+      expect(messages.length).toBeGreaterThanOrEqual(4);
+
+      // Verify the history messages are present
+      const userMessages = messages.filter((m) => m.role === "user");
+      const assistantMessages = messages.filter((m) => m.role === "assistant");
+
+      // At least 2 user messages (1 from history + 1 live) and 2 assistant (1 from history + 1 live)
+      expect(userMessages.length).toBeGreaterThanOrEqual(2);
+      expect(assistantMessages.length).toBeGreaterThanOrEqual(2);
+
+      // Verify the history content is preserved in the session
+      const allContent = messages.map((m) => m.content).join(" ");
+      expect(allContent).toContain("hasn't arrived yet");
+      expect(allContent).toContain("order number");
+
+      // Cleanup
+      await deleteEvalSuite(ctx.orgId, suite.id);
+    },
+    120_000,
+  );
+
+  it.skipIf(!HAS_API_KEY)(
+    "regression: test case without conversationHistory behaves identically",
+    async () => {
+      // Verifies that test cases without conversationHistory still work
+      // as before — single message, no history messages in session.
+
+      // 1. Compile agent
+      await compileAgent({
+        orgId: ctx.orgId,
+        agentId: ctx.agentId,
+        sopId,
+      });
+
+      // 2. Init eval suite from SOP
+      const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
+      const autoTc = suite.testCases.find((tc) => tc.source === "auto");
+      expect(autoTc).toBeDefined();
+
+      // 3. Populate test case with input but NO conversationHistory
+      await forOrg(ctx.orgId, (tx) =>
+        tx
+          .update(evalSuiteTestCases)
+          .set({
+            input: {
+              message: "Where is my order ORD-888?",
+              // No conversationHistory field
+            },
+            mockToolResponses: {
+              sim_store_look_up_order: {
+                order_id: "ORD-888",
+                status: "delivered",
+                shipping_date: "2026-04-01",
+                estimated_delivery: "2026-04-05",
+                carrier: "USPS",
+                tracking_number: "USPS-99999",
+              },
+            },
+          })
+          .where(eq(evalSuiteTestCases.id, autoTc!.id)),
+      );
+
+      // 4. Run simulate-and-run
+      const result = await enqueueSimulateAndRun(
+        ctx.orgId,
+        suite.id,
+        "compiled",
+      );
+      expect(result.suiteRunId).toBeDefined();
+
+      // 5. Poll for completion
+      let runDetail: Awaited<ReturnType<typeof getEvalSuiteRunById>> | null =
+        null;
+
+      for (let i = 0; i < 45; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        runDetail = await getEvalSuiteRunById(
+          ctx.orgId,
+          suite.id,
+          result.suiteRunId,
+        );
+        if (runDetail.status !== "running") break;
+      }
+
+      expect(runDetail).toBeDefined();
+      expect(runDetail!.status).toBe("completed");
+
+      // 6. Verify test case results
+      const tcResults = runDetail!.testCaseResults;
+      expect(tcResults).toHaveLength(1);
+      expect(tcResults[0].scores.length).toBeGreaterThan(0);
+
+      // 7. Find the most recent simulation session and verify message count
+      const simSessions = await forApp((tx) =>
+        tx
+          .select({ id: sessions.id, startedAt: sessions.startedAt })
+          .from(sessions)
+          .where(
+            and(
+              eq(sessions.organizationId, ctx.orgId),
+              eq(sessions.mode, "simulation"),
+              eq(sessions.agentId, ctx.agentId),
+            ),
+          ),
+      );
+      simSessions.sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
+      const latestSessionId = simSessions[0].id;
+
+      const messages = await forApp((tx) =>
+        tx
+          .select({ id: sessionMessages.id, role: sessionMessages.role })
+          .from(sessionMessages)
+          .where(eq(sessionMessages.sessionId, latestSessionId)),
+      );
+
+      // Without history: exactly 1 user message + at least 1 assistant response
+      const userMessages = messages.filter((m) => m.role === "user");
+      const assistantMessages = messages.filter((m) => m.role === "assistant");
+
+      expect(userMessages.length).toBe(1);
+      expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
+
+      // Total: no history overhead — just the live turn
+      expect(messages.length).toBeGreaterThanOrEqual(2);
+      // But not 4+ (which would indicate history was injected)
+      // Note: tool call messages might bump the count, so we check user count specifically
+      expect(userMessages.length).toBe(1);
+
+      // Cleanup
+      await deleteEvalSuite(ctx.orgId, suite.id);
+    },
+    120_000,
+  );
 });
