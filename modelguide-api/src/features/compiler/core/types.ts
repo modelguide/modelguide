@@ -151,13 +151,17 @@ export interface CompilerMetadata {
   warnings: CompilerWarning[];
 }
 
-/** Intermediate representation — output of core, input to emitters. */
-export interface CompilerIR {
+/** Output of transform() — structured data for strategies to build prompts from. */
+export interface TransformResult {
   agentConfig: CompilerInput["agentConfig"];
   sop: EnrichedSop;
-  systemPrompt: string;
   tools: ResolvedTool[];
   guardrails: ParsedGuardrail[];
+}
+
+/** Final compiled output — transform result + strategy-built prompt + metadata. */
+export interface CompilerIR extends TransformResult {
+  systemPrompt: string;
   /** Output metadata — token estimates, cache boundary, warnings. */
   metadata: CompilerMetadata;
 }

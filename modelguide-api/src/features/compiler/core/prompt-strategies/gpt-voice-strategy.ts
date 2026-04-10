@@ -19,12 +19,12 @@
  */
 
 import type {
-  CompilerIR,
   CompilerWarning,
   EnrichedStep,
   ParsedGuardrail,
   PromptConfig,
   ResolvedTool,
+  TransformResult,
 } from "../types";
 import type { PromptStrategy, StrategyOutput } from "./types";
 
@@ -64,7 +64,7 @@ function normalizeSymbolicOperators(text: string): string {
 export class GptVoiceStrategy implements PromptStrategy {
   readonly name = "GptVoiceStrategy";
 
-  buildPrompt(ir: CompilerIR): StrategyOutput {
+  buildPrompt(ir: TransformResult): StrategyOutput {
     const { agentConfig, sop, guardrails, tools } = ir;
     const warnings: CompilerWarning[] = [];
 

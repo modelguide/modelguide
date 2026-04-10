@@ -5,7 +5,7 @@
  * a model- and channel-optimized system prompt string.
  */
 
-import type { CompilerIR, CompilerWarning } from "../types";
+import type { CompilerWarning, TransformResult } from "../types";
 
 /** Return type of PromptStrategy.buildPrompt(). */
 export interface StrategyOutput {
@@ -21,6 +21,6 @@ export interface PromptStrategy {
   /** Human-readable name for logging/debugging. */
   readonly name: string;
 
-  /** Build a system prompt string from the compiler IR. */
-  buildPrompt(ir: CompilerIR): StrategyOutput;
+  /** Build a system prompt from the transform result. */
+  buildPrompt(ir: TransformResult): StrategyOutput;
 }

@@ -36,13 +36,7 @@ export function compile(input: CompilerInput): CompilerIR {
     requiresConfirmation: confirmMap[t.resolvedName] ?? t.requiresConfirmation,
   }));
 
-  const ir = transform(
-    sop,
-    tools,
-    guardrails,
-    input.agentConfig,
-    input.agentSops,
-  );
+  const ir = transform(sop, tools, guardrails, input.agentConfig);
 
   // Select strategy based on model family + channel
   const { modelFamily, channel } = input.agentConfig;

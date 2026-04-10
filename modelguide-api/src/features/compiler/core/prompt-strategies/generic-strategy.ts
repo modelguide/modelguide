@@ -7,13 +7,13 @@
  */
 
 import { buildSystemPrompt } from "../prompt-builder";
-import type { CompilerIR } from "../types";
+import type { TransformResult } from "../types";
 import type { PromptStrategy, StrategyOutput } from "./types";
 
 export class GenericStrategy implements PromptStrategy {
   readonly name = "GenericStrategy";
 
-  buildPrompt(ir: CompilerIR): StrategyOutput {
+  buildPrompt(ir: TransformResult): StrategyOutput {
     const prompt = buildSystemPrompt(
       ir.agentConfig.description,
       {
