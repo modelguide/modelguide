@@ -30,7 +30,7 @@ const agentConfig = {
     "You are a customer support agent for an e-commerce store handling inbound support emails. You process one email per run and send a single reply.",
   promptConfig: {},
   modelFamily: "generic" as const,
-  channel: "text" as const,
+  modality: "text" as const,
 };
 
 function makeInput(

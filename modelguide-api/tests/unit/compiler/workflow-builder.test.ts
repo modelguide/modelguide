@@ -21,7 +21,7 @@ const input: CompilerInput = {
     description: "Test agent",
     promptConfig: {},
     modelFamily: "generic" as const,
-    channel: "text" as const,
+    modality: "text" as const,
   },
 };
 

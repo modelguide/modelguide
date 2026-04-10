@@ -21,9 +21,9 @@ import { getSopById } from "@features/sops/sops.service";
 import { z } from "zod";
 import { compile } from "./core/compile";
 import type {
-  Channel,
   CompilerInput,
   KnowledgeBaseDetailResponse,
+  Modality,
   ModelFamily,
 } from "./core/types";
 
@@ -179,8 +179,8 @@ export async function compileAgent(input: CompileAgentInput) {
     updatedAt: sopDetail.updatedAt?.toISOString() ?? null,
   };
 
-  // 7. Derive channel from modality (AC4)
-  const channel: Channel = agent.modality === "voice" ? "voice" : "text";
+  // 7. Agent modality for strategy selection (AC4)
+  const modality: Modality = agent.modality === "voice" ? "voice" : "text";
 
   // 8. Run compiler
   const compilerInput: CompilerInput = {
@@ -194,7 +194,7 @@ export async function compileAgent(input: CompileAgentInput) {
         agentDescription ?? agent.description ?? "AI customer support agent",
       promptConfig: promptConfigSchema.parse(agent.promptConfig ?? {}),
       modelFamily: agent.modelFamily as ModelFamily,
-      channel,
+      modality,
     },
     agentSops: agentSopRows,
     toolConfirmationMap,

@@ -14,9 +14,9 @@ import type {
   CompilerWarning,
 } from "./types";
 
-/** Voice channel token budget threshold. */
+/** Voice modality token budget threshold. */
 const VOICE_TOKEN_BUDGET = 2500;
-/** Text channel token budget threshold. */
+/** Text modality token budget threshold. */
 const TEXT_TOKEN_BUDGET = 8000;
 /** Average tokens per tool schema (MCP tools/list overhead). */
 const TOKENS_PER_TOOL_SCHEMA = 180;
@@ -38,9 +38,9 @@ export function compile(input: CompilerInput): CompilerIR {
 
   const ir = transform(sop, tools, guardrails, input.agentConfig);
 
-  // Select strategy based on model family + channel
-  const { modelFamily, channel } = input.agentConfig;
-  const strategy = getStrategy(modelFamily, channel);
+  // Select strategy based on model family + modality
+  const { modelFamily, modality } = input.agentConfig;
+  const strategy = getStrategy(modelFamily, modality);
 
   // Build prompt via strategy
   const {
@@ -57,13 +57,13 @@ export function compile(input: CompilerInput): CompilerIR {
   const warnings: CompilerWarning[] = [...strategyWarnings];
 
   // AC23: warn when budget exceeded
-  const budget = channel === "voice" ? VOICE_TOKEN_BUDGET : TEXT_TOKEN_BUDGET;
+  const budget = modality === "voice" ? VOICE_TOKEN_BUDGET : TEXT_TOKEN_BUDGET;
   if (totalEstimatedTokens > budget) {
     const code =
-      channel === "voice" ? "VOICE_BUDGET_EXCEEDED" : "TEXT_BUDGET_EXCEEDED";
+      modality === "voice" ? "VOICE_BUDGET_EXCEEDED" : "TEXT_BUDGET_EXCEEDED";
     warnings.push({
       code,
-      message: `Estimated ${totalEstimatedTokens} tokens exceeds ${channel} budget of ${budget}`,
+      message: `Estimated ${totalEstimatedTokens} tokens exceeds ${modality} budget of ${budget}`,
       tokens: totalEstimatedTokens,
     });
   }

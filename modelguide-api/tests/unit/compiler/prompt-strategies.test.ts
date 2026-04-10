@@ -29,14 +29,14 @@ function makeAgentConfig(
     description: "a pre-screening voice agent for candidate recruitment",
     promptConfig: {},
     modelFamily: "generic" as const,
-    channel: "text" as const,
+    modality: "text" as const,
     ...overrides,
   };
 }
 
 const voiceAgentConfig = makeAgentConfig({
   modelFamily: "gpt",
-  channel: "voice",
+  modality: "voice",
   promptConfig: {
     persona:
       "Warm, efficient, respectful recruiter. You DRIVE the conversation.",
@@ -323,7 +323,7 @@ describe("GptVoiceStrategy", () => {
     const noFillerIr = compileVoice({
       agentConfig: makeAgentConfig({
         modelFamily: "gpt",
-        channel: "voice",
+        modality: "voice",
         promptConfig: { persona: "Test persona." },
       }),
     });
@@ -441,7 +441,7 @@ describe("GenericStrategy backward compatibility (AC21)", () => {
       guardrails: makeGuardrails(),
       agentConfig: makeAgentConfig({
         modelFamily: "generic",
-        channel: "text",
+        modality: "text",
       }),
     });
     const prompt = genericIr.systemPrompt;
@@ -458,7 +458,7 @@ describe("GenericStrategy backward compatibility (AC21)", () => {
       guardrails: makeGuardrails(),
       agentConfig: makeAgentConfig({
         modelFamily: "generic",
-        channel: "text",
+        modality: "text",
       }),
     });
     const prompt = genericIr.systemPrompt;
@@ -474,7 +474,7 @@ describe("GenericStrategy backward compatibility (AC21)", () => {
       guardrails: makeGuardrails(),
       agentConfig: makeAgentConfig({
         modelFamily: "generic",
-        channel: "text",
+        modality: "text",
       }),
     });
     expect(genericIr.metadata.cacheablePrefix).toBe(
@@ -570,7 +570,7 @@ describe("Output metadata (AC22, AC23)", () => {
       guardrails: [],
       agentConfig: makeAgentConfig({
         modelFamily: "generic",
-        channel: "text",
+        modality: "text",
       }),
     });
 

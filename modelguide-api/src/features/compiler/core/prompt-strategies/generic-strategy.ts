@@ -2,7 +2,7 @@
  * GenericStrategy — backward-compatible prompt format.
  *
  * Wraps the existing buildSystemPrompt() to produce the same markdown output
- * as Phase 1. Used as fallback for all (modelFamily, channel) combinations
+ * as Phase 1. Used as fallback for all (modelFamily, modality) combinations
  * that don't have a dedicated strategy.
  */
 

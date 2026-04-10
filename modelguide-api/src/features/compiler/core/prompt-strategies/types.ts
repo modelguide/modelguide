@@ -2,7 +2,7 @@
  * PromptStrategy interface — all strategies implement this.
  *
  * A strategy takes the compiler's intermediate representation and produces
- * a model- and channel-optimized system prompt string.
+ * a model- and modality-optimized system prompt string.
  */
 
 import type { CompilerWarning, TransformResult } from "../types";

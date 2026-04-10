@@ -11,9 +11,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
-  Channel,
   CompilerInput,
   KnowledgeBaseDetailResponse,
+  Modality,
   ModelFamily,
   SopDetailResponse,
 } from "@features/compiler/core/types";
@@ -164,8 +164,7 @@ export function loadDemoFixture(
     }),
   );
 
-  // Derive channel from modality
-  const channel: Channel = agent.modality === "voice" ? "voice" : "text";
+  const modality: Modality = agent.modality === "voice" ? "voice" : "text";
 
   const promptConfig = {
     persona: agent.promptConfig?.persona?.trim(),
@@ -183,7 +182,7 @@ export function loadDemoFixture(
       description: agent.description,
       promptConfig,
       modelFamily: agent.modelFamily as ModelFamily,
-      channel,
+      modality,
     },
   };
 }

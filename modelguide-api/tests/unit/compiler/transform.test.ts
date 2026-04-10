@@ -19,7 +19,7 @@ const agentConfig = {
   description: "Test agent description",
   promptConfig: {},
   modelFamily: "generic" as const,
-  channel: "text" as const,
+  modality: "text" as const,
 };
 
 const ir = transform(sop, tools, guardrails, agentConfig);

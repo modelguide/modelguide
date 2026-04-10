@@ -194,7 +194,7 @@ describe("SOP classification full flow", () => {
             "You are a customer support agent for an e-commerce store handling inbound support emails.",
           promptConfig: {},
           modelFamily: "generic" as const,
-          channel: "text" as const,
+          modality: "text" as const,
         },
         agentSops: [
           {

@@ -187,7 +187,7 @@ export async function seedCompileAgents(db: SeedDb): Promise<void> {
         description: agent.description ?? "AI customer support agent",
         promptConfig: agent.promptConfig ?? {},
         modelFamily: agent.modelFamily ?? "generic",
-        channel:
+        modality:
           agent.modality === "voice" ? ("voice" as const) : ("text" as const),
       },
     };

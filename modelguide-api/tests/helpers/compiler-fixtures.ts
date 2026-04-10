@@ -9,7 +9,7 @@ import type { CompilerInput } from "@features/compiler/core/types";
 
 /**
  * A 4-step voice onboarding SOP with 3 guardrails.
- * Model family: gpt, channel: voice → exercises GptVoiceStrategy.
+ * Model family: gpt, modality: voice → exercises GptVoiceStrategy.
  */
 export const gptVoiceOnboardingFixture: CompilerInput = {
   sops: [
@@ -130,6 +130,6 @@ export const gptVoiceOnboardingFixture: CompilerInput = {
       language: "The conversation is conducted in English.",
     },
     modelFamily: "gpt",
-    channel: "voice",
+    modality: "voice",
   },
 };

@@ -42,8 +42,8 @@ export type {
 /** Model families supported by the compiler strategy selector. */
 export type ModelFamily = "gpt" | "claude" | "gemini" | "generic";
 
-/** Channel derived from agent modality. */
-export type Channel = "voice" | "text";
+/** Agent modality — determines strategy selection and token budget. */
+export type Modality = "voice" | "text";
 
 // ============================================================================
 // API response types (inferred from Zod schemas)
@@ -92,8 +92,8 @@ export interface CompilerInput {
     promptConfig: PromptConfig;
     /** Model family for strategy selection. */
     modelFamily: ModelFamily;
-    /** Channel derived from agent modality. */
-    channel: Channel;
+    /** Agent modality — determines strategy selection and token budget. */
+    modality: Modality;
   };
   /** All active SOPs assigned to the agent (for intent classification). */
   agentSops?: AgentSopInfo[];

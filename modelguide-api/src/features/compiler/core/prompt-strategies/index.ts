@@ -3,7 +3,7 @@
  */
 
 import { getLogger } from "@lib/logger";
-import type { Channel, ModelFamily } from "../types";
+import type { Modality, ModelFamily } from "../types";
 import { GenericStrategy } from "./generic-strategy";
 import { GptVoiceStrategy } from "./gpt-voice-strategy";
 import type { PromptStrategy } from "./types";
@@ -13,22 +13,22 @@ export { GenericStrategy } from "./generic-strategy";
 export { GptVoiceStrategy } from "./gpt-voice-strategy";
 
 /**
- * Select a prompt strategy based on model family and channel.
+ * Select a prompt strategy based on model family and modality.
  *
  * For v1: only (gpt, voice) → GptVoiceStrategy.
  * All other combinations fall back to GenericStrategy.
  */
 export function getStrategy(
   modelFamily: ModelFamily,
-  channel: Channel,
+  modality: Modality,
 ): PromptStrategy {
-  if (modelFamily === "gpt" && channel === "voice") {
+  if (modelFamily === "gpt" && modality === "voice") {
     return new GptVoiceStrategy();
   }
 
   getLogger().warn(
-    { modelFamily, channel },
-    `no dedicated prompt strategy for (${modelFamily}, ${channel}) — falling back to GenericStrategy`,
+    { modelFamily, modality },
+    `no dedicated prompt strategy for (${modelFamily}, ${modality}) — falling back to GenericStrategy`,
   );
   return new GenericStrategy();
 }
