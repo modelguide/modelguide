@@ -384,11 +384,24 @@ describe("GptVoiceStrategy", () => {
     expect(p).toContain("Ask the user for confirmation before executing");
   });
 
-  it("cache boundary is before # Reminders", () => {
-    const remindersIdx = prompt.indexOf("# Reminders");
-    // cacheablePrefix char offset should be right before # Reminders
-    expect(ir.metadata.cacheablePrefix).toBeLessThanOrEqual(remindersIdx);
-    expect(ir.metadata.cacheablePrefix).toBeGreaterThan(0);
+  it("cache boundary lands exactly at the Reminders section break", () => {
+    const prefix = ir.metadata.cacheablePrefix;
+    expect(prefix).toBeGreaterThan(0);
+    // The content after cacheablePrefix must start with the Reminders section
+    const tail = prompt.slice(prefix);
+    expect(tail.trimStart().startsWith("# Reminders")).toBe(true);
+    // Everything before cacheablePrefix must NOT contain Reminders
+    expect(prompt.slice(0, prefix)).not.toContain("# Reminders");
+  });
+
+  it("cacheablePrefix equals prompt length when no guardrails", () => {
+    const noGuardrailsIr = compileVoice({ guardrails: [] });
+    // No guardrails → no Reminders section → entire prompt is cacheable
+    expect(noGuardrailsIr.metadata.cacheablePrefix).toBe(
+      noGuardrailsIr.systemPrompt.length,
+    );
+    expect(noGuardrailsIr.systemPrompt).not.toContain("# Reminders");
+    expect(noGuardrailsIr.systemPrompt).not.toContain("# Rules");
   });
 });
 
