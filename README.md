@@ -14,13 +14,21 @@
 </p>
 
 <p align="center">
+  <strong>Start from a reference voice agent →</strong>
+  <a href="examples/agents/livekit-agent/"><strong>LiveKit</strong></a> ·
+  <a href="examples/agents/pipecat-agent/">Pipecat</a> ·
+  <a href="examples/agents/elevenlabs-agent/">ElevenLabs</a> ·
+  <a href="examples/agents/mastra-wismo-email-agent/">Mastra</a>
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>&nbsp;
   <a href="https://github.com/modelguide/modelguide/actions/workflows/ci.yml"><img src="https://github.com/modelguide/modelguide/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status" /></a>&nbsp;
   <a href="https://cla-assistant.io/modelguide/modelguide"><img src="https://cla-assistant.io/readme/badge/modelguide/modelguide" alt="CLA assistant" /></a>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="#adding-a-connector">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
+  <a href="#quick-start">Quick Start</a> · <a href="#reference-voice-agents">Reference Agents</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="#adding-a-connector">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
 <a href="https://www.youtube.com/watch?v=melFDGiA6gg" target="_blank"><img src="https://img.youtube.com/vi/melFDGiA6gg/maxresdefault.jpg" alt="ModelGuide Demo" /></a>
@@ -78,6 +86,26 @@ ModelGuide is the infrastructure layer between your voice agent and your busines
     </tr>
   </tbody>
 </table>
+
+## Reference Voice Agents
+
+Every framework ships with a working example. Fork one, point it at your ModelGuide MCP endpoint, and you have a voice agent with business context, tools, guardrails, and session tracking — without rebuilding the harness.
+
+### LiveKit Agents · [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/)
+
+**The flagship reference.** Production Python agent for WebRTC and phone — LiveKit Cloud transport, Silero VAD, Deepgram Nova-3 STT, GPT-4.1-mini with function calling, ElevenLabs Flash v2.5 TTS. SIP trunking (inbound via LiveKit phone numbers, outbound via Twilio), 11 MCP tools wired up, eval tests under `tests/`, Dockerfile, and [`DEPLOY.md`](examples/agents/livekit-agent/DEPLOY.md) walking through LiveKit Cloud region deployment.
+
+### Pipecat · [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/)
+
+Python agent for Pipecat Cloud. Same MCP tool wiring, different voice runtime — pick this if your team already runs on Pipecat.
+
+### ElevenLabs Conversational AI · [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/)
+
+TypeScript management CLI for ElevenLabs Agents. Sync the ElevenLabs platform agent config, tools, and prompt from a local definition. Pair with the ModelGuide UI sync flow for production — see [`docs/elevenlabs-setup.md`](docs/elevenlabs-setup.md).
+
+### Mastra · [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/)
+
+Mastra TypeScript agent for the email "Where Is My Order?" workflow — Resend inbound webhook → Hono handler → ModelGuide MCP session + tool calls → reply. Shows that the same orchestration layer serves non-voice channels when the business needs them.
 
 ## Features
 
