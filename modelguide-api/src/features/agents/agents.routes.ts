@@ -62,6 +62,7 @@ const agentResponseSchema = z.object({
   promptConfig: promptConfigSchema,
   agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
   isActive: z.boolean(),
+  evalSuiteCount: z.number().int().nonnegative(),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string()).openapi({
     description:
@@ -209,6 +210,7 @@ function formatAgent(
     keyPrefix?: string | null;
     hasElevenLabsKey?: boolean;
     hasWebhookSecret?: boolean;
+    evalSuiteCount?: number;
   },
 ) {
   // Strip webhook_hmac_secret from metadata to prevent plaintext leak
@@ -237,6 +239,7 @@ function formatAgent(
     promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
     agentPlatform: agent.agentPlatform,
     isActive: agent.isActive,
+    evalSuiteCount: agent.evalSuiteCount ?? 0,
     metadata,
     secrets: (agent.secrets ?? {}) as Record<string, string>,
     hasElevenLabsKey: agent.hasElevenLabsKey ?? false,

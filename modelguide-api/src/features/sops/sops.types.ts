@@ -32,11 +32,17 @@ export interface ManualTrigger {
   config: Record<string, never>;
 }
 
+export interface CampaignStartTrigger {
+  type: "campaign_start";
+  config: { campaign?: string };
+}
+
 export type SopTrigger =
   | ChannelTrigger
   | IntentDetectedTrigger
   | ToolPresentTrigger
-  | ManualTrigger;
+  | ManualTrigger
+  | CampaignStartTrigger;
 
 // ============================================================================
 // Steps

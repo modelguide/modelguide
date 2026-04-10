@@ -8,7 +8,10 @@ import type { EvalSuiteSummary } from '../../schemas/eval-suites'
 // --- Mocks ---
 
 vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: () => (options: Record<string, unknown>) => options,
+  createFileRoute: () => (options: Record<string, unknown>) => ({
+    ...options,
+    useSearch: () => ({ agentId: undefined }),
+  }),
   useNavigate: () => vi.fn(),
   Link: ({ children, className }: { children: ReactNode; className?: string }) => (
     // biome-ignore lint/a11y/useValidAnchor: mock Link for tests

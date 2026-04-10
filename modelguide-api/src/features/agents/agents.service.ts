@@ -11,6 +11,7 @@ import {
   connectorTools,
   connectors,
   connectorsCatalog,
+  evalSuites,
   secrets,
 } from "@db/schema";
 import type { EntitySecretsMap, PromptConfig } from "@db/schema";
@@ -113,10 +114,16 @@ export async function getAgentById(orgId: string, agentId: string) {
       throw Errors.agentNotFound(agentId);
     }
 
-    const [activeKey] = await tx
-      .select({ keyPrefix: apiKeys.keyPrefix })
-      .from(apiKeys)
-      .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true)));
+    const [[activeKey], [{ evalSuiteCount }]] = await Promise.all([
+      tx
+        .select({ keyPrefix: apiKeys.keyPrefix })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.agentId, agentId), eq(apiKeys.isActive, true))),
+      tx
+        .select({ evalSuiteCount: count() })
+        .from(evalSuites)
+        .where(eq(evalSuites.agentId, agentId)),
+    ]);
 
     // Derive key presence from the entity secrets map
     const secretsMap = (agent.secrets ?? {}) as EntitySecretsMap;
@@ -131,6 +138,7 @@ export async function getAgentById(orgId: string, agentId: string) {
       keyPrefix: activeKey?.keyPrefix ?? null,
       hasElevenLabsKey,
       hasWebhookSecret: hasWebhookSecretRef || hasLegacyHmac,
+      evalSuiteCount,
     };
   });
 }

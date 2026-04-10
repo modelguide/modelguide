@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { FlaskConical, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { z } from 'zod'
 import { Button } from '~/components/ui/button'
 import { PageHeader } from '~/components/ui/page-header'
 import { Pagination } from '~/components/ui/pagination'
@@ -12,22 +13,29 @@ import type { PaginatedResponse } from '~/lib/pagination'
 import { useIsAdmin } from '~/lib/permissions'
 import type { EvalSuiteSummary } from '~/schemas/eval-suites'
 
+const evalsSearchSchema = z.object({
+  agentId: z.string().uuid().optional(),
+})
+
 export const Route = createFileRoute('/_authenticated/evals/')({
   component: EvalsPage,
+  validateSearch: evalsSearchSchema,
 })
 
 function EvalsPage() {
   const isAdmin = useIsAdmin()
+  const { agentId } = Route.useSearch()
   const [showInitDialog, setShowInitDialog] = useState(false)
   const [page, setPage] = useState(1)
   const pageSize = 20
 
+  const searchParams: Record<string, string | number> = { page, pageSize }
+  if (agentId) searchParams.agentId = agentId
+
   const { data, isLoading } = useQuery({
-    queryKey: ['eval-suites', page],
+    queryKey: ['eval-suites', page, agentId],
     queryFn: () =>
-      api
-        .get('eval-suites', { searchParams: { page, pageSize } })
-        .json<PaginatedResponse<EvalSuiteSummary>>(),
+      api.get('eval-suites', { searchParams }).json<PaginatedResponse<EvalSuiteSummary>>(),
   })
 
   return (

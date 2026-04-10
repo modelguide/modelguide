@@ -1,6 +1,7 @@
 import { Check, Copy } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
+import { ViewToggle } from '~/components/ui/view-toggle'
 import { cn } from '~/lib/cn'
 
 interface PromptViewerProps {
@@ -261,32 +262,14 @@ export function PromptViewer({
     >
       {/* View toggle */}
       <div className="flex items-center justify-between border-b border-fg-subtle/10 px-4 py-2">
-        <div className="flex gap-1 rounded-xl bg-bg-subtle p-1">
-          <button
-            type="button"
-            onClick={() => setView('structured')}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-              view === 'structured'
-                ? 'bg-bg-elevated text-fg-primary shadow-sm'
-                : 'text-fg-secondary hover:text-fg-primary',
-            )}
-          >
-            Structured
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('raw')}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-              view === 'raw'
-                ? 'bg-bg-elevated text-fg-primary shadow-sm'
-                : 'text-fg-secondary hover:text-fg-primary',
-            )}
-          >
-            Raw
-          </button>
-        </div>
+        <ViewToggle
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'structured', label: 'Structured' },
+            { value: 'raw', label: 'Raw' },
+          ]}
+        />
       </div>
 
       {/* Content */}
