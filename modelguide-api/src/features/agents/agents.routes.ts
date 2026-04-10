@@ -42,11 +42,13 @@ const router = createRouter();
 
 const compiledFromSchema = z.record(z.unknown()).nullable();
 
-const promptConfigSchema = z.object({
-  persona: z.string().optional(),
-  fillerPhrases: z.array(z.string()).optional(),
-  language: z.string().optional(),
-});
+const promptConfigSchema = z
+  .object({
+    persona: z.string().max(5000).optional(),
+    fillerPhrases: z.array(z.string().max(200)).max(20).optional(),
+    language: z.string().max(100).optional(),
+  })
+  .strict();
 
 const modelFamilySchema = z.enum(["gpt", "claude", "gemini", "generic"]);
 
