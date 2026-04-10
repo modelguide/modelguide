@@ -145,7 +145,7 @@ export interface CompilerMetadata {
   estimatedToolSchemaTokens: number;
   /** Sum of system prompt + tool schema tokens. */
   totalEstimatedTokens: number;
-  /** Char offset where static content ends (before [Reminders] section). */
+  /** JS string offset (UTF-16 code units) where static content ends, before the Reminders section. Non-JS consumers must convert to byte offset. */
   cacheablePrefix: number;
   /** Warnings (e.g. VOICE_BUDGET_EXCEEDED). */
   warnings: CompilerWarning[];
