@@ -39,9 +39,9 @@ Your voice agent handles demos. Production needs business context, tool access, 
 
 You wire up LiveKit or Pipecat, pick an LLM and a TTS — and the agent talks. But it can't check an order, follow your cancellation policy, or tell you what happened after the call.
 
-The boring stuff between "it works" and "it ships" — that's what kills timelines. Not the AI. SaaS charges $150K+ for this harness. We open-sourced it.
+The boring stuff between "it works" and "it ships" — that's what kills timelines. Not the AI. Every team rebuilds the same harness: auth, sessions, connectors, SOPs, evals, analytics, guardrails, cost tracking. We open-sourced it.
 
-80% of the infrastructure comes ready: auth, sessions, connectors, SOPs, evals, analytics. You customize the 20% that makes your agent yours. The first blueprint — a contact center agent — is shipping now. Fork it, or start fresh for any vertical: healthcare intake, field service, B2B sales, internal ops.
+Fork the contact center blueprint and customize the parts that make your agent yours — or start fresh for any vertical: healthcare intake, field service, B2B sales, internal ops.
 
 ![Architecture diagram](./docs/architecture_image.png)
 
@@ -50,17 +50,20 @@ The boring stuff between "it works" and "it ships" — that's what kills timelin
 <video src="https://github.com/user-attachments/assets/811f1756-4948-461e-abdd-7691ee3d9ccc
 " controls width="100%"></video>
 
-ModelGuide is the infrastructure layer between your voice agent and your business systems. It doesn't run the AI or own the voice stack — it gives you five production-ready layers you'd otherwise build from scratch:
+ModelGuide is the infrastructure layer between your voice agent and your business systems. It doesn't run the AI or own the voice stack — it draws a clear line between what you own and what it ships, over [MCP](https://modelcontextprotocol.io):
 
-**Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools your voice agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every voice framework.
+### What you own, what ModelGuide ships
 
-**Observation layer** — Every conversation recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did* on the line.
+| Concern | You own | ModelGuide ships |
+|---|---|---|
+| **Voice stack** | LiveKit / Pipecat / ElevenLabs / Mastra runtime; LLM, STT, TTS provider | Reference agents for every runtime ([`examples/agents/`](examples/agents/)) |
+| **Agent behavior** | Role, persona, business policies | Prompt compiler with voice-tuned strategies, business context injected via SOPs + guardrails |
+| **Business systems** | Your CRM, orders, tickets, calendars | MCP tool surface with per-agent tool gating, response trimming for voice latency budgets, per-tool confirmation gates |
+| **Conversation state** | — *this is ours* | Session recording, full tool traces, per-message cost tracking, automatic SOP classification |
+| **Quality** | Success criteria, eval prompts, personas | Evals framework, guardrails, simulations (replay conversations with synthetic personas through your agent), CSAT + internal QA tags |
+| **Deployment** | Infra, data, branding | Multi-tenant auth (RLS, encrypted secrets, hashed API keys), one-command YAML blueprints |
 
-**Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
-
-**SOP layer** — Define step-by-step procedures your voice agent follows on the call — cancellation flows, order lookups, escalation paths. Agents follow your playbook instead of improvising live, so every conversation runs the same way.
-
-**Analytics layer** — Call resolution rates, escalation trends, post-call CSAT, session volume by channel — the metrics you need to prove your voice agent is working, not vanity dashboards.
+**Plays well with your observability stack.** ModelGuide's dashboard is built for customer-support ops — transcript review, QA tagging, CSAT, SOP adherence. For engineering observability (LLM latency histograms, prompt diffing, OpenTelemetry traces), keep running Langfuse, Datadog, or Honeycomb. The reference agents are plain Python or TypeScript services — instrument them the same way you instrument anything else.
 
 <table>
   <tbody>
@@ -107,43 +110,22 @@ TypeScript management CLI for ElevenLabs Agents. Sync the ElevenLabs platform ag
 
 Mastra TypeScript agent for the email "Where Is My Order?" workflow — Resend inbound webhook → Hono handler → ModelGuide MCP session + tool calls → reply. Shows that the same orchestration layer serves non-voice channels when the business needs them.
 
-## Features
+## Tech Stack
 
-Everything you need to go from demo to production:
+| Layer | Technology |
+|-------|-----------|
+| API | [Hono](https://hono.dev) + [Bun.js](https://bun.sh) |
+| Agent Protocol | [MCP](https://modelcontextprotocol.io) (`@modelcontextprotocol/sdk`) |
+| Database | PostgreSQL 16 + [Drizzle ORM](https://orm.drizzle.team) |
+| Dashboard | [TanStack Start](https://tanstack.com/start) + React 19 + Tailwind CSS v4 |
+| Auth | JWT + magic links (users) · API keys (agents) |
+| API Docs | [Scalar](https://scalar.com) (auto-generated from OpenAPI) |
 
-✅ **Connector System** — Code-defined manifests with real HTTP handlers. Ships with a Medusa e-commerce connector as a reference implementation (8 tools: browse products, manage carts, checkout, orders). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
+No proprietary components. Every layer is inspectable, replaceable, forkable.
 
-✅ **Tool Namespacing** — Connector instances get a unique slug. Same connector type, different instances: `glowbox_store_add_to_cart` and `clearhealth_pharmacy_add_to_cart` coexist on the same agent.
+## Also ships
 
-✅ **MCP Protocol** — Standard [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP. Tool discovery, execution, and resources. Works with any MCP-compatible client.
-
-✅ **Confirmation Gates** — Flag destructive tools as requiring customer confirmation before execution. The `requires_confirmation` flag tells the AI agent to verify intent before proceeding (e.g., completing a checkout).
-
-✅ **Session Recording** — Full message history with roles, timestamps, audio URLs, tool call inputs/outputs. Sequence-numbered for correct ordering.
-
-✅ **CSAT + QA** — Customer feedback via `core_rate_session`. Internal quality evaluation by support team with tags and comments. Both stored per session, filterable in dashboard.
-
-✅ **Multi-Tenant** — PostgreSQL row-level security on every org-scoped table. Separate DB roles: superuser for migrations, app role subject to RLS policies. One deployment, multiple organizations.
-
-✅ **Auth** — Magic link passwordless login for dashboard users. API key auth (`mgk_` prefix, SHA-256 hashed, shown once on creation) for agents. Refresh token rotation with family-based revocation.
-
-✅ **RBAC** — Granular permissions across admin and support roles. Agents get a separate auth path — they can only access MCP, not REST endpoints.
-
-✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
-
-✅ **SOPs (Standard Operating Procedures)** — Define agent behavioral contracts: ordered steps with tool references, triggers, and metadata. Fork from reusable templates or create from scratch. Draft/active/archived lifecycle. Assign SOPs to agents. Inactive-tool warnings at read time. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md).
-
-✅ **Evals Framework** — Structured evaluation pipelines for voice agent behavior: tool selection, SOP adherence, hallucination detection, transcript scoring. Import eval suites via the CLI, run them against session transcripts, track quality over time. See [ADR-007](docs/decisions/007-evaluation-engine.md) and [ADR-009](docs/decisions/009-eval-suites.md).
-
-✅ **Framework Examples** — Production-ready reference agents for the frameworks you already use. Fork one and point it at your MCP endpoint. See [`examples/agents/`](examples/agents/) — LiveKit, Pipecat, ElevenLabs, and Mastra are all shipped.
-
-✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
-
-## AI-Assisted Development
-
-ModelGuide is built with AI coding agents, not just for them. We're progressively building a development harness — enforced module boundaries, structured issue specs, mechanical convention enforcement via CI, and agent-to-agent code review — so that any AI coding agent can implement features, write tests, and open PRs with minimal hand-holding. We also use slash commands available to all contributors for common workflows like committing, reviewing PRs, and implementing issues.
-
-We'll keep harness artifacts public.
+Things that don't fit neatly in the table above but matter in production: **RBAC** (admin/support/agent with separate auth paths — agents only reach MCP, never REST), **auto-generated OpenAPI 3.1 docs** from Hono route definitions served at `/docs` via Scalar, and a **full CI pipeline** running lint, typecheck, unit, integration, and MCP-protocol tests on every PR. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md) for the SOP primitive, [ADR-007](docs/decisions/007-evaluation-engine.md) and [ADR-009](docs/decisions/009-eval-suites.md) for the evals engine.
 
 ## Quick Start
 
@@ -170,71 +152,13 @@ API docs are auto-generated at `http://localhost:3000/docs`.
 
 ## How It Works
 
-### 1. Define connectors in code
+**1. Define connectors in code.** Each connector is a TypeScript module exporting a `ConnectorManifest` with tool handlers. `make sync-connectors` loads the catalog into the database; admins configure instances through the dashboard. Full walkthrough: [`docs/guide/adding-a-connector.md`](docs/guide/adding-a-connector.md).
 
-Each connector is a TypeScript module with a manifest and tool handlers:
+**2. Agents connect over MCP.** External voice agents authenticate with an API key (`mgk_xxx`) at `POST /mcp`. `tools/list` returns only the tools assigned to that agent; every tool call requires an active `session_id`. The MCP handler creates a fresh server per request, registers only authorized tools, converts JSON Schema to Zod on the fly, and validates sessions before execution.
 
-```typescript
-// src/features/connectors/catalog/medusa/index.ts
-const manifest: ConnectorManifest = {
-  name: "Medusa",
-  slug: "medusa",
-  description: "E-commerce connector for carts, orders, and products",
-  connectorType: "api",
-  configSchema: {
-    baseUrl: { type: "string", required: true },
-    publishableKey: { type: "string", required: true },
-  },
-  authMethods: ["api_key"],
-  iconUrl: "/logos/medusa.svg",
-  tools: [
-    {
-      catalog: {
-        name: "Add to Cart",
-        description: "Add an item to the shopping cart",
-        inputSchema: { /* JSON Schema */ },
-        defaultRequiresConfirmation: false,
-      },
-      handler: addToCart,  // actual HTTP call to Medusa API
-    },
-    // ... 7 more tools
-  ],
-};
+**3. Sessions capture everything.** Core MCP tools (`core_create_session`, `core_add_messages`, `core_rate_session`, `core_end_session`) handle the session lifecycle. Every tool call, every message, every rating is stored with per-message cost tracking and automatic SOP classification, queryable through the REST API and dashboard.
 
-export default manifest;
-```
-
-Run `make sync-connectors` to sync manifests to the database. Admins configure instances through the dashboard — set the API URL, link encrypted credentials, assign tools to agents.
-
-### 2. Agents connect via MCP
-
-External AI agents authenticate with an API key (`mgk_xxx`) and get their tools dynamically:
-
-```
-POST /mcp
-Authorization: Bearer mgk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-→ tools/list returns only tools assigned to THIS agent
-→ Each tool requires an active session_id
-→ Tool names are namespaced: glowbox_store_add_to_cart
-```
-
-The MCP handler creates a fresh server per request, registers only the tools that agent is authorized to use, converts JSON Schema to Zod on the fly, and validates sessions before execution.
-
-### 3. Sessions capture everything
-
-Core MCP tools handle the session lifecycle:
-
-- `core_create_session` — starts a session with channel type, user identifier, metadata
-- `core_add_messages` — bulk ingest conversation turns with timestamps and tool calls
-- `core_rate_session` — records CSAT (1 = negative, 2 = positive)
-- `core_end_session` — closes the session
-
-Every tool call, every message, every rating — stored and queryable through the REST API and dashboard.
-
-### 4. Dashboard for ops
-
-The dashboard gives support teams what they need: session list with filters (status, channel, agent, date range, feedback), full transcripts with expandable tool call traces showing request/response JSON, and the ability to evaluate agent performance with tags (`wrong_tool`, `hallucination`, `good_resolution`).
+**4. Dashboard for ops.** Session list with filters (status, channel, agent, date, feedback), full transcripts with expandable tool call traces, and QA tags (`wrong_tool`, `hallucination`, `good_resolution`). For engineering observability, pipe your voice runtime to Langfuse or OpenTelemetry separately.
 
 ## Seed Data
 
@@ -257,19 +181,6 @@ The dashboard gives support teams what they need: session list with filters (sta
 | SteelPoint | `delivered+admin-steelpoint@resend.dev` | `delivered+support-steelpoint@resend.dev` | `delivered+viewer-steelpoint@resend.dev` |
 
 The seed is config-driven — each vertical is a single TypeScript file in `modelguide-api/src/db/seed/verticals/`. Adding a new organization means creating a new config file and importing it in `seed/index.ts`.
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| API | [Hono](https://hono.dev) + [Bun.js](https://bun.sh) |
-| Agent Protocol | [MCP](https://modelcontextprotocol.io) (`@modelcontextprotocol/sdk`) |
-| Database | PostgreSQL 16 + [Drizzle ORM](https://orm.drizzle.team) |
-| Dashboard | [TanStack Start](https://tanstack.com/start) + React 19 + Tailwind CSS v4 |
-| Auth | JWT + magic links (users) · API keys (agents) |
-| API Docs | [Scalar](https://scalar.com) (auto-generated from OpenAPI) |
-
-No proprietary components. Every layer is inspectable, replaceable, forkable.
 
 ## Project Structure
 
@@ -378,40 +289,7 @@ const modules = await Promise.all([
 
 ## Deployment
 
-### Docker Compose (local / staging)
-
-```bash
-make docker-up       # Build and start full stack
-make docker-logs     # View logs
-make docker-rebuild  # Rebuild API + UI only
-make docker-down     # Stop all
-make docker-reset    # Stop, remove volumes, rebuild
-```
-
-Override secrets for non-dev environments via `.env.docker`:
-
-```bash
-JWT_SECRET=...
-REFRESH_JWT_SECRET=...
-ENCRYPTION_KEY=...
-MAGIC_LINK_SECRET=...
-```
-
-### Railway (production)
-
-Architecture: PostgreSQL + API + UI + load balancer (Caddy). The LB is the only public-facing service — it routes `/api/*` and `/mcp` to the API and everything else to the UI via Railway's internal network.
-
-Config-as-code via `railway.toml` in each service. Full setup guide: [`railway/DEPLOY.md`](railway/DEPLOY.md).
-
-**Deploying changes:**
-
-```bash
-(cd modelguide-api && railway up --service api)
-(cd modelguide-ui && railway up --service ui)
-(cd railway/lb && railway up --service lb)
-```
-
-Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (migrations) automatically on every deploy via `preDeployCommand` in `railway.toml`.
+Docker Compose for local and staging (`make docker-up`), Railway for production. The Railway architecture is PostgreSQL + API + UI + Caddy load balancer (the LB is the only public-facing service, routing `/api/*` and `/mcp` to the API and everything else to the UI over Railway's internal network). Config is as-code via `railway.toml` per service — full setup and deploy steps in [`railway/DEPLOY.md`](railway/DEPLOY.md).
 
 ## CLI — Customer Onboarding
 
