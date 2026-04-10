@@ -27,9 +27,9 @@
 
 ## The Problem
 
-Your agent handles demos. Production needs session tracking, tool management, evals, SOPs, and integrations with every system your company runs. Every team rebuilds this from scratch.
+Your voice agent handles demos. Production needs business context, tool access, evals, SOPs, and integrations with every system your company runs. Every team rebuilds this from scratch.
 
-Today you ship a chat agent. Tomorrow the business wants voice and email — and you're starting over because nothing was built to carry across channels.
+You wire up LiveKit or Pipecat, pick an LLM and a TTS — and the agent talks. But it can't check an order, follow your cancellation policy, or tell you what happened after the call.
 
 The boring stuff between "it works" and "it ships" — that's what kills timelines. Not the AI. SaaS charges $150K+ for this harness. We open-sourced it.
 
@@ -42,17 +42,17 @@ The boring stuff between "it works" and "it ships" — that's what kills timelin
 <video src="https://github.com/user-attachments/assets/811f1756-4948-461e-abdd-7691ee3d9ccc
 " controls width="100%"></video>
 
-ModelGuide is the infrastructure layer between your AI agents and your business systems. It doesn't run the AI or own the voice stack — it gives you four production-ready layers you'd otherwise build from scratch:
+ModelGuide is the infrastructure layer between your voice agent and your business systems. It doesn't run the AI or own the voice stack — it gives you five production-ready layers you'd otherwise build from scratch:
 
-**Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
+**Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools your voice agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every voice framework.
 
-**Observation layer** — Every session recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did*.
+**Observation layer** — Every conversation recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did* on the line.
 
 **Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
 
-**SOP layer** — Define step-by-step procedures, link them to specific tools, and assign them to agents. Agents follow your playbook instead of improvising — consistent behavior across every interaction.
+**SOP layer** — Define step-by-step procedures your voice agent follows on the call — cancellation flows, order lookups, escalation paths. Agents follow your playbook instead of improvising live, so every conversation runs the same way.
 
-**Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics you need to prove agents are working, not vanity dashboards.
+**Analytics layer** — Call resolution rates, escalation trends, post-call CSAT, session volume by channel — the metrics you need to prove your voice agent is working, not vanity dashboards.
 
 <table>
   <tbody>
@@ -104,6 +104,10 @@ Everything you need to go from demo to production:
 ✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
 
 ✅ **SOPs (Standard Operating Procedures)** — Define agent behavioral contracts: ordered steps with tool references, triggers, and metadata. Fork from reusable templates or create from scratch. Draft/active/archived lifecycle. Assign SOPs to agents. Inactive-tool warnings at read time. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md).
+
+✅ **Evals Framework** — Structured evaluation pipelines for voice agent behavior: tool selection, SOP adherence, hallucination detection, transcript scoring. Import eval suites via the CLI, run them against session transcripts, track quality over time. See [ADR-007](docs/decisions/007-evaluation-engine.md) and [ADR-009](docs/decisions/009-eval-suites.md).
+
+✅ **Framework Examples** — Production-ready reference agents for the frameworks you already use. Fork one and point it at your MCP endpoint. See [`examples/agents/`](examples/agents/) — LiveKit, Pipecat, ElevenLabs, and Mastra are all shipped.
 
 ✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
 
@@ -332,17 +336,13 @@ const modules = await Promise.all([
 
 ## Roadmap
 
-🚧 **Evals Framework** — Structured evaluation pipelines for agent responses — accuracy, tool selection, hallucination detection, SOP adherence scoring
-
-🚧 **Sub-agents & Workflow Builder** — Compose multi-step agent workflows with branching and handoffs
+🚧 **Sub-agents & Workflow Builder** — Compose multi-step voice agent workflows with branching and handoffs
 
 🚧 **OTEL + A/B Testing via Langfuse** — OpenTelemetry traces, prompt variant experiments, side-by-side comparison
 
 🚧 **Agentic Insights** — Custom funnels tracking agent behavior through business-defined conversion paths
 
 🚧 **Auto-tuning SOPs** — Feedback loop from evals to automatically refine operating procedures
-
-🚧 **Full Interoperability** — Deploy the same agent via Pipecat, LiveKit, Google ADK, or any runtime
 
 📋 **More Blueprints** — Contact center ships first; healthcare intake, field service, B2B sales next
 
@@ -464,5 +464,5 @@ Check [open issues](https://github.com/modelguide/modelguide/issues) — look fo
 ---
 
 <p align="center">
-  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source harness for production AI agents · 🇵🇱 Poland
+  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source orchestration framework for production voice agents · 🇵🇱 Poland
 </p>
