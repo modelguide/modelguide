@@ -108,7 +108,7 @@ const makeGuardrails = (
       slug: "no-salary-info",
       content:
         "Compensation details are not available. If the candidate asks about salary, say: the recruiter will share the full compensation details in the next step. Do not invent, estimate, or state any figure.",
-      description: null,
+      description: "Never share salary information",
       config: {
         priority: "critical",
         critical: true,
@@ -125,8 +125,9 @@ const makeGuardrails = (
       type: "guardrail",
       name: "Be polite",
       slug: "be-polite",
-      content: "Always maintain a warm and professional tone.",
-      description: null,
+      content:
+        "Always maintain a warm and professional tone. Use the candidate's name, avoid jargon, and keep responses concise.",
+      description: "Stay warm and professional",
       config: { priority: "medium" },
       isActive: true,
       assignedAgents: [],
@@ -338,23 +339,19 @@ describe("GptVoiceStrategy", () => {
     );
   });
 
-  it("AC18: all guardrails appear in both Rules and Reminders (sandwich)", () => {
-    const rulesSection = prompt.indexOf("# Rules");
-    const remindersSection = prompt.indexOf("# Reminders");
-    expect(rulesSection).toBeGreaterThan(0);
-    expect(remindersSection).toBeGreaterThan(rulesSection);
+  it("AC18: all guardrail names appear in both Rules and Reminders (sandwich)", () => {
+    const rulesIdx = prompt.indexOf("# Rules");
+    const remindersIdx = prompt.indexOf("# Reminders");
+    expect(rulesIdx).toBeGreaterThan(0);
+    expect(remindersIdx).toBeGreaterThan(rulesIdx);
 
-    // All guardrails appear in both sections
-    const topContent = prompt.slice(rulesSection, remindersSection);
-    const bottomContent = prompt.slice(remindersSection);
-    expect(topContent).toContain("Compensation details are not available");
-    expect(bottomContent).toContain("Compensation details are not available");
-    expect(topContent).toContain(
-      "Always maintain a warm and professional tone",
-    );
-    expect(bottomContent).toContain(
-      "Always maintain a warm and professional tone",
-    );
+    // Guardrail headings appear in both sections
+    const rulesSection = prompt.slice(rulesIdx, remindersIdx);
+    const remindersSection = prompt.slice(remindersIdx);
+    expect(rulesSection).toContain("## No salary info");
+    expect(remindersSection).toContain("## No salary info");
+    expect(rulesSection).toContain("## Be polite");
+    expect(remindersSection).toContain("## Be polite");
   });
 
   it("AC19: no agentic boilerplate (persistence/tool-calling/planning)", () => {
@@ -402,6 +399,34 @@ describe("GptVoiceStrategy", () => {
     );
     expect(noGuardrailsIr.systemPrompt).not.toContain("# Reminders");
     expect(noGuardrailsIr.systemPrompt).not.toContain("# Rules");
+  });
+
+  it("sandwich technique: Rules has full content, Reminders has concise description", () => {
+    // Split prompt at the two sections
+    const rulesIdx = prompt.indexOf("# Rules");
+    const remindersIdx = prompt.indexOf("# Reminders");
+    expect(rulesIdx).toBeGreaterThan(-1);
+    expect(remindersIdx).toBeGreaterThan(rulesIdx);
+
+    const rulesSection = prompt.slice(rulesIdx, remindersIdx);
+    const remindersSection = prompt.slice(remindersIdx);
+
+    // Rules should contain the full content
+    expect(rulesSection).toContain("Compensation details are not available");
+    expect(rulesSection).toContain(
+      "Do not invent, estimate, or state any figure",
+    );
+    expect(rulesSection).toContain(
+      "Always maintain a warm and professional tone. Use the candidate",
+    );
+
+    // Reminders should contain the concise descriptions, NOT the full content
+    expect(remindersSection).toContain("Never share salary information");
+    expect(remindersSection).toContain("Stay warm and professional");
+    expect(remindersSection).not.toContain(
+      "Do not invent, estimate, or state any figure",
+    );
+    expect(remindersSection).not.toContain("Use the candidate");
   });
 });
 
