@@ -118,13 +118,12 @@ const createAgentSchema = z.object({
     .optional()
     .openapi({ description: "Auto-generated from name if omitted" }),
   description: z.string().optional(),
-  modality: z.enum(["voice", "text"]).default("voice").optional(),
-  modelFamily: modelFamilySchema.default("generic").optional(),
+  modality: z.enum(["voice", "text"]).default("voice"),
+  modelFamily: modelFamilySchema.default("generic"),
   promptConfig: promptConfigSchema.optional(),
   agentPlatform: z
     .enum(["custom", "elevenlabs", "livekit"])
-    .default("custom")
-    .optional(),
+    .default("custom"),
   metadata: z.record(z.unknown()).optional(),
   secrets: z.record(z.string().uuid()).optional().openapi({
     description: "Secret ref map: { fieldName: secretId }",
@@ -163,8 +162,8 @@ const assignConnectorSchema = z.object({
   tools: z.array(
     z.object({
       slug: z.string().openapi({ description: "Tool slug" }),
-      isEnabled: z.boolean().optional().default(true),
-      requiresConfirmation: z.boolean().optional().default(false),
+      isEnabled: z.boolean().default(true),
+      requiresConfirmation: z.boolean().default(false),
     }),
   ),
 });

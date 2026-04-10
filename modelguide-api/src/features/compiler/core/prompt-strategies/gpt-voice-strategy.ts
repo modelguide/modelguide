@@ -14,7 +14,7 @@
  * Key conventions:
  * - Markdown # headers for sections (model reads these, not TTS)
  * - No markdown in model OUTPUT (AC13) — but system prompt uses markdown structure
- * - All guardrails rendered uniformly and repeated in Reminders (sandwich)
+ * - Guardrails: full content in Rules, concise description in Reminders (sandwich technique)
  * - Safety & escalation at agent level, not per SOP step
  */
 
@@ -275,10 +275,6 @@ export class GptVoiceStrategy implements PromptStrategy {
     } else {
       lines.push(tool.resolvedName);
     }
-
-    // AC16: useWhen/doNotUseWhen stubs — commented out for future implementation
-    // lines.push(`  useWhen: <condition when this tool should be used>`);
-    // lines.push(`  doNotUseWhen: <condition when this tool should NOT be used>`);
 
     return lines.join("\n");
   }

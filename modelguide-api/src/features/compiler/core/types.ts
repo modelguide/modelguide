@@ -131,8 +131,13 @@ export interface EnrichedSop {
 }
 
 /** Warning emitted by the compiler (e.g. budget overruns). */
+export type CompilerWarningCode =
+  | "VOICE_BUDGET_EXCEEDED"
+  | "TEXT_BUDGET_EXCEEDED"
+  | "TOOL_BLOCK_OVER_BUDGET";
+
 export interface CompilerWarning {
-  code: string;
+  code: CompilerWarningCode;
   message: string;
   tokens?: number;
 }

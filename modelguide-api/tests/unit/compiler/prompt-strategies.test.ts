@@ -581,11 +581,9 @@ describe("Output metadata (AC22, AC23)", () => {
 
   it("AC23: no warning when under budget", () => {
     const ir = compileVoice();
-    // With our small fixture SOP, should be well under budget
-    // (unless the fixture itself is very large)
-    if (ir.metadata.totalEstimatedTokens <= 2500) {
-      expect(ir.metadata.warnings).toEqual([]);
-    }
+    // Fixture must stay under budget for this test to be meaningful
+    expect(ir.metadata.totalEstimatedTokens).toBeLessThanOrEqual(2500);
+    expect(ir.metadata.warnings).toEqual([]);
   });
 
   it("warns when a tool block exceeds per-tool token limit", () => {
