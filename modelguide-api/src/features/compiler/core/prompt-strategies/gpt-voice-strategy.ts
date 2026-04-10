@@ -185,7 +185,7 @@ export class GptVoiceStrategy implements PromptStrategy {
 
     const lines: string[] = [
       "# Rules",
-      "Rules below may contain illustrative examples in parentheses (e.g., …). These are templates only — use ONLY data from the Role Context above. If the Role Context does not include a value referenced in an example, say you do not have that information and redirect to the recruiter.",
+      "Rules below may contain illustrative examples in parentheses (e.g., …). These are templates only — use ONLY data from the Role Context above.",
     ];
     for (const g of guardrails) {
       lines.push(`\n## ${g.name}`);
