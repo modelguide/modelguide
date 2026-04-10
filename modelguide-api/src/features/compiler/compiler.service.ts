@@ -18,6 +18,7 @@ import { and, eq } from "drizzle-orm";
 
 import { resolveAgentSops } from "@features/mcp/mcp.service";
 import { getSopById } from "@features/sops/sops.service";
+import { z } from "zod";
 import { compile } from "./core/compile";
 import type {
   Channel,
@@ -27,6 +28,16 @@ import type {
 } from "./core/types";
 
 const log = getLogger();
+
+/** Parse promptConfig JSONB safely — fall back to empty on malformed data. */
+const promptConfigSchema = z
+  .object({
+    persona: z.string().optional(),
+    fillerPhrases: z.array(z.string()).optional(),
+    language: z.string().optional(),
+  })
+  .strict()
+  .catch({});
 
 // ============================================================================
 // Types
@@ -181,7 +192,7 @@ export async function compileAgent(input: CompileAgentInput) {
       model: agentModel ?? "anthropic/claude-haiku-4-5-20251001",
       description:
         agentDescription ?? agent.description ?? "AI customer support agent",
-      promptConfig: agent.promptConfig ?? {},
+      promptConfig: promptConfigSchema.parse(agent.promptConfig ?? {}),
       modelFamily: agent.modelFamily as ModelFamily,
       channel,
     },
