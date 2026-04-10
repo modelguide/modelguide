@@ -5,11 +5,12 @@
   </picture>
 </p>
 
-<h3 align="center">Ship support & sales agents with confidence.</h3>
+<h3 align="center">Voice AI worth talking to.</h3>
 
 <p align="center">
-  Open-source production harness for AI agents — voice, chat, email, any channel.<br/>
-  SOPs · Connectors · Session Recording · Evals · RBAC — one TypeScript codebase, zero vendor lock-in.
+  <strong>Unlock your voice agent</strong> with business context, tools, and monitoring.<br/>
+  The open-source orchestration framework for agents on <strong>LiveKit</strong>, <strong>Pipecat</strong>, <strong>ElevenLabs</strong>, or <strong>Mastra</strong>.<br/>
+  <em>No vendor lock-in. Bring your own models.</em>
 </p>
 
 <p align="center">
