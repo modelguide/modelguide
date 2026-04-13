@@ -9,8 +9,8 @@
 
 <p align="center">
   ModelGuide is the open-source orchestration layer for production <strong>voice-first agents</strong>.<br/>
-  Keep your runtime. Connect business systems once. Enforce playbooks, standard operating procedures (SOPs), and guardrails centrally.<br/>
-  Review, evaluate, and improve every customer interaction in your own environment.
+  Keep your runtime. Wire up integrations once. Define agent behavior with playbooks, SOPs, and guardrails.<br/>
+  Build → generate tests → simulate → score → improve → ship. A closed feedback loop you own.
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ The delay is not the model. It is the layer around it: business tool access, pol
 
 Most teams assemble that layer from custom glue code and vendor dashboards. That slows launch, fragments ownership, and creates migration risk whenever the runtime, model, or channel changes.
 
-ModelGuide gives you that layer as open source. Start with voice. Extend to other customer-facing channels when needed.
+ModelGuide gives you that layer as open source — so you can build and ship your voice agent on any stack without rebuilding production infrastructure from scratch. Start with voice. Extend to other customer-facing channels when needed.
 
 ![Architecture diagram](./docs/architecture_image.png)
 
@@ -63,18 +63,16 @@ ModelGuide sits between your agent runtime and your business systems. It is not 
 - Run evals and simulations against real workflows
 - Provision new organizations from repeatable YAML blueprints
 
-## Why CTOs Use ModelGuide
+## What You Get
 
 | Outcome | What ModelGuide gives you |
 |---|---|
 | **Closed feedback loop** | Run simulations and evals, turn failed conversations into reusable test cases and evaluators, and recompile better instructions |
 | **Faster production launch** | The missing layer around the model: tools, SOPs, sessions, evals, and operator workflows |
 | **Lower vendor risk** | Keep LiveKit, Pipecat, ElevenLabs, Mastra, or your own runtime. The business layer stays portable. |
-| **Central governance** | One place to control tool access, guardrails, confirmation policies, and quality review |
-| **Operational visibility** | Full session records, tool traces, CSAT, QA tags, and eval results |
-| **Deployment control** | Open-source, self-hostable infrastructure with multi-tenant auth, encrypted secrets, and row-level security |
-
-ModelGuide covers operational visibility for support and ops teams: transcripts, tool traces, CSAT, QA tags, SOP adherence, and eval results. It is designed to complement, not replace, engineering observability. Keep Langfuse, Datadog, Honeycomb, or OpenTelemetry for runtime telemetry and infrastructure tracing.
+| **Governance in one place** | Manage tool access, guardrails, confirmation policies, and quality review from a single dashboard |
+| **Operational visibility** | Full session records, tool traces, CSAT, QA tags, and eval results — complements your observability stack (Langfuse, Datadog, OpenTelemetry) |
+| **Production-ready infrastructure** | Open-source, self-hostable, with multi-tenant auth, encrypted secrets, and row-level security |
 
 <table>
   <tbody>
@@ -100,6 +98,22 @@ ModelGuide covers operational visibility for support and ops teams: transcripts,
     </tr>
   </tbody>
 </table>
+
+## How Teams Use ModelGuide
+
+**1. Define what your agent should do.** Describe the persona, connect your business systems, set the rules and guardrails. ModelGuide keeps that operational context in one place.
+
+**2. Generate the instructions your runtime uses.** ModelGuide compiles that context into agent instructions and exposes the approved business tools over MCP.
+
+**3. Generate test assets automatically.** ModelGuide creates synthetic conversations, eval suites, evaluators, and QA workflows to test the agent before it reaches production traffic.
+
+**4. Run the feedback loop.** ModelGuide runs simulations, scores behavior, and gives your team transcripts, tool traces, CSAT, QA tags, and eval results to review.
+
+**5. Tighten the operating context.** Use failures to update SOPs, guardrails, persona, tools, and compiled instructions until the automated checks consistently look right.
+
+**6. Validate manually before launch.** Once the agent passes the automated checks, run manual tests in your runtime and confirm the experience is good enough to ship.
+
+The closed feedback loop is already here: define the context, compile the instructions, generate tests, run simulations, score behavior, and improve the agent from failures. Over time, more of the prompt and context fixes can be automated.
 
 ## Reference Agents
 
@@ -134,22 +148,6 @@ make ui-dev     # Dashboard at http://localhost:3001
 Open `http://localhost:3001`. The seed creates three industry-vertical organizations — retail, medical call center, B2B industrial — each with Medusa e-commerce and Zendesk helpdesk connectors, two agents, and ~300 realistic sessions. Log in with `delivered+admin-glowbox@resend.dev` (magic link printed to API console).
 
 Full vertical matrix, dev accounts, and session scenarios: [`docs/guide/seed-data.md`](docs/guide/seed-data.md).
-
-## How Teams Use ModelGuide
-
-**1. Define the agent you want.** Import SOPs, guardrails, persona, desired behavior, connectors, and tools. ModelGuide keeps that operational context in one place.
-
-**2. Generate the instructions your runtime uses.** ModelGuide compiles that context into agent instructions and exposes the approved business tools over MCP.
-
-**3. Generate test assets automatically.** ModelGuide creates synthetic conversations, eval suites, evaluators, and QA workflows to test the agent before it reaches production traffic.
-
-**4. Run the feedback loop.** ModelGuide runs simulations, scores behavior, and gives your team transcripts, tool traces, CSAT, QA tags, and eval results to review.
-
-**5. Tighten the operating context.** Use failures to update SOPs, guardrails, persona, tools, and compiled instructions until the automated checks consistently look right.
-
-**6. Validate manually before launch.** Once the agent passes the automated checks, run manual tests in your runtime and confirm the experience is good enough to ship.
-
-The closed feedback loop is already here: define the context, compile the instructions, generate tests, run simulations, score behavior, and improve the agent from failures. Over time, more of the prompt and context fixes can be automated.
 
 ## Onboarding an Organization
 
