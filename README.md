@@ -5,16 +5,20 @@
   </picture>
 </p>
 
-<h3 align="center">Voice AI worth talking to.</h3>
+<h3 align="center">Own your agent stack.</h3>
 
 <p align="center">
-  <strong>Unlock your voice agent</strong> with business context, tools, and monitoring.<br/>
-  The open-source orchestration framework for agents on <strong>LiveKit</strong>, <strong>Pipecat</strong>, <strong>ElevenLabs</strong>, or <strong>Mastra</strong>.<br/>
-  <em>No vendor lock-in. Bring your own models.</em>
+  ModelGuide is the open-source orchestration layer for production <strong>voice-first agents</strong>.<br/>
+  Keep your runtime. Connect business systems once. Enforce SOPs and guardrails centrally.<br/>
+  Review, evaluate, and improve every customer interaction in your own environment.
 </p>
 
 <p align="center">
-  <strong>Start from a reference voice agent →</strong>
+  <em>No vendor lock-in. Bring your own models, runtimes, channels, and deployment.</em>
+</p>
+
+<p align="center">
+  <strong>Start with a reference implementation →</strong>
   <a href="examples/agents/livekit-agent/"><strong>LiveKit</strong></a> ·
   <a href="examples/agents/pipecat-agent/">Pipecat</a> ·
   <a href="examples/agents/elevenlabs-agent/">ElevenLabs</a> ·
@@ -28,42 +32,48 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="#reference-voice-agents">Reference Agents</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="docs/guide/adding-a-connector.md">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
+  <a href="#quick-start">Quick Start</a> · <a href="#reference-agents">Reference Agents</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="docs/guide/adding-a-connector.md">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
 <a href="https://www.youtube.com/watch?v=melFDGiA6gg" target="_blank"><img src="https://img.youtube.com/vi/melFDGiA6gg/maxresdefault.jpg" alt="ModelGuide Demo" /></a>
 
-## The Problem
+## The Production Gap
 
-Your voice agent handles demos. Production needs business context, tool access, evals, SOPs, and integrations with every system your company runs. Every team rebuilds this from scratch.
+A real-time agent can talk in a day. Getting it into production takes much longer.
 
-You wire up LiveKit or Pipecat, pick an LLM and a TTS — and the agent talks. But it can't check an order, follow your cancellation policy, or tell you what happened after the call.
+The delay is not the model. It is the layer around it: business tool access, policy enforcement, session history, QA workflows, evals, onboarding, and deployment.
 
-The boring stuff between "it works" and "it ships" — that's what kills timelines. Not the AI. Every team rebuilds the same harness: auth, sessions, connectors, SOPs, evals, analytics, guardrails, cost tracking. We open-sourced it.
+Most teams assemble that layer from custom glue code and vendor dashboards. That slows launch, fragments ownership, and creates migration risk whenever the runtime, model, or channel changes.
 
-Fork the contact center blueprint and customize the parts that make your agent yours — or start fresh for any vertical: healthcare intake, field service, B2B sales, internal ops.
+ModelGuide gives you that layer as open source. Start with voice. Extend to other customer-facing channels when needed.
 
 ![Architecture diagram](./docs/architecture_image.png)
 
-## What ModelGuide Does
+## What ModelGuide Is
 
 <video src="https://github.com/user-attachments/assets/811f1756-4948-461e-abdd-7691ee3d9ccc
 " controls width="100%"></video>
 
-ModelGuide is the infrastructure layer between your voice agent and your business systems. It doesn't run the AI or own the voice stack — it draws a clear line between what you own and what it ships, over [MCP](https://modelcontextprotocol.io):
+ModelGuide sits between your agent runtime and your business systems. It is not a voice runtime and it is not a hosted black box. It is the orchestration layer you own.
 
-### What you own, what ModelGuide ships
+- Connect business systems once over [MCP](https://modelcontextprotocol.io)
+- Assign the right tools to each agent with confirmation gates and secure credentials
+- Compile SOPs and guardrails into agent behavior
+- Record sessions with transcripts, tool traces, CSAT, and QA tags
+- Run evals and simulations against real workflows
+- Provision new organizations from repeatable YAML blueprints
 
-| Concern | You own | ModelGuide ships |
-|---|---|---|
-| **Voice stack** | LiveKit / Pipecat / ElevenLabs / Mastra runtime; LLM, STT, TTS provider | Reference agents for every runtime ([`examples/agents/`](examples/agents/)) |
-| **Agent behavior** | Role, persona, business policies | Prompt compiler with voice-tuned strategies, business context injected via SOPs + guardrails |
-| **Business systems** | Your CRM, orders, tickets, calendars | MCP tool surface with per-agent tool gating, response trimming for voice latency budgets, per-tool confirmation gates |
-| **Conversation state** | — *this is ours* | Session recording, full tool traces, per-message cost tracking, automatic SOP classification |
-| **Quality** | Success criteria, eval prompts, personas | Evals framework, guardrails, simulations (replay conversations with synthetic personas through your agent), CSAT + internal QA tags |
-| **Deployment** | Infra, data, branding | Multi-tenant auth (RLS, encrypted secrets, hashed API keys), one-command YAML blueprints |
+## Why CTOs Use ModelGuide
 
-**Plays well with your observability stack.** ModelGuide's dashboard is built for customer-support ops — transcript review, QA tagging, CSAT, SOP adherence. For engineering observability (LLM latency histograms, prompt diffing, OpenTelemetry traces), keep running Langfuse, Datadog, or Honeycomb. The reference agents are plain Python or TypeScript services — instrument them the same way you instrument anything else.
+| Outcome | What ModelGuide gives you |
+|---|---|
+| **Faster production launch** | The missing layer around the model: tools, SOPs, sessions, evals, and operator workflows |
+| **Lower vendor risk** | Keep LiveKit, Pipecat, ElevenLabs, Mastra, or your own runtime. The business layer stays portable. |
+| **Central governance** | One place to control tool access, guardrails, confirmation policies, and quality review |
+| **Operational visibility** | Full session records, tool traces, CSAT, QA tags, and eval results |
+| **Deployment control** | Open-source, self-hostable infrastructure with multi-tenant auth, encrypted secrets, and row-level security |
+
+ModelGuide covers operational visibility for support and ops teams: transcripts, tool traces, CSAT, QA tags, SOP adherence, and eval results. It is designed to complement, not replace, engineering observability. Keep Langfuse, Datadog, Honeycomb, or OpenTelemetry for runtime telemetry and infrastructure tracing.
 
 <table>
   <tbody>
@@ -90,33 +100,18 @@ ModelGuide is the infrastructure layer between your voice agent and your busines
   </tbody>
 </table>
 
-## Reference Voice Agents
+## Reference Agents
 
-Every framework ships with a working example. Fork one, point it at your ModelGuide MCP endpoint, and you have a voice agent with business context, tools, guardrails, and session tracking — without rebuilding the harness.
+The reference agents prove that the orchestration layer stays portable across runtimes and channels.
 
-| Runtime | Language | What you get | Path |
-|---|---|---|---|
-| **LiveKit Agents** *(flagship)* | Python | LiveKit Cloud WebRTC + SIP trunking (inbound LiveKit numbers, outbound Twilio), Silero VAD, Deepgram Nova-3 STT, GPT-4.1-mini with function calling, ElevenLabs Flash v2.5 TTS, 11 MCP tools, eval tests, Dockerfile, [`DEPLOY.md`](examples/agents/livekit-agent/DEPLOY.md) for LiveKit Cloud | [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/) |
-| **Pipecat** | Python | Pipecat Cloud deployment, same MCP tool wiring — pick this if your team already runs on Pipecat | [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/) |
-| **ElevenLabs Conversational AI** | TypeScript | CLI that syncs ElevenLabs platform agent config, tools, and prompt from a local definition; pair with the ModelGuide UI sync flow — see [`docs/elevenlabs-setup.md`](docs/elevenlabs-setup.md) | [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/) |
-| **Mastra** | TypeScript | Email "Where Is My Order?" workflow — Resend inbound webhook → Hono handler → MCP session + tool calls → reply. Proves the same orchestration layer works for non-voice channels | [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/) |
+Start with the LiveKit implementation for the fastest end-to-end path. Use the Pipecat or ElevenLabs examples if your team already runs there. The Mastra example shows the same orchestration layer extending beyond voice when you need another customer-facing channel.
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| API | [Hono](https://hono.dev) + [Bun.js](https://bun.sh) |
-| Agent Protocol | [MCP](https://modelcontextprotocol.io) (`@modelcontextprotocol/sdk`) |
-| Database | PostgreSQL 16 + [Drizzle ORM](https://orm.drizzle.team) |
-| Dashboard | [TanStack Start](https://tanstack.com/start) + React 19 + Tailwind CSS v4 |
-| Auth | JWT + magic links (users) · API keys (agents) |
-| API Docs | [Scalar](https://scalar.com) (auto-generated from OpenAPI) |
-
-No proprietary components. Every layer is inspectable, replaceable, forkable.
-
-## Also ships
-
-Things that don't fit neatly in the table above but matter in production: **RBAC** (admin/support/agent with separate auth paths — agents only reach MCP, never REST), **auto-generated OpenAPI 3.1 docs** from Hono route definitions served at `/docs` via Scalar, and a **full CI pipeline** running lint, typecheck, unit, integration, and MCP-protocol tests on every PR. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md) for the SOP primitive, [ADR-007](docs/decisions/007-evaluation-engine.md) and [ADR-009](docs/decisions/009-eval-suites.md) for the evals engine.
+| Runtime | Why it exists | Path |
+|---|---|---|
+| **LiveKit Agents** *(flagship)* | Fastest path to a production voice agent with telephony, MCP tool wiring, session tracking, eval tests, and deployment docs | [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/) |
+| **Pipecat** | Same orchestration model for teams already committed to Pipecat | [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/) |
+| **ElevenLabs Conversational AI** | Manage platform agent config, tools, and prompts from version-controlled local definitions | [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/) |
+| **Mastra** | Email "Where Is My Order?" example showing the orchestration layer extends beyond voice when you need another customer-facing channel | [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/) |
 
 ## Quick Start
 
@@ -139,21 +134,25 @@ Open `http://localhost:3001`. The seed creates three industry-vertical organizat
 
 Full vertical matrix, dev accounts, and session scenarios: [`docs/guide/seed-data.md`](docs/guide/seed-data.md).
 
-API docs are auto-generated at `http://localhost:3000/docs`.
+## How Teams Use ModelGuide
 
-## How It Works
+**1. Define the agent you want.** Import SOPs, guardrails, persona, desired behavior, connectors, and tools. ModelGuide keeps that operational context in one place.
 
-**1. Define connectors in code.** Each connector is a TypeScript module exporting a `ConnectorManifest` with tool handlers. `make sync-connectors` loads the catalog into the database; admins configure instances through the dashboard. Full walkthrough: [`docs/guide/adding-a-connector.md`](docs/guide/adding-a-connector.md).
+**2. Generate the instructions your runtime uses.** ModelGuide compiles that context into agent instructions and exposes the approved business tools over MCP.
 
-**2. Agents connect over MCP.** External voice agents authenticate with an API key (`mgk_xxx`) at `POST /mcp`. `tools/list` returns only the tools assigned to that agent; every tool call requires an active `session_id`. The MCP handler creates a fresh server per request, registers only authorized tools, converts JSON Schema to Zod on the fly, and validates sessions before execution.
+**3. Generate test assets automatically.** ModelGuide creates synthetic conversations, eval suites, evaluators, and QA workflows to test the agent before it reaches production traffic.
 
-**3. Sessions capture everything.** Core MCP tools (`core_create_session`, `core_add_messages`, `core_rate_session`, `core_end_session`) handle the session lifecycle. Every tool call, every message, every rating is stored with per-message cost tracking and automatic SOP classification, queryable through the REST API and dashboard.
+**4. Run the feedback loop.** ModelGuide runs simulations, scores behavior, and gives your team transcripts, tool traces, CSAT, QA tags, and eval results to review.
 
-**4. Dashboard for ops.** Session list with filters (status, channel, agent, date, feedback), full transcripts with expandable tool call traces, and QA tags (`wrong_tool`, `hallucination`, `good_resolution`). For engineering observability, pipe your voice runtime to Langfuse or OpenTelemetry separately.
+**5. Tighten the operating context.** Use failures to update SOPs, guardrails, persona, tools, and compiled instructions until the automated checks consistently look right.
+
+**6. Validate manually before launch.** Once the agent passes the automated checks, run manual tests in your runtime and confirm the experience is good enough to ship.
+
+The closed feedback loop is already here: define the context, compile the instructions, generate tests, run simulations, score behavior, and improve the agent from failures. Over time, more of the prompt and context fixes can be automated.
 
 ## Onboarding a Customer
 
-The `mg` CLI provisions a new organization from a directory of YAML files — users, connectors, agents with compiled prompts, SOPs, guardrails, and demo sessions — in one command. Safe to re-run against the same directory.
+The `mg` CLI provisions a new organization from a directory of YAML files — users, connectors, agents with compiled instructions, SOPs, guardrails, and demo sessions — in one command. Safe to re-run against the same directory.
 
 ```bash
 bun run src/cli/mg.ts setup /path/to/my-org/
@@ -163,13 +162,13 @@ Full flag reference, per-command usage, and Railway instructions: [`docs/guide/c
 
 ## Roadmap
 
-🚧 **Sub-agents & Workflow Builder** — Compose multi-step voice agent workflows with branching and handoffs
+🚧 **Sub-agents & Workflow Builder** — Compose multi-step agent workflows with branching and handoffs
 
 🚧 **OTEL + A/B Testing via Langfuse** — OpenTelemetry traces, prompt variant experiments, side-by-side comparison
 
 🚧 **Agentic Insights** — Custom funnels tracking agent behavior through business-defined conversion paths
 
-🚧 **Auto-tuning SOPs** — Feedback loop from evals to automatically refine operating procedures
+🚧 **Closed-loop instruction tuning** — turn repeated eval and simulation failures into suggested SOP, guardrail, and instruction fixes
 
 📋 **More Blueprints** — Contact center ships first; healthcare intake, field service, B2B sales next
 
@@ -178,6 +177,21 @@ Full flag reference, per-command usage, and Railway instructions: [`docs/guide/c
 ## Deployment
 
 Docker Compose for local and staging (`make docker-up`), Railway for production. The Railway architecture is PostgreSQL + API + UI + Caddy load balancer (the LB is the only public-facing service, routing `/api/*` and `/mcp` to the API and everything else to the UI over Railway's internal network). Config is as-code via `railway.toml` per service — full setup and deploy steps in [`railway/DEPLOY.md`](railway/DEPLOY.md).
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| API | [Hono](https://hono.dev) + [Bun.js](https://bun.sh) |
+| Agent Protocol | [MCP](https://modelcontextprotocol.io) (`@modelcontextprotocol/sdk`) |
+| Database | PostgreSQL 16 + [Drizzle ORM](https://orm.drizzle.team) |
+| Dashboard | [TanStack Start](https://tanstack.com/start) + React 19 + Tailwind CSS v4 |
+| Auth | JWT + magic links (users) · API keys (agents) |
+| API Docs | [Scalar](https://scalar.com) (auto-generated from OpenAPI) |
+
+No proprietary components. Every layer is inspectable, replaceable, forkable.
+
+Production foundations include RBAC with separate admin/support/agent auth paths, encrypted secrets, row-level security, and a full CI pipeline running lint, typecheck, unit, integration, and MCP-protocol tests on every PR. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md) for the SOP primitive, [ADR-007](docs/decisions/007-evaluation-engine.md) and [ADR-009](docs/decisions/009-eval-suites.md) for the evals engine.
 
 ## Documentation
 
@@ -213,5 +227,5 @@ Check [open issues](https://github.com/modelguide/modelguide/issues) — look fo
 ---
 
 <p align="center">
-  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source orchestration framework for production voice agents · 🇵🇱 Poland
+  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source orchestration framework for production voice-first agents · 🇵🇱 Poland
 </p>
