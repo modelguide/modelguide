@@ -1,8 +1,8 @@
-# `mg` CLI — Customer Onboarding
+# `mg` CLI — Organization Provisioning
 
-The `mg` CLI provisions new organizations into ModelGuide from YAML configs. One command takes a directory of YAML files and sets up everything needed for a working org: users, secrets, connector instances, agents with prompts and guardrails, SOPs, and optional demo sessions.
+The `mg` CLI provisions new organizations into ModelGuide from YAML configs. One command takes a directory of YAML files and sets up everything needed for a working org: users, secrets, connector instances, agents with compiled instructions and guardrails, SOPs, and optional demo sessions.
 
-Use it for onboarding customers, seeding demo environments, staging rollouts, or reproducing a known-good org layout across environments (local → staging → production).
+Use it for provisioning new organizations, seeding demo environments, staging rollouts, or reproducing a known-good org layout across environments (local → staging → production).
 
 ## Quick reference
 

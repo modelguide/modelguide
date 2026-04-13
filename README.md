@@ -32,20 +32,20 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="#reference-agents">Reference Agents</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="docs/guide/adding-a-connector.md">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
+  <a href="#quick-start">Quick Start</a> · <a href="#reference-implementations">Reference Implementations</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="docs/guide/adding-a-connector.md">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
 <a href="https://www.youtube.com/watch?v=melFDGiA6gg" target="_blank"><img src="https://img.youtube.com/vi/melFDGiA6gg/maxresdefault.jpg" alt="ModelGuide Demo" /></a>
 
-## The Production Gap
+## The Missing Feedback Loop
 
-A real-time agent can talk in a day. Getting it into production takes much longer.
+Getting an agent to talk is easy. Making it reliable is the hard part.
 
-The delay is not the model. It is the layer around it: business tool access, policy enforcement, session history, QA workflows, evals, onboarding, and deployment.
+A bad conversation happens. Someone reviews it manually. A prompt gets tweaked. But no reusable test is created, no eval is added, and the same failure comes back later in a slightly different form.
 
-Most teams assemble that layer from custom glue code and vendor dashboards. That slows launch, fragments ownership, and creates migration risk whenever the runtime, model, or channel changes.
+The missing layer is the feedback loop around the runtime: business tool access, policy enforcement, session history, QA workflows, evals, provisioning, and deployment.
 
-ModelGuide gives you that layer as open source — so you can build and ship your voice agent on any stack without rebuilding production infrastructure from scratch. Start with voice. Extend to other customer-facing channels when needed.
+ModelGuide gives you that layer as open source — so you can turn failures into tests, tests into better instructions, and ship voice agents on any stack without rebuilding production infrastructure from scratch. Start with voice. Extend to other customer-facing channels when needed.
 
 ![Architecture diagram](./docs/architecture_image.png)
 
@@ -63,70 +63,43 @@ ModelGuide sits between your agent runtime and your business systems. It is not 
 - Run evals and simulations against real workflows
 - Provision new organizations from repeatable YAML blueprints
 
-## What You Get
+## Why Builders Use ModelGuide
 
-| Outcome | What ModelGuide gives you |
+| Builder need | What ModelGuide gives you |
 |---|---|
 | **Closed feedback loop** | Run simulations and evals, turn failed conversations into reusable test cases and evaluators, and recompile better instructions |
-| **Faster production launch** | The missing layer around the model: tools, SOPs, sessions, evals, and operator workflows |
-| **Lower vendor risk** | Keep LiveKit, Pipecat, ElevenLabs, Mastra, or your own runtime. The business layer stays portable. |
-| **Governance in one place** | Manage tool access, guardrails, confirmation policies, and quality review from a single dashboard |
-| **Operational visibility** | Full session records, tool traces, CSAT, QA tags, and eval results — complements your observability stack (Langfuse, Datadog, OpenTelemetry) |
-| **Production-ready infrastructure** | Open-source, self-hostable, with multi-tenant auth, encrypted secrets, and row-level security |
+| **Less production glue code** | Connect tools, sessions, SOPs, evals, and operator workflows without rebuilding the harness around every runtime |
+| **Runtime portability** | Keep LiveKit, Pipecat, ElevenLabs, Mastra, or your own runtime. The business layer stays portable. |
+| **One place for agent context** | Manage tools, SOPs, guardrails, confirmation policies, and review workflows from a single control layer |
+| **Reviewable behavior** | Full session records, tool traces, CSAT, QA tags, and eval results — complements your observability stack |
+| **Self-hostable production infrastructure** | Open-source, self-hostable, with multi-tenant auth, encrypted secrets, and row-level security |
+
+ModelGuide focuses on agent behavior and review: transcripts, tool traces, CSAT, QA tags, SOP adherence, and eval results. Keep Langfuse, Datadog, Honeycomb, or OpenTelemetry for lower-level runtime telemetry and infrastructure tracing.
 
 <table>
   <tbody>
     <tr>
-      <td align="center"><strong>Connectors</strong></td>
-      <td align="center"><strong>Sessions</strong></td>
-      <td align="center"><strong>Agents</strong></td>
+      <td align="center"><strong>Connect Tools</strong></td>
+      <td align="center"><strong>Review Conversations</strong></td>
+      <td align="center"><strong>Define Behavior</strong></td>
     </tr>
     <tr>
-      <td><a href="./docs/Connectors.png"><img src="./docs/Connectors.png" alt="Connectors" width="260"></a></td>
-      <td><a href="./docs/Converstation.png"><img src="./docs/Converstation.png" alt="Sessions" width="260"></a></td>
-      <td><a href="./docs/Data.png"><img src="./docs/Data.png" alt="Agents" width="260"></a></td>
+      <td><a href="./docs/Connectors.png"><img src="./docs/Connectors.png" alt="Connect Tools" width="260"></a></td>
+      <td><a href="./docs/Converstation.png"><img src="./docs/Converstation.png" alt="Review Conversations" width="260"></a></td>
+      <td><a href="./docs/Data.png"><img src="./docs/Data.png" alt="Define Behavior" width="260"></a></td>
     </tr>
     <tr>
-      <td align="center"><strong>SOPs</strong></td>
-      <td align="center"><strong>Analytics</strong></td>
-      <td align="center"><strong>Evals</strong></td>
+      <td align="center"><strong>Write Playbooks</strong></td>
+      <td align="center"><strong>Track Quality</strong></td>
+      <td align="center"><strong>Run Evals</strong></td>
     </tr>
     <tr>
-      <td><a href="./docs/SOPs.png"><img src="./docs/SOPs.png" alt="SOPs" width="260"></a></td>
-      <td><a href="./docs/Optimize.png"><img src="./docs/Optimize.png" alt="Analytics" width="260"></a></td>
-      <td><a href="./docs/evals.png"><img src="./docs/evals.png" alt="Evals" width="260"></a></td>
+      <td><a href="./docs/SOPs.png"><img src="./docs/SOPs.png" alt="Write Playbooks" width="260"></a></td>
+      <td><a href="./docs/Optimize.png"><img src="./docs/Optimize.png" alt="Track Quality" width="260"></a></td>
+      <td><a href="./docs/evals.png"><img src="./docs/evals.png" alt="Run Evals" width="260"></a></td>
     </tr>
   </tbody>
 </table>
-
-## How Teams Use ModelGuide
-
-**1. Define what your agent should do.** Describe the persona, connect your business systems, set the rules and guardrails. ModelGuide keeps that operational context in one place.
-
-**2. Generate the instructions your runtime uses.** ModelGuide compiles that context into agent instructions and exposes the approved business tools over MCP.
-
-**3. Generate test assets automatically.** ModelGuide creates synthetic conversations, eval suites, evaluators, and QA workflows to test the agent before it reaches production traffic.
-
-**4. Run the feedback loop.** ModelGuide runs simulations, scores behavior, and gives your team transcripts, tool traces, CSAT, QA tags, and eval results to review.
-
-**5. Tighten the operating context.** Use failures to update SOPs, guardrails, persona, tools, and compiled instructions until the automated checks consistently look right.
-
-**6. Validate manually before launch.** Once the agent passes the automated checks, run manual tests in your runtime and confirm the experience is good enough to ship.
-
-The closed feedback loop is already here: define the context, compile the instructions, generate tests, run simulations, score behavior, and improve the agent from failures. Over time, more of the prompt and context fixes can be automated.
-
-## Reference Agents
-
-The reference agents prove that the orchestration layer stays portable across runtimes and channels.
-
-Start with the LiveKit implementation for the fastest end-to-end path. Use the Pipecat or ElevenLabs examples if your team already runs there. The Mastra example shows the same orchestration layer extending beyond voice when you need another customer-facing channel.
-
-| Runtime | Why it exists | Path |
-|---|---|---|
-| **LiveKit Agents** *(flagship)* | Fastest path to a production voice agent with telephony, MCP tool wiring, session tracking, eval tests, and deployment docs | [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/) |
-| **Pipecat** | Same orchestration model for teams already committed to Pipecat | [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/) |
-| **ElevenLabs Conversational AI** | Manage platform agent config, tools, and prompts from version-controlled local definitions | [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/) |
-| **Mastra** | Email "Where Is My Order?" example showing the orchestration layer extends beyond voice when you need another customer-facing channel | [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/) |
 
 ## Quick Start
 
@@ -149,7 +122,36 @@ Open `http://localhost:3001`. The seed creates three industry-vertical organizat
 
 Full vertical matrix, dev accounts, and session scenarios: [`docs/guide/seed-data.md`](docs/guide/seed-data.md).
 
-## Onboarding an Organization
+## How Teams Use ModelGuide
+
+**1. Define what your agent should do.** Describe the persona, connect your business systems, set the rules and guardrails. ModelGuide keeps that operational context in one place.
+
+**2. Generate the instructions your runtime uses.** ModelGuide compiles that context into agent instructions and exposes the approved business tools over MCP.
+
+**3. Generate test assets automatically.** ModelGuide creates synthetic conversations, eval suites, evaluators, and QA workflows to test the agent before it reaches production traffic.
+
+**4. Run the feedback loop.** ModelGuide runs simulations, scores behavior, and gives your team transcripts, tool traces, CSAT, QA tags, and eval results to review.
+
+**5. Tighten the operating context.** Use failures to update SOPs, guardrails, persona, tools, and compiled instructions until the automated checks consistently look right.
+
+**6. Validate manually before launch.** Once the agent passes the automated checks, run manual tests in your runtime and confirm the experience is good enough to ship.
+
+The closed feedback loop is already here: define the context, compile the instructions, generate tests, run simulations, score behavior, and improve the agent from failures. Over time, more of the prompt and context fixes can be automated.
+
+## Reference Implementations
+
+The reference implementations prove that the orchestration layer stays portable across runtimes and channels.
+
+Start with the LiveKit implementation for the fastest end-to-end path. Use the Pipecat or ElevenLabs examples if your team already runs there. The Mastra example shows the same orchestration layer extending beyond voice when you need another customer-facing channel.
+
+| Runtime | Why it exists | Path |
+|---|---|---|
+| **LiveKit Agents** *(flagship)* | Fastest path to a production voice agent with telephony, MCP tool wiring, session tracking, eval tests, and deployment docs | [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/) |
+| **Pipecat** | Same orchestration model for teams already committed to Pipecat | [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/) |
+| **ElevenLabs Conversational AI** | Manage platform agent config, tools, and prompts from version-controlled local definitions | [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/) |
+| **Mastra** | Email "Where Is My Order?" example showing the orchestration layer extends beyond voice when you need another customer-facing channel | [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/) |
+
+## Provisioning an Organization
 
 The `mg` CLI provisions a new organization from a directory of YAML files — users, connectors, agents with compiled instructions, SOPs, guardrails, and demo sessions — in one command. Safe to re-run against the same directory.
 
@@ -199,7 +201,7 @@ Production foundations include RBAC with separate admin/support/agent auth paths
 | [MCP Integration Guide](docs/guide/mcp-integration.md) | Connect your AI agent via MCP |
 | [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools through the dashboard |
 | [Adding a Connector](docs/guide/adding-a-connector.md) | Build a new connector manifest, handlers, and tests |
-| [`mg` CLI — Onboarding](docs/guide/cli.md) | Provision organizations from YAML |
+| [`mg` CLI — Provisioning](docs/guide/cli.md) | Provision organizations from YAML |
 | [Seed Data](docs/guide/seed-data.md) | Dev accounts, orgs, and session scenarios |
 | [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
 | [Deployment Guide](railway/DEPLOY.md) | Railway production deployment |

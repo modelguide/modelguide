@@ -208,4 +208,4 @@ Once agents are running, the **Sessions** page shows real-time activity:
 
 - [MCP Integration Guide](mcp-integration.md) — Full MCP integration walkthrough
 - [Adding a Connector](../../README.md#adding-a-connector) — Build a custom connector
-- Auto-generated API docs at `http://localhost:3000/docs`
+- [Local API docs](http://localhost:3000/docs) — REST endpoints and schemas

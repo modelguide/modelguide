@@ -308,5 +308,5 @@ main().catch(console.error);
 ## Next Steps
 
 - [Admin Guide](admin-guide.md) — Configure connectors, create agents, assign tools
-- Auto-generated API docs at `http://localhost:3000/docs`
+- [Local API docs](http://localhost:3000/docs) — REST endpoints and schemas
 - [Adding a Connector](../../README.md#adding-a-connector) — Build your own connector
