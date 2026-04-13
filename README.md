@@ -67,6 +67,7 @@ ModelGuide sits between your agent runtime and your business systems. It is not 
 
 | Outcome | What ModelGuide gives you |
 |---|---|
+| **Closed feedback loop** | Run simulations and evals, turn failed conversations into reusable test cases and evaluators, and recompile better instructions |
 | **Faster production launch** | The missing layer around the model: tools, SOPs, sessions, evals, and operator workflows |
 | **Lower vendor risk** | Keep LiveKit, Pipecat, ElevenLabs, Mastra, or your own runtime. The business layer stays portable. |
 | **Central governance** | One place to control tool access, guardrails, confirmation policies, and quality review |
@@ -150,7 +151,7 @@ Full vertical matrix, dev accounts, and session scenarios: [`docs/guide/seed-dat
 
 The closed feedback loop is already here: define the context, compile the instructions, generate tests, run simulations, score behavior, and improve the agent from failures. Over time, more of the prompt and context fixes can be automated.
 
-## Onboarding a Customer
+## Onboarding an Organization
 
 The `mg` CLI provisions a new organization from a directory of YAML files — users, connectors, agents with compiled instructions, SOPs, guardrails, and demo sessions — in one command. Safe to re-run against the same directory.
 
