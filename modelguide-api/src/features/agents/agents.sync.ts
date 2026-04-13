@@ -286,7 +286,11 @@ async function _syncAgentToElevenLabs(
     throw err;
   }
 
-  // Step 4: Assign new MCP server + webhook + conversation-init to ElevenLabs agent
+  // Determine compiled prompt and LLM model from agent metadata
+  const compiledPrompt = agent.compiledInstructions ?? undefined;
+  const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
+
+  // Step 4: Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
   try {
     const mergedMcpIds = [...foreignMcpIds, mcpServerId!];
 
@@ -302,14 +306,24 @@ async function _syncAgentToElevenLabs(
         }
       : {};
 
+    // Build prompt payload — include compiled prompt and model only when set
+    const promptPayload: Record<string, unknown> = {
+      mcpServerIds: mergedMcpIds,
+    };
+    if (compiledPrompt) {
+      promptPayload.prompt = compiledPrompt;
+      promptPayload.ignoreDefaultPersonality = true;
+    }
+    if (llmModel) {
+      promptPayload.llm = llmModel;
+    }
+
     await client.conversationalAi.agents.update(elevenLabsAgentId, {
       conversationConfig: {
         agent: {
-          prompt: {
-            mcpServerIds: mergedMcpIds,
-          },
+          prompt: promptPayload,
         },
-        // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
+        // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds/ignoreDefaultPersonality
       } as any,
       platformSettings: {
         overrides: {
@@ -332,6 +346,36 @@ async function _syncAgentToElevenLabs(
       message: getErrorMessage(err),
     });
     throw err;
+  }
+
+  // Report compiled prompt step
+  if (compiledPrompt) {
+    steps.push({
+      step: "Compiled prompt",
+      status: "success",
+      message: "Pushed compiled prompt with ignoreDefaultPersonality: true",
+    });
+  } else {
+    steps.push({
+      step: "Compiled prompt",
+      status: "skipped",
+      message: "Agent has no compiled instructions — compile the prompt first",
+    });
+  }
+
+  // Report LLM model step
+  if (llmModel) {
+    steps.push({
+      step: "LLM model",
+      status: "success",
+      message: `Set to ${llmModel}`,
+    });
+  } else {
+    steps.push({
+      step: "LLM model",
+      status: "skipped",
+      message: "No LLM model configured — ElevenLabs default preserved",
+    });
   }
 
   // Report conversation-init webhook status

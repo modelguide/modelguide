@@ -4,8 +4,11 @@
 
 import { env } from "@/env";
 import type { Agent } from "@db/schema";
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { getAgentElevenLabsKey } from "@features/secrets";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
+import { Errors } from "@lib/errors";
 import {
   getCurrentUser,
   getOrganizationId,
@@ -33,6 +36,10 @@ import {
   upsertLivekitConfig,
 } from "./agents.service";
 import { syncAgentToElevenLabs } from "./agents.sync";
+import {
+  type ModelFamily,
+  getElevenLabsModelGroups,
+} from "./elevenlabs-models";
 
 const router = createRouter();
 
@@ -362,6 +369,164 @@ router.openapi(createAgentRoute, async (c) => {
   return c.json({ ...formatAgent(agent), apiKey }, 201);
 });
 
+// ============================================================================
+// ElevenLabs Models Endpoint
+// ============================================================================
+
+// GET /elevenlabs/models
+router.get(
+  "/elevenlabs/models",
+  requireUser(),
+  requirePermission("agents:read"),
+  requireOrganization(),
+);
+
+const elevenlabsModelsQuerySchema = z.object({
+  family: z
+    .enum(["gpt", "claude", "gemini", "generic"])
+    .optional()
+    .openapi({ description: "Filter models by family" }),
+});
+
+const elevenlabsModelsRoute = createRoute({
+  method: "get",
+  path: "/elevenlabs/models",
+  tags: ["Agents"],
+  summary: "List ElevenLabs LLM models",
+  description:
+    "Returns a curated list of ElevenLabs LLM models grouped by family. Filter by ?family=gpt|claude|gemini|generic. When family=generic, all models from all families are returned combined.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    query: elevenlabsModelsQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "Curated model list grouped by family",
+      content: {
+        "application/json": {
+          schema: z.object({
+            data: z.array(
+              z.object({
+                family: z.string(),
+                models: z.array(
+                  z.object({
+                    id: z.string(),
+                    label: z.string(),
+                  }),
+                ),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+  },
+});
+
+router.openapi(elevenlabsModelsRoute, async (c) => {
+  const { family } = c.req.valid("query");
+  const data = getElevenLabsModelGroups(family as ModelFamily | undefined);
+
+  return c.json({ data }, 200);
+});
+
+// ============================================================================
+// ElevenLabs Agent Creation
+// ============================================================================
+
+// POST /:id/elevenlabs
+router.post(
+  "/:id/elevenlabs",
+  requireUser(),
+  requirePermission("agents:update"),
+  requireOrganization(),
+);
+
+const createElevenLabsAgentRoute = createRoute({
+  method: "post",
+  path: "/{id}/elevenlabs",
+  tags: ["Agents"],
+  summary: "Create ElevenLabs agent",
+  description:
+    "Creates a minimal shell agent on ElevenLabs using the agent name. Returns the ElevenLabs agent ID and saves it to metadata.elevenlabs.agentId. All real configuration (MCP servers, webhooks, prompt, model) is applied via sync.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    200: {
+      description: "ElevenLabs agent created",
+      content: {
+        "application/json": {
+          schema: z.object({
+            elevenLabsAgentId: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse("ElevenLabs API key not configured"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    409: errorResponse("ElevenLabs agent already exists for this agent"),
+  },
+});
+
+router.openapi(createElevenLabsAgentRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+
+  const agent = await getAgentById(orgId, id);
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
+
+  // Guard: agent ID already set → 409
+  if (elMeta.agentId) {
+    throw Errors.conflict(
+      "ElevenLabs agent ID already set — clear it first to re-create",
+    );
+  }
+
+  // Guard: no API key → 400
+  if (!agent.hasElevenLabsKey) {
+    throw Errors.invalidInput(
+      "ElevenLabs API key must be configured before creating an agent",
+    );
+  }
+
+  const apiKey = await getAgentElevenLabsKey(orgId, id);
+  if (!apiKey) {
+    throw Errors.invalidInput(
+      "ElevenLabs API key not configured for this agent",
+    );
+  }
+
+  const client = new ElevenLabsClient({ apiKey });
+
+  const created = await client.conversationalAi.agents.create({
+    name: agent.name,
+    conversationConfig: {},
+  });
+
+  const elevenLabsAgentId = created.agentId;
+
+  // Persist agentId to metadata
+  await updateAgent(orgId, id, {
+    metadata: {
+      ...meta,
+      elevenlabs: {
+        ...elMeta,
+        agentId: elevenLabsAgentId,
+      },
+    },
+  });
+
+  return c.json({ elevenLabsAgentId }, 200);
+});
+
 // GET /:id
 router.get(
   "/:id",
@@ -447,7 +612,8 @@ router.openapi(updateAgentRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
-  const agent = await updateAgent(orgId, id, body);
+  await updateAgent(orgId, id, body);
+  const agent = await getAgentById(orgId, id);
 
   return c.json(formatAgent(agent), 200);
 });
