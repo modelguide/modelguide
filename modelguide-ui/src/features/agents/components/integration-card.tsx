@@ -3,6 +3,7 @@ import { Check, Copy, Key, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
+import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { api } from '~/lib/api'
 import type { Agent, RegenerateKeyResponse } from '~/schemas/agents'
 
@@ -15,6 +16,7 @@ interface IntegrationCardProps {
 export function IntegrationCard({ agent, isAdmin, onRegenerateSuccess }: IntegrationCardProps) {
   const queryClient = useQueryClient()
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   const regenerateKeyMutation = useMutation({
     mutationFn: () => api.post(`agents/${agent.id}/regenerate-key`).json<RegenerateKeyResponse>(),
@@ -74,7 +76,7 @@ export function IntegrationCard({ agent, isAdmin, onRegenerateSuccess }: Integra
                   variant="secondary"
                   size="sm"
                   className="mt-2 w-full"
-                  onClick={() => regenerateKeyMutation.mutate()}
+                  onClick={() => setShowConfirm(true)}
                   loading={regenerateKeyMutation.isPending}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -125,6 +127,29 @@ export function IntegrationCard({ agent, isAdmin, onRegenerateSuccess }: Integra
           </div>
         </CardContent>
       </Card>
+      <Dialog
+        open={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        title="Regenerate API Key?"
+        description="This will invalidate the current key immediately. Any integrations using the old key will stop working."
+        size="sm"
+      >
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setShowConfirm(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            loading={regenerateKeyMutation.isPending}
+            onClick={() => {
+              setShowConfirm(false)
+              regenerateKeyMutation.mutate()
+            }}
+          >
+            Regenerate
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </>
   )
 }
