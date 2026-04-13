@@ -5,11 +5,24 @@
   </picture>
 </p>
 
-<h3 align="center">Ship support & sales agents with confidence.</h3>
+<h3 align="center">Own your agent stack.</h3>
 
 <p align="center">
-  Open-source production harness for AI agents — voice, chat, email, any channel.<br/>
-  SOPs · Connectors · Session Recording · Evals · RBAC — one TypeScript codebase, zero vendor lock-in.
+  ModelGuide is the open-source orchestration layer for production <strong>voice-first agents</strong>.<br/>
+  Keep your runtime. Wire up integrations once. Define agent behavior with playbooks, SOPs, and guardrails.<br/>
+  Build → generate tests → simulate → score → improve → ship. A closed feedback loop you own.
+</p>
+
+<p align="center">
+  <em>No vendor lock-in. Bring your own models, runtimes, channels, and deployment.</em>
+</p>
+
+<p align="center">
+  <strong>Start with a reference implementation →</strong>
+  <a href="examples/agents/livekit-agent/"><strong>LiveKit</strong></a> ·
+  <a href="examples/agents/pipecat-agent/">Pipecat</a> ·
+  <a href="examples/agents/elevenlabs-agent/">ElevenLabs</a> ·
+  <a href="examples/agents/mastra-wismo-email-agent/">Mastra</a>
 </p>
 
 <p align="center">
@@ -19,98 +32,74 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="#adding-a-connector">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
+  <a href="#quick-start">Quick Start</a> · <a href="#reference-implementations">Reference Implementations</a> · <a href="docs/guide/mcp-integration.md">Connect Your Agent</a> · <a href="docs/guide/admin-guide.md">Admin Guide</a> · <a href="docs/guide/adding-a-connector.md">Build a Connector</a> · <a href="#roadmap">Roadmap</a>
 </p>
 
 <a href="https://www.youtube.com/watch?v=melFDGiA6gg" target="_blank"><img src="https://img.youtube.com/vi/melFDGiA6gg/maxresdefault.jpg" alt="ModelGuide Demo" /></a>
 
-## The Problem
+## The Missing Feedback Loop
 
-Your agent handles demos. Production needs session tracking, tool management, evals, SOPs, and integrations with every system your company runs. Every team rebuilds this from scratch.
+Getting an agent to talk is easy. Making it reliable is the hard part.
 
-Today you ship a chat agent. Tomorrow the business wants voice and email — and you're starting over because nothing was built to carry across channels.
+A bad conversation happens. Someone reviews it manually. A prompt gets tweaked. But no reusable test is created, no eval is added, and the same failure comes back later in a slightly different form.
 
-The boring stuff between "it works" and "it ships" — that's what kills timelines. Not the AI. SaaS charges $150K+ for this harness. We open-sourced it.
+The missing layer is the feedback loop around the runtime: business tool access, policy enforcement, session history, QA workflows, evals, provisioning, and deployment.
 
-80% of the infrastructure comes ready: auth, sessions, connectors, SOPs, evals, analytics. You customize the 20% that makes your agent yours. The first blueprint — a contact center agent — is shipping now. Fork it, or start fresh for any vertical: healthcare intake, field service, B2B sales, internal ops.
+ModelGuide gives you that layer as open source — so you can turn failures into tests, tests into better instructions, and ship voice agents on any stack without rebuilding production infrastructure from scratch. Start with voice. Extend to other customer-facing channels when needed.
 
 ![Architecture diagram](./docs/architecture_image.png)
 
-## What ModelGuide Does
+## What ModelGuide Is
 
 <video src="https://github.com/user-attachments/assets/811f1756-4948-461e-abdd-7691ee3d9ccc
 " controls width="100%"></video>
 
-ModelGuide is the infrastructure layer between your AI agents and your business systems. It doesn't run the AI or own the voice stack — it gives you four production-ready layers you'd otherwise build from scratch:
+ModelGuide sits between your agent runtime and your business systems. It is not a voice runtime and it is not a hosted black box. It is the orchestration layer you own.
 
-**Tool layer** — Connectors expose your business systems (orders, tickets, calendars) as tools any AI agent can call via [MCP](https://modelcontextprotocol.io). One integration works with every platform.
+- Connect business systems once over [MCP](https://modelcontextprotocol.io)
+- Assign the right tools to each agent with confirmation gates and secure credentials
+- Compile SOPs and guardrails into agent behavior
+- Record sessions with transcripts, tool traces, CSAT, and QA tags
+- Run evals and simulations against real workflows
+- Provision new organizations from repeatable YAML blueprints
 
-**Observation layer** — Every session recorded with full tool call traces: inputs, outputs, latency, errors, CSAT scores, internal QA. Not just "call duration" — what the agent *actually did*.
+## Why Builders Use ModelGuide
 
-**Configuration layer** — Agent configs, API keys, tool assignments, per-tool confirmation gates. Swap the voice platform, keep your entire backend.
+| Builder need | What ModelGuide gives you |
+|---|---|
+| **Closed feedback loop** | Run simulations and evals, turn failed conversations into reusable test cases and evaluators, and recompile better instructions |
+| **Less production glue code** | Connect tools, sessions, SOPs, evals, and operator workflows without rebuilding the harness around every runtime |
+| **Runtime portability** | Keep LiveKit, Pipecat, ElevenLabs, Mastra, or your own runtime. The business layer stays portable. |
+| **One place for agent context** | Manage tools, SOPs, guardrails, confirmation policies, and review workflows from a single control layer |
+| **Reviewable behavior** | Full session records, tool traces, CSAT, QA tags, and eval results — complements your observability stack |
+| **Self-hostable production infrastructure** | Open-source, self-hostable, with multi-tenant auth, encrypted secrets, and row-level security |
 
-**SOP layer** — Define step-by-step procedures, link them to specific tools, and assign them to agents. Agents follow your playbook instead of improvising — consistent behavior across every interaction.
-
-**Analytics layer** — Resolution rates, escalation trends, CSAT scores, session volume by channel — the metrics you need to prove agents are working, not vanity dashboards.
+ModelGuide focuses on agent behavior and review: transcripts, tool traces, CSAT, QA tags, SOP adherence, and eval results. Keep Langfuse, Datadog, Honeycomb, or OpenTelemetry for lower-level runtime telemetry and infrastructure tracing.
 
 <table>
   <tbody>
     <tr>
-      <td align="center"><strong>Connectors</strong></td>
-      <td align="center"><strong>Sessions</strong></td>
-      <td align="center"><strong>Agents</strong></td>
+      <td align="center"><strong>Connect Tools</strong></td>
+      <td align="center"><strong>Review Conversations</strong></td>
+      <td align="center"><strong>Define Behavior</strong></td>
     </tr>
     <tr>
-      <td><a href="./docs/Connectors.png"><img src="./docs/Connectors.png" alt="Connectors" width="260"></a></td>
-      <td><a href="./docs/Converstation.png"><img src="./docs/Converstation.png" alt="Sessions" width="260"></a></td>
-      <td><a href="./docs/Data.png"><img src="./docs/Data.png" alt="Agents" width="260"></a></td>
+      <td><a href="./docs/Connectors.png"><img src="./docs/Connectors.png" alt="Connect Tools" width="260"></a></td>
+      <td><a href="./docs/Converstation.png"><img src="./docs/Converstation.png" alt="Review Conversations" width="260"></a></td>
+      <td><a href="./docs/Data.png"><img src="./docs/Data.png" alt="Define Behavior" width="260"></a></td>
     </tr>
     <tr>
-      <td align="center"><strong>SOPs</strong></td>
-      <td align="center"><strong>Analytics</strong></td>
-      <td></td>
+      <td align="center"><strong>Write Playbooks</strong></td>
+      <td align="center"><strong>Track Quality</strong></td>
+      <td align="center"><strong>Run Evals</strong></td>
     </tr>
     <tr>
-      <td><a href="./docs/SOPs.png"><img src="./docs/SOPs.png" alt="SOPs" width="260"></a></td>
-      <td><a href="./docs/Optimize.png"><img src="./docs/Optimize.png" alt="Analytics" width="260"></a></td>
-      <td></td>
+      <td><a href="./docs/SOPs.png"><img src="./docs/SOPs.png" alt="Write Playbooks" width="260"></a></td>
+      <td><a href="./docs/Optimize.png"><img src="./docs/Optimize.png" alt="Track Quality" width="260"></a></td>
+      <td><a href="./docs/evals.png"><img src="./docs/evals.png" alt="Run Evals" width="260"></a></td>
     </tr>
   </tbody>
 </table>
-
-## Features
-
-Everything you need to go from demo to production:
-
-✅ **Connector System** — Code-defined manifests with real HTTP handlers. Ships with a Medusa e-commerce connector as a reference implementation (8 tools: browse products, manage carts, checkout, orders). Build your own — implement the `ConnectorManifest` interface and add a handler function per tool.
-
-✅ **Tool Namespacing** — Connector instances get a unique slug. Same connector type, different instances: `glowbox_store_add_to_cart` and `clearhealth_pharmacy_add_to_cart` coexist on the same agent.
-
-✅ **MCP Protocol** — Standard [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP. Tool discovery, execution, and resources. Works with any MCP-compatible client.
-
-✅ **Confirmation Gates** — Flag destructive tools as requiring customer confirmation before execution. The `requires_confirmation` flag tells the AI agent to verify intent before proceeding (e.g., completing a checkout).
-
-✅ **Session Recording** — Full message history with roles, timestamps, audio URLs, tool call inputs/outputs. Sequence-numbered for correct ordering.
-
-✅ **CSAT + QA** — Customer feedback via `core_rate_session`. Internal quality evaluation by support team with tags and comments. Both stored per session, filterable in dashboard.
-
-✅ **Multi-Tenant** — PostgreSQL row-level security on every org-scoped table. Separate DB roles: superuser for migrations, app role subject to RLS policies. One deployment, multiple organizations.
-
-✅ **Auth** — Magic link passwordless login for dashboard users. API key auth (`mgk_` prefix, SHA-256 hashed, shown once on creation) for agents. Refresh token rotation with family-based revocation.
-
-✅ **RBAC** — Granular permissions across admin and support roles. Agents get a separate auth path — they can only access MCP, not REST endpoints.
-
-✅ **Auto-Generated API Docs** — OpenAPI 3.1 spec generated from Hono route definitions. Scalar UI at `/docs`.
-
-✅ **SOPs (Standard Operating Procedures)** — Define agent behavioral contracts: ordered steps with tool references, triggers, and metadata. Fork from reusable templates or create from scratch. Draft/active/archived lifecycle. Assign SOPs to agents. Inactive-tool warnings at read time. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md).
-
-✅ **CI Pipeline** — Lint, typecheck, unit tests, integration tests on every PR. Includes MCP protocol tests using the official SDK client.
-
-## AI-Assisted Development
-
-ModelGuide is built with AI coding agents, not just for them. We're progressively building a development harness — enforced module boundaries, structured issue specs, mechanical convention enforcement via CI, and agent-to-agent code review — so that any AI coding agent can implement features, write tests, and open PRs with minimal hand-holding. We also use slash commands available to all contributors for common workflows like committing, reviewing PRs, and implementing issues.
-
-We'll keep harness artifacts public.
 
 ## Quick Start
 
@@ -129,101 +118,66 @@ make api-dev    # API at http://localhost:3000
 make ui-dev     # Dashboard at http://localhost:3001
 ```
 
-Open `http://localhost:3001`. The seed creates three industry-vertical organizations — each with Medusa e-commerce and Zendesk helpdesk connectors, two agents, and ~300 realistic sessions. Log in with `delivered+admin-glowbox@resend.dev` (magic link printed to API console).
+Open `http://localhost:3001`. The seed creates three industry-vertical organizations — retail, medical call center, B2B industrial — each with Medusa e-commerce and Zendesk helpdesk connectors, two agents, and ~300 realistic sessions. Log in with `delivered+admin-glowbox@resend.dev` (magic link printed to API console).
 
-See [Seed Data](#seed-data) for the full list of organizations and use cases.
+Full vertical matrix, dev accounts, and session scenarios: [`docs/guide/seed-data.md`](docs/guide/seed-data.md).
 
-API docs are auto-generated at `http://localhost:3000/docs`.
+## How Teams Use ModelGuide
 
-## How It Works
+**1. Define what your agent should do.** Describe the persona, connect your business systems, set the rules and guardrails. ModelGuide keeps that operational context in one place.
 
-### 1. Define connectors in code
+**2. Generate the instructions your runtime uses.** ModelGuide compiles that context into agent instructions and exposes the approved business tools over MCP.
 
-Each connector is a TypeScript module with a manifest and tool handlers:
+**3. Generate test assets automatically.** ModelGuide creates synthetic conversations, eval suites, evaluators, and QA workflows to test the agent before it reaches production traffic.
 
-```typescript
-// src/features/connectors/catalog/medusa/index.ts
-const manifest: ConnectorManifest = {
-  name: "Medusa",
-  slug: "medusa",
-  description: "E-commerce connector for carts, orders, and products",
-  connectorType: "api",
-  configSchema: {
-    baseUrl: { type: "string", required: true },
-    publishableKey: { type: "string", required: true },
-  },
-  authMethods: ["api_key"],
-  iconUrl: "/logos/medusa.svg",
-  tools: [
-    {
-      catalog: {
-        name: "Add to Cart",
-        description: "Add an item to the shopping cart",
-        inputSchema: { /* JSON Schema */ },
-        defaultRequiresConfirmation: false,
-      },
-      handler: addToCart,  // actual HTTP call to Medusa API
-    },
-    // ... 7 more tools
-  ],
-};
+**4. Run the feedback loop.** ModelGuide runs simulations, scores behavior, and gives your team transcripts, tool traces, CSAT, QA tags, and eval results to review.
 
-export default manifest;
+**5. Tighten the operating context.** Use failures to update SOPs, guardrails, persona, tools, and compiled instructions until the automated checks consistently look right.
+
+**6. Validate manually before launch.** Once the agent passes the automated checks, run manual tests in your runtime and confirm the experience is good enough to ship.
+
+The closed feedback loop is already here: define the context, compile the instructions, generate tests, run simulations, score behavior, and improve the agent from failures. Over time, more of the prompt and context fixes can be automated.
+
+## Reference Implementations
+
+The reference implementations prove that the orchestration layer stays portable across runtimes and channels.
+
+Start with the LiveKit implementation for the fastest end-to-end path. Use the Pipecat or ElevenLabs examples if your team already runs there. The Mastra example shows the same orchestration layer extending beyond voice when you need another customer-facing channel.
+
+| Runtime | Why it exists | Path |
+|---|---|---|
+| **LiveKit Agents** *(flagship)* | Fastest path to a production voice agent with telephony, MCP tool wiring, session tracking, eval tests, and deployment docs | [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/) |
+| **Pipecat** | Same orchestration model for teams already committed to Pipecat | [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/) |
+| **ElevenLabs Conversational AI** | Manage platform agent config, tools, and prompts from version-controlled local definitions | [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/) |
+| **Mastra** | Email "Where Is My Order?" example showing the orchestration layer extends beyond voice when you need another customer-facing channel | [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/) |
+
+## Provisioning an Organization
+
+The `mg` CLI provisions a new organization from a directory of YAML files — users, connectors, agents with compiled instructions, SOPs, guardrails, and demo sessions — in one command. Safe to re-run against the same directory.
+
+```bash
+bun run src/cli/mg.ts setup /path/to/my-org/
 ```
 
-Run `make sync-connectors` to sync manifests to the database. Admins configure instances through the dashboard — set the API URL, link encrypted credentials, assign tools to agents.
+Full flag reference, per-command usage, and Railway instructions: [`docs/guide/cli.md`](docs/guide/cli.md).
 
-### 2. Agents connect via MCP
+## Roadmap
 
-External AI agents authenticate with an API key (`mgk_xxx`) and get their tools dynamically:
+🚧 **Sub-agents & Workflow Builder** — Compose multi-step agent workflows with branching and handoffs
 
-```
-POST /mcp
-Authorization: Bearer mgk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+🚧 **OTEL + A/B Testing via Langfuse** — OpenTelemetry traces, prompt variant experiments, side-by-side comparison
 
-→ tools/list returns only tools assigned to THIS agent
-→ Each tool requires an active session_id
-→ Tool names are namespaced: glowbox_store_add_to_cart
-```
+🚧 **Agentic Insights** — Custom funnels tracking agent behavior through business-defined conversion paths
 
-The MCP handler creates a fresh server per request, registers only the tools that agent is authorized to use, converts JSON Schema to Zod on the fly, and validates sessions before execution.
+🚧 **Closed-loop instruction tuning** — turn repeated eval and simulation failures into suggested SOP, guardrail, and instruction fixes
 
-### 3. Sessions capture everything
+📋 **More Blueprints** — Contact center ships first; healthcare intake, field service, B2B sales next
 
-Core MCP tools handle the session lifecycle:
+📋 **Connector Marketplace** — Community-built integrations
 
-- `core_create_session` — starts a session with channel type, user identifier, metadata
-- `core_add_messages` — bulk ingest conversation turns with timestamps and tool calls
-- `core_rate_session` — records CSAT (1 = negative, 2 = positive)
-- `core_end_session` — closes the session
+## Deployment
 
-Every tool call, every message, every rating — stored and queryable through the REST API and dashboard.
-
-### 4. Dashboard for ops
-
-The dashboard gives support teams what they need: session list with filters (status, channel, agent, date range, feedback), full transcripts with expandable tool call traces showing request/response JSON, and the ability to evaluate agent performance with tags (`wrong_tool`, `hallucination`, `good_resolution`).
-
-## Seed Data
-
-`make db-seed` populates three organizations that demonstrate ModelGuide across different industries. Each org gets both **Medusa** (e-commerce) and **Zendesk** (helpdesk) connectors, two agents, ~300 generated sessions with tool calls, and handwritten showcase conversations. The seed also creates SOP templates (global catalog) and demo SOP definitions with agent assignments for the default org.
-
-| Organization | Slug | Industry | Use Case |
-|---|---|---|---|
-| **GlowBox Beauty** | `glowbox` | Retail / Beauty | "Where is my order?" + product recommendations. Web-dominant channel mix. Demo-enabled org for instant viewer login. |
-| **ClearHealth** | `clearhealth` | Medical Call Center | Patient support — Rx refills, appointment scheduling, insurance questions, lab results. Voice-dominant channel mix. |
-| **SteelPoint Supply** | `steelpoint` | B2B Industrial | Quotes, bulk orders, technical specs, delivery scheduling. Email/Slack-heavy channel mix. |
-
-**Session scenarios** cover 8 types: product inquiry, purchase flow, order status, return/exchange, ticket lookup, ticket creation, ticket escalation, and general questions. Each org's sessions use industry-appropriate products, ticket templates, and conversation language.
-
-**Dev accounts** (magic link auth — link printed to API console):
-
-| Org | Admin | Support | Viewer |
-|-----|-------|---------|--------|
-| GlowBox | `delivered+admin-glowbox@resend.dev` | `delivered+support-glowbox@resend.dev` | `delivered+viewer-glowbox@resend.dev` |
-| ClearHealth | `delivered+admin-clearhealth@resend.dev` | `delivered+support-clearhealth@resend.dev` | `delivered+viewer-clearhealth@resend.dev` |
-| SteelPoint | `delivered+admin-steelpoint@resend.dev` | `delivered+support-steelpoint@resend.dev` | `delivered+viewer-steelpoint@resend.dev` |
-
-The seed is config-driven — each vertical is a single TypeScript file in `modelguide-api/src/db/seed/verticals/`. Adding a new organization means creating a new config file and importing it in `seed/index.ts`.
+Docker Compose for local and staging (`make docker-up`), Railway for production. The Railway architecture is PostgreSQL + API + UI + Caddy load balancer (the LB is the only public-facing service, routing `/api/*` and `/mcp` to the API and everything else to the UI over Railway's internal network). Config is as-code via `railway.toml` per service — full setup and deploy steps in [`railway/DEPLOY.md`](railway/DEPLOY.md).
 
 ## Tech Stack
 
@@ -238,209 +192,20 @@ The seed is config-driven — each vertical is a single TypeScript file in `mode
 
 No proprietary components. Every layer is inspectable, replaceable, forkable.
 
-## Project Structure
-
-```
-modelguide/
-├── modelguide-api/              # Hono API + MCP server
-│   └── src/
-│       ├── cli/                 # mg CLI — org provisioning tool
-│       │   ├── commands/        # One file per command
-│       │   ├── examples/acme/   # Sample YAML configs
-│       │   ├── lib/             # IdRegistry, YAML loader, logger
-│       │   └── schemas/         # Zod validation for YAML files
-│       ├── features/
-│       │   ├── agents/          # Agent CRUD, tool assignment
-│       │   ├── connectors/      # Connector config + catalog/
-│       │   │   └── catalog/
-│       │   │       ├── medusa/  # Medusa manifest + handlers
-│       │   │       ├── registry.ts
-│       │   │       └── sync.ts
-│       │   ├── mcp/             # MCP handler, core tools, schema conversion
-│       │   ├── sops/            # SOP templates, definitions, agent assignment
-│       │   ├── sessions/        # Session lifecycle, messages, feedback
-│       │   ├── secrets/         # Encrypted credential storage
-│       │   └── users/           # Auth, RBAC, user management
-│       ├── db/                  # Drizzle schema, RLS, seeds
-│       └── lib/                 # Middleware, crypto, errors, pagination
-├── modelguide-ui/               # Dashboard (TanStack Start)
-│   └── src/
-│       ├── features/            # agents, connectors, sessions, analytics
-│       └── routes/              # File-based routing
-├── docker/                      # PostgreSQL init (RLS roles)
-├── docs/                        # Guides, ADRs, design system
-└── Makefile                     # All dev commands
-```
-
-## Adding a Connector
-
-1. Create `src/features/connectors/catalog/yourservice/index.ts`:
-
-```typescript
-import type { ConnectorManifest } from "../types";
-
-const manifest: ConnectorManifest = {
-  name: "Your Service",
-  slug: "yourservice",
-  description: "Short description of your connector",
-  connectorType: "api",
-  configSchema: {
-    apiUrl: { type: "string", required: true, description: "API base URL" },
-    apiKey: { type: "secret", required: true, description: "API key" },
-  },
-  authMethods: ["api_key"],
-  iconUrl: "https://yourservice.com/logo.svg",
-  tools: [
-    {
-      catalog: {
-        name: "Do Thing",
-        description: "Does the thing",
-        inputSchema: {
-          type: "object",
-          properties: {
-            thingId: { type: "string", description: "Thing ID" },
-          },
-          required: ["thingId"],
-        },
-        defaultRequiresConfirmation: false,
-        defaultTimeoutSeconds: 30,
-      },
-      handler: async (ctx) => {
-        // ctx.config has resolved secrets
-        // ctx.input has validated parameters
-        const response = await fetch(`${ctx.config.apiUrl}/things/${ctx.input.thingId}`);
-        return { success: true, data: await response.json() };
-      },
-    },
-  ],
-};
-
-export default manifest;
-```
-
-2. Register in `src/features/connectors/catalog/registry.ts`:
-
-```typescript
-const modules = await Promise.all([
-  import("./medusa/index"),
-  import("./yourservice/index"),  // add this
-]);
-```
-
-3. Run `make sync-connectors`. Your tools are now available to assign to agents via the dashboard.
-
-## Roadmap
-
-🚧 **Evals Framework** — Structured evaluation pipelines for agent responses — accuracy, tool selection, hallucination detection, SOP adherence scoring
-
-🚧 **Sub-agents & Workflow Builder** — Compose multi-step agent workflows with branching and handoffs
-
-🚧 **OTEL + A/B Testing via Langfuse** — OpenTelemetry traces, prompt variant experiments, side-by-side comparison
-
-🚧 **Agentic Insights** — Custom funnels tracking agent behavior through business-defined conversion paths
-
-🚧 **Auto-tuning SOPs** — Feedback loop from evals to automatically refine operating procedures
-
-🚧 **Full Interoperability** — Deploy the same agent via Pipecat, LiveKit, Google ADK, or any runtime
-
-📋 **More Blueprints** — Contact center ships first; healthcare intake, field service, B2B sales next
-
-📋 **Connector Marketplace** — Community-built integrations
-
-## Deployment
-
-### Docker Compose (local / staging)
-
-```bash
-make docker-up       # Build and start full stack
-make docker-logs     # View logs
-make docker-rebuild  # Rebuild API + UI only
-make docker-down     # Stop all
-make docker-reset    # Stop, remove volumes, rebuild
-```
-
-Override secrets for non-dev environments via `.env.docker`:
-
-```bash
-JWT_SECRET=...
-REFRESH_JWT_SECRET=...
-ENCRYPTION_KEY=...
-MAGIC_LINK_SECRET=...
-```
-
-### Railway (production)
-
-Architecture: PostgreSQL + API + UI + load balancer (Caddy). The LB is the only public-facing service — it routes `/api/*` and `/mcp` to the API and everything else to the UI via Railway's internal network.
-
-Config-as-code via `railway.toml` in each service. Full setup guide: [`railway/DEPLOY.md`](railway/DEPLOY.md).
-
-**Deploying changes:**
-
-```bash
-(cd modelguide-api && railway up --service api)
-(cd modelguide-ui && railway up --service ui)
-(cd railway/lb && railway up --service lb)
-```
-
-Only redeploy the service(s) you changed. The API runs `scripts/release.ts` (migrations) automatically on every deploy via `preDeployCommand` in `railway.toml`.
-
-## CLI — Customer Onboarding
-
-The `mg` CLI provisions new organizations from YAML configs. Create a directory anywhere with your YAML files and run one command to set up an org with users, connectors, agents, SOPs, guardrails, and demo sessions.
-
-```bash
-cd modelguide-api
-
-# Full setup from a YAML directory (path can be absolute or relative)
-bun run src/cli/mg.ts setup /path/to/my-org/
-
-# Dry-run — validate all YAML and print plan without touching the DB
-bun run src/cli/mg.ts setup /path/to/my-org/ --dry-run
-
-# Skip interactive secret prompts (uses placeholders — useful for testing/CI)
-bun run src/cli/mg.ts setup /path/to/my-org/ --skip-secrets
-```
-
-**Running against Railway** (from your local machine):
-
-```bash
-cd modelguide-api
-
-railway run --service api -- sh -c \
-  'DATABASE_URL=postgresql://modelguide_app:$APP_DB_PASSWORD@$POSTGRES_TCP_PROXY_DOMAIN:$POSTGRES_TCP_PROXY_PORT/$PGDATABASE \
-   bun run src/cli/mg.ts setup /path/to/my-org/ --skip-secrets'
-```
-
-This uses `railway run` to inject all env vars (secrets, encryption keys, etc.) and overrides `DATABASE_URL` with the public TCP proxy since the private hostname isn't reachable locally. Requires the TCP proxy vars from [DEPLOY.md step 6](railway/DEPLOY.md).
-
-The setup directory needs only `org.yaml` (required). All other files are optional: `users.yaml`, `secrets.yaml`, `connectors.yaml`, `agents.yaml`, `sops.yaml`, `guardrails.yaml`, `sessions.yaml`. Additional flags: `--skip-compile` (skip agent compilation), `--skip-sessions` (skip session import).
-
-**Individual commands** for incremental setup:
-
-```bash
-bun run src/cli/mg.ts create-org --from /path/to/org.yaml
-bun run src/cli/mg.ts add-users --org acme --from /path/to/users.yaml
-bun run src/cli/mg.ts add-secrets --org acme --from /path/to/secrets.yaml
-bun run src/cli/mg.ts add-connectors --org acme --from /path/to/connectors.yaml
-bun run src/cli/mg.ts add-agents --org acme --from /path/to/agents.yaml
-bun run src/cli/mg.ts import-sops --org acme /path/to/sops.yaml
-bun run src/cli/mg.ts import-guardrails --org acme /path/to/guardrails.yaml
-bun run src/cli/mg.ts compile-agents --org acme
-bun run src/cli/mg.ts import-sessions --org acme /path/to/sessions.yaml
-```
-
-All provisioning commands are idempotent and safe to re-run — orgs upsert on slug, duplicate entities are skipped, and session imports dedupe on `externalId` (explicit or derived from a deterministic payload hash). Standalone `add-secrets` is append-only (use `--skip-secrets` on re-runs). See `src/cli/examples/acme/` for sample YAML files and [ADR-010](docs/decisions/010-cli-onboarding-tool.md) for design decisions.
+Production foundations include RBAC with separate admin/support/agent auth paths, encrypted secrets, row-level security, and a full CI pipeline running lint, typecheck, unit, integration, and MCP-protocol tests on every PR. See [ADR-005](docs/decisions/005-sops-as-core-primitive.md) for the SOP primitive, [ADR-007](docs/decisions/007-evaluation-engine.md) and [ADR-009](docs/decisions/009-eval-suites.md) for the evals engine.
 
 ## Documentation
 
 | Resource | Description |
 |----------|-------------|
 | [MCP Integration Guide](docs/guide/mcp-integration.md) | Connect your AI agent via MCP |
-| [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools |
-| [CLI Examples](modelguide-api/src/cli/examples/acme/) | Sample YAML configs for org provisioning |
+| [Admin Guide](docs/guide/admin-guide.md) | Configure connectors, agents, and tools through the dashboard |
+| [Adding a Connector](docs/guide/adding-a-connector.md) | Build a new connector manifest, handlers, and tests |
+| [`mg` CLI — Provisioning](docs/guide/cli.md) | Provision organizations from YAML |
+| [Seed Data](docs/guide/seed-data.md) | Dev accounts, orgs, and session scenarios |
 | [Architecture Decisions](docs/decisions/) | ADRs for significant design choices |
 | [Deployment Guide](railway/DEPLOY.md) | Railway production deployment |
-| [Contributing](CONTRIBUTING.md) | Setup, workflow, conventions |
+| [Contributing](CONTRIBUTING.md) | Setup, workflow, project structure, conventions |
 
 ## Contributing
 
@@ -463,5 +228,5 @@ Check [open issues](https://github.com/modelguide/modelguide/issues) — look fo
 ---
 
 <p align="center">
-  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source harness for production AI agents · 🇵🇱 Poland
+  Built by <a href="https://modelguide.ai">ModelGuide</a> · The open-source orchestration framework for production voice-first agents · 🇵🇱 Poland
 </p>

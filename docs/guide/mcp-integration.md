@@ -5,19 +5,20 @@ Connect your AI agent to ModelGuide via the Model Context Protocol (MCP). This g
 ## Prerequisites
 
 - A running ModelGuide instance (see [Quick Start](../../README.md#quick-start))
-- An agent API key (`mgk_...`) — created by an admin via the dashboard or REST API
+- An active agent's MCP endpoint URL (for example, `http://localhost:3000/mcp/agt_xxx`)
+- The matching agent API key (`mgk_...`) — created by an admin via the dashboard or REST API
 
 ## Connecting via MCP
 
-ModelGuide exposes an MCP endpoint using Streamable HTTP transport:
+ModelGuide exposes an agent-specific MCP endpoint using Streamable HTTP transport:
 
 ```
-POST /mcp
+/mcp/:agentId
 Authorization: Bearer mgk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Content-Type: application/json
 ```
 
-The API key identifies your agent and determines which tools are available. Each request creates a fresh MCP server scoped to your agent's permissions.
+The `agentId` in the path and the API key in the header must belong to the same active agent. Each request creates a fresh MCP server scoped to that agent's permissions.
 
 ### Using the MCP SDK
 
@@ -25,8 +26,9 @@ The API key identifies your agent and determines which tools are available. Each
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+const agentId = "agt_xxxxxxxxxxxxxxxxxxxx";
 const transport = new StreamableHTTPClientTransport(
-  new URL("http://localhost:3000/mcp"),
+  new URL(`http://localhost:3000/mcp/${agentId}`),
   {
     requestInit: {
       headers: {
@@ -248,9 +250,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 async function main() {
+  const agentId = "agt_xxxxxxxxxxxxxxxxxxxx";
+
   // Connect
   const transport = new StreamableHTTPClientTransport(
-    new URL("http://localhost:3000/mcp"),
+    new URL(`http://localhost:3000/mcp/${agentId}`),
     {
       requestInit: {
         headers: { Authorization: "Bearer mgk_your_key_here" },
@@ -308,5 +312,5 @@ main().catch(console.error);
 ## Next Steps
 
 - [Admin Guide](admin-guide.md) — Configure connectors, create agents, assign tools
-- Auto-generated API docs at `http://localhost:3000/docs`
-- [Adding a Connector](../../README.md#adding-a-connector) — Build your own connector
+- [Local API docs](http://localhost:3000/docs) — REST endpoints and schemas
+- [Adding a Connector](adding-a-connector.md) — Build your own connector

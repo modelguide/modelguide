@@ -63,7 +63,7 @@ src/
 | `GET /api/health` | Health check |
 | `GET /docs` | Scalar API documentation |
 | `GET /openapi.json` | OpenAPI 3.1 spec |
-| `POST /mcp` | MCP endpoint for AI agents |
+| `/mcp/:agentId` | MCP endpoint for a specific agent (Streamable HTTP transport) |
 
 Full specification auto-generated at `http://localhost:3000/docs` (Scalar UI).
 
