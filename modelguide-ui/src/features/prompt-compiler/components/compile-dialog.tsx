@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { diffLines } from 'diff'
-import { AlertCircle, CheckCircle } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '~/components/ui/button'
@@ -158,7 +158,9 @@ export function CompileDialog({
           </Button>
           <Button
             onClick={handleApply}
-            disabled={!previewResult || applyMutation.isPending}
+            disabled={
+              !previewResult || applyMutation.isPending || (currentPrompt !== null && !hasChanges)
+            }
             loading={applyMutation.isPending}
           >
             Apply
@@ -207,6 +209,31 @@ export function CompileDialog({
               promptLength={previewResult.promptLength}
               className="shrink-0"
             />
+
+            {/* Compiler warnings */}
+            {previewResult.metadata?.warnings && previewResult.metadata.warnings.length > 0 ? (
+              <div className="flex flex-col gap-1.5 shrink-0">
+                {previewResult.metadata.warnings.map((w) => (
+                  <div
+                    key={w.code}
+                    className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/[0.06] px-3 py-2.5"
+                  >
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-fg-secondary">{w.message}</p>
+                      {w.tokens !== undefined ? (
+                        <p className="mt-0.5 font-mono text-[10px] text-fg-muted">
+                          {w.tokens} tokens
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="ml-auto shrink-0 font-mono text-[10px] text-fg-muted">
+                      {w.code}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {/* Tab bar — show when recompiling (has existing prompt) */}
             {isRecompile ? (

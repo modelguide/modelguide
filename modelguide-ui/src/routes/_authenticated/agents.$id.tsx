@@ -2,15 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import {
   ArrowLeft,
-  Check,
-  Copy,
+  ChevronRight,
   FlaskConical,
-  Key,
-  Link2,
   Phone,
   Plug,
   Plus,
-  RefreshCw,
   ShieldCheck,
   Trash2,
   Wrench,
@@ -24,19 +20,13 @@ import { Spinner } from '~/components/ui/spinner'
 import { Toggle } from '~/components/ui/toggle'
 import { AddConnectorDialog } from '~/features/agents/components/add-connector-dialog'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
-import { ElevenLabsCard } from '~/features/agents/components/elevenlabs-card'
-import { LivekitCard } from '~/features/agents/components/livekit-card'
+import { DetailsCard } from '~/features/agents/components/details-card'
+import { IntegrationCard } from '~/features/agents/components/integration-card'
 import { OutboundCallDialog } from '~/features/agents/components/outbound-call-dialog'
-import { CompiledPromptCard } from '~/features/prompt-compiler/components/compiled-prompt-card'
+import { PlatformCard } from '~/features/agents/components/platform-card'
+import { PromptSection } from '~/features/agents/components/prompt-section'
 import { api } from '~/lib/api'
-import type { PaginatedResponse } from '~/lib/pagination'
-import type {
-  Agent,
-  AgentConnector,
-  AgentConnectorTool,
-  RegenerateKeyResponse,
-} from '~/schemas/agents'
-import type { EvalSuiteSummary } from '~/schemas/eval-suites'
+import type { Agent, AgentConnector, AgentConnectorTool } from '~/schemas/agents'
 import { useAuthStore } from '~/stores/auth'
 
 export const Route = createFileRoute('/_authenticated/agents/$id')({
@@ -102,7 +92,7 @@ function LinkedToolsCard({
 
   return (
     <>
-      <Card className="lg:col-span-2">
+      <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -264,9 +254,7 @@ function AgentDetailPage() {
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.role === 'admin'
 
-  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
   const [newApiKey, setNewApiKey] = useState<string | null>(null)
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
 
   const {
     data: agent,
@@ -293,19 +281,9 @@ function AgentDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
   })
 
-  const regenerateKeyMutation = useMutation({
-    mutationFn: () => api.post(`agents/${id}/regenerate-key`).json<RegenerateKeyResponse>(),
-    onSuccess: (data) => {
-      setNewApiKey(data.apiKey)
-      setShowRegenerateDialog(false)
-      queryClient.invalidateQueries({ queryKey: ['agents', id] })
-    },
-  })
-
-  const isElevenLabs = agent?.agentPlatform === 'elevenlabs'
-
   return (
     <div className="space-y-6">
+      {/* Page header */}
       <div className="flex items-center gap-4 animate-fade-up">
         <Link
           to="/agents"
@@ -317,12 +295,12 @@ function AgentDetailPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-fg-primary">{agent?.name ?? 'Agent Detail'}</h1>
             {agent ? (
-              <Badge variant={isElevenLabs ? 'brand' : 'default'}>{agent.agentPlatform}</Badge>
+              <Badge variant={agent.isActive ? 'success' : 'default'} dot>
+                {agent.isActive ? 'active' : 'inactive'}
+              </Badge>
             ) : null}
           </div>
-          {agent?.description ? (
-            <p className="mt-1 font-sans text-sm text-fg-secondary">{agent.description}</p>
-          ) : null}
+          <p className="mt-1 font-mono text-xs text-fg-muted">{id}</p>
         </div>
         {isAdmin && agent ? (
           <div className="flex items-center gap-2">
@@ -366,177 +344,42 @@ function AgentDetailPage() {
           <p className="text-sm text-error">Failed to load agent</p>
         </div>
       ) : agent ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="space-y-4">
-                <div>
-                  <dt className="text-xs font-medium text-fg-muted">Status</dt>
-                  <dd className="mt-1">
-                    <Badge variant={agent.isActive ? 'success' : 'default'} dot>
-                      {agent.isActive ? 'active' : 'inactive'}
-                    </Badge>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-fg-muted">Modality</dt>
-                  <dd className="mt-1 text-sm text-fg-primary capitalize">{agent.modality}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-fg-muted">ID</dt>
-                  <dd className="mt-1 font-mono text-xs text-fg-secondary">{agent.id}</dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
+        <div className="space-y-6">
+          {/* Row 1: Details + Platform (2-col grid) */}
+          <div className="grid gap-6 lg:grid-cols-3">
+            <DetailsCard agent={agent} isAdmin={isAdmin} />
+            <div className="lg:col-span-2">
+              <PlatformCard agent={agent} isAdmin={isAdmin} />
+            </div>
+          </div>
 
-          {/* API Key */}
-          <Card>
-            <CardHeader>
-              <CardTitle>API Key</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3">
-                  <Key className="h-4 w-4 text-fg-muted" />
-                  <span className="flex-1 font-mono text-xs text-fg-secondary">
-                    {agent.keyPrefix ? `${agent.keyPrefix}...` : 'API key configured'}
-                  </span>
-                </div>
+          {/* Row 2: Eval Suites */}
+          <Link
+            to="/evals"
+            search={{ agentId: id }}
+            className="flex items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle px-4 py-3 transition-colors hover:border-brand-500/30 hover:bg-bg-subtle/80"
+          >
+            <FlaskConical className="h-4 w-4 shrink-0 text-cyan-400" />
+            <span className="flex-1 text-sm font-medium text-fg-primary">Eval Suites</span>
+            <Badge variant="default">{agent.evalSuiteCount}</Badge>
+            <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" />
+          </Link>
 
-                {isAdmin ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowRegenerateDialog(true)}
-                    className="w-full"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Regenerate Key
-                  </Button>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Row 3: Integration (full width) */}
+          <IntegrationCard agent={agent} isAdmin={isAdmin} onRegenerateSuccess={setNewApiKey} />
 
-          {/* Linked Tools */}
+          {/* Row 3: Prompt section (full width, tabbed) */}
+          <PromptSection agent={agent} canMutate={isAdmin} />
+
+          {/* Row 4: Linked Tools (full width) */}
           <LinkedToolsCard
             agentId={id}
             connectorsData={connectorsData}
             connectorsError={connectorsError}
             isAdmin={isAdmin}
           />
-
-          {/* Compiled Prompt */}
-          <CompiledPromptCard agent={agent} canMutate={isAdmin} />
-
-          {/* Eval Suites */}
-          <AgentEvalSuitesCard agentId={id} />
-
-          {/* Platform */}
-          <ElevenLabsCard agent={agent} isAdmin={isAdmin} />
-          <LivekitCard agent={agent} isAdmin={isAdmin} />
-
-          {/* Integration URLs */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Link2 className="h-4 w-4" />
-                Integration URLs
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm text-fg-secondary">
-                {isElevenLabs
-                  ? 'These URLs are configured automatically during sync.'
-                  : 'Configure these URLs in your agent settings.'}
-              </p>
-              <div className="space-y-3">
-                {(() => {
-                  const hasHmac = agent.hasWebhookSecret ?? false
-                  const urls = [
-                    {
-                      label: 'Session Init',
-                      url: agent.integrationUrls?.sessionInit ?? '',
-                      description: 'POST — create session before starting a call',
-                    },
-                    {
-                      label: 'MCP Endpoint',
-                      url: agent.integrationUrls?.mcp ?? '',
-                      description: 'POST — tool calls during conversation (MCP protocol)',
-                    },
-                    {
-                      label: 'Post-Call Webhook',
-                      url: agent.integrationUrls?.postCallWebhook ?? '',
-                      description: 'POST — transcript storage after call',
-                      hmac: isElevenLabs,
-                    },
-                  ]
-                  return urls.map(({ label, url, description, hmac }) => (
-                    <div
-                      key={label}
-                      className="flex items-center gap-2 rounded border border-fg-subtle/20 bg-bg-base p-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-fg-muted">{label}</span>
-                          {hmac ? (
-                            <Badge variant={hasHmac ? 'success' : 'warning'} dot>
-                              {hasHmac ? 'HMAC verified' : 'HMAC not configured'}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <div className="mt-0.5 truncate font-mono text-xs text-fg-secondary">
-                          {url}
-                        </div>
-                        <div className="mt-0.5 text-xs text-fg-muted">{description}</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-bg-subtle hover:text-fg-primary"
-                        onClick={() => {
-                          navigator.clipboard.writeText(url)
-                          setCopiedUrl(label)
-                          setTimeout(() => setCopiedUrl(null), 2000)
-                        }}
-                      >
-                        {copiedUrl === label ? (
-                          <Check className="h-3.5 w-3.5 text-success" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  ))
-                })()}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       ) : null}
-
-      {/* Regenerate Key Dialog */}
-      <Dialog
-        open={showRegenerateDialog}
-        onClose={() => setShowRegenerateDialog(false)}
-        title="Regenerate API Key"
-        description="This will invalidate the current key immediately. Any integrations using the old key will stop working."
-      >
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => setShowRegenerateDialog(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => regenerateKeyMutation.mutate()}
-            loading={regenerateKeyMutation.isPending}
-          >
-            Regenerate
-          </Button>
-        </DialogFooter>
-      </Dialog>
 
       {newApiKey ? (
         <ApiKeyModal
@@ -547,50 +390,5 @@ function AgentDetailPage() {
         />
       ) : null}
     </div>
-  )
-}
-
-function AgentEvalSuitesCard({ agentId }: { agentId: string }) {
-  const { data } = useQuery({
-    queryKey: ['eval-suites', { agentId }],
-    queryFn: () =>
-      api
-        .get('eval-suites', { searchParams: { agentId } })
-        .json<PaginatedResponse<EvalSuiteSummary>>(),
-  })
-
-  const suites = data?.data ?? []
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FlaskConical className="h-4 w-4" />
-          Eval Suites
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {suites.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <FlaskConical className="h-8 w-8 text-fg-muted" />
-            <p className="mt-3 text-sm text-fg-muted">No eval suites for this agent</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {suites.map((suite) => (
-              <Link
-                key={suite.id}
-                to="/evals/suites/$suiteId"
-                params={{ suiteId: suite.id }}
-                className="flex items-center gap-2 rounded-lg border border-fg-subtle/10 bg-bg-subtle/50 px-3 py-2.5 transition-colors hover:border-fg-subtle/20 hover:bg-bg-subtle"
-              >
-                <FlaskConical className="h-3.5 w-3.5 text-cyan-400" />
-                <span className="flex-1 text-sm font-medium text-fg-primary">{suite.name}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }

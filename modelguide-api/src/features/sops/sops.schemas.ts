@@ -39,11 +39,19 @@ const manualTriggerSchema = z.object({
   config: z.object({}).strict(),
 });
 
+const campaignStartTriggerSchema = z.object({
+  type: z.literal("campaign_start"),
+  config: z.object({
+    campaign: z.string().optional(),
+  }),
+});
+
 export const sopTriggerSchema = z.discriminatedUnion("type", [
   channelTriggerSchema,
   intentDetectedTriggerSchema,
   toolPresentTriggerSchema,
   manualTriggerSchema,
+  campaignStartTriggerSchema,
 ]);
 
 // ============================================================================

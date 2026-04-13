@@ -5,6 +5,17 @@ import type { PaginatedResponse } from '~/lib/pagination'
 export const agentPlatforms = ['custom', 'elevenlabs', 'livekit'] as const
 export type AgentPlatform = (typeof agentPlatforms)[number]
 
+export const modelFamilies = ['gpt', 'claude', 'gemini', 'generic'] as const
+export type ModelFamily = (typeof modelFamilies)[number]
+
+export const promptConfigSchema = z.object({
+  persona: z.string().optional(),
+  language: z.string().optional(),
+  fillerPhrases: z.array(z.string()).optional(),
+})
+
+export type PromptConfig = z.infer<typeof promptConfigSchema>
+
 export const compiledFromSchema = z
   .object({
     sopId: z.string().uuid(),
@@ -23,8 +34,11 @@ export const agentSchema = z.object({
   slug: z.string(),
   description: z.string().nullable(),
   modality: z.enum(['voice', 'text']),
+  modelFamily: z.enum(modelFamilies).optional().default('generic'),
   agentPlatform: z.enum(agentPlatforms),
   isActive: z.boolean(),
+  evalSuiteCount: z.number().int().nonnegative().optional().default(0),
+  promptConfig: promptConfigSchema.optional().default({}),
   metadata: z.record(z.unknown()).optional(),
   hasElevenLabsKey: z.boolean(),
   hasWebhookSecret: z.boolean().optional(),

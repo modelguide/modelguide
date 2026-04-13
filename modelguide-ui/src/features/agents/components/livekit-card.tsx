@@ -71,8 +71,6 @@ export function LivekitCard({ agent, isAdmin }: LivekitCardProps) {
 
   const canSave = urlInput.trim() && agentNameInput.trim() && apiKeySecretId && apiSecretSecretId
 
-  if (agent.agentPlatform !== 'livekit') return null
-
   return (
     <Card>
       <CardHeader>
