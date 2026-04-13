@@ -24,7 +24,7 @@ Each agent step is stored immediately as it completes — if the process crashes
 ## Prerequisites
 
 - [Bun](https://bun.sh) v1.x
-- A running [ModelGuide API](../../modelguide-api/) instance
+- A running [ModelGuide API](../../../modelguide-api/) instance
 - A Resend account with inbound email domain configured
 - An active ModelGuide agent with order lookup + Zendesk tools configured
 

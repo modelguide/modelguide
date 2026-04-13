@@ -105,7 +105,7 @@ Logout requires the refresh token's generation to match the DB generation. An at
 | `REFRESH_JWT_SECRET` | Yes | — | Refresh token signing key (must differ from `JWT_SECRET`) |
 | `REFRESH_TOKEN_EXPIRES_IN` | No | `7d` | Refresh token sliding window |
 | `REFRESH_SESSION_RETENTION_DAYS` | No | `90` | How long expired sessions are retained before cleanup |
-| `APP_URL` | No | `http://localhost:3000` | Must point to the frontend origin for CSRF validation |
+| `APP_URL` | No | `http://localhost:3001` | Must point to the frontend origin for CSRF validation. For local UI dev, use `http://localhost:3001`. |
 
 ## Consequences
 

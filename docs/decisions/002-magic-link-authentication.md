@@ -128,7 +128,7 @@ vs. happy path:
 | `MAGIC_LINK_STRATEGY` | No | `console` | `console` or `resend` |
 | `RESEND_API_KEY` | If resend | — | Resend API key |
 | `RESEND_FROM_EMAIL` | If resend | — | Sender address for emails |
-| `APP_URL` | No | `http://localhost:3000` | Base URL for magic link (must point to the **frontend** origin) |
+| `APP_URL` | No | `http://localhost:3001` | Base URL for magic links. Must point to the **frontend** origin, so local UI dev should use `http://localhost:3001`. |
 
 Session & token env vars are documented in [ADR-001](./001-refresh-token-rotation.md#environment-variables).
 

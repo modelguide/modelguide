@@ -125,7 +125,7 @@ Both sub-projects require `.env` files. The `make quickstart` command copies `.e
 | `REFRESH_TOKEN_EXPIRES_IN` | No | `7d` | Refresh token lifetime |
 | `REFRESH_SESSION_RETENTION_DAYS` | No | `90` | Days to keep expired refresh sessions in DB |
 | `ENCRYPTION_KEY` | Yes | — | AES-256-GCM key for secrets storage (base64, 32 bytes) |
-| `APP_URL` | Yes | `http://localhost:3000` | Frontend origin for CSRF validation |
+| `APP_URL` | Yes | `http://localhost:3001` | Frontend origin for CSRF validation and magic links. For local UI dev, use `http://localhost:3001`. |
 | `MAGIC_LINK_SECRET` | Yes | — | HMAC secret for hashing magic tokens (min 32 chars) |
 | `MAGIC_LINK_EXPIRES_IN_MINUTES` | No | `15` | Magic link expiration |
 | `MAGIC_LINK_STRATEGY` | No | `console` | Delivery strategy: `console` (dev) or `resend` (production) |

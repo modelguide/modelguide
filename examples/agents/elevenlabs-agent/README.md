@@ -2,7 +2,7 @@
 
 CLI script for ad-hoc inspection and configuration of ElevenLabs Conversational AI agents. Useful during development to view or modify agent settings directly via the ElevenLabs API.
 
-> **For production setup**, use the ModelGuide UI sync flow instead. See [docs/elevenlabs-setup.md](../../docs/elevenlabs-setup.md).
+> **For production setup**, use the ModelGuide UI sync flow instead. See [docs/elevenlabs-setup.md](../../../docs/elevenlabs-setup.md).
 
 ## Setup
 

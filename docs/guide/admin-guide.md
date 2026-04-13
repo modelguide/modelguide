@@ -113,7 +113,7 @@ curl -X POST http://localhost:3000/api/agents \
     "description": "Voice concierge for product recs, orders, and returns",
     "agent_type": "voice"
   }'
-# Response includes api_key — save it!
+# Response includes id and api_key — save both.
 ```
 
 ## 4. Assign Tools to the Agent
@@ -169,13 +169,13 @@ Test that your agent can connect and use tools. See the [MCP Integration Guide](
 
 ```bash
 # List available tools via MCP
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:3000/mcp/<agent-id> \
   -H "Authorization: Bearer mgk_your_agent_key" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
 ```
 
-You should see the core tools plus all connector tools assigned to this agent.
+Use the same `<agent-id>` and `mgk_...` pair returned for that agent. You should see the core tools plus all connector tools assigned to it.
 
 ## Managing Existing Resources
 
@@ -207,5 +207,5 @@ Once agents are running, the **Sessions** page shows real-time activity:
 ## Next Steps
 
 - [MCP Integration Guide](mcp-integration.md) — Full MCP integration walkthrough
-- [Adding a Connector](../../README.md#adding-a-connector) — Build a custom connector
+- [Adding a Connector](adding-a-connector.md) — Build a custom connector
 - [Local API docs](http://localhost:3000/docs) — REST endpoints and schemas

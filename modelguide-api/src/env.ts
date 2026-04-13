@@ -35,7 +35,7 @@ const envSchema = z
     // Application URL (for magic links and CSRF origin validation).
     // Must match the UI origin, not the API listen address.
     // E.g., with Vite proxy on :3001 → API on :3000, set APP_URL=http://localhost:3001
-    APP_URL: z.string().url().default("http://localhost:3000"),
+    APP_URL: z.string().url().default("http://localhost:3001"),
 
     // Magic link configuration
     MAGIC_LINK_SECRET: z
