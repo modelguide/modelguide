@@ -9,7 +9,7 @@
 
 <p align="center">
   ModelGuide is the open-source orchestration layer for production <strong>voice-first agents</strong>.<br/>
-  Keep your runtime. Connect business systems once. Enforce SOPs and guardrails centrally.<br/>
+  Keep your runtime. Connect business systems once. Enforce playbooks, standard operating procedures (SOPs), and guardrails centrally.<br/>
   Review, evaluate, and improve every customer interaction in your own environment.
 </p>
 
