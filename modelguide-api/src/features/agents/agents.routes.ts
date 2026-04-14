@@ -442,106 +442,118 @@ router.openapi(platformModelsRoute, async (c) => {
 });
 
 // ============================================================================
-// ElevenLabs Agent Creation
+// Platform Agent Creation
 // ============================================================================
 
-// POST /:id/elevenlabs
+// POST /:id/platform-agent
 router.post(
-  "/:id/elevenlabs",
+  "/:id/platform-agent",
   requireUser(),
   requirePermission("agents:update"),
   requireOrganization(),
 );
 
-const createElevenLabsAgentRoute = createRoute({
+const createPlatformAgentRoute = createRoute({
   method: "post",
-  path: "/{id}/elevenlabs",
+  path: "/{id}/platform-agent",
   tags: ["Agents"],
-  summary: "Create ElevenLabs agent",
+  summary: "Create agent on a platform",
   description:
-    "Creates a minimal shell agent on ElevenLabs using the agent name. Returns the ElevenLabs agent ID and saves it to metadata.elevenlabs.agentId. All real configuration (MCP servers, webhooks, prompt, model) is applied via sync. Pass ?force=true to replace an existing agent ID atomically (clears the old ID and creates a new one in a single request).",
+    "Creates a minimal shell agent on the given platform using the agent name. Returns the platform-assigned agent ID and saves it to metadata.<platform>.agentId. All real configuration is applied via sync. Pass ?force=true to replace an existing agent ID atomically.",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,
-    query: z.object({
-      force: z.enum(["true", "false"]).optional().openapi({
-        description:
-          "Clear any existing agentId and create a new agent atomically. Without this flag the endpoint returns 409 if an agentId is already set.",
-      }),
-    }),
-  },
-  responses: {
-    201: {
-      description: "ElevenLabs agent created",
+    body: {
       content: {
         "application/json": {
           schema: z.object({
-            elevenLabsAgentId: z.string(),
+            platform: z.enum(["elevenlabs"]).openapi({
+              description: "Target platform to create the agent on",
+            }),
+            force: z.boolean().optional().openapi({
+              description:
+                "Clear any existing agentId and create a new agent atomically. Without this flag the endpoint returns 409 if an agentId is already set.",
+            }),
           }),
         },
       },
     },
-    400: errorResponse("ElevenLabs API key not configured"),
+  },
+  responses: {
+    201: {
+      description: "Platform agent created",
+      content: {
+        "application/json": {
+          schema: z.object({
+            platformAgentId: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse(
+      "Platform API key not configured or unsupported platform",
+    ),
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
     404: errorResponse("Agent not found"),
-    409: errorResponse("ElevenLabs agent already exists for this agent"),
+    409: errorResponse("Platform agent already exists for this agent"),
   },
 });
 
-router.openapi(createElevenLabsAgentRoute, async (c) => {
+router.openapi(createPlatformAgentRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
-  const { force } = c.req.valid("query");
+  const { platform, force } = c.req.valid("json");
 
   const agent = await getAgentById(orgId, id);
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
-  const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
 
-  // Guard: agent ID already set — 409 unless ?force=true
-  if (elMeta.agentId && force !== "true") {
-    throw Errors.conflict(
-      "ElevenLabs agent ID already set — pass ?force=true to replace it",
-    );
-  }
+  // Branch per platform — extend here when new platforms are added
+  if (platform === "elevenlabs") {
+    const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
 
-  // Guard: no API key → 400
-  if (!agent.hasElevenLabsKey) {
-    throw Errors.invalidInput(
-      "ElevenLabs API key must be configured before creating an agent",
-    );
-  }
+    // Guard: agent ID already set — 409 unless force=true
+    if (elMeta.agentId && !force) {
+      throw Errors.conflict(
+        "ElevenLabs agent ID already set — pass force: true to replace it",
+      );
+    }
 
-  const apiKey = await getAgentElevenLabsKey(orgId, id);
-  if (!apiKey) {
-    throw Errors.invalidInput(
-      "ElevenLabs API key not configured for this agent",
-    );
-  }
+    if (!agent.hasElevenLabsKey) {
+      throw Errors.invalidInput(
+        "ElevenLabs API key must be configured before creating an agent",
+      );
+    }
 
-  const client = new ElevenLabsClient({ apiKey });
+    const apiKey = await getAgentElevenLabsKey(orgId, id);
+    if (!apiKey) {
+      throw Errors.invalidInput(
+        "ElevenLabs API key not configured for this agent",
+      );
+    }
 
-  const created = await client.conversationalAi.agents.create({
-    name: agent.name,
-    conversationConfig: {},
-  });
+    const client = new ElevenLabsClient({ apiKey });
+    const created = await client.conversationalAi.agents.create({
+      name: agent.name,
+      conversationConfig: {},
+    });
 
-  const elevenLabsAgentId = created.agentId;
+    const platformAgentId = created.agentId;
 
-  // Persist agentId to metadata — if force=true this also clears the old ID
-  const { agentId: _old, ...elMetaWithoutId } = elMeta;
-  await updateAgent(orgId, id, {
-    metadata: {
-      ...meta,
-      elevenlabs: {
-        ...elMetaWithoutId,
-        agentId: elevenLabsAgentId,
+    // Persist agentId to metadata — if force=true this also clears the old ID
+    const { agentId: _old, ...elMetaWithoutId } = elMeta;
+    await updateAgent(orgId, id, {
+      metadata: {
+        ...meta,
+        elevenlabs: { ...elMetaWithoutId, agentId: platformAgentId },
       },
-    },
-  });
+    });
 
-  return c.json({ elevenLabsAgentId }, 201);
+    return c.json({ platformAgentId }, 201);
+  }
+
+  throw Errors.invalidInput(`Unsupported platform: ${platform}`);
 });
 
 // GET /:id

@@ -108,12 +108,12 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
   const createElevenLabsAgentMutation = useMutation({
     mutationFn: () =>
       api
-        .post(`agents/${agent.id}/elevenlabs`, {
-          searchParams: elMeta.agentId ? { force: 'true' } : {},
+        .post(`agents/${agent.id}/platform-agent`, {
+          json: { platform: 'elevenlabs', ...(elMeta.agentId ? { force: true } : {}) },
         })
-        .json<{ elevenLabsAgentId: string }>(),
+        .json<{ platformAgentId: string }>(),
     onSuccess: (data) => {
-      setElAgentId(data.elevenLabsAgentId)
+      setElAgentId(data.platformAgentId)
       setCreateElError(null)
       queryClient.invalidateQueries({ queryKey: ['agents'] })
     },
