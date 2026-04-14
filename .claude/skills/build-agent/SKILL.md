@@ -154,17 +154,35 @@ bun --version > /dev/null 2>&1 && echo "Bun: OK" || echo "Bun: MISSING"
 python3 --version 2>&1 | grep -E "3\.(1[1-9]|[2-9][0-9])" && echo "Python: OK" || echo "Python: MISSING or < 3.11"
 ```
 
-If any are missing, show the install command and wait for the person to fix it. Report all missing tools at once so everything can be fixed in one pass. Do not abort.
-- Docker: https://www.docker.com/products/docker-desktop/
-- Bun: `curl -fsSL https://bun.sh/install | bash`
-- Python 3.11+: `brew install python@3.11` (macOS) or https://python.org/downloads
-
 **ModelGuide repo check** — verify the repo is set up:
 ```bash
 test -f modelguide-api/.env && echo "API env: OK" || echo "API env: MISSING — run: cp modelguide-api/.env.example modelguide-api/.env and fill in required vars"
 test -d modelguide-api/node_modules && echo "API deps: OK" || echo "API deps: MISSING — run: cd modelguide-api && bun install"
 ```
 If `modelguide-api/.env` is missing, ask the person to copy the example and fill in `DATABASE_URL`, `JWT_SECRET`, and other required vars before continuing.
+
+Format the results as a status block:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Prerequisites
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✓  Docker    <version>
+  ✗  Bun       missing  →  curl -fsSL https://bun.sh/install | bash
+  ✓  Python    <version>
+  ✓  API env   configured
+  ✓  API deps  installed
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Use ✓ for passing items (show the version or "configured"), ✗ for missing items with the install command inline.
+Show all issues at once — never stop after the first. Do not abort.
+- Docker: https://www.docker.com/products/docker-desktop/
+- Bun: `curl -fsSL https://bun.sh/install | bash`
+- Python 3.11+: `brew install python@3.11` (macOS) or https://python.org/downloads
+
+If all pass, end with: `All good — starting Stage [0].`
+If any fail, end with: `Fix the items marked ✗ above and run me again.`
 
 Write STATE.md with `currentStage: 0`.
 
@@ -174,7 +192,11 @@ Write STATE.md with `currentStage: 0`.
 
 Gather all decisions needed for agent configuration. Write answers to CONTEXT.md as locked decisions D-01…D-NN.
 
-In supervised mode: show CONTEXT.md after all answers and wait for "continue".
+Open each question with a progress banner so the person always knows where they are:
+```
+━━━ Q1 of 7 ━━━━━━━━━━━━━━━━━━━━━━━
+```
+After each answer is locked, confirm it on one line: `✓  D-01  Mode: auto-pilot`
 
 ### Q1 — Mode
 "Would you like **auto-pilot** (I run everything) or **supervised** (I pause after each stage)?"
@@ -300,6 +322,29 @@ Record as D-06.
 
 Write STATE.md (`currentStage: 1`) and CONTEXT.md with all decisions. For custom connectors, also write `connectorStatus: pending`.
 
+After writing the files, show a locked decisions summary instead of dumping CONTEXT.md raw:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Stage [0] — decisions locked
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Mode        auto-pilot
+  Business    <name>  ·  <orgSlug>
+  Agent       <name>  ·  <style>
+  Stack       GPT-4.1-mini / Deepgram Nova-3 / ElevenLabs
+  Connector   <type and status>
+  Guardrails  <N focus>  ·  <N safety>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+In supervised mode, follow the summary with:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⏸  Waiting for approval
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Type "continue" to start Stage [1]
+```
+
 ---
 
 ## Stage [1]: Setup — Local Inputs
@@ -358,6 +403,17 @@ Write STATE.md (`currentStage: 1`) and CONTEXT.md with all decisions. For custom
    grep -q "^DEEPGRAM_API_KEY=.\+" agent/.env && echo "DEEPGRAM_API_KEY: set" || echo "DEEPGRAM_API_KEY: MISSING"
    grep -q "^ELEVENLABS_API_KEY=.\+" agent/.env && echo "ELEVENLABS_API_KEY: set" || echo "ELEVENLABS_API_KEY: MISSING"
    ```
+   Format the result as a status block:
+   ```
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     agent/.env
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     ✓  OPENAI_API_KEY       set
+     ✗  DEEPGRAM_API_KEY     MISSING
+     ✓  ELEVENLABS_API_KEY   set
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ```
+   Don't proceed until all three are set.
 
 7. Verify users.yaml:
    ```bash
@@ -761,20 +817,22 @@ Write STATE.md (`currentStage: done`).
 ## Completion
 
 ```
-Build complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✓  Build complete
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Agent    {{agentName}}  ·  {{orgSlug}}
+  Score    {{lastEvalScore}} evals passed
+  Code     agent/
+  Config   .modelguide/
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Agent: {{agentName}} ({{orgSlug}})
-Eval results: {{lastEvalScore}} test cases passed
-Agent code: agent/
-Config: .modelguide/
-
-Restart the agent:
+Restart:
   cd agent && source .venv/bin/activate && python agent.py dev
   make livekit-token NAME=me
 
 Re-run evals:
   cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}}
 
-Open dashboard:
-  make ui-dev → http://localhost:3001
+Dashboard:
+  make ui-dev  →  http://localhost:3001
 ```
