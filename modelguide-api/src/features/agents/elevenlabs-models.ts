@@ -9,15 +9,12 @@
  * drifts from the SDK's type definition.
  */
 
-// `Llm` is not re-exported from the package root as of @elevenlabs/elevenlabs-js@2.x.
-// This internal dist path can change without a semver break — pin the SDK version
-// tightly in package.json and update this import when upgrading.
-import type { Llm } from "@elevenlabs/elevenlabs-js/dist/api/types/Llm";
+import type { ElevenLabs } from "@elevenlabs/elevenlabs-js";
 
 export type ModelFamily = "gpt" | "claude" | "gemini" | "generic";
 
 export interface ElevenLabsModel {
-  id: Llm;
+  id: ElevenLabs.Llm;
   label: string;
   family: ModelFamily;
 }
