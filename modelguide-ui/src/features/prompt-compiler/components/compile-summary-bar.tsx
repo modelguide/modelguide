@@ -1,7 +1,9 @@
+import { Link } from '@tanstack/react-router'
 import { Zap } from 'lucide-react'
 import { cn } from '~/lib/cn'
 
 interface CompiledFromInfo {
+  sopId: string
   sopName: string
   stepCount: number
   toolCount: number
@@ -38,10 +40,14 @@ export function CompileSummaryBar({
   return (
     <div className={cn('rounded-xl bg-bg-subtle border-t-2 border-brand-500/20 p-4', className)}>
       <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
+        <Link
+          to="/sops/$id"
+          params={{ id: compiledFrom.sopId }}
+          className="flex items-center gap-2 hover:underline"
+        >
           <Zap className="h-3.5 w-3.5 text-brand-400" />
           <span className="text-sm font-medium text-fg-primary">{compiledFrom.sopName}</span>
-        </div>
+        </Link>
         <div className="h-4 w-px bg-fg-subtle/20" />
         <div className="flex items-center gap-4 text-xs text-fg-muted">
           <span>

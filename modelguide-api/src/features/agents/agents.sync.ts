@@ -96,7 +96,15 @@ async function _syncAgentToElevenLabs(
     );
   }
 
-  // 2. Get per-agent ElevenLabs API key
+  // 2. Guard: LLM model must be configured before any ElevenLabs side effects
+  const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
+  if (!llmModel) {
+    throw Errors.invalidInput(
+      "LLM model must be configured before syncing to ElevenLabs",
+    );
+  }
+
+  // 3. Get per-agent ElevenLabs API key
   const apiKey = await getAgentElevenLabsKey(orgId, agentId);
   if (!apiKey) {
     throw Errors.invalidInput(
@@ -104,7 +112,7 @@ async function _syncAgentToElevenLabs(
     );
   }
 
-  // 3. Get ModelGuide API key for MCP auth (optional — agents created before secret storage won't have it)
+  // 4. Get ModelGuide API key for MCP auth (optional — agents created before secret storage won't have it)
   const mgApiKey = await getAgentModelGuideKey(orgId, agentId);
 
   const client = new ElevenLabsClient({ apiKey });
@@ -286,7 +294,10 @@ async function _syncAgentToElevenLabs(
     throw err;
   }
 
-  // Step 4: Assign new MCP server + webhook + conversation-init to ElevenLabs agent
+  // Determine compiled prompt (llmModel already validated above)
+  const compiledPrompt = agent.compiledInstructions ?? undefined;
+
+  // Step 4: Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
   try {
     const mergedMcpIds = [...foreignMcpIds, mcpServerId!];
 
@@ -302,14 +313,22 @@ async function _syncAgentToElevenLabs(
         }
       : {};
 
+    // Build prompt payload — llmModel is guaranteed set (guarded above)
+    const promptPayload: Record<string, unknown> = {
+      mcpServerIds: mergedMcpIds,
+      llm: llmModel,
+    };
+    if (compiledPrompt) {
+      promptPayload.prompt = compiledPrompt;
+      promptPayload.ignoreDefaultPersonality = true;
+    }
+
     await client.conversationalAi.agents.update(elevenLabsAgentId, {
       conversationConfig: {
         agent: {
-          prompt: {
-            mcpServerIds: mergedMcpIds,
-          },
+          prompt: promptPayload,
         },
-        // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
+        // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds/ignoreDefaultPersonality
       } as any,
       platformSettings: {
         overrides: {
@@ -324,7 +343,13 @@ async function _syncAgentToElevenLabs(
         },
       },
     });
-    steps.push({ step: "Agent configuration", status: "success" });
+    steps.push({
+      step: "Agent configuration",
+      status: "success",
+      message: compiledPrompt
+        ? `Applied compiled prompt + LLM model (${llmModel})`
+        : `Applied LLM model (${llmModel}) — no compiled prompt`,
+    });
   } catch (err) {
     steps.push({
       step: "Agent configuration",

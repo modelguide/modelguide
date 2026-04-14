@@ -365,13 +365,13 @@ function AgentDetailPage() {
             <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" />
           </Link>
 
-          {/* Row 3: Integration (full width) */}
-          <IntegrationCard agent={agent} isAdmin={isAdmin} onRegenerateSuccess={setNewApiKey} />
-
           {/* Row 3: Prompt section (full width, tabbed) */}
           <PromptSection agent={agent} canMutate={isAdmin} />
 
-          {/* Row 4: Linked Tools (full width) */}
+          {/* Row 4: Integration (full width) */}
+          <IntegrationCard agent={agent} isAdmin={isAdmin} onRegenerateSuccess={setNewApiKey} />
+
+          {/* Row 5: Linked Tools (full width) */}
           <LinkedToolsCard
             agentId={id}
             connectorsData={connectorsData}

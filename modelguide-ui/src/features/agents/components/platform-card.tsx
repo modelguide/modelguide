@@ -31,32 +31,30 @@ export function PlatformCard({ agent, isAdmin }: PlatformCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Platform</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="max-w-xs">
+        <div className="flex items-center gap-4">
+          <CardTitle>Platform</CardTitle>
           {isAdmin ? (
-            <Select
-              label="Platform"
-              value={platform}
-              onChange={(e) => {
-                const val = e.target.value as AgentPlatform
-                setPlatform(val)
-                platformMutation.mutate(val)
-              }}
-              disabled={platformMutation.isPending}
-            >
-              <option value="custom">Custom</option>
-              <option value="elevenlabs">ElevenLabs</option>
-              <option value="livekit">LiveKit</option>
-            </Select>
+            <div className="w-36">
+              <Select
+                value={platform}
+                onChange={(e) => {
+                  const val = e.target.value as AgentPlatform
+                  setPlatform(val)
+                  platformMutation.mutate(val)
+                }}
+                disabled={platformMutation.isPending}
+              >
+                <option value="custom">Custom</option>
+                <option value="elevenlabs">ElevenLabs</option>
+                <option value="livekit">LiveKit</option>
+              </Select>
+            </div>
           ) : (
-            <dl>
-              <dt className="text-xs font-medium text-fg-muted">Platform</dt>
-              <dd className="mt-1 text-sm capitalize text-fg-primary">{agent.agentPlatform}</dd>
-            </dl>
+            <span className="text-sm capitalize text-fg-secondary">{agent.agentPlatform}</span>
           )}
         </div>
+      </CardHeader>
+      <CardContent>
         {agent.agentPlatform === 'elevenlabs' ? (
           <ElevenLabsFields agent={agent} isAdmin={isAdmin} />
         ) : agent.agentPlatform === 'livekit' ? (

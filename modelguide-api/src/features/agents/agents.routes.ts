@@ -4,8 +4,11 @@
 
 import { env } from "@/env";
 import type { Agent } from "@db/schema";
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { getAgentElevenLabsKey } from "@features/secrets";
 import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
+import { Errors } from "@lib/errors";
 import {
   getCurrentUser,
   getOrganizationId,
@@ -33,6 +36,10 @@ import {
   upsertLivekitConfig,
 } from "./agents.service";
 import { syncAgentToElevenLabs } from "./agents.sync";
+import {
+  type ModelFamily,
+  getElevenLabsModelGroups,
+} from "./elevenlabs-models";
 
 const router = createRouter();
 
@@ -362,6 +369,203 @@ router.openapi(createAgentRoute, async (c) => {
   return c.json({ ...formatAgent(agent), apiKey }, 201);
 });
 
+// ============================================================================
+// Platform Models Endpoint
+// ============================================================================
+
+// GET /platform-models
+router.get(
+  "/platform-models",
+  requireUser(),
+  requirePermission("agents:read"),
+  requireOrganization(),
+);
+
+const platformModelsQuerySchema = z.object({
+  platform: z
+    .enum(["elevenlabs"])
+    .openapi({ description: "Agent platform to list LLM models for" }),
+  family: z
+    .enum(["gpt", "claude", "gemini", "generic"])
+    .optional()
+    .openapi({ description: "Filter models by family" }),
+});
+
+const platformModelsRoute = createRoute({
+  method: "get",
+  path: "/platform-models",
+  tags: ["Agents"],
+  summary: "List LLM models for a platform",
+  description:
+    "Returns a curated list of LLM models for the given agent platform, grouped by family. Filter by ?family=gpt|claude|gemini|generic.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    query: platformModelsQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "Curated model list grouped by family",
+      content: {
+        "application/json": {
+          schema: z.object({
+            data: z.array(
+              z.object({
+                family: z.string(),
+                models: z.array(
+                  z.object({
+                    id: z.string(),
+                    label: z.string(),
+                  }),
+                ),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    400: errorResponse("Unsupported platform"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+  },
+});
+
+router.openapi(platformModelsRoute, async (c) => {
+  const { platform, family } = c.req.valid("query");
+
+  // Branch per platform — extend here when new platforms are added
+  if (platform === "elevenlabs") {
+    const data = getElevenLabsModelGroups(family as ModelFamily | undefined);
+    return c.json({ data }, 200);
+  }
+
+  throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// Platform Agent Creation
+// ============================================================================
+
+// POST /:id/platform-agent
+router.post(
+  "/:id/platform-agent",
+  requireUser(),
+  requirePermission("agents:update"),
+  requireOrganization(),
+);
+
+const createPlatformAgentRoute = createRoute({
+  method: "post",
+  path: "/{id}/platform-agent",
+  tags: ["Agents"],
+  summary: "Create agent on a platform",
+  description:
+    "Creates a minimal shell agent on the given platform using the agent name. Returns the platform-assigned agent ID and saves it to metadata.<platform>.agentId. All real configuration is applied via sync. Pass { force: true } in the request body to replace an existing agent ID atomically.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            platform: z.enum(["elevenlabs"]).openapi({
+              description: "Target platform to create the agent on",
+            }),
+            force: z.boolean().optional().openapi({
+              description:
+                "Clear any existing agentId and create a new agent atomically. Without this flag the endpoint returns 409 if an agentId is already set.",
+            }),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Platform agent created",
+      content: {
+        "application/json": {
+          schema: z.object({
+            platformAgentId: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse(
+      "Platform API key not configured or unsupported platform",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    409: errorResponse("Platform agent already exists for this agent"),
+  },
+});
+
+router.openapi(createPlatformAgentRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const { platform, force } = c.req.valid("json");
+
+  const agent = await getAgentById(orgId, id);
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+
+  // Branch per platform — extend here when new platforms are added
+  if (platform === "elevenlabs") {
+    const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
+
+    // Guard: agent ID already set — 409 unless force=true
+    if (elMeta.agentId && !force) {
+      throw Errors.conflict(
+        "ElevenLabs agent ID already set — pass force: true to replace it",
+      );
+    }
+
+    if (!agent.hasElevenLabsKey) {
+      throw Errors.invalidInput(
+        "ElevenLabs API key must be configured before creating an agent",
+      );
+    }
+
+    const apiKey = await getAgentElevenLabsKey(orgId, id);
+    if (!apiKey) {
+      throw Errors.invalidInput(
+        "ElevenLabs API key not configured for this agent",
+      );
+    }
+
+    const client = new ElevenLabsClient({ apiKey });
+    const created = await client.conversationalAi.agents.create({
+      name: agent.name,
+      conversationConfig: {},
+    });
+
+    const platformAgentId = created.agentId;
+
+    // Persist agentId to metadata.
+    // When force=true, also clear sync-derived fields that are bound to the
+    // old remote agent (webhook, MCP server, last sync state) so the UI does
+    // not show stale "already synced" indicators for the new agent.
+    const {
+      agentId: _old,
+      lastSyncedAt: _syncedAt,
+      agentName: _agentName,
+      webhookId: _webhookId,
+      mcpServerId: _mcpServerId,
+      ...elMetaCore
+    } = elMeta;
+    await updateAgent(orgId, id, {
+      metadata: {
+        ...meta,
+        elevenlabs: { ...elMetaCore, agentId: platformAgentId },
+      },
+    });
+
+    return c.json({ platformAgentId }, 201);
+  }
+
+  throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
 // GET /:id
 router.get(
   "/:id",
@@ -447,7 +651,8 @@ router.openapi(updateAgentRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
-  const agent = await updateAgent(orgId, id, body);
+  await updateAgent(orgId, id, body);
+  const agent = await getAgentById(orgId, id);
 
   return c.json(formatAgent(agent), 200);
 });
