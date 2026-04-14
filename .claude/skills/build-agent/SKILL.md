@@ -1,16 +1,22 @@
 ---
 name: build-agent
 description: >
-  End-to-end voice agent builder. Trigger on "/build-agent" or when the user
-  says "build a voice agent", "create a new agent from scratch", or "set up a
-  new ModelGuide agent". Guides through 8 stages: prereq check, interview,
-  local input collection, YAML generation + provisioning, eval import,
-  simulation feedback loop, autonomous tightening, and local LiveKit
-  validation. Supports end-to-end provisioning for Medusa, Zendesk, and
-  conversation-only agents. For other APIs, dispatches `@mg-connector` in
-  parallel while the rest of the build continues — the build only pauses at
-  `mg setup` if the connector isn't ready yet. Produces a validated voice
-  agent in 2-3 hours. Resumes from the last completed stage if
+  End-to-end voice agent builder for ModelGuide. Use this skill whenever
+  someone wants to build, create, or set up a voice agent or voice bot from
+  scratch — regardless of industry (dental, HVAC, retail, restaurant, gym,
+  real estate, law firm, insurance, etc.). Trigger on "/build-agent" or
+  phrases like "build a voice agent", "create a voice bot", "set up an agent",
+  "automate our phone line / dispatch calls / inbound calls", "I need a voice
+  agent for my [business]", "help me build an agent", or "I want to set up a
+  new ModelGuide agent". Also trigger when someone says they are "starting from
+  zero" or "starting fresh" on a new agent build. Guides through 8 stages:
+  prereq check, interview, local input collection, YAML generation +
+  provisioning, eval import, simulation feedback loop, autonomous tightening,
+  and local LiveKit validation. Supports end-to-end provisioning for Medusa,
+  Zendesk, and conversation-only agents. For other APIs, dispatches
+  `@mg-connector` in parallel while the rest of the build continues — the
+  build only pauses at `mg setup` if the connector isn't ready yet. Produces a
+  validated voice agent in 2-3 hours. Resumes from the last completed stage if
   `.modelguide/STATE.md` exists.
 ---
 
