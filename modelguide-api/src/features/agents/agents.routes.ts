@@ -450,10 +450,16 @@ const createElevenLabsAgentRoute = createRoute({
   tags: ["Agents"],
   summary: "Create ElevenLabs agent",
   description:
-    "Creates a minimal shell agent on ElevenLabs using the agent name. Returns the ElevenLabs agent ID and saves it to metadata.elevenlabs.agentId. All real configuration (MCP servers, webhooks, prompt, model) is applied via sync.",
+    "Creates a minimal shell agent on ElevenLabs using the agent name. Returns the ElevenLabs agent ID and saves it to metadata.elevenlabs.agentId. All real configuration (MCP servers, webhooks, prompt, model) is applied via sync. Pass ?force=true to replace an existing agent ID atomically (clears the old ID and creates a new one in a single request).",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,
+    query: z.object({
+      force: z.enum(["true", "false"]).optional().openapi({
+        description:
+          "Clear any existing agentId and create a new agent atomically. Without this flag the endpoint returns 409 if an agentId is already set.",
+      }),
+    }),
   },
   responses: {
     201: {
@@ -477,16 +483,17 @@ const createElevenLabsAgentRoute = createRoute({
 router.openapi(createElevenLabsAgentRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const { id } = c.req.valid("param");
+  const { force } = c.req.valid("query");
 
   const agent = await getAgentById(orgId, id);
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
 
-  // Guard: agent ID already set → 409
-  if (elMeta.agentId) {
+  // Guard: agent ID already set — 409 unless ?force=true
+  if (elMeta.agentId && force !== "true") {
     throw Errors.conflict(
-      "ElevenLabs agent ID already set — clear it first to re-create",
+      "ElevenLabs agent ID already set — pass ?force=true to replace it",
     );
   }
 
@@ -513,12 +520,13 @@ router.openapi(createElevenLabsAgentRoute, async (c) => {
 
   const elevenLabsAgentId = created.agentId;
 
-  // Persist agentId to metadata
+  // Persist agentId to metadata — if force=true this also clears the old ID
+  const { agentId: _old, ...elMetaWithoutId } = elMeta;
   await updateAgent(orgId, id, {
     metadata: {
       ...meta,
       elevenlabs: {
-        ...elMeta,
+        ...elMetaWithoutId,
         agentId: elevenLabsAgentId,
       },
     },

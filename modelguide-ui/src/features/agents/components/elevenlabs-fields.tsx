@@ -104,19 +104,12 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
   })
 
   const createElevenLabsAgentMutation = useMutation({
-    mutationFn: async () => {
-      // If a stale agent ID is saved in metadata, clear it first so the API won't 409
-      if (elMeta.agentId) {
-        const currentMeta = (agent.metadata ?? {}) as Record<string, unknown>
-        const { agentId: _removed, ...elMetaWithoutId } = elMeta
-        await api
-          .patch(`agents/${agent.id}`, {
-            json: { metadata: { ...currentMeta, elevenlabs: elMetaWithoutId } },
-          })
-          .json()
-      }
-      return api.post(`agents/${agent.id}/elevenlabs`).json<{ elevenLabsAgentId: string }>()
-    },
+    mutationFn: () =>
+      api
+        .post(`agents/${agent.id}/elevenlabs`, {
+          searchParams: elMeta.agentId ? { force: 'true' } : {},
+        })
+        .json<{ elevenLabsAgentId: string }>(),
     onSuccess: (data) => {
       setElAgentId(data.elevenLabsAgentId)
       setCreateElError(null)
