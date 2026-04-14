@@ -22,6 +22,7 @@ orgSlug: smilefirst
 
 **D-07 Connector:**
 - connectorType: custom
+- catalogSlug: (pending)
 - connectorSlug: smilefirst_booking
 - baseUrl: https://api.smilefirst.example.com
 - auth: Bearer token

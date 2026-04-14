@@ -1,6 +1,10 @@
 // modelguide-api/tests/unit/cli/run-evals.test.ts
 import { describe, expect, test } from "bun:test";
-import { computePassRate, formatResultsTable } from "@/cli/commands/run-evals";
+import {
+  buildMissingAdminUserMessage,
+  computePassRate,
+  formatResultsTable,
+} from "../../../src/cli/commands/run-evals.helpers";
 
 const makeResult = (passed: boolean | null) => ({
   testCaseId: "tc-1",
@@ -77,5 +81,14 @@ describe("formatResultsTable", () => {
     const table = formatResultsTable([resultWithScores]);
     expect(table).toContain("↳ respects-guardrails");
     expect(table).toContain("Agent violated the rule");
+  });
+});
+
+describe("buildMissingAdminUserMessage", () => {
+  test("includes a runnable add-users example with the org slug", () => {
+    const message = buildMissingAdminUserMessage("glowskin");
+    expect(message).toContain('No admin user found for org "glowskin".');
+    expect(message).toContain("mg add-users --org glowskin");
+    expect(message).toContain('role=admin');
   });
 });

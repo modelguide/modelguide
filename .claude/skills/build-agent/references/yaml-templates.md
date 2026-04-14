@@ -1,6 +1,7 @@
 # YAML Templates Reference
 
-Complete annotated examples for all 6 config files. Use during stage [2].
+Complete annotated examples for the stage [1] bootstrap file plus up to 6 stage
+[2] provisioning files.
 `{{double_braces}}` are replaced from CONTEXT.md interview answers.
 Full schema: `.claude/skills/mg-cli/references/schemas.md`
 
@@ -12,6 +13,19 @@ slug: "{{orgSlug}}"        # lowercase + hyphens, e.g. "glowbox"
 timezone: "America/New_York"
 features: [voice-agents]
 demoEnabled: false
+```
+
+## users.yaml
+
+Create this in stage [1] before provisioning so `mg setup` has an admin user to
+create the agent under and `mg run-evals` has a real admin identity to mint an
+internal JWT from.
+
+```yaml
+users:
+  - email: "{{adminEmail}}"
+    name: "{{businessName}} Admin"
+    role: admin
 ```
 
 ## agents.yaml
@@ -27,46 +41,82 @@ agents:
     config:
       url: "ws://localhost:7880"
       agentName: "{{agentSlug}}"
+    # Conversation-only agents: omit the `tools:` block entirely.
     tools:
-      # Catalog connector (Medusa or Zendesk):
+      # `connectorSlug` is the org connector instance slug, e.g. `glowskin_store`.
       - connectorSlug: "{{connectorSlug}}"
-      # Custom connector — list only tools defined in my_agent.py:
-      # - connectorSlug: "{{customSlug}}"
-      #   toolSlugs: [tool_one, tool_two]
 ```
+
+Conversation-only render: omit the entire `tools:` block. The final
+`agents.yaml` must not contain `connectorSlug`.
 
 ## connectors.yaml — Medusa (catalog)
 
 ```yaml
 connectors:
   - name: "{{businessName}} Store"
-    slug: "{{orgSlug}}_store"    # underscores not hyphens
-    catalogSlug: "medusa"
+    slug: "{{connectorSlug}}"    # e.g. glowskin_store
+    catalogSlug: "{{catalogSlug}}"    # medusa
     config:
-      baseUrl: "{{medusaStoreUrl}}"
+      baseUrl: "{{medusaBaseUrl}}"
+      publishableKey: "{{medusaPublishableKey}}"
     secrets:
       - field: "secretApiKey"
-        name: "{{businessName}} Store API Key"
+        name: "{{businessName}} Medusa Admin API Key"
         type: api_key
 ```
 
-## connectors.yaml — Custom REST
+`publishableKey` is required by the shipped Medusa manifest. Do not omit it.
 
-Tool slugs must match `@function_tool` method names in `my_agent.py`.
-The Python agent code IS the connector for v1; stage [7] migrates to the catalog.
+## connectors.yaml — Zendesk (catalog)
+
+```yaml
+connectors:
+  - name: "{{businessName}} Support"
+    slug: "{{connectorSlug}}"    # e.g. glowskin_support
+    catalogSlug: "{{catalogSlug}}"    # zendesk
+    config:
+      subdomain: "{{zendeskSubdomain}}"
+      email: "{{zendeskEmail}}"
+    secrets:
+      - field: "apiToken"
+        name: "{{businessName}} Zendesk API Token"
+        type: api_key
+```
+
+## connectors.yaml — Custom connector (after `@mg-connector`)
+
+Only generate this after `.modelguide/CONNECTOR_HANDOFF.md` says
+`status: completed`.
 
 ```yaml
 connectors:
   - name: "{{serviceName}}"
-    slug: "{{orgSlug}}_{{serviceSlug}}"
-    catalogSlug: "custom_rest"
+    slug: "{{connectorSlug}}"
+    catalogSlug: "{{catalogSlug}}"
     config:
-      baseUrl: "{{serviceBaseUrl}}"
+      # Copy every non-secret field name returned in CONNECTOR_HANDOFF.md.
+      # Fill the values from D-10 Connector Config.
+      # Example:
+      # baseUrl: "{{serviceBaseUrl}}"
     secrets:
-      - field: "apiKey"
-        name: "{{serviceName}} API Key"
-        type: api_key
+      # Copy every required secret entry returned in CONNECTOR_HANDOFF.md.
+      # Example:
+      # - field: "apiToken"
+      #   name: "{{businessName}} {{serviceName}} API Token"
+      #   type: api_key
 ```
+
+## Unsupported Custom APIs
+
+Do **not** generate `catalogSlug: "custom_rest"` here. ModelGuide does not ship
+that catalog entry, so `mg setup` will fail at connector creation.
+
+If the developer needs Shopify, HubSpot, or a bespoke REST API:
+- create `.modelguide/CONNECTOR_HANDOFF.md`
+- invoke `@mg-connector`
+- resume `/build-agent` only after the handoff file says `status: completed`
+- then generate `connectors.yaml` from the handoff result instead of inventing fields
 
 ## sops.yaml
 
@@ -92,7 +142,9 @@ sops:
       - id: lookup
         instruction: "Look up the order using the provided identifier."
         required: true
+        # Conversation-only agents: omit this `tool:` block entirely.
         tool:
+          # `connectorSlug` here is the org connector instance slug.
           connectorSlug: "{{connectorSlug}}"
           toolSlug: "{{lookupToolSlug}}"
       - id: respond
@@ -101,6 +153,10 @@ sops:
 
   # Repeat pattern for Conv-2 and Conv-3...
 ```
+
+Conversation-only render: omit every `tool:` block entirely. The final
+`sops.yaml` must not contain `connectorSlug`, `toolSlug`, or unresolved
+connector placeholders.
 
 ## guardrails.yaml
 

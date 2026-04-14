@@ -3,11 +3,14 @@ name: build-agent
 description: >
   End-to-end voice agent builder. Trigger on "/build-agent" or when the user
   says "build a voice agent", "create a new agent from scratch", or "set up a
-  new ModelGuide agent". Guides through 8 stages: prereq check, interview, API
-  key collection, YAML generation + provisioning, eval import, simulation
-  feedback loop, autonomous tightening, and local LiveKit validation. Produces
-  a validated voice agent in 2-3 hours. Resumes from the last completed stage
-  if .modelguide/STATE.md exists.
+  new ModelGuide agent". Guides through 8 stages: prereq check, interview, local
+  input collection, YAML generation + provisioning, eval import, simulation
+  feedback loop, autonomous tightening, and local LiveKit validation. Supports
+  end-to-end provisioning for Medusa, Zendesk, and conversation-only agents.
+  For other APIs, create a resumable `.modelguide/CONNECTOR_HANDOFF.md`, hand
+  off to `@mg-connector`, and resume once the connector result is written back.
+  Produces a validated voice agent in 2-3 hours. Resumes from the last
+  completed stage if `.modelguide/STATE.md` exists.
 ---
 
 # Build-Agent Skill
@@ -22,24 +25,77 @@ Before the interview, check for existing progress:
 test -f .modelguide/STATE.md && cat .modelguide/STATE.md
 ```
 
-If `currentStage` exists, skip completed stages and resume. If STATE.md doesn't exist, start from [pre].
+If `currentStage` exists, skip completed stages and resume.
+
+Special case: if `currentStage: connector`, read
+`.modelguide/CONNECTOR_HANDOFF.md` before doing anything else:
+- `status: requested` → do not restart Stage [0]; continue the `@mg-connector`
+  handoff
+- `status: blocked` → show the blocker and stop
+- `status: completed` → sync `catalogSlug`, `connectorSlug`, `toolSlugs`, and
+  any verified service name from the handoff back into D-07, write `STATE.md`
+  with `currentStage: 1`, and continue from Stage [1]
+
+If STATE.md doesn't exist, start from [pre].
 
 ## State Files
 
 **`.modelguide/STATE.md`** — stage tracker:
 ```
-currentStage: pre | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | done
+currentStage: pre | 0 | connector | 1 | 2 | 3 | 4 | 5 | 6 | 7 | done
 mode: auto-pilot | supervised
 orgSlug: <slug>
 agentSlug: <slug>
 agentId: <uuid>
-connectorType: catalog | custom
-connectorSlug: <slug>
+connectorType: catalog | none | custom
+catalogSlug: <slug> | (none) | (pending)
+connectorSlug: <org-connector-slug> | (none) | (pending)
 evalIteration: 0
 lastEvalScore: (none)
 ```
 
 **`.modelguide/CONTEXT.md`** — interview answers and locked decisions (D-01…D-NN).
+
+**`.modelguide/CONNECTOR_HANDOFF.md`** — only for custom APIs:
+```yaml
+status: requested | completed | blocked
+serviceName: <display name>
+serviceSlug: <slug>
+requestedConnectorSlug: <org>_<service>
+authModel: <requested auth model>
+baseUrl: <requested base URL or (none)>
+operations:
+  - <requested operation>
+catalogSlug: <catalog slug> | (pending)
+connectorSlug: <org connector slug> | (pending)
+toolSlugs:
+  - <tool slug>
+configFields:
+  - name: <non-secret field name>
+    description: <what the builder should enter>
+    required: true
+secretFields:
+  - field: <secret field name>
+    name: <secret prompt label>
+    type: api_key
+changedFiles:
+  - <path>
+verification: <commands run or (pending)>
+blocker: <message or (none)>
+```
+
+The build-agent skill creates this file in Stage [0]. `@mg-connector` updates
+it in place. Resume logic reads it so the builder never has to repeat the
+interview. Preserve the original request fields when updating this file; do not
+replace the builder's API summary with only completion data.
+
+Slug roles:
+- `serviceSlug` — interview-time slug for the external service
+- `requestedConnectorSlug` — proposed org connector instance slug before the
+  connector implementation is confirmed
+- `catalogSlug` — final connector type slug in the global catalog
+- `connectorSlug` — final org connector instance slug used in `agents.yaml`,
+  `sops.yaml`, and runtime MCP tool names
 
 Update `currentStage` in STATE.md at the start and end of each stage.
 
@@ -103,13 +159,34 @@ Push for specific dialogue if vague. These become SOP steps and eval test cases 
 Options:
 - **A) Medusa** — built-in e-commerce (products, cart, orders)
 - **B) Zendesk** — built-in helpdesk (tickets, knowledge base)
-- **C) Named service** (e.g. "Shopify") — Claude researches API docs with WebFetch
-- **D) Custom API** — ask for base URL + auth type + 3-5 operations
-- **E) None** — conversation only
+- **C) None** — conversation only
+- **D) Something else** (e.g. Shopify or a custom REST API)
 
-For C: use WebFetch to read the service's API docs, pick 4-8 endpoints relevant to the example conversations, show the tool list for confirmation.
+Supported end-to-end provisioning in this skill is **Medusa**, **Zendesk**, or
+**conversation-only**. If the developer picks any other service/API:
+- capture the service name, auth model, base URL, and concrete operations in D-07
+- derive `serviceSlug` and a requested org connector slug
+  `{{orgSlug}}_{{serviceSlug}}`
+- explain that this skill must not invent a `custom_rest` connector config
+- create `.modelguide/CONNECTOR_HANDOFF.md` with `status: requested`
+- invoke `@mg-connector` to add a first-class ModelGuide connector first
+- write `STATE.md` with `currentStage: connector`
+- resume `/build-agent` only after `CONNECTOR_HANDOFF.md` says
+  `status: completed`
 
-Record as D-07 (connectorType, connectorSlug, tool names).
+Record D-07 with both connector identifiers:
+- Medusa → `connectorType: catalog`, `catalogSlug: medusa`,
+  `connectorSlug: {{orgSlug}}_store`
+- Zendesk → `connectorType: catalog`, `catalogSlug: zendesk`,
+  `connectorSlug: {{orgSlug}}_support`
+- None → `connectorType: none`, `catalogSlug: (none)`,
+  `connectorSlug: (none)`
+- Custom → `connectorType: custom`, `catalogSlug: (pending)`,
+  `connectorSlug: {{orgSlug}}_{{serviceSlug}}`
+
+Also record the tool slugs needed by the agent. `connectorSlug` is always the
+org connector instance slug used in runtime MCP tool names; `catalogSlug` is
+the connector type in the global catalog.
 
 ### Q5 — Persona
 "What's the agent's name, and how should it sound?"
@@ -143,23 +220,72 @@ Press Enter to confirm, or tell me what to change.
 ```
 Record as D-06.
 
-Write STATE.md (`currentStage: 1`), write CONTEXT.md with all decisions.
+For supported paths (Medusa, Zendesk, conversation-only): write STATE.md
+(`currentStage: 1`) and CONTEXT.md with all decisions.
+
+For unsupported custom APIs: write CONTEXT.md, write
+`.modelguide/CONNECTOR_HANDOFF.md`, write STATE.md with
+`currentStage: connector`, hand off to `@mg-connector`, and stop. On resume, do
+not repeat Q1-Q7.
 
 ---
 
-## Stage [1]: Setup — API Key Collection
+## Stage [1]: Setup — Local Inputs
 
-**Purpose**: Generate `agent/.env.example`, instruct developer to fill `agent/.env`, verify keys are present without reading values.
+**Purpose**: Bootstrap the first admin user, collect the connector inputs that
+stage [2] needs, generate `agent/.env.example`, and verify the required local
+inputs without reading secret values from files.
 
 1. Create directory:
    ```bash
-   mkdir -p agent/prompts/workflows
+   mkdir -p .modelguide agent/prompts/workflows
    ```
 
-2. Generate `agent/.env.example` from `references/python-templates.md` (.env.example section).
-   Substitute all `{{variables}}` from CONTEXT.md.
+2. Ask for the initial ModelGuide admin email:
+   ```
+   What email should be the initial admin user for this org?
+   ```
+   Append it to CONTEXT.md as `D-09 Admin User Email`.
 
-3. Tell the developer:
+3. Capture connector inputs before provisioning:
+   - If `catalogSlug == medusa`, ask for:
+     - Medusa base URL
+     - Medusa publishable key
+     Append both to CONTEXT.md as `D-10 Connector Config`.
+     Append `D-11 Connector Secrets Checklist: secretApiKey` and tell the
+     developer `mg setup` will prompt for it in stage [2c] if the agent uses
+     order lookup, returns, or any other admin tools.
+   - If `catalogSlug == zendesk`, ask for:
+     - Zendesk subdomain
+     - Zendesk agent email
+     Append both to CONTEXT.md as `D-10 Connector Config`.
+     Append `D-11 Connector Secrets Checklist: apiToken` and tell the developer
+     `mg setup` will prompt for it in stage [2c].
+   - If `connectorType == custom`, verify the handoff file is complete before
+     continuing:
+     ```bash
+     test -s .modelguide/CONNECTOR_HANDOFF.md && echo "handoff: Found" || echo "handoff: Missing"
+     grep -q "^status: completed$" .modelguide/CONNECTOR_HANDOFF.md && echo "handoff: completed" || echo "handoff: not completed"
+     ```
+     If the handoff file is missing, blocked, or missing any of
+     `catalogSlug`, `connectorSlug`, `configFields`, or `secretFields`, stop and
+     send the workflow back to `@mg-connector`. Do not continue Stage [1].
+     For each returned `configFields` entry, ask the developer for the value and
+     write the answers into `D-10 Connector Config`. Copy the returned
+     `secretFields` entries into `D-11 Connector Secrets Checklist` so the
+     builder knows exactly what `mg setup` will prompt for. Do not invent field
+     names, labels, or secret types.
+   - If `connectorType == none`, record `D-10 Connector Config: none`.
+
+4. Generate two files:
+   - `agent/.env.example` from `references/python-templates.md` (.env.example section)
+   - `.modelguide/users.yaml` from `references/yaml-templates.md` (`users.yaml` section)
+   Substitute all `{{variables}}` from CONTEXT.md. For `users.yaml`, use:
+   - `email: {{adminEmail}}` from D-09
+   - `name: "{{businessName}} Admin"` unless the developer gave a better display name
+   - `role: admin`
+
+5. Tell the developer:
    ```
    Generated agent/.env.example. Next:
      cp agent/.env.example agent/.env
@@ -170,16 +296,18 @@ Write STATE.md (`currentStage: 1`), write CONTEXT.md with all decisions.
 
    MODELGUIDE_API_KEY and MODELGUIDE_AGENT_ID will be filled in stage [2].
    LiveKit credentials are pre-filled (no account needed for local dev).
+   Also keep the connector secret(s) from D-11 ready — `mg setup` will prompt
+   for them once during stage [2c].
 
    Tell me when agent/.env is ready.
    ```
 
-4. Verify file exists and is non-empty:
+6. Verify file exists and is non-empty:
    ```bash
    test -s agent/.env && echo "Found" || echo "Missing or empty"
    ```
 
-5. Check required keys are set (without reading values):
+7. Check required keys are set (without reading values):
    ```bash
    grep -q "^OPENAI_API_KEY=.\+" agent/.env && echo "OPENAI_API_KEY: set" || echo "OPENAI_API_KEY: MISSING"
    grep -q "^DEEPGRAM_API_KEY=.\+" agent/.env && echo "DEEPGRAM_API_KEY: set" || echo "DEEPGRAM_API_KEY: MISSING"
@@ -187,7 +315,13 @@ Write STATE.md (`currentStage: 1`), write CONTEXT.md with all decisions.
    grep -q "^ELEVENLABS_API_KEY=.\+" agent/.env && echo "ELEVENLABS_API_KEY: set" || echo "ELEVENLABS_API_KEY: MISSING"
    ```
 
-6. Ensure `API_EXTERNAL_ADDRESS` is set in the ModelGuide API env (needed for simulations):
+8. Verify `.modelguide/users.yaml` exists and includes an admin user:
+   ```bash
+   test -s .modelguide/users.yaml && echo "users.yaml: Found" || echo "users.yaml: Missing"
+   grep -q "role: admin" .modelguide/users.yaml && echo "users.yaml: admin present" || echo "users.yaml: admin missing"
+   ```
+
+9. Ensure `API_EXTERNAL_ADDRESS` is set in the ModelGuide API env (needed for simulations):
    ```bash
    if ! grep -q "^API_EXTERNAL_ADDRESS=" modelguide-api/.env; then
      echo "API_EXTERNAL_ADDRESS=http://localhost:3000" >> modelguide-api/.env
@@ -207,15 +341,23 @@ In supervised mode: show each YAML file and wait for approval before running `mg
 
 ### 2a. Generate YAML artifacts
 
-Create `.modelguide/` and write 6 files from `references/yaml-templates.md`.
-Substitute all `{{variables}}` from CONTEXT.md.
+Write up to 6 provisioning files into `.modelguide/` from
+`references/yaml-templates.md`. Do **not** overwrite the `users.yaml` file from
+stage [1]. Substitute all `{{variables}}` from CONTEXT.md.
 
 - `org.yaml` — slug from D-02
 - `agents.yaml` — platform: livekit, config.url: ws://localhost:7880, active: true
-- `connectors.yaml` — based on D-07
+- `connectors.yaml` — based on D-07 + D-10. For custom connectors, copy the
+  exact `catalogSlug`, config field names, and secret definitions from the
+  completed `.modelguide/CONNECTOR_HANDOFF.md` result, and use the actual
+  non-secret values collected in D-10. Omit this file entirely for
+  conversation-only agents.
 - `sops.yaml` — 3 SOPs from Conv-1/2/3, status: active
 - `guardrails.yaml` — from D-08, always include no-fabrication baseline
 - `evals.yaml` — 5-10 test cases per SOP (happy path + missing info + guardrail trigger)
+
+In `agents.yaml` and `sops.yaml`, `connectorSlug` must be the org connector
+instance slug, not the catalog slug.
 
 ### 2b. Generate Python agent code
 
@@ -231,7 +373,7 @@ done
 Generate:
 - `agent/agent.py` (copy example, update BuildProAgent → {{AgentClassName}})
 - `agent/my_agent.py` (new MCPAgent subclass)
-- `agent/config.py` (copy example, update AGENT_NAME and CONNECTOR_PREFIX defaults)
+- `agent/config.py` (copy example, update AGENT_NAME / CONNECTOR_PREFIX defaults and BuildProAgent import references)
 - `agent/prompts/__init__.py`
 - `agent/prompts/base.py`
 - `agent/pyproject.toml`
@@ -251,6 +393,13 @@ make db-migrate
 # Dry run first
 cd modelguide-api && bun run src/cli/mg.ts setup ../.modelguide/ --dry-run
 ```
+
+This dry-run should now show the admin user from `.modelguide/users.yaml`
+alongside the org, agent, SOP, and guardrail plan.
+
+If `mg setup` prompts for connector secrets, use the Stage [1] checklist (or
+the completed custom handoff file). That prompt is expected; do not treat it as
+new discovery work.
 
 If dry-run passes:
 ```bash
@@ -460,12 +609,17 @@ Write STATE.md (`currentStage: 7`).
 ## Stage [7]: Improve MG — Connector PR (Optional)
 
 Only run if `connectorType == custom` in STATE.md.
+Skip this stage if the earlier `@mg-connector` handoff already prepared or
+opened the connector PR.
 
 Ask: "You built a custom {{serviceName}} connector. Want to contribute it to ModelGuide so it's available to all orgs?"
 
 If yes:
-1. Invoke `@mg-connector` skill with API details from CONTEXT.md (service name, base URL, auth, tool definitions)
-2. After `mg-connector` completes, open a PR:
+1. Reuse `.modelguide/CONNECTOR_HANDOFF.md` and the existing connector files;
+   do not restart from a blank API spec
+2. Invoke `@mg-connector` only if you still need it to prepare the contribution
+   PR from those existing files
+3. After `mg-connector` completes, open a PR:
    ```bash
    gh pr create --title "feat(connectors): add {{serviceName}} catalog connector" \
      --body "Generated by /build-agent skill. Adds {{serviceName}} as a first-class ModelGuide connector."

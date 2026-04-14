@@ -1,7 +1,7 @@
 # Python Agent Templates Reference
 
 Complete templates for the voice agent. `{{variables}}` replaced from CONTEXT.md.
-Base on `examples/agents/livekit-agent/src/` — these files can be copied unchanged:
+Based on `examples/agents/livekit-agent/src/` — these files can be copied unchanged:
 `mcp_agent.py`, `mg_client.py`, `tracing.py`, `transcript.py`, `providers.py`, `hangup.py`
 
 ## agent.py
@@ -14,7 +14,10 @@ from buildpro import BuildProAgent
 from my_agent import {{AgentClassName}}
 ```
 
-Also update all occurrences of `BuildProAgent` → `{{AgentClassName}}` (there are 3: the import line, the instantiation in `entrypoint`, and the type annotation in `_cleanup`).
+Also update all occurrences of `BuildProAgent` → `{{AgentClassName}}`
+(there are 3: the import line, the instantiation in `entrypoint`, and the type
+annotation in `_cleanup`). Keep the `user_email=user_identifier` argument in the
+`entrypoint` constructor call; `my_agent.py` must accept it.
 
 ## my_agent.py
 
@@ -33,10 +36,20 @@ class {{AgentClassName}}(MCPAgent):
         "{{toolShortName1}}",
         "{{toolShortName2}}",
         # one entry per tool from CONTEXT.md
+        # Conversation-only agents: leave this as []
     ]
 
-    def __init__(self, *, session_id: str | None, mcp=None) -> None:
-        instructions = build_system_prompt(session_id or "")
+    def __init__(
+        self,
+        *,
+        session_id: str | None,
+        user_email: str = "voice-caller",
+        mcp=None,
+    ) -> None:
+        instructions = build_system_prompt(
+            session_id or "",
+            user_email=user_email,
+        )
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     @function_tool()
@@ -59,13 +72,29 @@ class {{AgentClassName}}(MCPAgent):
 
 ## config.py
 
-Copy `examples/agents/livekit-agent/src/config.py` and update two lines:
+Copy `examples/agents/livekit-agent/src/config.py` and make these edits:
 ```python
+from my_agent import {{AgentClassName}}
+
 AGENT_NAME: str = os.getenv("AGENT_NAME", "{{agentSlug}}")
 CONNECTOR_PREFIX: str = os.getenv("CONNECTOR_PREFIX", "{{connectorSlug}}")
+
+...
+
+for short_name in {{AgentClassName}}.TOOL_NAMES:
 ```
 
+`CONNECTOR_PREFIX` must be the org connector instance slug used in runtime MCP
+tool names (for example `glowskin_store`), not the catalog slug (`medusa`).
+For conversation-only agents, set the `CONNECTOR_PREFIX` default to `""` and
+leave `TOOL_NAMES = []`.
+
+Do not leave any `from buildpro import BuildProAgent` import or
+`BuildProAgent.TOOL_NAMES` reference behind in `config.py`.
+
 All other config (LLM/STT/TTS vars, ModelGuide vars) stays identical.
+If you copy-paste instead of editing in place, the resulting file must still
+retain the example's async MCP validation block.
 
 ## prompts/__init__.py
 
@@ -163,7 +192,7 @@ LIVEKIT_URL=ws://localhost:7880
 LIVEKIT_API_KEY=devkey
 LIVEKIT_API_SECRET=secret
 AGENT_NAME={{agentSlug}}
-CONNECTOR_PREFIX={{connectorSlug}}
+CONNECTOR_PREFIX={{connectorSlug}}   # Org connector slug in MCP tool names; blank for conversation-only agents
 
 # Optional — TTS voice
 # TTS_PROVIDER=elevenlabs
@@ -174,3 +203,5 @@ CONNECTOR_PREFIX={{connectorSlug}}
 # LANGFUSE_SECRET_KEY=sk-lf-...
 # LANGFUSE_HOST=https://cloud.langfuse.com
 ```
+
+Conversation-only render: `CONNECTOR_PREFIX=` with an empty value.

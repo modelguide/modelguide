@@ -8,73 +8,40 @@
  * bypass on the simulation endpoints (ALLOW_LOCAL_SIM=true).
  */
 
-import { env } from "@/env";
 import { forApp } from "@db/rls";
 import { users } from "@db/schema";
 import type { Command } from "commander";
 import { and, eq } from "drizzle-orm";
 import { sign } from "hono/jwt";
+import {
+  buildMissingAdminUserMessage,
+  formatResultsTable,
+  type TestCaseResult,
+} from "./run-evals.helpers";
 import { getErrorMessage } from "../lib/errors";
 import { log } from "../lib/logger";
 import { resolveOrgId } from "../lib/resolve-org";
+
+export {
+  buildMissingAdminUserMessage,
+  computePassRate,
+  formatResultsTable,
+} from "./run-evals.helpers";
 
 const API_BASE = "http://localhost:3000";
 const POLL_INTERVAL_MS = 8_000;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min
 
 // ============================================================================
-// Pure helpers (unit-testable)
-// ============================================================================
-
-export interface TestCaseResult {
-  testCaseId: string | null;
-  testCaseName: string | null;
-  evalRunId: string;
-  sessionId?: string | null;
-  passed: boolean | null;
-  status: string;
-  scores: Array<{ name: string; result: string; reasoning?: string }>;
-}
-
-/** Compute pass rate as an integer 0-100. Errored cases (passed=null) excluded from denominator. */
-export function computePassRate(results: TestCaseResult[]): number {
-  const scored = results.filter((r) => r.passed !== null);
-  if (scored.length === 0) return 0;
-  const passed = scored.filter((r) => r.passed === true).length;
-  return Math.round((passed / scored.length) * 100);
-}
-
-/** Format a results table as a printable string. */
-export function formatResultsTable(results: TestCaseResult[]): string {
-  const lines: string[] = [];
-  const passRate = computePassRate(results);
-
-  for (const r of results) {
-    const label =
-      r.passed === true ? "PASS" : r.passed === false ? "FAIL" : "ERROR";
-    const name = r.testCaseName ?? r.testCaseId ?? "unknown";
-    lines.push(`  ${label.padEnd(6)} ${name}`);
-    if (r.passed === false) {
-      for (const s of r.scores.filter((sc) => sc.result === "fail")) {
-        lines.push(
-          `         ↳ ${s.name}: ${s.reasoning?.slice(0, 120) ?? "no detail"}`,
-        );
-      }
-    }
-  }
-
-  const passed = results.filter((r) => r.passed === true).length;
-  const scored = results.filter((r) => r.passed !== null).length;
-  lines.push("");
-  lines.push(`Pass rate: ${passed}/${scored} (${passRate}%)`);
-  return lines.join("\n");
-}
-
-// ============================================================================
 // Internal: JWT generation
 // ============================================================================
 
-async function generateInternalJwt(orgId: string): Promise<string> {
+async function generateInternalJwt(
+  orgId: string,
+  orgRef: string,
+): Promise<string> {
+  const { env } = await import("@/env");
+
   // Find the first admin user in this org (bypass RLS since this is an internal CLI op)
   const rows = await forApp(async (tx) => {
     return tx
@@ -91,9 +58,7 @@ async function generateInternalJwt(orgId: string): Promise<string> {
   });
 
   if (rows.length === 0) {
-    throw new Error(
-      `No admin user found for org ${orgId}. Run: mg add-users --org <slug>`,
-    );
+    throw new Error(buildMissingAdminUserMessage(orgRef));
   }
 
   const u = rows[0];
@@ -183,6 +148,7 @@ async function pollUntilDone(
 export async function handleRunEvals(
   orgId: string,
   agentSlug?: string,
+  orgRef = orgId,
 ): Promise<{ totalPassed: number; totalScored: number; passRate: number }> {
   // 1. Health check
   const healthy = await fetch(`${API_BASE}/api/health`)
@@ -197,7 +163,7 @@ export async function handleRunEvals(
   }
 
   // 2. Internal JWT (hidden from caller)
-  const token = await generateInternalJwt(orgId);
+  const token = await generateInternalJwt(orgId, orgRef);
 
   // 3. List eval suites
   const suitesResp = (await apiFetch(
@@ -274,7 +240,7 @@ export function registerRunEvalsCommand(program: Command): void {
     .action(async (opts: { org: string; agent?: string }) => {
       const orgId = await resolveOrgId(opts.org);
       try {
-        await handleRunEvals(orgId, opts.agent);
+        await handleRunEvals(orgId, opts.agent, opts.org);
       } catch (err) {
         log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);
