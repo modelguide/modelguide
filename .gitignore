@@ -42,6 +42,7 @@ drizzle/meta/
 
 # Claude Code
 .claude/local/
+.claude/worktrees/
 **/.claude/settings.local.json
 
 # Superpowers plans/specs (local-only)
