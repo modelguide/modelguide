@@ -1,7 +1,7 @@
 /**
- * Integration tests for ElevenLabs-specific endpoints:
- *   GET  /api/agents/elevenlabs/models
- *   POST /api/agents/:id/elevenlabs
+ * Integration tests for platform-agnostic agent endpoints:
+ *   GET  /api/agents/platform-models?platform=elevenlabs
+ *   POST /api/agents/:id/platform-agent
  *
  * The create endpoint tests cover guard conditions that do not require a real
  * ElevenLabs API connection (400 / 409). The happy path requires a live key
@@ -42,14 +42,17 @@ afterAll(async () => {
 });
 
 // ============================================================================
-// GET /api/agents/elevenlabs/models
+// GET /api/agents/platform-models?platform=elevenlabs
 // ============================================================================
 
-describe("GET /api/agents/elevenlabs/models", () => {
+describe("GET /api/agents/platform-models?platform=elevenlabs", () => {
   test("returns 200 with grouped model list (no filter)", async () => {
-    const response = await request("/api/agents/elevenlabs/models", {
-      headers: orgAAdminHeaders,
-    });
+    const response = await request(
+      "/api/agents/platform-models?platform=elevenlabs",
+      {
+        headers: orgAAdminHeaders,
+      },
+    );
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -77,7 +80,7 @@ describe("GET /api/agents/elevenlabs/models", () => {
 
   test("filters by ?family=claude returns only claude models", async () => {
     const response = await request(
-      "/api/agents/elevenlabs/models?family=claude",
+      "/api/agents/platform-models?platform=elevenlabs&family=claude",
       {
         headers: orgAAdminHeaders,
       },
@@ -95,9 +98,12 @@ describe("GET /api/agents/elevenlabs/models", () => {
   });
 
   test("filters by ?family=gpt returns only gpt models", async () => {
-    const response = await request("/api/agents/elevenlabs/models?family=gpt", {
-      headers: orgAAdminHeaders,
-    });
+    const response = await request(
+      "/api/agents/platform-models?platform=elevenlabs&family=gpt",
+      {
+        headers: orgAAdminHeaders,
+      },
+    );
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -113,7 +119,7 @@ describe("GET /api/agents/elevenlabs/models", () => {
 
   test("filters by ?family=generic returns all models combined", async () => {
     const response = await request(
-      "/api/agents/elevenlabs/models?family=generic",
+      "/api/agents/platform-models?platform=elevenlabs&family=generic",
       { headers: orgAAdminHeaders },
     );
 
@@ -132,23 +138,28 @@ describe("GET /api/agents/elevenlabs/models", () => {
   });
 
   test("rejects unauthenticated request (401)", async () => {
-    const response = await request("/api/agents/elevenlabs/models");
+    const response = await request(
+      "/api/agents/platform-models?platform=elevenlabs",
+    );
     expect(response.status).toBe(401);
   });
 
   test("accessible by support role (200)", async () => {
-    const response = await request("/api/agents/elevenlabs/models", {
-      headers: orgASupportHeaders,
-    });
+    const response = await request(
+      "/api/agents/platform-models?platform=elevenlabs",
+      {
+        headers: orgASupportHeaders,
+      },
+    );
     expect(response.status).toBe(200);
   });
 });
 
 // ============================================================================
-// POST /api/agents/:id/elevenlabs
+// POST /api/agents/:id/platform-agent
 // ============================================================================
 
-describe("POST /api/agents/:id/elevenlabs", () => {
+describe("POST /api/agents/:id/platform-agent", () => {
   let agentId: string;
 
   beforeAll(async () => {
@@ -167,9 +178,10 @@ describe("POST /api/agents/:id/elevenlabs", () => {
   });
 
   test("returns 400 when no ElevenLabs API key configured", async () => {
-    const response = await request(`/api/agents/${agentId}/elevenlabs`, {
+    const response = await request(`/api/agents/${agentId}/platform-agent`, {
       method: "POST",
-      headers: orgAAdminHeaders,
+      headers: { ...orgAAdminHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: "elevenlabs" }),
     });
 
     expect(response.status).toBe(400);
@@ -193,9 +205,10 @@ describe("POST /api/agents/:id/elevenlabs", () => {
     const created = await createRes.json();
     createdAgentIds.push(created.id);
 
-    const response = await request(`/api/agents/${created.id}/elevenlabs`, {
+    const response = await request(`/api/agents/${created.id}/platform-agent`, {
       method: "POST",
-      headers: orgAAdminHeaders,
+      headers: { ...orgAAdminHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: "elevenlabs" }),
     });
 
     expect(response.status).toBe(409);
@@ -204,9 +217,13 @@ describe("POST /api/agents/:id/elevenlabs", () => {
   });
 
   test("rejects support role (403)", async () => {
-    const response = await request(`/api/agents/${agentId}/elevenlabs`, {
+    const response = await request(`/api/agents/${agentId}/platform-agent`, {
       method: "POST",
-      headers: orgASupportHeaders,
+      headers: {
+        ...orgASupportHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ platform: "elevenlabs" }),
     });
 
     expect(response.status).toBe(403);
@@ -214,9 +231,10 @@ describe("POST /api/agents/:id/elevenlabs", () => {
 
   test("returns 404 for non-existent agent", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
-    const response = await request(`/api/agents/${fakeId}/elevenlabs`, {
+    const response = await request(`/api/agents/${fakeId}/platform-agent`, {
       method: "POST",
-      headers: orgAAdminHeaders,
+      headers: { ...orgAAdminHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: "elevenlabs" }),
     });
 
     expect(response.status).toBe(404);
