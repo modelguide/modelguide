@@ -338,7 +338,19 @@ async function _syncAgentToElevenLabs(
         },
       },
     });
-    steps.push({ step: "Agent configuration", status: "success" });
+    const configMessage =
+      compiledPrompt && llmModel
+        ? `Applied compiled prompt + LLM model (${llmModel})`
+        : compiledPrompt
+          ? "Applied compiled prompt (no LLM model configured)"
+          : llmModel
+            ? `Applied LLM model (${llmModel}) — no compiled prompt`
+            : "No compiled prompt or LLM model configured";
+    steps.push({
+      step: "Agent configuration",
+      status: "success",
+      message: configMessage,
+    });
   } catch (err) {
     steps.push({
       step: "Agent configuration",
@@ -346,36 +358,6 @@ async function _syncAgentToElevenLabs(
       message: getErrorMessage(err),
     });
     throw err;
-  }
-
-  // Report compiled prompt step
-  if (compiledPrompt) {
-    steps.push({
-      step: "Compiled prompt",
-      status: "success",
-      message: "Pushed compiled prompt with ignoreDefaultPersonality: true",
-    });
-  } else {
-    steps.push({
-      step: "Compiled prompt",
-      status: "skipped",
-      message: "Agent has no compiled instructions — compile the prompt first",
-    });
-  }
-
-  // Report LLM model step
-  if (llmModel) {
-    steps.push({
-      step: "LLM model",
-      status: "success",
-      message: `Set to ${llmModel}`,
-    });
-  } else {
-    steps.push({
-      step: "LLM model",
-      status: "skipped",
-      message: "No LLM model configured — ElevenLabs default preserved",
-    });
   }
 
   // Report conversation-init webhook status
