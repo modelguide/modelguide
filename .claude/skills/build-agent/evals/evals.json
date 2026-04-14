@@ -1,0 +1,234 @@
+{
+  "skill_name": "build-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to build a voice agent for my skincare brand called GlowSkin Beauty. We sell through Medusa e-commerce. Customers ask about order status, product ingredients, and how to return items.\n\nFor the interview questions:\n- Mode: auto-pilot\n- Business: GlowSkin Beauty is a DTC skincare brand serving online shoppers (orgSlug: glowskin)\n- Example conversations: (1) 'Where is my order #1042?' → look up order and share status; (2) 'Does the Vitamin C serum have retinol?' → look up product ingredients; (3) 'I want to return my moisturizer' → explain return policy and initiate return\n- Tools: Medusa catalog connector\n- Agent name: Aria. Style: friendly & conversational\n- Guardrails: never quote or estimate delivery dates; always escalate angry or upset customers to a human agent\n- Stack: default (GPT-4.1-mini + Deepgram + ElevenLabs)\n\nRun /build-agent and complete Stage [0] only. Output the full contents of CONTEXT.md and STATE.md as code blocks in your response. Do not write files.",
+      "expected_output": "CONTEXT.md content in a code block containing all D-01 through D-08 decisions (auto-pilot mode, Medusa catalog connector, Aria persona, delivery date guardrail, escalation guardrail, 3 example conversations). STATE.md content with currentStage: 1.",
+      "files": [],
+      "expectations": [
+        "Response contains a CONTEXT.md code block",
+        "Response contains a STATE.md code block with currentStage: 1",
+        "CONTEXT.md contains a D-01 decision recording 'auto-pilot' mode",
+        "CONTEXT.md contains a D-02 decision with orgSlug 'glowskin'",
+        "CONTEXT.md contains a D-03 or D-04 decision recording agent name 'Aria'",
+        "CONTEXT.md contains a D-07 decision recording connectorType 'catalog' and connectorSlug referencing 'medusa'",
+        "CONTEXT.md contains a D-08 decision with at least 2 guardrails including one about not quoting delivery dates",
+        "CONTEXT.md contains 3 example conversations formatted as [customer says X] → [agent does Y]"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You have a completed /build-agent interview for a dental clinic. The CONTEXT.md content is below — treat this as the existing .modelguide/CONTEXT.md.\n\n```\n# Agent Context\n\n## Locked Decisions\n\n**D-01 Mode:** auto-pilot\n\n**D-02 Business Context:**\nSmileFirst Dental is a multi-location dental clinic. The agent handles appointment management and general FAQs.\norgSlug: smilefirst\n\n**D-03 Agent Name:** Denta\n\n**D-04 Agent Slug:** smilefirst-voice-agent\n\n**D-05 Persona Style:** Professional & concise. Warm but efficient.\n\n**D-06 Stack:** GPT-4.1-mini / Deepgram Nova-3 / ElevenLabs Flash v2.5 / LiveKit Agents\n\n**D-07 Connector:**\n- connectorType: custom\n- connectorSlug: smilefirst_booking\n- baseUrl: https://api.smilefirst.example.com\n- auth: Bearer token\n- Tools:\n  1. book_appointment — POST /appointments\n  2. check_availability — GET /availability\n  3. cancel_appointment — DELETE /appointments/{id}\n\n**D-08 Guardrails:**\n1. Never diagnose or give medical/dental advice.\n2. Never confirm an appointment without first checking availability.\n3. Always escalate distressed patients to a human receptionist.\n\n## Example Conversations\n1. [patient says: \"I need to book a cleaning for next Friday\"] → [check availability, then book_appointment]\n2. [patient says: \"Can I check if Dr. Patel is free on Thursday afternoon?\"] → [call check_availability]\n3. [patient says: \"Please cancel my appointment\"] → [cancel_appointment]\n```\n\nRun Stage [2a] of the build-agent skill: generate all 6 YAML configuration files (org.yaml, agents.yaml, connectors.yaml, sops.yaml, guardrails.yaml, evals.yaml). Output each file as a named code block. Do not run any CLI commands.",
+      "expected_output": "Six YAML code blocks labelled org.yaml, agents.yaml, connectors.yaml, sops.yaml, guardrails.yaml, evals.yaml. All {{variables}} substituted. agents.yaml has platform: livekit and url: ws://localhost:7880. sops.yaml has 3 SOPs. guardrails.yaml includes no-fabrication. evals.yaml has 9+ test cases.",
+      "files": [],
+      "expectations": [
+        "Response contains a code block labelled or named org.yaml",
+        "Response contains a code block labelled or named agents.yaml",
+        "Response contains a code block labelled or named connectors.yaml",
+        "Response contains a code block labelled or named sops.yaml",
+        "Response contains a code block labelled or named guardrails.yaml",
+        "Response contains a code block labelled or named evals.yaml",
+        "No unsubstituted {{variable}} placeholders appear in any generated YAML",
+        "agents.yaml content includes 'platform: livekit'",
+        "agents.yaml content includes 'url: ws://localhost:7880'",
+        "agents.yaml content includes 'active: true'",
+        "sops.yaml contains exactly 3 SOPs with status: active",
+        "guardrails.yaml contains an entry with slug 'no-fabrication'",
+        "evals.yaml contains at least 9 test cases",
+        "evals.yaml evaluators include 'handles-missing-info' and 'respects-guardrails'"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I want to build a voice agent for scheduling HVAC maintenance. My business is called CoolAir Services, we dispatch technicians to fix air conditioning and heating systems.\n\nFor the interview questions:\n- Mode: supervised\n- Business: CoolAir Services dispatches HVAC technicians to residential customers (orgSlug: coolair)\n- Example conversations: (1) 'I need to book a furnace repair for next Tuesday' → check availability and create appointment; (2) 'Can I reschedule my appointment from Thursday?' → look up appointment and update date; (3) 'Cancel my appointment, the issue fixed itself' → cancel the booking\n- Tools: Custom REST API at https://api.coolair.example.com. Auth: Bearer token. Operations: POST /appointments (create), GET /availability?date=YYYY-MM-DD (check slots), PATCH /appointments/{id} (reschedule), DELETE /appointments/{id} (cancel)\n- Agent name: Max. Style: professional & concise\n- Guardrails: never promise same-day availability without checking; never quote prices without lookup\n- Stack: default\n\nRun /build-agent and complete Stage [0] only. Output the full contents of CONTEXT.md and STATE.md as code blocks in your response. Do not write files.",
+      "expected_output": "CONTEXT.md with D-07 recording connectorType 'custom' with 4 tool definitions. D-01 records 'supervised' mode. STATE.md has currentStage: 1.",
+      "files": [],
+      "expectations": [
+        "Response contains a CONTEXT.md code block",
+        "Response contains a STATE.md code block with currentStage: 1",
+        "CONTEXT.md D-01 records 'supervised' mode",
+        "CONTEXT.md D-07 records connectorType as 'custom' (not catalog)",
+        "CONTEXT.md D-07 includes at least 3 tool definitions with HTTP method and path",
+        "CONTEXT.md D-07 includes a tool for creating/booking appointments",
+        "CONTEXT.md D-07 includes a tool for checking availability",
+        "CONTEXT.md D-08 contains a guardrail about not promising same-day availability"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Run /build-agent. The following STATE.md already exists from a previous session:\n\n```\ncurrentStage: 4\nmode: auto-pilot\norgSlug: luminary\nagentSlug: luminary-voice-agent\nagentId: 550e8400-e29b-41d4-a716-446655440000\nconnectorType: catalog\nconnectorSlug: luminary_store\nevalIteration: 0\nlastEvalScore: (none)\n```\n\nTreat this as the existing .modelguide/STATE.md. The skill should detect the existing state and resume. Show which stage you resume from and what command you would run next. Do not run any CLI commands.",
+      "expected_output": "Skill announces resuming from Stage [4], outputs the mg run-evals command with --org luminary --agent luminary-voice-agent, skips all earlier stages including the Q1-Q7 interview and API key collection.",
+      "files": [],
+      "expectations": [
+        "Response announces resuming from Stage [4] (not starting from Stage [pre] or Stage [0])",
+        "Response includes the mg run-evals command referencing orgSlug 'luminary'",
+        "Response includes the mg run-evals command referencing agentSlug 'luminary-voice-agent'",
+        "Response does NOT include Q1 (mode) or Q2 (business context) interview questions",
+        "Response does NOT ask for OPENAI_API_KEY or DEEPGRAM_API_KEY"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I want to build a voice agent for a restaurant called TacoLoco. It's a fast-casual Mexican chain. Run /build-agent Stage [0] in multi-turn mode — ask me each question one at a time and wait for my answer before asking the next one.\n\nHere are my answers in order:\n- Q1 (mode): supervised\n- Q2 (business): TacoLoco is a fast-casual Mexican restaurant chain. Customers call to place orders for pickup or check if specific items are available. orgSlug: tacoloco\n- Q3 (conversations): (1) 'Is the carnitas burrito available?' → check menu item availability; (2) 'I'd like to order 2 chicken tacos for pickup at 5pm' → place a pickup order; (3) 'What are your hours today?' → answer from FAQ\n- Q4 (tools): None — conversation only, no external API\n- Q5 (persona): Agent name Loco, friendly and upbeat\n- Q6 (guardrails): Never promise a pickup time under 15 minutes; never confirm an order without repeating it back to the customer\n- Q7 (stack): default\n\nProceed through each question and answer. After all answers, output the complete CONTEXT.md as a code block.",
+      "expected_output": "Skill asks Q1, receives answer, asks Q2, receives answer, and so on through Q7. After all 7 questions are answered, outputs the complete CONTEXT.md with D-01 through D-08. D-07 records connectorType 'none' or 'conversation-only'. D-08 has both pickup time and order confirmation guardrails.",
+      "files": [],
+      "expectations": [
+        "Skill asks questions sequentially (does not dump all questions at once)",
+        "Response contains a CONTEXT.md code block after all answers",
+        "CONTEXT.md D-01 records 'supervised' mode",
+        "CONTEXT.md D-07 records connectorType as 'none' or 'conversation-only' (no API connector)",
+        "CONTEXT.md D-08 includes a guardrail about not promising pickup under 15 minutes",
+        "CONTEXT.md D-08 includes a guardrail about repeating the order back before confirming",
+        "CONTEXT.md contains 3 example conversations from the Q3 answers"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "I want to build a voice agent for a financial services firm called ClearWealth Advisors. They provide investment advice and portfolio management over the phone.\n\nFor the interview questions:\n- Mode: supervised\n- Business: ClearWealth Advisors provides investment management to retail clients (orgSlug: clearwealth)\n- Example conversations: (1) 'What's my current portfolio value?' → look up portfolio; (2) 'Should I sell my tech stocks given the market?' → agent must NOT give investment advice, deflect to advisor; (3) 'I want to move $10,000 from bonds to equities' → requires human approval, cannot execute autonomously\n- Tools: Custom REST API (portfolio read-only: GET /portfolio, GET /transactions)\n- Agent name: Clara. Style: professional, formal\n- Guardrails: I need you to suggest appropriate financial services guardrails for this business\n- Stack: default\n\nRun /build-agent Stage [0] only. For guardrails (Q6), propose appropriate financial services guardrails based on the business context — do not ask me to provide them. Output CONTEXT.md as a code block.",
+      "expected_output": "CONTEXT.md with D-08 containing financial-services-appropriate guardrails that Claude inferred from context: no investment advice, escalate all trade execution requests, no price predictions. Should include at least 3 guardrails, at least one referencing regulatory/compliance concerns.",
+      "files": [],
+      "expectations": [
+        "Response contains a CONTEXT.md code block",
+        "CONTEXT.md D-08 contains at least 3 guardrails",
+        "D-08 includes a guardrail prohibiting investment advice or stock recommendations",
+        "D-08 includes a guardrail requiring human approval for any trade or account change",
+        "D-08 includes at least one guardrail mentioning escalation to a human advisor",
+        "CONTEXT.md D-07 records connectorType as 'custom' with read-only portfolio tools"
+      ]
+    }
+    ,
+    {
+      "id": 7,
+      "prompt": "You are running Stage [2c] of /build-agent for org 'glowskin', agent 'glowskin-voice-agent'.\n\nWhen the skill instructs you to run bash commands, use these mock responses instead of executing them:\n\n- `make db-up` → (no output, exits 0)\n- `docker exec modelguide-postgres pg_isready -q` → (exits 0 immediately)\n- `make db-migrate` → 'Migrations applied successfully'\n- `cd modelguide-api && bun run src/cli/mg.ts setup ../.modelguide/ --dry-run` → 'Dry run passed. No errors.'\n- `cd modelguide-api && bun run src/cli/mg.ts setup ../.modelguide/ --skip-evals` →\n```\nProvisioning org: glowskin\n✓ Organization created\n✓ Agent created\n✓ Connector created\n✓ SOPs imported (3)\n✓ Guardrails imported (3)\n\nSummary:\n┌───────────┬──────────────────────────────────────┬─────────────────────────┐\n│ Resource  │ ID                                   │ API Key                 │\n├───────────┼──────────────────────────────────────┼─────────────────────────┤\n│ Org       │ org_abc123                           │ -                       │\n│ Agent     │ 7f3a9c21-4e2b-4d8f-b1c3-9a0e5f2d8b47 │ mgk_live_xK9mP2qRvW8nL4j │\n└───────────┴──────────────────────────────────────┴─────────────────────────┘\n```\n- `cd modelguide-api && bun run src/cli/mg.ts compile-agents --org glowskin` → 'Compiled agent: glowskin-voice-agent (SOP: order-status-inquiry)\\nCompiled agent: glowskin-voice-agent (SOP: product-inquiry)\\nCompiled agent: glowskin-voice-agent (SOP: return-request)'\n\nPretend agent/.env already exists (from Stage [1]). Run Stage [2c] and [2d] using the mock outputs. Tell me:\n1. What MODELGUIDE_API_KEY value you would write to agent/.env\n2. What MODELGUIDE_AGENT_ID value you would write to agent/.env\n3. What agentId you would write to STATE.md\n4. That compile-agents succeeded",
+      "expected_output": "Skill correctly parses mg setup table output to extract API key mgk_live_xK9mP2qRvW8nL4j and UUID 7f3a9c21-4e2b-4d8f-b1c3-9a0e5f2d8b47. Updates agent/.env and STATE.md with correct values. Confirms compile-agents succeeded.",
+      "files": [],
+      "expectations": [
+        "Skill extracts API key 'mgk_live_xK9mP2qRvW8nL4j' from the mg setup table output",
+        "Skill extracts agent UUID '7f3a9c21-4e2b-4d8f-b1c3-9a0e5f2d8b47' from the mg setup table output",
+        "Skill states it would set MODELGUIDE_API_KEY=mgk_live_xK9mP2qRvW8nL4j in agent/.env",
+        "Skill states it would set MODELGUIDE_AGENT_ID=7f3a9c21-4e2b-4d8f-b1c3-9a0e5f2d8b47 in agent/.env",
+        "Skill states it would write agentId 7f3a9c21-4e2b-4d8f-b1c3-9a0e5f2d8b47 to STATE.md",
+        "Skill confirms compile-agents succeeded with 3 SOPs"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "You are running Stage [4] of /build-agent for org 'glowskin', agent 'glowskin-voice-agent'. STATE.md shows currentStage: 4.\n\nWhen the skill instructs you to check the API health or run mg run-evals, use these mock responses:\n\n- `curl -sf http://localhost:3000/api/health` → exits 0 (API is healthy)\n- `cd modelguide-api && bun run src/cli/mg.ts run-evals --org glowskin --agent glowskin-voice-agent` →\n```\nRunning 3 eval suite(s)...\n\nSuite: Order Status Inquiry\n  PASS   order-status-happy-01\n  PASS   order-status-missing-id-01\n  PASS   order-status-guardrail-01\n\nSuite: Product Inquiry\n  PASS   product-inquiry-happy-01\n  FAIL   product-inquiry-missing-info-01\n         ↳ handles-missing-info: Agent proceeded without asking for product name\n  PASS   product-inquiry-guardrail-01\n\nSuite: Return Request\n  PASS   return-request-happy-01\n  PASS   return-request-missing-info-01\n  PASS   return-request-guardrail-01\n  PASS   return-request-guardrail-02\n\nPass rate: 9/10 (90%)\n```\n\nRun Stage [4] using the mock outputs. What is the pass rate, and which stage do you proceed to next?",
+      "expected_output": "Skill reads pass rate as 90% (9/10), which is ≥80%, so it skips Stage [5] and proceeds directly to Stage [6] (manual LiveKit validation). It does NOT enter the tighten loop.",
+      "files": [],
+      "expectations": [
+        "Skill identifies the pass rate as 90% or 9/10",
+        "Skill determines pass rate is ≥80%",
+        "Skill proceeds to Stage [6] (not Stage [5])",
+        "Skill does NOT initiate the tighten/revision loop",
+        "Skill updates STATE.md currentStage to 6"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "You are running Stage [4] of /build-agent for org 'glowskin', agent 'glowskin-voice-agent'. STATE.md shows currentStage: 4.\n\nWhen the skill instructs you to check the API health or run mg run-evals, use these mock responses:\n\n- `curl -sf http://localhost:3000/api/health` → exits 0\n- `cd modelguide-api && bun run src/cli/mg.ts run-evals --org glowskin --agent glowskin-voice-agent` →\n```\nRunning 3 eval suite(s)...\n\nSuite: Order Status Inquiry\n  PASS   order-status-happy-01\n  FAIL   order-status-missing-id-01\n         ↳ handles-missing-info: Agent proceeded without asking for order ID\n  FAIL   order-status-guardrail-01\n         ↳ respects-guardrails: Agent quoted estimated delivery date\n\nSuite: Product Inquiry\n  FAIL   product-inquiry-happy-01\n         ↳ uses-correct-tool: Wrong tool called (get_order instead of get_product)\n  FAIL   product-inquiry-missing-info-01\n         ↳ handles-missing-info: Agent did not ask for product name\n  PASS   product-inquiry-guardrail-01\n\nSuite: Return Request\n  PASS   return-request-happy-01\n  FAIL   return-request-missing-info-01\n         ↳ handles-missing-info: No clarifying question before proceeding\n  PASS   return-request-guardrail-01\n\nPass rate: 3/8 (38%)\n```\n\nRun Stage [4] using the mock outputs. What is the pass rate and which stage do you proceed to?",
+      "expected_output": "Skill reads pass rate as 38% (3/8), which is <80%, so it proceeds to Stage [5] (tighten loop). It categorizes the failures and proposes targeted fixes.",
+      "files": [],
+      "expectations": [
+        "Skill identifies the pass rate as 38% or 3/8",
+        "Skill determines pass rate is <80%",
+        "Skill proceeds to Stage [5] (not Stage [6])",
+        "Skill categorizes the failures (SOP issue: wrong tool; guardrail issue: delivery date quoted)",
+        "Skill updates STATE.md currentStage to 5 and lastEvalScore to 3/8"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "You are in Stage [5] of /build-agent (tighten loop, iteration 1) for org 'glowskin'. The previous eval run scored 3/8 (38%). Failures were:\n- order-status-missing-id-01: agent proceeded without asking for order ID (SOP fix needed)\n- order-status-guardrail-01: agent quoted delivery date (guardrail fix needed)\n- product-inquiry-happy-01: wrong tool called (SOP fix needed)\n- product-inquiry-missing-info-01: no clarifying question (SOP fix needed)\n- return-request-missing-info-01: no clarifying question (SOP fix needed)\n\nAfter you apply fixes, the re-run mock returns:\n```\nPass rate: 8/10 (80%)\n```\n\nUse these mocks when the skill runs commands:\n- `cd modelguide-api && bun run src/cli/mg.ts import-sops --org glowskin ../.modelguide/sops.yaml` → 'Imported 3 SOPs'\n- `cd modelguide-api && bun run src/cli/mg.ts import-guardrails --org glowskin ../.modelguide/guardrails.yaml` → 'Imported 3 guardrails'\n- `cd modelguide-api && bun run src/cli/mg.ts compile-agents --org glowskin` → 'Compiled agent: glowskin-voice-agent (3 SOPs)'\n- `cd modelguide-api && bun run src/cli/mg.ts run-evals --org glowskin --agent glowskin-voice-agent` → 'Pass rate: 8/10 (80%)'\n\nRun Stage [5]. Categorize failures, describe the fixes you would apply, run the commands, then show the re-run result. Which stage do you proceed to?",
+      "expected_output": "Skill categorizes failures by type (SOP and guardrail). Applies SOP fix via import-sops command and guardrail fix via import-guardrails. Recompiles. Re-runs evals, gets 80%, exits the loop and proceeds to Stage [6]. evalIteration is updated to 1.",
+      "files": [],
+      "expectations": [
+        "Skill categorizes failures as SOP failures and guardrail failures",
+        "Skill runs import-sops command for SOP fixes",
+        "Skill runs import-guardrails command for guardrail fixes",
+        "Skill runs compile-agents after applying fixes",
+        "Skill re-runs run-evals and reads new score as 80%",
+        "Skill exits the tighten loop (score ≥80%)",
+        "Skill proceeds to Stage [6]",
+        "Skill updates evalIteration to 1 in STATE.md"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "You are in Stage [5] of /build-agent (tighten loop) for org 'glowskin'. The eval score started at 50% and all 3 re-run attempts return the same failing score.\n\nUse these mocks for ALL compile + run-evals invocations (iterations 1, 2, and 3):\n- `cd modelguide-api && bun run src/cli/mg.ts compile-agents --org glowskin` → 'Compiled'\n- `cd modelguide-api && bun run src/cli/mg.ts run-evals --org glowskin --agent glowskin-voice-agent` → 'Pass rate: 5/10 (50%)'\n\nThe failure in each iteration is always: product-inquiry-happy-01 — handles-missing-info.\n\nRun all 3 tighten iterations. After the 3rd, what does the skill do?",
+      "expected_output": "After 3 iterations all scoring 50%, the skill prints the warning 'After 3 iterations, pass rate is 50%. Proceeding to manual validation.' and proceeds to Stage [6] rather than looping again.",
+      "files": [],
+      "expectations": [
+        "Skill runs exactly 3 tighten iterations",
+        "Skill does NOT run a 4th iteration",
+        "Skill prints a message indicating the 3-iteration limit was reached",
+        "Skill prints the final pass rate (50%)",
+        "Skill proceeds to Stage [6] despite score being below 80%",
+        "STATE.md evalIteration is updated to 3"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Run /build-agent from the beginning (no existing STATE.md).\n\nUse these mock responses for Stage [pre] prerequisite checks:\n- `docker info > /dev/null 2>&1` → exits 1 (Docker not running)\n- `bun --version` → '1.1.20'\n- `python3 --version` → 'Python 3.11.9'\n- `test -f modelguide-api/.env` → exits 0 (file exists)\n- `test -d modelguide-api/node_modules` → exits 0 (deps installed)\n\nRun Stage [pre]. What does the skill do about the missing Docker? Does it abort, or does it continue?",
+      "expected_output": "Skill detects Docker is missing, provides the Docker Desktop install URL (https://www.docker.com/products/docker-desktop/), and waits for the developer to fix it. It does NOT abort or exit — it instructs the developer to install Docker and come back. Bun and Python are reported as OK.",
+      "files": [],
+      "expectations": [
+        "Skill reports 'Docker: MISSING' or equivalent",
+        "Skill reports 'Bun: OK' (version 1.1.20 found)",
+        "Skill reports 'Python: OK' (3.11.9 found)",
+        "Skill provides the Docker Desktop install URL or install instructions",
+        "Skill does NOT abort or refuse to continue",
+        "Skill instructs the developer to fix Docker and return",
+        "Skill does NOT proceed to Stage [0] interview before Docker is confirmed"
+      ]
+    }
+    ,
+    {
+      "id": 13,
+      "prompt": "Run /build-agent from the beginning (no existing STATE.md).\n\nUse these mock responses for Stage [pre] prerequisite checks:\n- `docker info > /dev/null 2>&1` → exits 0 (Docker OK)\n- `bun --version > /dev/null 2>&1` → exits 1 (bun: command not found)\n- `python3 --version 2>&1 | grep -E ...` → exits 0, prints 'Python 3.12.0'\n- `test -f modelguide-api/.env` → exits 0\n- `test -d modelguide-api/node_modules` → exits 0\n\nRun Stage [pre]. What does the skill do about missing Bun? Does it abort? What install command does it provide?",
+      "expected_output": "Skill reports Docker OK, Bun MISSING, Python OK. Provides the Bun install command (curl -fsSL https://bun.sh/install | bash). Does not abort. Waits for developer to install and return.",
+      "files": [],
+      "expectations": [
+        "Skill reports 'Docker: OK'",
+        "Skill reports 'Bun: MISSING' or equivalent",
+        "Skill reports 'Python: OK'",
+        "Skill provides the Bun install command: curl -fsSL https://bun.sh/install | bash",
+        "Skill does NOT abort or exit",
+        "Skill instructs the developer to install Bun and return",
+        "Skill does NOT proceed to Stage [0] before Bun is confirmed"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Run /build-agent from the beginning (no existing STATE.md).\n\nUse these mock responses for Stage [pre] prerequisite checks:\n- `docker info > /dev/null 2>&1` → exits 0 (Docker OK)\n- `bun --version > /dev/null 2>&1` → exits 0, prints '1.1.20'\n- `python3 --version 2>&1 | grep -E \"3\\.(1[1-9]|[2-9][0-9])\"` → exits 1 (no match — Python 3.9 installed)\n- `test -f modelguide-api/.env` → exits 0\n- `test -d modelguide-api/node_modules` → exits 0\n\nRun Stage [pre]. What does the skill do about Python 3.9? Does it abort? What does it tell the developer?",
+      "expected_output": "Skill reports Docker OK, Bun OK, Python MISSING or < 3.11. Provides Python 3.11+ install instructions (brew install python@3.11 on macOS, or python.org/downloads). Does not abort. Waits for developer.",
+      "files": [],
+      "expectations": [
+        "Skill reports 'Docker: OK'",
+        "Skill reports 'Bun: OK'",
+        "Skill reports 'Python: MISSING or < 3.11' or equivalent",
+        "Skill provides Python 3.11+ install instructions (brew or python.org URL)",
+        "Skill does NOT abort or exit",
+        "Skill instructs the developer to upgrade Python and return",
+        "Skill does NOT proceed to Stage [0] before Python is confirmed"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Run /build-agent from the beginning (no existing STATE.md).\n\nUse these mock responses for Stage [pre] prerequisite checks:\n- `docker info > /dev/null 2>&1` → exits 1 (Docker not running)\n- `bun --version > /dev/null 2>&1` → exits 1 (bun not found)\n- `python3 --version 2>&1 | grep -E ...` → exits 1 (Python not found)\n- `test -f modelguide-api/.env` → exits 0\n- `test -d modelguide-api/node_modules` → exits 0\n\nRun Stage [pre] with ALL THREE prerequisites missing. What does the skill report and does it abort?",
+      "expected_output": "Skill reports all three as MISSING, provides install instructions for each (Docker Desktop URL, Bun curl command, Python brew/download link). Does not abort — lists all three issues at once so the developer can fix everything before returning. Does not proceed to Stage [0].",
+      "files": [],
+      "expectations": [
+        "Skill reports 'Docker: MISSING'",
+        "Skill reports 'Bun: MISSING'",
+        "Skill reports 'Python: MISSING or < 3.11'",
+        "Skill provides install instructions for Docker",
+        "Skill provides install instructions for Bun",
+        "Skill provides install instructions for Python",
+        "Skill does NOT abort",
+        "Skill lists all missing deps together rather than stopping after the first"
+      ]
+    }
+  ]
+}

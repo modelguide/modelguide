@@ -45,6 +45,9 @@ drizzle/meta/
 .claude/worktrees/
 **/.claude/settings.local.json
 
+# Skill eval workspaces (run artifacts, not source)
+.claude/skills/*-workspace/
+
 # Superpowers plans/specs (local-only)
 docs/superpowers/
 

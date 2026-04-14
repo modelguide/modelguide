@@ -72,6 +72,7 @@ All other config (LLM/STT/TTS vars, ModelGuide vars) stays identical.
 ```python
 from .base import build_system_prompt
 
+# Used by agent.py entrypoint: session.say(GREETING.format(name=customer_name))
 GREETING = "Hi, I'm {{agentFirstName}}. {{greetingLine}}"
 
 __all__ = ["build_system_prompt", "GREETING"]

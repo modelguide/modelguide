@@ -152,7 +152,13 @@ async function pollUntilDone(
     const run = (await apiFetch(
       `/api/eval-suites/${suiteId}/runs/${runId}`,
       token,
-    )) as { status: string; testCaseResults?: TestCaseResult[] };
+    )) as { status?: string; testCaseResults?: TestCaseResult[] };
+
+    if (typeof run.status !== "string") {
+      throw new Error(
+        `Unexpected poll response from /runs/${runId}: ${JSON.stringify(run)}`,
+      );
+    }
 
     if (
       run.status === "completed" ||

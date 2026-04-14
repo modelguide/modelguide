@@ -183,7 +183,8 @@ Write STATE.md (`currentStage: 1`), write CONTEXT.md with all decisions.
    ```bash
    grep -q "^OPENAI_API_KEY=.\+" agent/.env && echo "OPENAI_API_KEY: set" || echo "OPENAI_API_KEY: MISSING"
    grep -q "^DEEPGRAM_API_KEY=.\+" agent/.env && echo "DEEPGRAM_API_KEY: set" || echo "DEEPGRAM_API_KEY: MISSING"
-   # Repeat for TTS key based on stack choice
+   # TTS key — ElevenLabs is the default (D-06); swap for CARTESIA_API_KEY if Cartesia was chosen
+   grep -q "^ELEVENLABS_API_KEY=.\+" agent/.env && echo "ELEVENLABS_API_KEY: set" || echo "ELEVENLABS_API_KEY: MISSING"
    ```
 
 6. Ensure `API_EXTERNAL_ADDRESS` is set in the ModelGuide API env (needed for simulations):

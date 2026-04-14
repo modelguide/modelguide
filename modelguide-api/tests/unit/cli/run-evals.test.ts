@@ -49,6 +49,10 @@ describe("formatResultsTable", () => {
     expect(table).toContain("ERROR");
   });
 
+  test("handles empty results list", () => {
+    expect(formatResultsTable([])).toContain("Pass rate: 0/0 (0%)");
+  });
+
   test("includes failure reasoning detail for failed results with scores", () => {
     const resultWithScores = {
       testCaseId: "tc-2",
