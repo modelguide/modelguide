@@ -117,9 +117,15 @@ name = "{{orgSlug}}-voice-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "livekit-agents[openai,silero,deepgram,elevenlabs,cartesia,turn-detector]>=1.0",
-    "python-dotenv>=1.0",
-    "langfuse>=2.0",
+    "livekit-agents[silero,turn-detector]~=1.4",
+    "livekit-plugins-openai~=1.4",
+    "livekit-plugins-deepgram~=1.4",
+    "livekit-plugins-elevenlabs~=1.4",
+    "livekit-plugins-cartesia~=1.4",
+    "httpx",
+    "python-dotenv",
+    "mcp",
+    "langfuse>=4.0.0",
 ]
 
 [build-system]
@@ -143,13 +149,13 @@ OPENAI_API_KEY=sk-...           # https://platform.openai.com/api-keys
 DEEPGRAM_API_KEY=...            # https://console.deepgram.com/
 
 # TTS (choose one)
-ELEVEN_API_KEY=...              # https://elevenlabs.io/app/settings/api-keys
+ELEVENLABS_API_KEY=...          # https://elevenlabs.io/app/settings/api-keys
 # CARTESIA_API_KEY=...
 
 # ModelGuide (filled in stage [2] after provisioning)
 MODELGUIDE_API_URL=http://localhost:3000
 MODELGUIDE_API_KEY=mgk_...      # printed by mg setup
-MODELGUIDE_AGENT_ID=            # printed by mg setup or queried in stage [2d]
+MODELGUIDE_AGENT_ID=            # UUID printed by mg setup (agent summary table)
 
 # LiveKit — local dev, no account needed
 LIVEKIT_URL=ws://localhost:7880
