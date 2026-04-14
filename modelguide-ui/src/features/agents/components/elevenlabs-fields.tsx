@@ -53,7 +53,9 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
     queryKey: ['elevenlabs-models', modelFamily],
     queryFn: () =>
       api
-        .get(`agents/elevenlabs/models?family=${modelFamily}`)
+        .get('agents/platform-models', {
+          searchParams: { platform: 'elevenlabs', family: modelFamily },
+        })
         .json<{ data: ElevenLabsModelGroup[] }>(),
     enabled: agent.agentPlatform === 'elevenlabs',
   })

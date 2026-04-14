@@ -370,34 +370,37 @@ router.openapi(createAgentRoute, async (c) => {
 });
 
 // ============================================================================
-// ElevenLabs Models Endpoint
+// Platform Models Endpoint
 // ============================================================================
 
-// GET /elevenlabs/models
+// GET /platform-models
 router.get(
-  "/elevenlabs/models",
+  "/platform-models",
   requireUser(),
   requirePermission("agents:read"),
   requireOrganization(),
 );
 
-const elevenlabsModelsQuerySchema = z.object({
+const platformModelsQuerySchema = z.object({
+  platform: z
+    .enum(["elevenlabs"])
+    .openapi({ description: "Agent platform to list LLM models for" }),
   family: z
     .enum(["gpt", "claude", "gemini", "generic"])
     .optional()
     .openapi({ description: "Filter models by family" }),
 });
 
-const elevenlabsModelsRoute = createRoute({
+const platformModelsRoute = createRoute({
   method: "get",
-  path: "/elevenlabs/models",
+  path: "/platform-models",
   tags: ["Agents"],
-  summary: "List ElevenLabs LLM models",
+  summary: "List LLM models for a platform",
   description:
-    "Returns a curated list of ElevenLabs LLM models grouped by family. Filter by ?family=gpt|claude|gemini|generic. When family=generic, all models from all families are returned combined.",
+    "Returns a curated list of LLM models for the given agent platform, grouped by family. Filter by ?family=gpt|claude|gemini|generic.",
   security: [{ bearerAuth: [] }],
   request: {
-    query: elevenlabsModelsQuerySchema,
+    query: platformModelsQuerySchema,
   },
   responses: {
     200: {
@@ -420,16 +423,22 @@ const elevenlabsModelsRoute = createRoute({
         },
       },
     },
+    400: errorResponse("Unsupported platform"),
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
   },
 });
 
-router.openapi(elevenlabsModelsRoute, async (c) => {
-  const { family } = c.req.valid("query");
-  const data = getElevenLabsModelGroups(family as ModelFamily | undefined);
+router.openapi(platformModelsRoute, async (c) => {
+  const { platform, family } = c.req.valid("query");
 
-  return c.json({ data }, 200);
+  // Branch per platform — extend here when new platforms are added
+  if (platform === "elevenlabs") {
+    const data = getElevenLabsModelGroups(family as ModelFamily | undefined);
+    return c.json({ data }, 200);
+  }
+
+  throw Errors.invalidInput(`Unsupported platform: ${platform}`);
 });
 
 // ============================================================================
