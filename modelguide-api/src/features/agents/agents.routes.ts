@@ -456,7 +456,7 @@ const createElevenLabsAgentRoute = createRoute({
     params: agentIdParams,
   },
   responses: {
-    200: {
+    201: {
       description: "ElevenLabs agent created",
       content: {
         "application/json": {
@@ -524,7 +524,7 @@ router.openapi(createElevenLabsAgentRoute, async (c) => {
     },
   });
 
-  return c.json({ elevenLabsAgentId }, 200);
+  return c.json({ elevenLabsAgentId }, 201);
 });
 
 // GET /:id
