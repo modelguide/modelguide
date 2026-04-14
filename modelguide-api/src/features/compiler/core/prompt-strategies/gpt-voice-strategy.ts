@@ -66,8 +66,24 @@ export class GptVoiceStrategy implements PromptStrategy {
   readonly name = "GptVoiceStrategy";
 
   buildPrompt(ir: TransformResult): StrategyOutput {
-    const { agentConfig, sop, guardrails, tools } = ir;
+    const { agentConfig, sops, guardrails, tools } = ir;
     const warnings: CompilerWarning[] = [];
+
+    // Render one Conversation Flow section per SOP
+    const flowSections = sops.map((sop) =>
+      this.renderConversationFlow(sop.steps, sop.name),
+    );
+
+    // Merge escalation triggers across all SOPs (deduped)
+    const allTriggers = new Set<string>();
+    for (const sop of sops) {
+      const triggers = sop.definition.metadata?.escalationTriggers;
+      if (triggers) {
+        for (const t of triggers) {
+          allTriggers.add(t);
+        }
+      }
+    }
 
     const staticSections = [
       this.renderRoleAndObjective(agentConfig.description),
@@ -75,9 +91,9 @@ export class GptVoiceStrategy implements PromptStrategy {
       this.renderReferencePronunciations(),
       this.renderTools(tools, agentConfig.promptConfig, warnings),
       this.renderRules(guardrails),
-      this.renderConversationFlow(sop.steps),
+      ...flowSections,
       this.renderSafetyAndEscalation(
-        sop.definition.metadata?.escalationTriggers,
+        allTriggers.size > 0 ? [...allTriggers] : undefined,
       ),
     ].filter(Boolean);
 
@@ -203,9 +219,15 @@ export class GptVoiceStrategy implements PromptStrategy {
     return lines.join("\n");
   }
 
-  /** 6. Conversation Flow — AC15: SOP steps with GOAL/EXIT */
-  private renderConversationFlow(steps: EnrichedStep[]): string {
-    const lines: string[] = ["# Conversation Flow"];
+  /** 6. Conversation Flow — one per SOP, with SOP name in header */
+  private renderConversationFlow(
+    steps: EnrichedStep[],
+    sopName?: string,
+  ): string {
+    const header = sopName
+      ? `# Conversation Flow: ${sopName}`
+      : "# Conversation Flow";
+    const lines: string[] = [header];
     const sorted = steps.slice().sort((a, b) => a.order - b.order);
 
     for (let i = 0; i < sorted.length; i++) {

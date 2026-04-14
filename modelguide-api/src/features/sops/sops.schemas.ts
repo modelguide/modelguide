@@ -169,6 +169,7 @@ export const updateSopSchema = z
     description: z.string().max(2000).optional(),
     definition: sopDefinitionWriteSchema.optional(),
     version: z.string().max(50).optional(),
+    agentIds: z.array(z.string().uuid()).optional(),
   })
   .strict()
   .refine(

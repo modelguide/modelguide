@@ -384,7 +384,7 @@ describe("Workflow 3: Archive prevents execution", () => {
       await compileAgent({
         orgId: ctx.orgId,
         agentId: ctx.agentId,
-        sopId,
+        sopIds: [sopId],
         agentModel: "anthropic/claude-haiku-4-5-20251001",
         agentDescription: agentConfig.description,
       });
@@ -499,7 +499,7 @@ describe("Workflow 4: Validation gauntlet", () => {
     await compileAgent({
       orgId: ctx.orgId,
       agentId: ctx.agentId,
-      sopId,
+      sopIds: [sopId],
       agentModel: "anthropic/claude-haiku-4-5-20251001",
       agentDescription: agentConfig.description,
     });
@@ -548,7 +548,7 @@ describe("Workflow 4: Validation gauntlet", () => {
     await compileAgent({
       orgId: ctx.orgId,
       agentId: ctx.agentId,
-      sopId,
+      sopIds: [sopId],
       agentModel: "anthropic/claude-haiku-4-5-20251001",
       agentDescription: agentConfig.description,
     });
@@ -653,7 +653,7 @@ describe("Workflow 5: Full lifecycle with cleanup", () => {
       await compileAgent({
         orgId: ctx.orgId,
         agentId: ctx.agentId,
-        sopId,
+        sopIds: [sopId],
         agentModel: "anthropic/claude-haiku-4-5-20251001",
         agentDescription: agentConfig.description,
       });
@@ -728,7 +728,7 @@ describe("Workflow 6: Technical failure → completed_with_errors", () => {
       await compileAgent({
         orgId: ctx.orgId,
         agentId: ctx.agentId,
-        sopId,
+        sopIds: [sopId],
         agentModel: "anthropic/claude-haiku-4-5-20251001",
         agentDescription: agentConfig.description,
       });

@@ -208,7 +208,7 @@ describe("Compiler E2E: compile → run → store → eval", () => {
       const compileResult = await compileAgent({
         orgId: ctx.orgId,
         agentId: ctx.agentId,
-        sopId: sop.id,
+        sopIds: [sop.id],
         agentModel: "anthropic/claude-haiku-4-5-20251001",
         agentDescription: agentConfig.description,
       });

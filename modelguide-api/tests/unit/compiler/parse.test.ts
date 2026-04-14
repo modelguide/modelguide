@@ -9,7 +9,7 @@ import { describe, expect, it } from "bun:test";
 import {
   CompilerError,
   parseGuardrails,
-  parseSop,
+  parseSops,
 } from "@features/compiler/core/parse";
 import type {
   KnowledgeBaseDetailResponse,
@@ -23,10 +23,10 @@ function cloneSop(sop: SopDetailResponse): SopDetailResponse {
   return JSON.parse(JSON.stringify(sop));
 }
 
-describe("parseSop", () => {
+describe("parseSops", () => {
   it("AC 4: accepts a valid SOP and returns tools", () => {
-    const { sop, tools } = parseSop([emailOrderNotArrivedSop]);
-    expect(sop.id).toBe("sop-email-order-not-arrived-001");
+    const { sops, tools } = parseSops([emailOrderNotArrivedSop]);
+    expect(sops[0].id).toBe("sop-email-order-not-arrived-001");
     expect(tools).toHaveLength(2);
     expect(tools.map((t) => t.resolvedName)).toEqual([
       "store_look_up_order",
@@ -34,23 +34,21 @@ describe("parseSop", () => {
     ]);
   });
 
-  it("AC 11: tools array has no duplicates", () => {
-    // Create a SOP with duplicate tool references
-    const sop = cloneSop(emailOrderNotArrivedSop);
-    // Add another step referencing the same tool
-    sop.definition.steps.push({
-      id: "extra-lookup",
-      order: 6,
-      instruction: "Look up the order again",
-      required: false,
-      tool: {
-        connectorToolId: "00000000-0000-0000-0000-000000000001",
-        connectorId: "00000000-0000-0000-0000-000000000010",
-        resolvedName: "store_look_up_order",
-      },
-    });
+  it("accepts multiple SOPs", () => {
+    const sop2 = cloneSop(emailOrderNotArrivedSop);
+    sop2.id = "sop-2";
+    sop2.name = "Second SOP";
+    const { sops } = parseSops([emailOrderNotArrivedSop, sop2]);
+    expect(sops).toHaveLength(2);
+  });
 
-    const { tools } = parseSop([sop]);
+  it("AC 11: tools array has no duplicates across SOPs", () => {
+    // Create a second SOP referencing the same tools
+    const sop2 = cloneSop(emailOrderNotArrivedSop);
+    sop2.id = "sop-dup";
+    sop2.name = "Dup SOP";
+
+    const { tools } = parseSops([emailOrderNotArrivedSop, sop2]);
     const resolvedNames = tools.map((t) => t.resolvedName);
     expect(resolvedNames).toEqual([
       "store_look_up_order",
@@ -65,17 +63,14 @@ describe("parseSop", () => {
       step.tool = undefined;
     }
 
-    const { sop: parsed, tools } = parseSop([sop]);
-    expect(parsed.id).toBe("sop-email-order-not-arrived-001");
+    const { sops, tools } = parseSops([sop]);
+    expect(sops[0].id).toBe("sop-email-order-not-arrived-001");
     expect(tools).toHaveLength(0);
   });
 
-  it("rejects when not exactly one SOP is provided", () => {
-    expect(() => parseSop([])).toThrow(CompilerError);
-    expect(() => parseSop([])).toThrow("exactly one SOP");
-    expect(() =>
-      parseSop([emailOrderNotArrivedSop, emailOrderNotArrivedSop]),
-    ).toThrow("exactly one SOP");
+  it("rejects when zero SOPs are provided", () => {
+    expect(() => parseSops([])).toThrow(CompilerError);
+    expect(() => parseSops([])).toThrow("at least one SOP");
   });
 
   it("AC 1: rejects an SOP with invalid schemaVersion", () => {
@@ -83,8 +78,8 @@ describe("parseSop", () => {
     // @ts-expect-error — intentionally invalid
     sop.definition.schemaVersion = 2;
 
-    expect(() => parseSop([sop])).toThrow(CompilerError);
-    expect(() => parseSop([sop])).toThrow("Invalid SOP definition");
+    expect(() => parseSops([sop])).toThrow(CompilerError);
+    expect(() => parseSops([sop])).toThrow("Invalid SOP definition");
   });
 
   it("AC 2: rejects a step with tool but no resolvedName", () => {
@@ -97,8 +92,8 @@ describe("parseSop", () => {
       (lookupStep.tool as Record<string, unknown>).resolvedName = undefined;
     }
 
-    expect(() => parseSop([sop])).toThrow(CompilerError);
-    expect(() => parseSop([sop])).toThrow("no resolvedName");
+    expect(() => parseSops([sop])).toThrow(CompilerError);
+    expect(() => parseSops([sop])).toThrow("no resolvedName");
   });
 });
 

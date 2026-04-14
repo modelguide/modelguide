@@ -27,7 +27,7 @@ const TOKENS_PER_TOOL_SCHEMA = 180;
  * @throws CompilerError on validation failures
  */
 export function compile(input: CompilerInput): CompilerIR {
-  const { sop, tools: parsedTools, guardrails } = parse(input);
+  const { sops, tools: parsedTools, guardrails } = parse(input);
 
   // Enrich tools with requiresConfirmation from the input map (AC6)
   const confirmMap = input.toolConfirmationMap ?? {};
@@ -36,7 +36,7 @@ export function compile(input: CompilerInput): CompilerIR {
     requiresConfirmation: confirmMap[t.resolvedName] ?? t.requiresConfirmation,
   }));
 
-  const ir = transform(sop, tools, guardrails, input.agentConfig);
+  const ir = transform(sops, tools, guardrails, input.agentConfig);
 
   // Select strategy based on model family + modality
   const { modelFamily, modality } = input.agentConfig;

@@ -32,7 +32,10 @@ const compileAgentQuerySchema = z.object({
 });
 
 const compileAgentBodySchema = z.object({
-  sopId: z.string().uuid().openapi({ description: "SOP ID to compile from" }),
+  sopIds: z
+    .array(z.string().uuid())
+    .min(1)
+    .openapi({ description: "SOP IDs to compile from" }),
   model: z
     .string()
     .max(100)
@@ -120,7 +123,7 @@ router.openapi(compileRoute, async (c) => {
   const result = await compileAgent({
     orgId,
     agentId,
-    sopId: body.sopId,
+    sopIds: body.sopIds,
     agentModel: body.model,
     agentDescription: body.description,
     dryRun: dryRun === true,

@@ -44,15 +44,17 @@ const makeIr = (toolsOverride?: ResolvedTool[]): TransformResult => ({
     modelFamily: "generic",
     modality: "text",
   },
-  sop: {
-    id: emailOrderNotArrivedSop.id,
-    name: emailOrderNotArrivedSop.name,
-    slug: emailOrderNotArrivedSop.slug,
-    description: emailOrderNotArrivedSop.description,
-    definition:
-      emailOrderNotArrivedSop.definition as TransformResult["sop"]["definition"],
-    steps: [],
-  },
+  sops: [
+    {
+      id: emailOrderNotArrivedSop.id,
+      name: emailOrderNotArrivedSop.name,
+      slug: emailOrderNotArrivedSop.slug,
+      description: emailOrderNotArrivedSop.description,
+      definition:
+        emailOrderNotArrivedSop.definition as TransformResult["sops"][number]["definition"],
+      steps: [],
+    },
+  ],
   tools: toolsOverride ?? sampleTools,
   guardrails: parsedGuardrails,
 });

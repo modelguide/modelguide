@@ -46,7 +46,7 @@ const promptConfigSchema = z
 interface CompileAgentInput {
   orgId: string;
   agentId: string;
-  sopId: string;
+  sopIds: string[];
   agentModel?: string;
   agentDescription?: string;
   dryRun?: boolean;
@@ -65,7 +65,8 @@ interface CompileAgentInput {
  * 4. Persists compiled_instructions, compiled_at, compiled_from
  */
 export async function compileAgent(input: CompileAgentInput) {
-  const { orgId, agentId, sopId, agentModel, agentDescription, dryRun } = input;
+  const { orgId, agentId, sopIds, agentModel, agentDescription, dryRun } =
+    input;
 
   // 1. Load agent
   const agent = await forOrg(orgId, async (tx) => {
@@ -87,8 +88,10 @@ export async function compileAgent(input: CompileAgentInput) {
     return row;
   });
 
-  // 2. Load SOP detail
-  const sopDetail = await getSopById(orgId, sopId);
+  // 2. Load SOP details in parallel
+  const sopDetails = await Promise.all(
+    sopIds.map((id) => getSopById(orgId, id)),
+  );
 
   // 3. Load active guardrails assigned to the agent
   const guardrails = await forOrg(orgId, async (tx) => {
@@ -158,8 +161,8 @@ export async function compileAgent(input: CompileAgentInput) {
   // 5. Load all active SOPs assigned to the agent (for intent classification)
   const agentSopRows = await resolveAgentSops(orgId, agentId);
 
-  // 6. Convert SOP DB result to SopDetailResponse shape
-  const sopResponse = {
+  // 6. Convert SOP DB results to SopDetailResponse shape
+  const sopResponses = sopDetails.map((sopDetail) => ({
     id: sopDetail.id,
     name: sopDetail.name,
     slug: sopDetail.slug,
@@ -177,14 +180,14 @@ export async function compileAgent(input: CompileAgentInput) {
     createdBy: sopDetail.createdBy,
     createdAt: sopDetail.createdAt.toISOString(),
     updatedAt: sopDetail.updatedAt?.toISOString() ?? null,
-  };
+  }));
 
   // 7. Agent modality for strategy selection (AC4)
   const modality: Modality = agent.modality === "voice" ? "voice" : "text";
 
   // 8. Run compiler
   const compilerInput: CompilerInput = {
-    sops: [sopResponse],
+    sops: sopResponses,
     guardrails: guardrailResponses,
     agentConfig: {
       id: agent.id,
@@ -202,13 +205,18 @@ export async function compileAgent(input: CompileAgentInput) {
 
   const ir = compile(compilerInput);
 
-  // 9. Build provenance metadata
+  // 9. Build provenance metadata (multi-SOP shape)
   const compiledFrom = {
-    sopId,
-    sopName: sopDetail.name,
+    sops: sopDetails.map((s) => {
+      const enriched = ir.sops.find((e) => e.id === s.id);
+      return {
+        sopId: s.id,
+        sopName: s.name,
+        stepCount: enriched?.steps.length ?? s.definition.steps.length,
+      };
+    }),
     guardrailIds: guardrails.map((g) => g.id),
     toolCount: ir.tools.length,
-    stepCount: ir.sop.steps.length,
   };
 
   // 10. Dry-run: return result without persisting
@@ -216,7 +224,7 @@ export async function compileAgent(input: CompileAgentInput) {
     log.info(
       {
         agentId,
-        sopId,
+        sopIds,
         promptLength: ir.systemPrompt.length,
         toolCount: ir.tools.length,
         guardrailCount: guardrails.length,
@@ -249,7 +257,7 @@ export async function compileAgent(input: CompileAgentInput) {
   if (ir.metadata?.warnings?.length) {
     for (const w of ir.metadata.warnings) {
       log.warn(
-        { agentId, sopId, warningCode: w.code, tokens: w.tokens },
+        { agentId, sopIds, warningCode: w.code, tokens: w.tokens },
         `compiler warning: ${w.message}`,
       );
     }
@@ -258,7 +266,7 @@ export async function compileAgent(input: CompileAgentInput) {
   log.info(
     {
       agentId,
-      sopId,
+      sopIds,
       promptLength: ir.systemPrompt.length,
       toolCount: ir.tools.length,
       guardrailCount: guardrails.length,

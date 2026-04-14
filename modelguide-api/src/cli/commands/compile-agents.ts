@@ -54,22 +54,22 @@ export async function handleCompileAgents(
       continue;
     }
 
-    // Compile against each active SOP assigned to this agent
-    for (const sop of agentSops) {
-      try {
-        await compileAgent({
-          orgId,
-          agentId: agent.id,
-          sopId: sop.id,
-        });
-        log.success(`Compiled agent: ${agent.name} (SOP: ${sop.name})`);
-        compiled++;
-      } catch (err) {
-        log.warn(
-          `Failed to compile ${agent.name} with SOP ${sop.name}: ${getErrorMessage(err)}`,
-        );
-        skipped++;
-      }
+    // Compile with all active SOPs in a single call
+    const sopIds = agentSops.map((s) => s.id);
+    const sopNames = agentSops.map((s) => s.name).join(", ");
+    try {
+      await compileAgent({
+        orgId,
+        agentId: agent.id,
+        sopIds,
+      });
+      log.success(`Compiled agent: ${agent.name} (SOPs: ${sopNames})`);
+      compiled++;
+    } catch (err) {
+      log.warn(
+        `Failed to compile ${agent.name} with SOPs [${sopNames}]: ${getErrorMessage(err)}`,
+      );
+      skipped++;
     }
   }
 

@@ -580,6 +580,7 @@ export async function updateSop(
     description?: string;
     definition?: SopSchema;
     version?: string;
+    agentIds?: string[];
   },
 ) {
   const updateData: Partial<NewSop> = {};
@@ -613,6 +614,10 @@ export async function updateSop(
 
     if (!updated) {
       throw Errors.sopNotFound(sopId);
+    }
+
+    if (data.agentIds !== undefined) {
+      await setAssignedAgentsInternal(tx, sopId, data.agentIds);
     }
 
     return updated;

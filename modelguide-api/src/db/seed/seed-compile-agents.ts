@@ -201,11 +201,13 @@ export async function seedCompileAgents(db: SeedDb): Promise<void> {
           compiledInstructions: ir.systemPrompt,
           compiledAt: new Date(),
           compiledFrom: {
-            sopId: sop.id,
-            sopName: sop.name,
+            sops: ir.sops.map((s) => ({
+              sopId: s.id,
+              sopName: s.name,
+              stepCount: s.steps.length,
+            })),
             guardrailIds: guardrailRows.map((g) => g.id),
             toolCount: ir.tools.length,
-            stepCount: ir.sop.steps.length,
           },
         })
         .where(eq(agents.id, agentId));

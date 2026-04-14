@@ -233,7 +233,7 @@ describe("simulate-and-run validation", () => {
     await compileAgent({
       orgId: ctx.orgId,
       agentId: ctx.agentId,
-      sopId,
+      sopIds: [sopId],
     });
 
     const suite = await initSuiteFromSop(ctx.orgId, ctx.agentId, sopId);
@@ -275,7 +275,7 @@ describe("simulate-and-run E2E pipeline", () => {
       await compileAgent({
         orgId: ctx.orgId,
         agentId: ctx.agentId,
-        sopId,
+        sopIds: [sopId],
       });
 
       // 2. Init eval suite from SOP (auto-generates evaluators)
@@ -410,7 +410,7 @@ describe("simulate-and-run E2E pipeline", () => {
       await compileAgent({
         orgId: ctx.orgId,
         agentId: ctx.agentId,
-        sopId,
+        sopIds: [sopId],
       });
 
       // 2. Init eval suite from SOP
@@ -550,7 +550,7 @@ describe("simulate-and-run E2E pipeline", () => {
       await compileAgent({
         orgId: ctx.orgId,
         agentId: ctx.agentId,
-        sopId,
+        sopIds: [sopId],
       });
 
       // 2. Init eval suite from SOP
