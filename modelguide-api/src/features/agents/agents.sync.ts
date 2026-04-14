@@ -290,6 +290,13 @@ async function _syncAgentToElevenLabs(
   const compiledPrompt = agent.compiledInstructions ?? undefined;
   const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
 
+  // Guard: LLM model must be configured before syncing
+  if (!llmModel) {
+    throw Errors.invalidInput(
+      "LLM model must be configured before syncing to ElevenLabs",
+    );
+  }
+
   // Step 4: Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
   try {
     const mergedMcpIds = [...foreignMcpIds, mcpServerId!];
@@ -306,16 +313,14 @@ async function _syncAgentToElevenLabs(
         }
       : {};
 
-    // Build prompt payload — include compiled prompt and model only when set
+    // Build prompt payload — llmModel is guaranteed set (guarded above)
     const promptPayload: Record<string, unknown> = {
       mcpServerIds: mergedMcpIds,
+      llm: llmModel,
     };
     if (compiledPrompt) {
       promptPayload.prompt = compiledPrompt;
       promptPayload.ignoreDefaultPersonality = true;
-    }
-    if (llmModel) {
-      promptPayload.llm = llmModel;
     }
 
     await client.conversationalAi.agents.update(elevenLabsAgentId, {
@@ -338,18 +343,12 @@ async function _syncAgentToElevenLabs(
         },
       },
     });
-    const configMessage =
-      compiledPrompt && llmModel
-        ? `Applied compiled prompt + LLM model (${llmModel})`
-        : compiledPrompt
-          ? "Applied compiled prompt (no LLM model configured)"
-          : llmModel
-            ? `Applied LLM model (${llmModel}) — no compiled prompt`
-            : "No compiled prompt or LLM model configured";
     steps.push({
       step: "Agent configuration",
       status: "success",
-      message: configMessage,
+      message: compiledPrompt
+        ? `Applied compiled prompt + LLM model (${llmModel})`
+        : `Applied LLM model (${llmModel}) — no compiled prompt`,
     });
   } catch (err) {
     steps.push({

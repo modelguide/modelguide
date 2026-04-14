@@ -66,7 +66,7 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
   const savedLlmModel = (elMeta.llmModel as string) ?? ''
   const isDirty = elAgentId !== savedAgentId || llmModel !== savedLlmModel || elApiKey.length > 0
 
-  const canSync = !!elMeta.agentId && agent.hasElevenLabsKey
+  const canSync = !!elMeta.agentId && agent.hasElevenLabsKey && !!elMeta.llmModel
 
   // All non-API-key fields are disabled until the API key is configured
   const fieldsDisabled = !agent.hasElevenLabsKey || !isAdmin
