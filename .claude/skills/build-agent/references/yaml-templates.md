@@ -160,7 +160,11 @@ connector placeholders.
 
 ## guardrails.yaml
 
-Always include the `no-fabrication` baseline plus one rule per interview answer.
+Always include the `no-fabrication` and `stay-on-topic` baselines, plus rules from D-08.
+
+Guardrails have two categories — both must be represented:
+- `category: focus` — keep the agent on-topic and concise (prevents drift, verbosity, scope creep)
+- `category: safety | compliance | escalation | accuracy` — liability, regulatory, and escalation rules
 
 ```yaml
 guardrails:
@@ -173,13 +177,24 @@ guardrails:
     config: { priority: critical, category: accuracy }
     agents: ["{{agentSlug}}"]
 
+  - name: "Stay On Topic"
+    slug: "stay-on-topic"
+    content: |
+      Only answer questions directly related to {{inferred scope from D-02/D-03}}.
+      If a customer asks about something outside your scope, politely say you can't
+      help with that and offer to connect them with a human agent.
+      Keep responses to 1-3 sentences unless the customer explicitly asks for detail.
+      Do not volunteer information the customer didn't ask for.
+    config: { priority: high, category: focus }
+    agents: ["{{agentSlug}}"]
+
   - name: "{{guardrailName}}"
     slug: "{{guardrailSlug}}"
     content: |
       {{guardrailContent — write as a direct instruction}}
     config:
       priority: high
-      category: "{{compliance | scope | tone | escalation}}"
+      category: "{{focus | compliance | scope | tone | escalation | accuracy}}"
     agents: ["{{agentSlug}}"]
 ```
 

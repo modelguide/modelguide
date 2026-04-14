@@ -3,14 +3,15 @@ name: build-agent
 description: >
   End-to-end voice agent builder. Trigger on "/build-agent" or when the user
   says "build a voice agent", "create a new agent from scratch", or "set up a
-  new ModelGuide agent". Guides through 8 stages: prereq check, interview, local
-  input collection, YAML generation + provisioning, eval import, simulation
-  feedback loop, autonomous tightening, and local LiveKit validation. Supports
-  end-to-end provisioning for Medusa, Zendesk, and conversation-only agents.
-  For other APIs, create a resumable `.modelguide/CONNECTOR_HANDOFF.md`, hand
-  off to `@mg-connector`, and resume once the connector result is written back.
-  Produces a validated voice agent in 2-3 hours. Resumes from the last
-  completed stage if `.modelguide/STATE.md` exists.
+  new ModelGuide agent". Guides through 8 stages: prereq check, interview,
+  local input collection, YAML generation + provisioning, eval import,
+  simulation feedback loop, autonomous tightening, and local LiveKit
+  validation. Supports end-to-end provisioning for Medusa, Zendesk, and
+  conversation-only agents. For other APIs, dispatches `@mg-connector` in
+  parallel while the rest of the build continues — the build only pauses at
+  `mg setup` if the connector isn't ready yet. Produces a validated voice
+  agent in 2-3 hours. Resumes from the last completed stage if
+  `.modelguide/STATE.md` exists.
 ---
 
 # Build-Agent Skill
@@ -27,22 +28,69 @@ test -f .modelguide/STATE.md && cat .modelguide/STATE.md
 
 If `currentStage` exists, skip completed stages and resume.
 
-Special case: if `currentStage: connector`, read
-`.modelguide/CONNECTOR_HANDOFF.md` before doing anything else:
-- `status: requested` → do not restart Stage [0]; continue the `@mg-connector`
-  handoff
-- `status: blocked` → show the blocker and stop
-- `status: completed` → sync `catalogSlug`, `connectorSlug`, `toolSlugs`, and
-  any verified service name from the handoff back into D-07, write `STATE.md`
-  with `currentStage: 1`, and continue from Stage [1]
+Special case: if `connectorStatus: pending` (or legacy `currentStage: connector`) in STATE.md,
+check `.modelguide/CONNECTOR_HANDOFF.md` before continuing:
+- `status: requested` → connector is still building; continue from the last completed stage
+  (skip `mg setup` — go to Stage [2b] if Stage [1] is done, else Stage [1]) and note the pause point
+- `status: blocked` → show the blocker message, stop, and ask for help resolving it
+- `status: completed` → sync `catalogSlug`, `connectorSlug`, `toolSlugs` from handoff into D-07,
+  update `connectorStatus: done`. Then resume from whichever stage is next:
+  - If `agentId` is empty (Stage [1] hasn't run): resume at Stage [1] — collect admin email,
+    connector secrets, generate `.env.example`
+  - If `agentId` is populated (Stage [1] done): generate `connectors.yaml` and tool blocks,
+    then run `mg setup` (Stage [2c])
 
 If STATE.md doesn't exist, start from [pre].
+
+---
+
+## Extend: Add a SOP to an Existing Agent
+
+If you already have a built agent (`currentStage: done` or any stage ≥ 3) and
+want to add a new use case without rebuilding, use this path instead of the full wizard.
+
+Trigger phrases: "add a use case", "add a SOP", "teach the agent to handle X", "new scenario for the agent".
+
+### Steps
+
+1. **Read context** — load `CONTEXT.md` and existing `.modelguide/sops.yaml` to understand the
+   current agent, connector, and SOP slugs already registered.
+
+2. **Interview for the new SOP** (2-3 questions):
+   - "Describe the new scenario in one sentence — what does the customer say and what should the agent do?"
+   - "Does this require a new tool call, or can it use the existing connector?"
+   - If new tool: check `CONNECTOR_HANDOFF.md` or ask which tool slug to use.
+
+3. **Generate the new SOP** — append to `.modelguide/sops.yaml` (do not overwrite existing SOPs):
+   - Follow the same structure as existing SOPs (status: active, agents: [agentSlug], steps with tool: block if applicable)
+   - Name the SOP after the customer's goal, not the agent action
+
+4. **Generate new eval cases** — append to `.modelguide/evals.yaml`:
+   - At minimum: happy path, missing-info, guardrail trigger for the new SOP
+
+5. **Import and recompile**:
+   ```bash
+   cd modelguide-api && bun run src/cli/mg.ts import-sops --org {{orgSlug}} ../.modelguide/sops.yaml
+   cd modelguide-api && bun run src/cli/mg.ts import-evals --org {{orgSlug}} ../.modelguide/evals.yaml
+   cd modelguide-api && bun run src/cli/mg.ts compile-agents --org {{orgSlug}}
+   ```
+
+6. **Run evals for just the new SOP**:
+   ```bash
+   cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}} --agent {{agentSlug}} --suite {{newSopSlug}}
+   ```
+   Apply targeted fixes if pass rate < 80%, same categorization as Stage [5].
+
+7. **Generate simulation script** for the new SOP (happy path + guardrail trigger) and show it
+   so you can test it live.
+
+---
 
 ## State Files
 
 **`.modelguide/STATE.md`** — stage tracker:
 ```
-currentStage: pre | 0 | connector | 1 | 2 | 3 | 4 | 5 | 6 | 7 | done
+currentStage: pre | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | done
 mode: auto-pilot | supervised
 orgSlug: <slug>
 agentSlug: <slug>
@@ -50,6 +98,7 @@ agentId: <uuid>
 connectorType: catalog | none | custom
 catalogSlug: <slug> | (none) | (pending)
 connectorSlug: <org-connector-slug> | (none) | (pending)
+connectorStatus: done | pending | (none)
 evalIteration: 0
 lastEvalScore: (none)
 ```
@@ -84,15 +133,9 @@ verification: <commands run or (pending)>
 blocker: <message or (none)>
 ```
 
-The build-agent skill creates this file in Stage [0]. `@mg-connector` updates
-it in place. Resume logic reads it so the builder never has to repeat the
-interview. Preserve the original request fields when updating this file; do not
-replace the builder's API summary with only completion data.
-
 Slug roles:
 - `serviceSlug` — interview-time slug for the external service
-- `requestedConnectorSlug` — proposed org connector instance slug before the
-  connector implementation is confirmed
+- `requestedConnectorSlug` — proposed org connector instance slug
 - `catalogSlug` — final connector type slug in the global catalog
 - `connectorSlug` — final org connector instance slug used in `agents.yaml`,
   `sops.yaml`, and runtime MCP tool names
@@ -111,7 +154,7 @@ bun --version > /dev/null 2>&1 && echo "Bun: OK" || echo "Bun: MISSING"
 python3 --version 2>&1 | grep -E "3\.(1[1-9]|[2-9][0-9])" && echo "Python: OK" || echo "Python: MISSING or < 3.11"
 ```
 
-If any are missing, provide the install command and wait for the developer to fix it. Do not abort.
+If any are missing, show the install command and wait for the person to fix it. Report all missing tools at once so everything can be fixed in one pass. Do not abort.
 - Docker: https://www.docker.com/products/docker-desktop/
 - Bun: `curl -fsSL https://bun.sh/install | bash`
 - Python 3.11+: `brew install python@3.11` (macOS) or https://python.org/downloads
@@ -121,7 +164,7 @@ If any are missing, provide the install command and wait for the developer to fi
 test -f modelguide-api/.env && echo "API env: OK" || echo "API env: MISSING — run: cp modelguide-api/.env.example modelguide-api/.env and fill in required vars"
 test -d modelguide-api/node_modules && echo "API deps: OK" || echo "API deps: MISSING — run: cd modelguide-api && bun install"
 ```
-If `modelguide-api/.env` is missing, do not proceed — direct the developer to copy the example and fill in `DATABASE_URL`, `JWT_SECRET`, and other required vars.
+If `modelguide-api/.env` is missing, ask the person to copy the example and fill in `DATABASE_URL`, `JWT_SECRET`, and other required vars before continuing.
 
 Write STATE.md with `currentStage: 0`.
 
@@ -141,17 +184,30 @@ Default: auto-pilot. Record as D-01.
 "Briefly describe your business and who the agent will serve (1-3 sentences)."
 Derive `orgSlug` from the business name (lowercase, hyphens, max 20 chars). Record as D-02.
 
-### Q3 — Example conversations
-"Give me 3 concrete things a customer would say and what the agent should do."
+### → Domain research (after Q2, before Q3)
 
-Format:
+Once you know the business type, research the domain to make the rest of the interview faster and the agent smarter:
+
+1. Search: "[business type] customer service voice agent common scenarios"
+2. Search: "[business type] compliance requirements" (for regulated industries: healthcare, finance, legal, insurance)
+3. Search: "[business type] API integrations" if the business type suggests a specific system (scheduling, POS, EHR, CRM)
+
+Use findings to:
+- Propose 3 realistic starter conversations for Q3 (builder confirms or customizes)
+- Pre-populate domain-specific guardrail suggestions for Q6
+- Identify if a catalog connector already covers this domain (e.g., appointment booking → custom; retail → Medusa; support → Zendesk)
+- Flag regulated-industry requirements early (e.g., HIPAA for healthcare, PCI for payments)
+
+Keep the research step invisible — don't list search results at the builder. Just use the knowledge to give sharper suggestions.
+
+### Q3 — Example conversations
+"Here are 3 typical scenarios for [business type]. Confirm, customize, or replace:"
 ```
-1. [customer says X] → [agent does Y using tool Z]
+1. [suggested customer phrase] → [suggested agent action]
 2. ...
 3. ...
 ```
-
-Push for specific dialogue if vague. These become SOP steps and eval test cases directly.
+Push for specific dialogue if vague. These become SOP steps and eval test cases directly. Record as part of D-02.
 
 ### Q4 — Tools / API
 "What systems does the agent need to call?"
@@ -162,51 +218,73 @@ Options:
 - **C) None** — conversation only
 - **D) Something else** (e.g. Shopify or a custom REST API)
 
-Supported end-to-end provisioning in this skill is **Medusa**, **Zendesk**, or
-**conversation-only**. If the developer picks any other service/API:
-- capture the service name, auth model, base URL, and concrete operations in D-07
-- derive `serviceSlug` and a requested org connector slug
-  `{{orgSlug}}_{{serviceSlug}}`
-- explain that this skill must not invent a `custom_rest` connector config
-- create `.modelguide/CONNECTOR_HANDOFF.md` with `status: requested`
-- invoke `@mg-connector` to add a first-class ModelGuide connector first
-- write `STATE.md` with `currentStage: connector`
-- resume `/build-agent` only after `CONNECTOR_HANDOFF.md` says
-  `status: completed`
+Supported end-to-end provisioning without connector work: **Medusa**, **Zendesk**, **conversation-only**.
+
+If any other service/API is mentioned:
+- Capture the service name, auth model, base URL, and concrete operations in D-07
+- Derive `serviceSlug` and requested org connector slug `{{orgSlug}}_{{serviceSlug}}`
+- Write `.modelguide/CONNECTOR_HANDOFF.md` with `status: requested`, the captured service details, and the requested operations
+- Tell the user:
+  ```
+  Your API isn't one of the built-in connectors, so I'm kicking off a background build for it.
+  I've saved all the details — your API URL, authentication, and the endpoints — to a handoff file.
+  A background process is building the connector automatically. You don't need to do anything.
+  We keep going from here — the only pause would be during provisioning if the connector isn't ready yet.
+  ```
+- Spawn a **background subagent** using the Agent tool:
+  - `run_in_background: true`
+  - Task prompt: "Invoke the `mg-connector` skill (use the Skill tool with `skill: 'mg-connector'`). The handoff spec is already written to `.modelguide/CONNECTOR_HANDOFF.md` — use it as your starting context. Build the connector and ensure the file reaches `status: completed` when done."
+  - Do NOT wait for it to finish
+- Write STATE.md with `currentStage: 1`, `connectorStatus: pending`
+- Continue immediately to Stage [1] — do NOT stop and wait
 
 Record D-07 with both connector identifiers:
-- Medusa → `connectorType: catalog`, `catalogSlug: medusa`,
-  `connectorSlug: {{orgSlug}}_store`
-- Zendesk → `connectorType: catalog`, `catalogSlug: zendesk`,
-  `connectorSlug: {{orgSlug}}_support`
-- None → `connectorType: none`, `catalogSlug: (none)`,
-  `connectorSlug: (none)`
-- Custom → `connectorType: custom`, `catalogSlug: (pending)`,
-  `connectorSlug: {{orgSlug}}_{{serviceSlug}}`
+- Medusa → `connectorType: catalog`, `catalogSlug: medusa`, `connectorSlug: {{orgSlug}}_store`
+- Zendesk → `connectorType: catalog`, `catalogSlug: zendesk`, `connectorSlug: {{orgSlug}}_support`
+- None → `connectorType: none`, `catalogSlug: (none)`, `connectorSlug: (none)`
+- Custom → `connectorType: custom`, `catalogSlug: (pending)`, `connectorSlug: {{orgSlug}}_{{serviceSlug}}`
 
-Also record the tool slugs needed by the agent. `connectorSlug` is always the
-org connector instance slug used in runtime MCP tool names; `catalogSlug` is
-the connector type in the global catalog.
+Also record the tool slugs needed by the agent.
 
 ### Q5 — Persona
 "What's the agent's name, and how should it sound?"
 
 Options: Friendly & conversational / Professional & concise / Domain expert / Custom.
-Claude infers a default from the business (retail → friendly, B2B → professional).
-Record name as D-03/D-04, style as D-05.
+Claude infers a default from the business (retail → friendly, B2B → professional, healthcare → calm & clear).
+
+Derive:
+- `agentFirstName` — the human name (e.g. "Aria", "Max")
+- `agentSlug` — always `{{orgSlug}}-voice-agent` (e.g. `glowskin-voice-agent`, `coolair-voice-agent`)
+- `AgentClassName` — PascalCase of the first name + "Agent" (e.g. `AriaAgent`, `MaxAgent`)
+
+Record name/slug/class as D-03/D-04, style as D-05.
 
 ### Q6 — Guardrails
-"What should the agent NEVER do?"
 
-Common patterns (multi-select):
-- Never quote or estimate delivery dates
-- Never process refunds above $X without escalation
+Guardrails come in two flavors — present both clearly:
+
+**Focus guardrails** keep the agent on-topic and concise. Without them, agents drift into long explanations, offer unsolicited advice, or handle requests outside their scope. They matter as much as safety rules for voice — nobody wants a two-minute monologue when they asked about their order.
+
+**Safety guardrails** prevent liability, compliance violations, and escalation failures.
+
+"Here are guardrails I'd suggest based on your business. I've split them into focus rules and safety rules — add, remove, or customize:"
+
+**Focus (pre-populate from domain research + business context):**
+- Only answer questions related to [inferred scope from Q2/Q3] — redirect anything else politely
+- Keep responses to 1-3 sentences unless the customer explicitly asks for more detail
+- Do not volunteer information the customer didn't ask for
+- If unsure, say so briefly and offer to connect with a human — don't speculate
+- Custom focus rule
+
+**Safety (pre-populate from domain research):**
+- Never quote or estimate delivery/arrival times
+- Never execute financial transactions without human confirmation
 - Never share another customer's data
 - Always escalate complaints or angry customers
-- Custom rule
+- Never give professional advice (medical, legal, financial) — redirect to a human
+- Custom safety rule
 
-Require at least 2 guardrails. Claude proposes sensible defaults from the business context.
-Record as D-08.
+Require at least 2 from each category (minimum 4 total). Claude proposes sensible defaults from business context and domain research. Record as D-08.
 
 ### Q7 — Stack confirmation
 Present the recommended stack:
@@ -220,21 +298,13 @@ Press Enter to confirm, or tell me what to change.
 ```
 Record as D-06.
 
-For supported paths (Medusa, Zendesk, conversation-only): write STATE.md
-(`currentStage: 1`) and CONTEXT.md with all decisions.
-
-For unsupported custom APIs: write CONTEXT.md, write
-`.modelguide/CONNECTOR_HANDOFF.md`, write STATE.md with
-`currentStage: connector`, hand off to `@mg-connector`, and stop. On resume, do
-not repeat Q1-Q7.
+Write STATE.md (`currentStage: 1`) and CONTEXT.md with all decisions. For custom connectors, also write `connectorStatus: pending`.
 
 ---
 
 ## Stage [1]: Setup — Local Inputs
 
-**Purpose**: Bootstrap the first admin user, collect the connector inputs that
-stage [2] needs, generate `agent/.env.example`, and verify the required local
-inputs without reading secret values from files.
+**Purpose**: Bootstrap the first admin user, collect connector inputs, generate `agent/.env.example`, and verify required local inputs without reading secret values.
 
 1. Create directory:
    ```bash
@@ -245,83 +315,57 @@ inputs without reading secret values from files.
    ```
    What email should be the initial admin user for this org?
    ```
-   Append it to CONTEXT.md as `D-09 Admin User Email`.
+   Append to CONTEXT.md as `D-09 Admin User Email`.
 
-3. Capture connector inputs before provisioning:
-   - If `catalogSlug == medusa`, ask for:
-     - Medusa base URL
-     - Medusa publishable key
-     Append both to CONTEXT.md as `D-10 Connector Config`.
-     Append `D-11 Connector Secrets Checklist: secretApiKey` and tell the
-     developer `mg setup` will prompt for it in stage [2c] if the agent uses
-     order lookup, returns, or any other admin tools.
-   - If `catalogSlug == zendesk`, ask for:
-     - Zendesk subdomain
-     - Zendesk agent email
-     Append both to CONTEXT.md as `D-10 Connector Config`.
-     Append `D-11 Connector Secrets Checklist: apiToken` and tell the developer
-     `mg setup` will prompt for it in stage [2c].
-   - If `connectorType == custom`, verify the handoff file is complete before
-     continuing:
+3. Capture connector inputs:
+   - If `catalogSlug == medusa`, ask for Medusa base URL and publishable key. Append as `D-10 Connector Config`. Append `D-11 Connector Secrets Checklist: secretApiKey`.
+   - If `catalogSlug == zendesk`, ask for Zendesk subdomain and agent email. Append as `D-10 Connector Config`. Append `D-11 Connector Secrets Checklist: apiToken`.
+   - If `connectorType == custom`, check handoff status:
      ```bash
      test -s .modelguide/CONNECTOR_HANDOFF.md && echo "handoff: Found" || echo "handoff: Missing"
      grep -q "^status: completed$" .modelguide/CONNECTOR_HANDOFF.md && echo "handoff: completed" || echo "handoff: not completed"
      ```
-     If the handoff file is missing, blocked, or missing any of
-     `catalogSlug`, `connectorSlug`, `configFields`, or `secretFields`, stop and
-     send the workflow back to `@mg-connector`. Do not continue Stage [1].
-     For each returned `configFields` entry, ask the developer for the value and
-     write the answers into `D-10 Connector Config`. Copy the returned
-     `secretFields` entries into `D-11 Connector Secrets Checklist` so the
-     builder knows exactly what `mg setup` will prompt for. Do not invent field
-     names, labels, or secret types.
+     - If `completed` and `secretFields` present: ask for `configFields` values (D-10), copy `secretFields` into D-11. Do not invent field names.
+     - If `completed` but missing `secretFields`: flag incomplete, send back to `@mg-connector`.
+     - If `requested` or `blocked`: note that connector is still in progress; continue setup without connector inputs — they'll be captured on resume.
    - If `connectorType == none`, record `D-10 Connector Config: none`.
 
-4. Generate two files:
-   - `agent/.env.example` from `references/python-templates.md` (.env.example section)
-   - `.modelguide/users.yaml` from `references/yaml-templates.md` (`users.yaml` section)
-   Substitute all `{{variables}}` from CONTEXT.md. For `users.yaml`, use:
-   - `email: {{adminEmail}}` from D-09
-   - `name: "{{businessName}} Admin"` unless the developer gave a better display name
-   - `role: admin`
+4. Generate:
+   - `agent/.env.example` from `references/python-templates.md`
+   - `.modelguide/users.yaml` from `references/yaml-templates.md`
+   Substitute all `{{variables}}` from CONTEXT.md.
 
-5. Tell the developer:
+5. Tell the user:
    ```
-   Generated agent/.env.example. Next:
+   I've created a template at agent/.env.example. Copy it to agent/.env:
      cp agent/.env.example agent/.env
-   Then fill in:
-     - OPENAI_API_KEY from https://platform.openai.com/api-keys
-     - DEEPGRAM_API_KEY from https://console.deepgram.com/
-     - ELEVENLABS_API_KEY from https://elevenlabs.io/app/settings/api-keys
 
-   MODELGUIDE_API_KEY and MODELGUIDE_AGENT_ID will be filled in stage [2].
-   LiveKit credentials are pre-filled (no account needed for local dev).
-   Also keep the connector secret(s) from D-11 ready — `mg setup` will prompt
-   for them once during stage [2c].
+   Then fill in three API keys:
+     - OPENAI_API_KEY       → https://platform.openai.com/api-keys
+     - DEEPGRAM_API_KEY     → https://console.deepgram.com/
+     - ELEVENLABS_API_KEY   → https://elevenlabs.io/app/settings/api-keys
 
-   Tell me when agent/.env is ready.
+   The ModelGuide keys will be generated automatically in the next step.
+   LiveKit is pre-filled — no account needed for local testing.
+
+   Let me know when agent/.env is ready.
    ```
 
-6. Verify file exists and is non-empty:
+6. Verify file exists and required keys are set (without reading values):
    ```bash
    test -s agent/.env && echo "Found" || echo "Missing or empty"
-   ```
-
-7. Check required keys are set (without reading values):
-   ```bash
    grep -q "^OPENAI_API_KEY=.\+" agent/.env && echo "OPENAI_API_KEY: set" || echo "OPENAI_API_KEY: MISSING"
    grep -q "^DEEPGRAM_API_KEY=.\+" agent/.env && echo "DEEPGRAM_API_KEY: set" || echo "DEEPGRAM_API_KEY: MISSING"
-   # TTS key — ElevenLabs is the default (D-06); swap for CARTESIA_API_KEY if Cartesia was chosen
    grep -q "^ELEVENLABS_API_KEY=.\+" agent/.env && echo "ELEVENLABS_API_KEY: set" || echo "ELEVENLABS_API_KEY: MISSING"
    ```
 
-8. Verify `.modelguide/users.yaml` exists and includes an admin user:
+7. Verify users.yaml:
    ```bash
    test -s .modelguide/users.yaml && echo "users.yaml: Found" || echo "users.yaml: Missing"
-   grep -q "role: admin" .modelguide/users.yaml && echo "users.yaml: admin present" || echo "users.yaml: admin missing"
+   grep -q "role: admin" .modelguide/users.yaml && echo "admin: present" || echo "admin: missing"
    ```
 
-9. Ensure `API_EXTERNAL_ADDRESS` is set in the ModelGuide API env (needed for simulations):
+8. Ensure `API_EXTERNAL_ADDRESS` is set:
    ```bash
    if ! grep -q "^API_EXTERNAL_ADDRESS=" modelguide-api/.env; then
      echo "API_EXTERNAL_ADDRESS=http://localhost:3000" >> modelguide-api/.env
@@ -341,23 +385,18 @@ In supervised mode: show each YAML file and wait for approval before running `mg
 
 ### 2a. Generate YAML artifacts
 
-Write up to 6 provisioning files into `.modelguide/` from
-`references/yaml-templates.md`. Do **not** overwrite the `users.yaml` file from
-stage [1]. Substitute all `{{variables}}` from CONTEXT.md.
+Write provisioning files into `.modelguide/` from `references/yaml-templates.md`. Do **not** overwrite `users.yaml`. Substitute all `{{variables}}` from CONTEXT.md.
 
+Always generate:
 - `org.yaml` — slug from D-02
 - `agents.yaml` — platform: livekit, config.url: ws://localhost:7880, active: true
-- `connectors.yaml` — based on D-07 + D-10. For custom connectors, copy the
-  exact `catalogSlug`, config field names, and secret definitions from the
-  completed `.modelguide/CONNECTOR_HANDOFF.md` result, and use the actual
-  non-secret values collected in D-10. Omit this file entirely for
-  conversation-only agents.
 - `sops.yaml` — 3 SOPs from Conv-1/2/3, status: active
 - `guardrails.yaml` — from D-08, always include no-fabrication baseline
 - `evals.yaml` — 5-10 test cases per SOP (happy path + missing info + guardrail trigger)
 
-In `agents.yaml` and `sops.yaml`, `connectorSlug` must be the org connector
-instance slug, not the catalog slug.
+Connector handling:
+- If `connectorStatus: done` (or no custom connector): generate `connectors.yaml` now
+- If `connectorStatus: pending`: skip `connectors.yaml` and omit `tool:` blocks from `sops.yaml`; use `PLACEHOLDER_TOOLS: [<awaiting connector>]` comment in `agents.yaml`; generate everything else
 
 ### 2b. Generate Python agent code
 
@@ -373,17 +412,25 @@ done
 Generate:
 - `agent/agent.py` (copy example, update BuildProAgent → {{AgentClassName}})
 - `agent/my_agent.py` (new MCPAgent subclass)
-- `agent/config.py` (copy example, update AGENT_NAME / CONNECTOR_PREFIX defaults and BuildProAgent import references)
+- `agent/config.py` (copy example, update AGENT_NAME / CONNECTOR_PREFIX defaults)
 - `agent/prompts/__init__.py`
 - `agent/prompts/base.py`
 - `agent/pyproject.toml`
 
+If `connectorStatus: pending`, use placeholder tool slugs in `my_agent.py` and set `TOOL_NAMES = []` temporarily. Add a `TODO: fill in tool slugs from CONNECTOR_HANDOFF.md` comment.
+
 ### 2c. Provision org
+
+**If `connectorStatus: pending`** — check handoff status before running `mg setup`:
+```bash
+grep -q "^status: completed$" .modelguide/CONNECTOR_HANDOFF.md && echo "ready" || echo "pending"
+```
+- If still pending: "Connector is still being built. Run `cat .modelguide/CONNECTOR_HANDOFF.md` to check progress. Type 'continue' when it shows `status: completed`."
+- On resume with completed handoff: sync catalogSlug/connectorSlug/toolSlugs into D-07 and STATE.md, generate `connectors.yaml`, update tool blocks in `sops.yaml` and `my_agent.py`, then proceed with `mg setup`.
 
 ```bash
 make db-up
 
-# Wait for DB ready
 until docker exec modelguide-postgres pg_isready -q 2>/dev/null; do
   echo "Waiting for DB..."; sleep 2
 done
@@ -394,37 +441,31 @@ make db-migrate
 cd modelguide-api && bun run src/cli/mg.ts setup ../.modelguide/ --dry-run
 ```
 
-This dry-run should now show the admin user from `.modelguide/users.yaml`
-alongside the org, agent, SOP, and guardrail plan.
-
-If `mg setup` prompts for connector secrets, use the Stage [1] checklist (or
-the completed custom handoff file). That prompt is expected; do not treat it as
-new discovery work.
-
 If dry-run passes:
 ```bash
-# Provision (skip-evals — imported separately in stage [3])
 cd modelguide-api && bun run src/cli/mg.ts setup ../.modelguide/ --skip-evals
 ```
 
-**Note on resume:** `mg setup` is idempotent — org and agent creation are upserts. If Stage [2] is interrupted and resumed, re-running `mg setup` is safe.
+**If dry-run fails**, diagnose before re-running. Common causes:
 
-The `mg setup` output includes the agent API key. Copy it:
-```
-Agent API Key: mgk_xxxxxxxx
-```
-→ Update `agent/.env`: `MODELGUIDE_API_KEY=mgk_xxxxxxxx`
+| Error | Fix |
+|---|---|
+| `Organization slug already exists` | Change `orgSlug` in `org.yaml` and CONTEXT.md D-02 |
+| `Agent slug already exists` | Change `agentSlug` in `agents.yaml` and CONTEXT.md D-04 |
+| `Connector catalog not found: <slug>` | Wrong `catalogSlug` — check `references/yaml-templates.md` for valid slugs |
+| `DATABASE_URL` / connection error | Run `make db-up` and wait for `pg_isready`; check `modelguide-api/.env` |
+| `JWT_SECRET` / `ENCRYPTION_KEY` missing | Fill missing vars in `modelguide-api/.env` from `.env.example` |
+| Any other error | Show the full error output and stop — do not guess at a fix |
+
+**Note:** `mg setup` is idempotent — safe to re-run on resume.
+
+The `mg setup` output includes the agent API key. Copy it to `agent/.env`: `MODELGUIDE_API_KEY=mgk_xxxxxxxx`
 
 ### 2d. Get agent UUID
 
-The `mg setup` command prints a summary table at the end of its run, including an `["Agent", "ID", "API Key"]` row with the agent UUID. Read it from there.
-
-In the skill, instruct Claude to:
-1. Parse the agent UUID from the `mg setup` output (it appears in the printed table as a full UUID string)
-2. Update `agent/.env`: `MODELGUIDE_AGENT_ID=<agentId>`
-3. Update STATE.md: `agentId: <agentId>`
-
-No additional API calls or scripts needed.
+Parse the agent UUID from the `mg setup` summary table. Update:
+- `agent/.env`: `MODELGUIDE_AGENT_ID=<agentId>`
+- `STATE.md`: `agentId: <agentId>`
 
 ### 2e. Compile agents
 
@@ -446,8 +487,6 @@ Import eval suites into ModelGuide:
 cd modelguide-api && bun run src/cli/mg.ts import-evals --org {{orgSlug}} ../.modelguide/evals.yaml
 ```
 
-This creates one eval suite per (agent, SOP) pair with test cases and evaluators.
-
 Write STATE.md (`currentStage: 4`).
 
 In supervised mode: show import summary and wait for "continue".
@@ -456,7 +495,21 @@ In supervised mode: show import summary and wait for "continue".
 
 ## Stage [4]: Run Feedback Loop
 
-**Purpose**: Simulate all eval suites and collect scored results. Single command.
+**Purpose**: Simulate all eval suites and collect scored results.
+
+Print this at the start of Stage [4]:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Running eval suites
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [ ] Start API
+  [ ] Run simulations
+  [ ] Score results  →  ≥ 80% → done / < 80% → tighten
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Check each off as it completes.
 
 ### 4a. Ensure API is running
 
@@ -475,18 +528,6 @@ fi
 cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}} --agent {{agentSlug}}
 ```
 
-This handles everything: auth, suite listing, simulate-and-run, polling, result printing.
-Expected output:
-```
-Suite: Order Status Inquiry
-  PASS   order-status-happy-01
-  FAIL   order-status-missing-id-01
-         ↳ handles-missing-info: Agent proceeded without asking for order number
-  PASS   order-status-guardrail-01
-
-Pass rate: 8/10 (80%)
-```
-
 ### 4c. Decision
 
 - Pass rate ≥ 80%: skip stage [5], proceed to [6]
@@ -503,57 +544,125 @@ In supervised mode: display results and wait for "continue".
 
 **Purpose**: Analyze failures, apply targeted fixes, recompile, re-run. Max 3 iterations.
 
+### Progress header (show at the start of every iteration)
+
+Print this before doing any work in Stage [5], and update it each iteration:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Tighten loop — iteration N / 3
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [✓] Categorize failures
+  [ ] Apply fixes
+  [ ] Recompile
+  [ ] Re-run evals
+  [ ] Decide: pass / iterate / escalate
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Previous score: X/Y  →  Target: ≥ 80%
+```
+
+Check each item off (`[✓]`) as it completes. This gives the person a live view of
+where things stand without them needing to ask.
+
 ### Failure categorization
 
 | Failure type | Symptom | Fix location |
 |---|---|---|
-| SOP | Wrong tool called, steps out of order | `.modelguide/sops.yaml` |
+| SOP | Wrong tool called, steps out of order, missing clarification | `.modelguide/sops.yaml` |
 | Persona | Wrong tone, scope too broad/narrow | `agent/prompts/base.py` PERSONA_HEADER |
 | Guardrail | Rule violated or too vague | `.modelguide/guardrails.yaml` |
 | Tool | Wrong parameters, bad docstring | `agent/my_agent.py` `@function_tool` docstring/params |
 
+After categorizing, print a brief summary before making any changes:
+
+```
+Found N failures:
+  • SOP (K):    <affected SOP slugs>  →  <what's wrong>
+  • Guardrail (K):  <affected rule>   →  <what's wrong>
+  • Tool (K):   <affected tool slug>  →  <what's wrong>
+```
+
+Track which SOP slugs were touched — you'll use these for targeted re-runs.
+
 ### Apply fixes
 
-**SOP fix**:
+**SOP fix** — edit `.modelguide/sops.yaml`, then import:
 ```bash
 cd modelguide-api && bun run src/cli/mg.ts import-sops --org {{orgSlug}} ../.modelguide/sops.yaml
 ```
 
-**Guardrail fix**:
+**Guardrail fix** — edit `.modelguide/guardrails.yaml`, then import:
 ```bash
 cd modelguide-api && bun run src/cli/mg.ts import-guardrails --org {{orgSlug}} ../.modelguide/guardrails.yaml
 ```
 
 **Persona/tool fix**: edit files directly (no CLI needed — recompile picks up changes).
 
-In supervised mode: show a diff of proposed changes and wait for approval.
+**In supervised mode — show changes before applying them.** Format each change as a
+clear before/after block so it's easy to read at a glance:
 
-### Recompile and re-run
+```
+── sops.yaml · order-status-inquiry ──────────────────
+  BEFORE   steps:
+             - id: lookup
+               instruction: "Look up the order."
+
+  AFTER    steps:
+             - id: identify
+               instruction: "Ask for the order number or email."   ← added
+               required: true
+             - id: lookup
+               instruction: "Look up the order using the identifier provided."
+
+── guardrails.yaml · no-delivery-estimates ────────────
+  BEFORE   content: "Never estimate delivery times."
+
+  AFTER    content: "Never estimate or imply delivery dates or timeframes,
+                     even when asked directly. Say you don't have that
+                     information and offer to connect them with a human."
+```
+
+Show all changes together before running any commands. Wait for "continue" (or "skip"
+to skip a specific change). Only apply what was approved.
+
+### Recompile and targeted re-run
 
 ```bash
 cd modelguide-api && bun run src/cli/mg.ts compile-agents --org {{orgSlug}}
+```
+
+Re-run only the suites that were actually changed — faster than running everything:
+```bash
+# For each SOP slug that was fixed:
+cd modelguide-api && bun run src/cli/mg.ts run-evals \
+  --org {{orgSlug}} --agent {{agentSlug}} --suite {{fixedSopSlug1}}
+# If multiple SOPs changed, run each suite separately or use --suite for each
+```
+
+If guardrails or persona changed (not SOP-specific), run the full suite:
+```bash
 cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}} --agent {{agentSlug}}
 ```
 
 ### Loop control
 
+After each re-run, print the updated progress header with the new score, then decide:
+
 ```
-evalIteration += 1
-if score >= 80% or evalIteration >= 3:
-  if score < 80%:
-    print "After 3 iterations, pass rate is X%. Proceeding to manual validation."
-  → Stage [6]
-else:
-  → repeat from failure categorization
+score ≥ 80%  →  Stage [6]  (print: "Pass rate X% — moving to manual validation")
+score < 80% and iterations < 3  →  repeat from failure categorization
+score < 80% and iterations = 3  →  Stage [6]  (print: "After 3 iterations, pass rate is X%.
+                                               Proceeding to manual validation anyway.")
 ```
 
-Update STATE.md: `evalIteration: N`, `lastEvalScore: X/Y`, `currentStage: 6`.
+Update STATE.md each iteration: `evalIteration: N`, `lastEvalScore: X/Y`.
+Write `currentStage: 6` when exiting.
 
 ---
 
 ## Stage [6]: Validate Manually
 
-Start the voice agent locally and give the developer a URL to talk to it.
+Start the voice agent locally and share the URL to talk to it.
 
 ### 6a. Install Python deps
 
@@ -569,7 +678,6 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -e .
 make livekit-up &   # native, requires: brew install livekit
 # OR: make livekit-up-docker
 
-# Wait for LiveKit to be ready
 until nc -z localhost 7880 2>/dev/null; do sleep 1; done
 ```
 
@@ -579,27 +687,51 @@ until nc -z localhost 7880 2>/dev/null; do sleep 1; done
 cd agent && source .venv/bin/activate && python agent.py dev
 ```
 
-The agent connects to ws://localhost:7880 and waits for a participant.
+### 6d. Generate simulation scripts
 
-### 6d. Open meeting URL
+Before sharing the URL, generate realistic conversation scripts they can walk through. Base these on D-02 (business), D-08 (guardrails), the 3 example conversations from Q3, and domain research.
 
-```bash
-# In a new terminal:
-make livekit-token NAME=me
+For each SOP, generate:
+- **Happy path** — ideal customer, complete information, smooth resolution
+- **Missing info** — customer vague or incomplete, agent must probe before acting
+- **Guardrail trigger** — customer asks for something the agent must deflect (e.g., "When will it arrive exactly?")
+- **Upset customer** — frustrated tone, should escalate to human
+
+Format each script as:
+
+```
+Scenario: [title]
+---
+You (customer): [opening line]
+> Agent should: [expected behavior]
+
+You: [follow-up if the agent asks for clarification]
+> Agent should: [expected behavior]
+
+You: [guardrail trigger or edge case if applicable]
+> Agent should: [expected behavior]
+---
 ```
 
-Tell the developer:
+Tell the user:
 ```
 Your agent is running!
 
 Open the meeting URL printed above (or run: make livekit-token NAME=me)
 
-Your agent passed {{lastEvalScore}} eval cases. Test these scenarios:
-1. {{conv1Scenario}} — expect: {{expectedBehavior1}}
-2. {{conv2Scenario}} — expect: {{expectedBehavior2}}
-3. {{conv3Scenario}} — expect: {{expectedBehavior3}}
+Your agent passed {{lastEvalScore}} eval cases. Work through these conversation scripts:
 
-Type "done" when finished testing.
+[simulation scripts here]
+
+Type "done" when finished. If the agent behaved unexpectedly on any script, describe what happened and I'll tighten the SOPs.
+```
+
+### 6e. Post-test tighten (optional)
+
+If unexpected behavior is reported after manual testing, apply targeted fixes (same categorization as Stage [5]) and re-run the specific failing eval suite:
+
+```bash
+cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}} --agent {{agentSlug}} --suite {{sopSlug}}
 ```
 
 Write STATE.md (`currentStage: 7`).
@@ -608,24 +740,19 @@ Write STATE.md (`currentStage: 7`).
 
 ## Stage [7]: Improve MG — Connector PR (Optional)
 
-Only run if `connectorType == custom` in STATE.md.
-Skip this stage if the earlier `@mg-connector` handoff already prepared or
-opened the connector PR.
+Only run if `connectorType == custom`.
+Skip if `@mg-connector` already prepared or opened the connector PR.
 
 Ask: "You built a custom {{serviceName}} connector. Want to contribute it to ModelGuide so it's available to all orgs?"
 
 If yes:
-1. Reuse `.modelguide/CONNECTOR_HANDOFF.md` and the existing connector files;
-   do not restart from a blank API spec
-2. Invoke `@mg-connector` only if you still need it to prepare the contribution
-   PR from those existing files
+1. Reuse `.modelguide/CONNECTOR_HANDOFF.md` and existing connector files
+2. Invoke `@mg-connector` only if needed to prepare the contribution PR
 3. After `mg-connector` completes, open a PR:
    ```bash
    gh pr create --title "feat(connectors): add {{serviceName}} catalog connector" \
      --body "Generated by /build-agent skill. Adds {{serviceName}} as a first-class ModelGuide connector."
    ```
-
-If no: proceed to completion.
 
 Write STATE.md (`currentStage: done`).
 
