@@ -52,11 +52,10 @@ describe("ELEVENLABS_MODELS — curated list integrity", () => {
   test("all curated model IDs exist in the SDK Llm const", async () => {
     const sdkValues = await getSdkLlmValues();
     if (sdkValues.size === 0) {
-      // If we couldn't load the runtime module, skip this assertion
-      console.warn(
-        "Skipping SDK Llm const validation — runtime module not available",
+      throw new Error(
+        "SDK Llm runtime module not loadable — cannot validate model IDs. " +
+          "Check the import path in elevenlabs-models.ts and bump the SDK if needed.",
       );
-      return;
     }
     for (const model of ELEVENLABS_MODELS) {
       expect(sdkValues).toContain(model.id);
