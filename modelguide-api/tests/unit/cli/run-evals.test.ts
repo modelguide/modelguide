@@ -89,6 +89,6 @@ describe("buildMissingAdminUserMessage", () => {
     const message = buildMissingAdminUserMessage("glowskin");
     expect(message).toContain('No admin user found for org "glowskin".');
     expect(message).toContain("mg add-users --org glowskin");
-    expect(message).toContain('role=admin');
+    expect(message).toContain("role=admin");
   });
 });

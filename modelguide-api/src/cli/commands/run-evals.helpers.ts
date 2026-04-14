@@ -22,7 +22,8 @@ export function formatResultsTable(results: TestCaseResult[]): string {
   const passRate = computePassRate(results);
 
   for (const r of results) {
-    const label = r.passed === true ? "PASS" : r.passed === false ? "FAIL" : "ERROR";
+    const label =
+      r.passed === true ? "PASS" : r.passed === false ? "FAIL" : "ERROR";
     const name = r.testCaseName ?? r.testCaseId ?? "unknown";
     lines.push(`  ${label.padEnd(6)} ${name}`);
     if (r.passed === false) {
@@ -42,9 +43,5 @@ export function formatResultsTable(results: TestCaseResult[]): string {
 }
 
 export function buildMissingAdminUserMessage(orgRef: string): string {
-  return (
-    `No admin user found for org "${orgRef}".\n` +
-    "Create one first, for example:\n" +
-    `mg add-users --org ${orgRef} email=founder@example.com name="Founder" role=admin`
-  );
+  return `No admin user found for org "${orgRef}".\nCreate one first, for example:\nmg add-users --org ${orgRef} email=founder@example.com name="Founder" role=admin`;
 }
