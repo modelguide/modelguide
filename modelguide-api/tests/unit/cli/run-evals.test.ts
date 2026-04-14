@@ -23,7 +23,12 @@ describe("computePassRate", () => {
 
   test("ignores errored cases (passed=null) in denominator", () => {
     // 2 pass, 1 fail, 1 error → 2/3 = 67
-    const results = [makeResult(true), makeResult(true), makeResult(false), makeResult(null)];
+    const results = [
+      makeResult(true),
+      makeResult(true),
+      makeResult(false),
+      makeResult(null),
+    ];
     expect(computePassRate(results)).toBe(67);
   });
 
@@ -61,7 +66,13 @@ describe("formatResultsTable", () => {
       sessionId: "s-2",
       passed: false as false,
       status: "completed",
-      scores: [{ name: "respects-guardrails", result: "fail", reasoning: "Agent violated the rule" }],
+      scores: [
+        {
+          name: "respects-guardrails",
+          result: "fail",
+          reasoning: "Agent violated the rule",
+        },
+      ],
     };
     const table = formatResultsTable([resultWithScores]);
     expect(table).toContain("↳ respects-guardrails");

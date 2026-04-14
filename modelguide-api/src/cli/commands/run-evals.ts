@@ -8,12 +8,12 @@
  * bypass on the simulation endpoints (ALLOW_LOCAL_SIM=true).
  */
 
+import { env } from "@/env";
 import { forApp } from "@db/rls";
 import { users } from "@db/schema";
-import { env } from "@/env";
 import type { Command } from "commander";
-import { sign } from "hono/jwt";
 import { and, eq } from "drizzle-orm";
+import { sign } from "hono/jwt";
 import { getErrorMessage } from "../lib/errors";
 import { log } from "../lib/logger";
 import { resolveOrgId } from "../lib/resolve-org";
@@ -56,7 +56,9 @@ export function formatResultsTable(results: TestCaseResult[]): string {
     lines.push(`  ${label.padEnd(6)} ${name}`);
     if (r.passed === false) {
       for (const s of r.scores.filter((sc) => sc.result === "fail")) {
-        lines.push(`         ↳ ${s.name}: ${s.reasoning?.slice(0, 120) ?? "no detail"}`);
+        lines.push(
+          `         ↳ ${s.name}: ${s.reasoning?.slice(0, 120) ?? "no detail"}`,
+        );
       }
     }
   }
@@ -84,12 +86,7 @@ async function generateInternalJwt(orgId: string): Promise<string> {
         organizationId: users.organizationId,
       })
       .from(users)
-      .where(
-        and(
-          eq(users.organizationId, orgId),
-          eq(users.role, "admin"),
-        ),
-      )
+      .where(and(eq(users.organizationId, orgId), eq(users.role, "admin")))
       .limit(1);
   });
 
@@ -137,7 +134,9 @@ async function apiFetch(
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${options?.method ?? "GET"} ${path} → ${res.status}: ${body}`);
+    throw new Error(
+      `API ${options?.method ?? "GET"} ${path} → ${res.status}: ${body}`,
+    );
   }
   return res.json();
 }
@@ -202,7 +201,7 @@ export async function handleRunEvals(
 
   // 3. List eval suites
   const suitesResp = (await apiFetch(
-    `/api/eval-suites?page=1&pageSize=50`,
+    "/api/eval-suites?page=1&pageSize=50",
     token,
   )) as { data: Array<{ id: string; name: string; agentId: string }> };
 
@@ -210,7 +209,7 @@ export async function handleRunEvals(
   if (agentSlug) {
     // Filter by agentSlug: fetch agents list and match
     const agentsResp = (await apiFetch(
-      `/api/agents?page=1&pageSize=50`,
+      "/api/agents?page=1&pageSize=50",
       token,
     )) as { data: Array<{ id: string; slug: string }> };
     const agent = agentsResp.data.find((a) => a.slug === agentSlug);
@@ -245,15 +244,18 @@ export async function handleRunEvals(
     const resultTable = formatResultsTable(result.testCaseResults);
     log.info(resultTable);
 
-    const scored = result.testCaseResults.filter((r) => r.passed !== null).length;
-    const passed = result.testCaseResults.filter((r) => r.passed === true).length;
+    const scored = result.testCaseResults.filter(
+      (r) => r.passed !== null,
+    ).length;
+    const passed = result.testCaseResults.filter(
+      (r) => r.passed === true,
+    ).length;
     totalPassed += passed;
     totalScored += scored;
   }
 
-  const passRate = totalScored > 0
-    ? Math.round((totalPassed / totalScored) * 100)
-    : 0;
+  const passRate =
+    totalScored > 0 ? Math.round((totalPassed / totalScored) * 100) : 0;
 
   log.info(`\nTotal: ${totalPassed}/${totalScored} passed (${passRate}%)`);
   return { totalPassed, totalScored, passRate };
