@@ -459,7 +459,7 @@ const createPlatformAgentRoute = createRoute({
   tags: ["Agents"],
   summary: "Create agent on a platform",
   description:
-    "Creates a minimal shell agent on the given platform using the agent name. Returns the platform-assigned agent ID and saves it to metadata.<platform>.agentId. All real configuration is applied via sync. Pass ?force=true to replace an existing agent ID atomically.",
+    "Creates a minimal shell agent on the given platform using the agent name. Returns the platform-assigned agent ID and saves it to metadata.<platform>.agentId. All real configuration is applied via sync. Pass { force: true } in the request body to replace an existing agent ID atomically.",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,
@@ -541,12 +541,22 @@ router.openapi(createPlatformAgentRoute, async (c) => {
 
     const platformAgentId = created.agentId;
 
-    // Persist agentId to metadata — if force=true this also clears the old ID
-    const { agentId: _old, ...elMetaWithoutId } = elMeta;
+    // Persist agentId to metadata.
+    // When force=true, also clear sync-derived fields that are bound to the
+    // old remote agent (webhook, MCP server, last sync state) so the UI does
+    // not show stale "already synced" indicators for the new agent.
+    const {
+      agentId: _old,
+      lastSyncedAt: _syncedAt,
+      agentName: _agentName,
+      webhookId: _webhookId,
+      mcpServerId: _mcpServerId,
+      ...elMetaCore
+    } = elMeta;
     await updateAgent(orgId, id, {
       metadata: {
         ...meta,
-        elevenlabs: { ...elMetaWithoutId, agentId: platformAgentId },
+        elevenlabs: { ...elMetaCore, agentId: platformAgentId },
       },
     });
 

@@ -96,7 +96,15 @@ async function _syncAgentToElevenLabs(
     );
   }
 
-  // 2. Get per-agent ElevenLabs API key
+  // 2. Guard: LLM model must be configured before any ElevenLabs side effects
+  const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
+  if (!llmModel) {
+    throw Errors.invalidInput(
+      "LLM model must be configured before syncing to ElevenLabs",
+    );
+  }
+
+  // 3. Get per-agent ElevenLabs API key
   const apiKey = await getAgentElevenLabsKey(orgId, agentId);
   if (!apiKey) {
     throw Errors.invalidInput(
@@ -104,7 +112,7 @@ async function _syncAgentToElevenLabs(
     );
   }
 
-  // 3. Get ModelGuide API key for MCP auth (optional — agents created before secret storage won't have it)
+  // 4. Get ModelGuide API key for MCP auth (optional — agents created before secret storage won't have it)
   const mgApiKey = await getAgentModelGuideKey(orgId, agentId);
 
   const client = new ElevenLabsClient({ apiKey });
@@ -286,16 +294,8 @@ async function _syncAgentToElevenLabs(
     throw err;
   }
 
-  // Determine compiled prompt and LLM model from agent metadata
+  // Determine compiled prompt (llmModel already validated above)
   const compiledPrompt = agent.compiledInstructions ?? undefined;
-  const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
-
-  // Guard: LLM model must be configured before syncing
-  if (!llmModel) {
-    throw Errors.invalidInput(
-      "LLM model must be configured before syncing to ElevenLabs",
-    );
-  }
 
   // Step 4: Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
   try {
