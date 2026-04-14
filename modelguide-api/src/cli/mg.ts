@@ -19,6 +19,7 @@ import { registerCompileAgentsCommand } from "./commands/compile-agents";
 import { registerCreateOrgCommand } from "./commands/create-org";
 import { registerImportEvalsCommand } from "./commands/import-evals";
 import { registerImportGuardrailsCommand } from "./commands/import-guardrails";
+import { registerRunEvalsCommand } from "./commands/run-evals";
 import { registerImportSessionsCommand } from "./commands/import-sessions";
 import { registerImportSopsCommand } from "./commands/import-sops";
 import { registerSetupCommand } from "./commands/setup";
@@ -40,6 +41,7 @@ registerImportGuardrailsCommand(program);
 registerImportEvalsCommand(program);
 registerImportSessionsCommand(program);
 registerCompileAgentsCommand(program);
+registerRunEvalsCommand(program);
 registerSetupCommand(program);
 
 if (import.meta.main) {
