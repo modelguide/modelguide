@@ -14,7 +14,7 @@ from buildpro import BuildProAgent
 from my_agent import {{AgentClassName}}
 ```
 
-Also update the two references to `BuildProAgent` → `{{AgentClassName}}` in `entrypoint`.
+Also update all occurrences of `BuildProAgent` → `{{AgentClassName}}` (there are 3: the import line, the instantiation in `entrypoint`, and the type annotation in `_cleanup`).
 
 ## my_agent.py
 
@@ -130,10 +130,10 @@ dependencies = [
 
 [build-system]
 requires = ["setuptools>=70"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 ```
 
 ## .env.example
