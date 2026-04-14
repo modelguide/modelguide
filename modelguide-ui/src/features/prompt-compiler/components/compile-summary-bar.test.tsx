@@ -1,7 +1,14 @@
 import { render, screen } from '@testing-library/react'
+import type React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { makeCompiledFrom } from '../../../../test/prompt-compiler-fixtures'
 import { CompileSummaryBar } from './compile-summary-bar'
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <span className={className}>{children}</span>
+  ),
+}))
 
 describe('CompileSummaryBar', () => {
   it('renders SOP name', () => {
