@@ -39,8 +39,28 @@ describe("formatResultsTable", () => {
     expect(table).toContain("FAIL");
   });
 
-  test("includes pass rate summary", () => {
+  test("includes pass rate summary in correct format", () => {
     const table = formatResultsTable([makeResult(true), makeResult(true)]);
-    expect(table).toContain("100%");
+    expect(table).toContain("Pass rate: 2/2 (100%)");
+  });
+
+  test("includes ERROR label for null passed", () => {
+    const table = formatResultsTable([makeResult(null)]);
+    expect(table).toContain("ERROR");
+  });
+
+  test("includes failure reasoning detail for failed results with scores", () => {
+    const resultWithScores = {
+      testCaseId: "tc-2",
+      testCaseName: "test with scores",
+      evalRunId: "er-2",
+      sessionId: "s-2",
+      passed: false as false,
+      status: "completed",
+      scores: [{ name: "respects-guardrails", result: "fail", reasoning: "Agent violated the rule" }],
+    };
+    const table = formatResultsTable([resultWithScores]);
+    expect(table).toContain("↳ respects-guardrails");
+    expect(table).toContain("Agent violated the rule");
   });
 });

@@ -257,6 +257,8 @@ If dry-run passes:
 cd modelguide-api && bun run src/cli/mg.ts setup ../.modelguide/ --skip-evals
 ```
 
+**Note on resume:** `mg setup` is idempotent — org and agent creation are upserts. If Stage [2] is interrupted and resumed, re-running `mg setup` is safe.
+
 The `mg setup` output includes the agent API key. Copy it:
 ```
 Agent API Key: mgk_xxxxxxxx
@@ -477,7 +479,7 @@ Write STATE.md (`currentStage: done`).
 ## Completion
 
 ```
-✓ Build complete!
+Build complete!
 
 Agent: {{agentName}} ({{orgSlug}})
 Eval results: {{lastEvalScore}} test cases passed

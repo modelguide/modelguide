@@ -10,8 +10,9 @@
 
 import { forApp } from "@db/rls";
 import { users } from "@db/schema";
-import { generateJWT } from "@lib/jwt";
+import { env } from "@/env";
 import type { Command } from "commander";
+import { sign } from "hono/jwt";
 import { and, eq } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import { log } from "../lib/logger";
@@ -99,13 +100,22 @@ async function generateInternalJwt(orgId: string): Promise<string> {
   }
 
   const u = rows[0];
-  return generateJWT({
-    id: u.id,
-    email: u.email,
-    name: u.name,
-    role: u.role,
-    organizationId: u.organizationId,
-  });
+  const now = Math.floor(Date.now() / 1000);
+  const JWT_EXPIRY_SECONDS = 4 * 60 * 60; // 4h for CLI eval sessions
+  return sign(
+    {
+      type: "access",
+      sub: u.id,
+      email: u.email,
+      name: u.name ?? "",
+      role: u.role,
+      org: u.organizationId,
+      iat: now,
+      exp: now + JWT_EXPIRY_SECONDS,
+    },
+    env.JWT_SECRET,
+    "HS256",
+  );
 }
 
 // ============================================================================
