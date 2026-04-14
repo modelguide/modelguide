@@ -243,6 +243,8 @@ export function useSopForm({
           type: 'tool_present',
           config: { toolSlugs: toolSlugs.map((t) => t.value).filter(Boolean) },
         }
+      case 'campaign_start':
+        return { type: 'campaign_start', config: {} }
       default:
         return { type: 'manual', config: {} }
     }
@@ -289,6 +291,7 @@ export function useSopForm({
 
   const isTriggerValid =
     triggerType === 'manual' ||
+    triggerType === 'campaign_start' ||
     (triggerType === 'channel' && channelTypes.length > 0) ||
     (triggerType === 'intent_detected' && patterns.some((p) => p.value.trim())) ||
     (triggerType === 'tool_present' && toolSlugs.some((t) => t.value.trim()))

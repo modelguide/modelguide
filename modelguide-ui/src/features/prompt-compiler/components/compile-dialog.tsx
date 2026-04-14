@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { diffLines } from 'diff'
 import { AlertCircle, AlertTriangle, CheckCircle } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '~/components/ui/button'
 import { Dialog } from '~/components/ui/dialog'
-import { Select } from '~/components/ui/select'
 import { Spinner } from '~/components/ui/spinner'
 import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
@@ -21,7 +20,7 @@ interface CompileDialogProps {
   onClose: () => void
   agentId: string
   currentPrompt: string | null
-  preselectedSopId?: string
+  preselectedSopIds?: string[]
 }
 
 export function CompileDialog({
@@ -29,10 +28,12 @@ export function CompileDialog({
   onClose,
   agentId,
   currentPrompt,
-  preselectedSopId,
+  preselectedSopIds,
 }: CompileDialogProps) {
   const queryClient = useQueryClient()
-  const [selectedSopId, setSelectedSopId] = useState(preselectedSopId ?? '')
+  const [selectedSopIds, setSelectedSopIds] = useState<Set<string>>(
+    () => new Set(preselectedSopIds ?? []),
+  )
   const [previewResult, setPreviewResult] = useState<CompileResponse | null>(null)
   const [activeTab, setActiveTab] = useState<'prompt' | 'changes'>('prompt')
 
@@ -47,12 +48,27 @@ export function CompileDialog({
   const agentSops =
     sopsData?.data.filter((sop) => sop.assignedAgents.some((a) => a.id === agentId)) ?? []
 
+  const toggleSop = useCallback((sopId: string) => {
+    setSelectedSopIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(sopId)) {
+        next.delete(sopId)
+      } else {
+        next.add(sopId)
+      }
+      return next
+    })
+    setPreviewResult(null)
+  }, [])
+
+  const sopIdsArray = useMemo(() => [...selectedSopIds], [selectedSopIds])
+
   // Dry-run compile (preview)
   const previewMutation = useMutation({
-    mutationFn: (sopId: string) =>
+    mutationFn: (sopIds: string[]) =>
       api
         .post(`agents/${agentId}/compile`, {
-          json: { sopId },
+          json: { sopIds },
           searchParams: { dryRun: 'true' },
         })
         .json<CompileResponse>(),
@@ -64,8 +80,8 @@ export function CompileDialog({
 
   // Real compile (persist)
   const applyMutation = useMutation({
-    mutationFn: (sopId: string) =>
-      api.post(`agents/${agentId}/compile`, { json: { sopId } }).json<CompileResponse>(),
+    mutationFn: (sopIds: string[]) =>
+      api.post(`agents/${agentId}/compile`, { json: { sopIds } }).json<CompileResponse>(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents', agentId] })
       toast.success('Prompt compiled successfully')
@@ -75,7 +91,7 @@ export function CompileDialog({
 
   function handleClose() {
     setPreviewResult(null)
-    setSelectedSopId(preselectedSopId ?? '')
+    setSelectedSopIds(new Set(preselectedSopIds ?? []))
     setActiveTab('prompt')
     previewMutation.reset()
     applyMutation.reset()
@@ -83,13 +99,13 @@ export function CompileDialog({
   }
 
   function handlePreview() {
-    if (!selectedSopId) return
-    previewMutation.mutate(selectedSopId)
+    if (sopIdsArray.length === 0) return
+    previewMutation.mutate(sopIdsArray)
   }
 
   function handleApply() {
-    if (!selectedSopId) return
-    applyMutation.mutate(selectedSopId)
+    if (sopIdsArray.length === 0) return
+    applyMutation.mutate(sopIdsArray)
   }
 
   const hasChanges =
@@ -119,39 +135,43 @@ export function CompileDialog({
       open={open}
       onClose={handleClose}
       title="Compile Prompt"
-      description="Select an SOP and preview the compiled system prompt."
+      description="Select SOPs and preview the compiled system prompt."
       className="max-w-4xl max-h-[85vh] overflow-hidden"
     >
       <div className="flex flex-col gap-4 min-h-0">
-        {/* Config bar */}
-        <div className="flex items-end gap-3 shrink-0">
-          <div className="flex-1">
-            <Select
-              label="SOP"
-              value={selectedSopId}
-              onChange={(e) => {
-                setSelectedSopId(e.target.value)
-                setPreviewResult(null)
-                previewMutation.reset()
-              }}
-              disabled={previewMutation.isPending || applyMutation.isPending}
-            >
-              <option value="">Select an SOP...</option>
-              {sopsLoading ? (
-                <option disabled>Loading...</option>
-              ) : (
-                agentSops.map((sop) => (
-                  <option key={sop.id} value={sop.id}>
-                    {sop.name} ({sop.status})
-                  </option>
-                ))
-              )}
-            </Select>
-          </div>
+        {/* SOP selection — checkbox list */}
+        <div className="shrink-0">
+          <p className="mb-2 text-sm font-medium text-fg-secondary">SOPs</p>
+          {sopsLoading ? (
+            <p className="text-xs text-fg-muted">Loading...</p>
+          ) : agentSops.length > 0 ? (
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-fg-subtle/10 bg-bg-base">
+              {agentSops.map((sop) => (
+                <label
+                  key={sop.id}
+                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-bg-subtle transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSopIds.has(sop.id)}
+                    onChange={() => toggleSop(sop.id)}
+                    disabled={previewMutation.isPending || applyMutation.isPending}
+                    className="h-4 w-4 rounded border-fg-subtle/30 bg-bg-subtle text-brand-500 focus:ring-brand-500"
+                  />
+                  <span className="text-sm text-fg-primary">{sop.name}</span>
+                  <span className="text-xs text-fg-muted">({sop.status})</span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-3 shrink-0">
           <Button
             variant="secondary"
             onClick={handlePreview}
-            disabled={!selectedSopId || previewMutation.isPending}
+            disabled={sopIdsArray.length === 0 || previewMutation.isPending}
             loading={previewMutation.isPending}
           >
             Preview
@@ -165,6 +185,11 @@ export function CompileDialog({
           >
             Apply
           </Button>
+          {sopIdsArray.length > 0 ? (
+            <span className="text-xs text-fg-muted">
+              {sopIdsArray.length} SOP{sopIdsArray.length !== 1 ? 's' : ''} selected
+            </span>
+          ) : null}
         </div>
 
         {/* No SOPs warning */}

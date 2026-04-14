@@ -327,7 +327,7 @@ describe('EditSopPage', () => {
     expect(chatCheckbox).not.toBeChecked()
   })
 
-  it('does not include agentIds in PATCH payload (managed via dedicated dialog)', async () => {
+  it('includes agentIds from assigned agents in PATCH payload', async () => {
     renderPage()
 
     await waitFor(() => {
@@ -341,7 +341,7 @@ describe('EditSopPage', () => {
     })
 
     const payload = mockPatch.mock.calls[0][1] as { json: Record<string, unknown> }
-    expect(payload.json).not.toHaveProperty('agentIds')
+    expect(payload.json).toHaveProperty('agentIds', ['00000000-0000-0000-0000-aaaaaaaaaaaa'])
   })
 
   it('does not send slug in PATCH payload', async () => {

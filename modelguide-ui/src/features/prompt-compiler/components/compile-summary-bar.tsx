@@ -2,10 +2,15 @@ import { Link } from '@tanstack/react-router'
 import { Zap } from 'lucide-react'
 import { cn } from '~/lib/cn'
 
-interface CompiledFromInfo {
+interface SopInfo {
   sopId: string
   sopName: string
   stepCount: number
+}
+
+interface CompiledFromInfo {
+  sops: SopInfo[]
+  guardrailIds: string[]
   toolCount: number
 }
 
@@ -38,32 +43,41 @@ export function CompileSummaryBar({
   className,
 }: CompileSummaryBarProps) {
   return (
-    <div className={cn('rounded-xl bg-bg-subtle border-t-2 border-brand-500/20 p-4', className)}>
-      <div className="flex items-center gap-4 flex-wrap">
-        <Link
-          to="/sops/$id"
-          params={{ id: compiledFrom.sopId }}
-          className="flex items-center gap-2 hover:underline"
+    <div className={cn('flex flex-col gap-2', className)}>
+      {/* One panel per SOP — shows per-SOP step count */}
+      {compiledFrom.sops.map((sop) => (
+        <div
+          key={sop.sopId}
+          className="rounded-xl bg-bg-subtle border-t-2 border-brand-500/20 px-4 py-3"
         >
-          <Zap className="h-3.5 w-3.5 text-brand-400" />
-          <span className="text-sm font-medium text-fg-primary">{compiledFrom.sopName}</span>
-        </Link>
-        <div className="h-4 w-px bg-fg-subtle/20" />
-        <div className="flex items-center gap-4 text-xs text-fg-muted">
-          <span>
-            <strong className="text-fg-secondary">{compiledFrom.stepCount}</strong> steps
-          </span>
-          <span>
-            <strong className="text-fg-secondary">{compiledFrom.toolCount}</strong> tools
-          </span>
-          <span>
-            <strong className="text-fg-secondary">{promptLength.toLocaleString()}</strong> chars
-          </span>
+          <div className="flex items-center gap-3">
+            <Zap className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+            <Link
+              to="/sops/$id"
+              params={{ id: sop.sopId }}
+              className="text-sm font-medium text-fg-primary hover:underline truncate"
+            >
+              {sop.sopName}
+            </Link>
+            <span className="ml-auto shrink-0 text-xs text-fg-muted">
+              <strong className="text-fg-secondary">{sop.stepCount}</strong> steps
+            </span>
+          </div>
         </div>
+      ))}
+
+      {/* Totals row — aggregate for the compiled prompt */}
+      <div className="flex items-center gap-4 px-1 text-xs text-fg-muted">
+        <span>
+          <strong className="text-fg-secondary">{compiledFrom.toolCount}</strong> tools
+        </span>
+        <span>
+          <strong className="text-fg-secondary">{promptLength.toLocaleString()}</strong> chars
+        </span>
         {compiledAt ? (
           <>
-            <div className="h-4 w-px bg-fg-subtle/20" />
-            <span className="text-xs text-fg-muted">{formatRelativeDate(compiledAt)}</span>
+            <div className="h-3 w-px bg-fg-subtle/20" />
+            <span>{formatRelativeDate(compiledAt)}</span>
           </>
         ) : null}
       </div>

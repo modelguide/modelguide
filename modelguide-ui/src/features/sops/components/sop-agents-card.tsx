@@ -108,7 +108,7 @@ export function SopAgentsCard({ sopId, agents, canMutate }: SopAgentsCardProps) 
           onClose={() => setCompileTarget(null)}
           agentId={compileTarget.agentId}
           currentPrompt={compileTargetAgent?.compiledInstructions ?? null}
-          preselectedSopId={sopId}
+          preselectedSopIds={[sopId]}
         />
       ) : null}
     </Card>

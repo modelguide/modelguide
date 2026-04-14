@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const compileRequestSchema = z.object({
-  sopId: z.string().uuid(),
+  sopIds: z.array(z.string().uuid()).min(1),
   model: z.string().max(100).optional(),
   description: z.string().max(2000).optional(),
 })
@@ -20,11 +20,15 @@ export const compileResponseSchema = z.object({
   agentId: z.string().uuid(),
   compiledAt: z.string(),
   compiledFrom: z.object({
-    sopId: z.string().uuid(),
-    sopName: z.string(),
+    sops: z.array(
+      z.object({
+        sopId: z.string().uuid(),
+        sopName: z.string(),
+        stepCount: z.number(),
+      }),
+    ),
     guardrailIds: z.array(z.string().uuid()),
     toolCount: z.number(),
-    stepCount: z.number(),
   }),
   compiledPrompt: z.string(),
   promptLength: z.number(),

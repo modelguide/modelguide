@@ -14,7 +14,11 @@ describe('CompileSummaryBar', () => {
   it('renders SOP name', () => {
     render(
       <CompileSummaryBar
-        compiledFrom={makeCompiledFrom({ sopName: 'WISMO Flow' })}
+        compiledFrom={makeCompiledFrom({
+          sops: [
+            { sopId: '00000000-0000-0000-0000-000000000050', sopName: 'WISMO Flow', stepCount: 6 },
+          ],
+        })}
         promptLength={2450}
       />,
     )
@@ -24,7 +28,18 @@ describe('CompileSummaryBar', () => {
 
   it('renders step count', () => {
     render(
-      <CompileSummaryBar compiledFrom={makeCompiledFrom({ stepCount: 8 })} promptLength={1000} />,
+      <CompileSummaryBar
+        compiledFrom={makeCompiledFrom({
+          sops: [
+            {
+              sopId: '00000000-0000-0000-0000-000000000050',
+              sopName: 'WISMO Email Flow',
+              stepCount: 8,
+            },
+          ],
+        })}
+        promptLength={1000}
+      />,
     )
 
     expect(screen.getByText('8')).toBeInTheDocument()

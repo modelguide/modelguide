@@ -29,11 +29,19 @@ const toolPresentTriggerSchema = z.object({
   }),
 })
 
+const campaignStartTriggerSchema = z.object({
+  type: z.literal('campaign_start'),
+  config: z.object({
+    campaign: z.string().optional(),
+  }),
+})
+
 export const sopTriggerSchema = z.discriminatedUnion('type', [
   manualTriggerSchema,
   channelTriggerSchema,
   intentDetectedTriggerSchema,
   toolPresentTriggerSchema,
+  campaignStartTriggerSchema,
 ])
 
 export type SopTrigger = z.infer<typeof sopTriggerSchema>
@@ -208,6 +216,7 @@ export const sopUpdateSchema = z.object({
     })
     .optional(),
   version: z.string().optional(),
+  agentIds: z.array(z.string().uuid()).optional(),
 })
 
 export type SopUpdate = z.infer<typeof sopUpdateSchema>
@@ -239,6 +248,7 @@ export const TRIGGER_LABELS: Record<SopTrigger['type'], string> = {
   channel: 'Channel',
   intent_detected: 'Intent Detected',
   tool_present: 'Tool Present',
+  campaign_start: 'Campaign Start',
 }
 
 // --- Status helpers ---

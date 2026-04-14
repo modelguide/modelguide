@@ -6,14 +6,18 @@ import type { CompileResponse } from '~/schemas/prompt-compiler'
 // ---------------------------------------------------------------------------
 
 export function makeCompiledFrom(
-  overrides: Partial<CompiledFrom & object> = {},
+  overrides: Partial<NonNullable<CompiledFrom>> = {},
 ): NonNullable<CompiledFrom> {
   return {
-    sopId: '00000000-0000-0000-0000-000000000050',
-    sopName: 'WISMO Email Flow',
+    sops: [
+      {
+        sopId: '00000000-0000-0000-0000-000000000050',
+        sopName: 'WISMO Email Flow',
+        stepCount: 6,
+      },
+    ],
     guardrailIds: ['00000000-0000-0000-0000-000000000060'],
     toolCount: 3,
-    stepCount: 6,
     ...overrides,
   }
 }
