@@ -28,7 +28,8 @@ export {
   formatResultsTable,
 } from "./run-evals.helpers";
 
-const API_BASE = "http://localhost:3000";
+const API_PORT = process.env.PORT ?? "3000";
+const API_BASE = `http://localhost:${API_PORT}`;
 const POLL_INTERVAL_MS = 8_000;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min
 
@@ -63,7 +64,7 @@ async function generateInternalJwt(
 
   const u = rows[0];
   const now = Math.floor(Date.now() / 1000);
-  const JWT_EXPIRY_SECONDS = 4 * 60 * 60; // 4h for CLI eval sessions
+  const JWT_EXPIRY_SECONDS = 30 * 60; // 30 min — sufficient for a full eval run
   return sign(
     {
       type: "access",
@@ -156,9 +157,7 @@ export async function handleRunEvals(
     .catch(() => false);
   if (!healthy) {
     throw new Error(
-      "ModelGuide API is not running at http://localhost:3000.\n" +
-        "Start it with: make api-dev\n" +
-        "Then re-run: mg run-evals --org <slug>",
+      `ModelGuide API is not running at ${API_BASE}.\nStart it with: make api-dev\nThen re-run: mg run-evals --org <slug>`,
     );
   }
 
@@ -167,7 +166,7 @@ export async function handleRunEvals(
 
   // 3. List eval suites
   const suitesResp = (await apiFetch(
-    "/api/eval-suites?page=1&pageSize=50",
+    "/api/eval-suites?page=1&pageSize=100",
     token,
   )) as { data: Array<{ id: string; name: string; agentId: string }> };
 
@@ -175,7 +174,7 @@ export async function handleRunEvals(
   if (agentSlug) {
     // Filter by agentSlug: fetch agents list and match
     const agentsResp = (await apiFetch(
-      "/api/agents?page=1&pageSize=50",
+      "/api/agents?page=1&pageSize=100",
       token,
     )) as { data: Array<{ id: string; slug: string }> };
     const agent = agentsResp.data.find((a) => a.slug === agentSlug);

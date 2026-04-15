@@ -26,7 +26,7 @@ export function getStrategy(
     return new GptVoiceStrategy();
   }
 
-  getLogger().warn(
+  getLogger().debug(
     { modelFamily, modality },
     `no dedicated prompt strategy for (${modelFamily}, ${modality}) — falling back to GenericStrategy`,
   );

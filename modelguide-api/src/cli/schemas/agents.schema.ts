@@ -39,19 +39,44 @@ export const agentItemSchema = z
     secrets: z.array(agentSecretSchema).default([]),
   })
   .superRefine((data, ctx) => {
-    if (data.platform === "livekit" && !data.config) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'config is required when platform is "livekit"',
-        path: ["config"],
-      });
+    if (data.platform === "livekit") {
+      if (!data.config) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'config is required when platform is "livekit"',
+          path: ["config"],
+        });
+      } else {
+        // Validate config matches livekit shape (url + agentName required)
+        const result = livekitConfigSchema.safeParse(data.config);
+        if (!result.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              'config must have url and agentName when platform is "livekit"',
+            path: ["config"],
+          });
+        }
+      }
     }
-    if (data.platform === "elevenlabs" && !data.config) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'config.llmModel is required when platform is "elevenlabs"',
-        path: ["config"],
-      });
+    if (data.platform === "elevenlabs") {
+      if (!data.config) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'config.llmModel is required when platform is "elevenlabs"',
+          path: ["config"],
+        });
+      } else {
+        // Validate config matches elevenlabs shape (llmModel required)
+        const result = elevenlabsConfigSchema.safeParse(data.config);
+        if (!result.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'config must have llmModel when platform is "elevenlabs"',
+            path: ["config"],
+          });
+        }
+      }
     }
   });
 

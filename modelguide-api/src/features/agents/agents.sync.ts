@@ -86,7 +86,18 @@ async function _syncAgentToElevenLabs(
   }
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
-  const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
+  const elMetaRaw = meta.elevenlabs;
+  if (
+    elMetaRaw !== undefined &&
+    (typeof elMetaRaw !== "object" ||
+      elMetaRaw === null ||
+      Array.isArray(elMetaRaw))
+  ) {
+    throw Errors.invalidInput(
+      "Corrupt elevenlabs metadata — expected an object",
+    );
+  }
+  const elMeta = (elMetaRaw ?? {}) as Record<string, unknown>;
   let elevenLabsAgentId = elMeta.agentId as string | undefined;
   const slug = agent.slug;
 
@@ -251,16 +262,22 @@ async function _syncAgentToElevenLabs(
             // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
           } as any,
         });
-      } catch {
-        // Best-effort
+      } catch (err) {
+        getLogger().warn(
+          { agentId, err: getErrorMessage(err) },
+          "MCP server unassign failed (best-effort) — proceeding with cleanup",
+        );
       }
 
       // Delete all our old MCP servers
       for (const id of ourMcpIds) {
         try {
           await client.conversationalAi.mcpServers.delete(id);
-        } catch {
-          // Best-effort: may already be deleted
+        } catch (err) {
+          getLogger().warn(
+            { agentId, mcpServerId: id, err: getErrorMessage(err) },
+            "MCP server delete failed (best-effort) — server may already be deleted or orphaned",
+          );
         }
       }
     }

@@ -31,6 +31,7 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
   const [createElError, setCreateElError] = useState<string | null>(null)
 
   // Sync form state when server data changes (e.g. after create/save mutations invalidate)
+  // Also clears llm model selection when model family changes (it may no longer be valid)
   useEffect(() => {
     const m = ((agent.metadata ?? {}) as Record<string, unknown>).elevenlabs as
       | Record<string, unknown>
@@ -41,13 +42,14 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
     setShowApiKeyInput(false)
   }, [agent.metadata])
 
-  // When model family changes, clear the llm model selection (it may no longer be valid)
   const modelFamily = agent.modelFamily ?? 'generic'
   const [prevModelFamily, setPrevModelFamily] = useState(modelFamily)
-  if (prevModelFamily !== modelFamily) {
-    setPrevModelFamily(modelFamily)
-    setLlmModel('')
-  }
+  useEffect(() => {
+    if (prevModelFamily !== modelFamily) {
+      setPrevModelFamily(modelFamily)
+      setLlmModel('')
+    }
+  }, [modelFamily, prevModelFamily])
 
   const { data: modelsData } = useQuery({
     queryKey: ['elevenlabs-models', modelFamily],

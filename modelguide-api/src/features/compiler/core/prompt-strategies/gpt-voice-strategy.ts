@@ -241,9 +241,14 @@ export class GptVoiceStrategy implements PromptStrategy {
       lines.push("");
       lines.push(`## ${stepLabel}`);
       if (step.id) {
-        const goal = step.id
+        const humanized = step.id
           .replace(/[-_]/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase());
+        // Fall back to first sentence of instruction for short/numeric IDs (e.g. "1", "step1")
+        const isDescriptive = humanized.replace(/\d/g, "").trim().length > 3;
+        const goal = isDescriptive
+          ? humanized
+          : step.instruction.split(/[.!?]/)[0].trim();
         lines.push(`GOAL: ${goal}`);
       }
       lines.push(normalizeSymbolicOperators(step.instruction));

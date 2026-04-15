@@ -47,7 +47,15 @@ const router = createRouter();
 // Schemas
 // ============================================================================
 
-const compiledFromSchema = z.record(z.unknown()).nullable();
+const compiledFromSchema = z
+  .object({
+    sopId: z.string().uuid(),
+    sopName: z.string(),
+    guardrailIds: z.array(z.string().uuid()),
+    toolCount: z.number().int().nonnegative(),
+    stepCount: z.number().int().nonnegative(),
+  })
+  .nullable();
 
 const promptConfigSchema = z
   .object({
@@ -260,10 +268,10 @@ function formatAgent(
     },
     compiledInstructions: agent.compiledInstructions ?? null,
     compiledAt: agent.compiledAt?.toISOString() ?? null,
-    compiledFrom: (agent.compiledFrom ?? null) as Record<
-      string,
-      unknown
-    > | null,
+    compiledFrom: (() => {
+      const parsed = compiledFromSchema.safeParse(agent.compiledFrom ?? null);
+      return parsed.success ? parsed.data : null;
+    })(),
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
   };
