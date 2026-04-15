@@ -91,7 +91,7 @@ async function _syncAgentToElevenLabs(
   const slug = agent.slug;
 
   // 2. Guard: LLM model must be configured before any ElevenLabs side effects
-  const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
+  const llmModel = elMeta.llmModel as string | undefined;
   if (!llmModel) {
     throw Errors.invalidInput(
       "LLM model must be configured before syncing to ElevenLabs",
@@ -118,30 +118,39 @@ async function _syncAgentToElevenLabs(
 
   // 5. Auto-provision ElevenLabs agent shell if not yet created
   if (!elevenLabsAgentId) {
-    const created = await client.conversationalAi.agents.create({
-      name: agent.name,
-      conversationConfig: {},
-    });
-    elevenLabsAgentId = created.agentId;
-    await forOrg(orgId, (tx) =>
-      tx
-        .update(agents)
-        .set({
-          metadata: {
-            ...meta,
-            elevenlabs: { ...elMeta, agentId: elevenLabsAgentId },
-          },
-        })
-        .where(eq(agents.id, agentId)),
-    );
-    steps.push({
-      step: "Create ElevenLabs agent",
-      status: "success",
-      message: `Agent ID: ${elevenLabsAgentId}`,
-    });
+    try {
+      const created = await client.conversationalAi.agents.create({
+        name: agent.name,
+        conversationConfig: {},
+      });
+      elevenLabsAgentId = created.agentId;
+      await forOrg(orgId, (tx) =>
+        tx
+          .update(agents)
+          .set({
+            metadata: {
+              ...meta,
+              elevenlabs: { ...elMeta, agentId: elevenLabsAgentId },
+            },
+          })
+          .where(eq(agents.id, agentId)),
+      );
+      steps.push({
+        step: "Create ElevenLabs agent",
+        status: "success",
+        message: `Agent ID: ${elevenLabsAgentId}`,
+      });
+    } catch (err) {
+      steps.push({
+        step: "Create ElevenLabs agent",
+        status: "error",
+        message: getErrorMessage(err),
+      });
+      throw err;
+    }
   }
 
-  // Step 1: Create/update ElevenLabs secret (ModelGuide API key)
+  // 6. Create/update ElevenLabs secret (ModelGuide API key)
   let secretId = elMeta.secretId as string | undefined;
   if (!mgApiKey) {
     steps.push({
@@ -183,7 +192,7 @@ async function _syncAgentToElevenLabs(
     }
   }
 
-  // Step 2: Create/update MCP server (STREAMABLE_HTTP)
+  // 7. Create/update MCP server (STREAMABLE_HTTP)
   let mcpServerId = elMeta.mcpServerId as string | undefined;
   const mcpName = `${slug}_mcp`;
   const mcpConfig = {
@@ -277,7 +286,7 @@ async function _syncAgentToElevenLabs(
     throw err;
   }
 
-  // Step 3: Delete + recreate webhook to ensure URL is current
+  // 8. Delete + recreate webhook to ensure URL is current
   let webhookId = elMeta.webhookId as string | undefined;
   let webhookSecret: string | undefined;
 
@@ -316,7 +325,7 @@ async function _syncAgentToElevenLabs(
   // Determine compiled prompt (llmModel already validated above)
   const compiledPrompt = agent.compiledInstructions ?? undefined;
 
-  // Step 4: Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
+  // 9. Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
   try {
     const mergedMcpIds = [...foreignMcpIds, mcpServerId!];
 
@@ -393,7 +402,7 @@ async function _syncAgentToElevenLabs(
     });
   }
 
-  // Step 5: Save webhook secret to encrypted secrets table + save metadata
+  // 10. Save webhook secret to encrypted secrets table + save metadata
   const elAgentName = elAgent.name;
   const syncedAt = new Date().toISOString();
 

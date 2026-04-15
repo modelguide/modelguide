@@ -118,6 +118,7 @@ export async function handleAddAgents(
           : item.platform === "elevenlabs" && item.config
             ? {
                 elevenlabs: {
+                  // Schema validates config.llmModel is present when platform === "elevenlabs"
                   llmModel: (item.config as { llmModel: string }).llmModel,
                 },
               }
