@@ -363,6 +363,31 @@ describe("PATCH /api/sops/:id", () => {
     expect(body.definition.steps).toHaveLength(2);
   });
 
+  test("updates assigned agents with agentIds only (200)", async () => {
+    const createRes = await request("/api/sops", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Patch Agent Assignments",
+        slug: `patch-agent-assignments-${Date.now()}`,
+        definition: validDefinition,
+        agentIds: [s.orgAAgentId],
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    createdSopIds.push(created.id);
+
+    const patchRes = await request(`/api/sops/${created.id}`, {
+      method: "PATCH",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ agentIds: [] }),
+    });
+    expect(patchRes.status).toBe(200);
+    const body = await patchRes.json();
+    expect(body.assignedAgents).toEqual([]);
+  });
+
   test("returns 404 for non-existent SOP when definition is provided", async () => {
     const fakeId = "00000000-0000-0000-0000-000000000000";
     const res = await request(`/api/sops/${fakeId}`, {

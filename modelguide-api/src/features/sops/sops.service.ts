@@ -588,6 +588,7 @@ export async function updateSop(
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
   if (data.version !== undefined) updateData.version = data.version;
+  if (data.agentIds !== undefined) updateData.updatedAt = new Date();
 
   return forOrg(orgId, async (tx) => {
     await requireSopExists(tx, sopId);

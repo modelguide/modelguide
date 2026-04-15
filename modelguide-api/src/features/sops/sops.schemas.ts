@@ -177,7 +177,8 @@ export const updateSopSchema = z
       data.name !== undefined ||
       data.description !== undefined ||
       data.definition !== undefined ||
-      data.version !== undefined,
+      data.version !== undefined ||
+      data.agentIds !== undefined,
     { message: "At least one field must be provided" },
   );
 
