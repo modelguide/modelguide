@@ -86,6 +86,10 @@ Trigger phrases: "add a use case", "add a SOP", "teach the agent to handle X", "
    cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}} --agent {{agentSlug}} --suite {{newSopSlug}}
    ```
    Apply targeted fixes if pass rate < 80%, same categorization as Stage [5].
+   Once evals pass, push to the live agent (ElevenLabs only):
+   ```bash
+   cd modelguide-api && bun run src/cli/mg.ts sync-agent --org {{orgSlug}} --agent {{agentSlug}}
+   ```
 
 7. **Generate simulation script** for the new SOP (happy path + guardrail trigger) and show it
    so you can test it live.
@@ -98,6 +102,7 @@ Trigger phrases: "add a use case", "add a SOP", "teach the agent to handle X", "
 ```
 currentStage: pre | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | done
 mode: auto-pilot | supervised
+platform: livekit | elevenlabs
 orgSlug: <slug>
 agentSlug: <slug>
 agentId: <uuid>
@@ -314,8 +319,31 @@ Guardrails come in two flavors — present both clearly:
 
 Require at least 2 from each category (minimum 4 total). Claude proposes sensible defaults from business context and domain research. Record as D-08.
 
-### Q7 — Stack confirmation
-Present the recommended stack:
+### Q7 — Platform & stack confirmation
+
+First, ask which platform to deploy on:
+
+```
+Which platform should the agent run on?
+
+  A) ElevenLabs Conversational AI  — fully managed, no code, deploy in minutes
+  B) LiveKit Agents                — self-hosted Python agent, full control
+
+Default: A (ElevenLabs), unless the builder has a reason to self-host.
+```
+
+**If ElevenLabs (A):**
+```
+Platform: ElevenLabs Conversational AI
+LLM:      GPT-4o-mini  — fast, cost-effective (change if needed)
+
+Press Enter to confirm, or tell me what to change.
+```
+Ask for the LLM model if they want a different one. Valid options: any model from the
+ElevenLabs supported list (gpt-4o, gpt-4o-mini, gpt-4.1, claude-sonnet-4-5, claude-haiku-4-5,
+gemini-2.5-flash, etc.). Record model as `llmModel` in D-06.
+
+**If LiveKit (B):**
 ```
 LLM: GPT-4.1-mini (OpenAI)     — fast, cost-effective for tool-calling
 STT: Deepgram Nova-3             — best accuracy for voice
@@ -324,7 +352,8 @@ Framework: LiveKit Agents        — local dev support, no cloud needed
 
 Press Enter to confirm, or tell me what to change.
 ```
-Record as D-06.
+
+Record platform and full stack as D-06.
 
 Write STATE.md (`currentStage: 1`) and CONTEXT.md with all decisions. For custom connectors, also write `connectorStatus: pending`.
 
@@ -355,12 +384,16 @@ In supervised mode, follow the summary with:
 
 ## Stage [1]: Setup — Local Inputs
 
-**Purpose**: Bootstrap the first admin user, collect connector inputs, generate `agent/.env.example`, and verify required local inputs without reading secret values.
+**Purpose**: Bootstrap the first admin user, collect connector inputs, collect API keys, and verify required local inputs without reading secret values.
 
 1. Create directory:
    ```bash
-   mkdir -p .modelguide agent/prompts/workflows
+   mkdir -p .modelguide
+   # LiveKit only:
+   # mkdir -p agent/prompts/workflows
    ```
+   For LiveKit: `mkdir -p .modelguide agent/prompts/workflows`
+   For ElevenLabs: `mkdir -p .modelguide` only — no agent code directory needed.
 
 2. Ask for the initial ModelGuide admin email:
    ```
@@ -368,7 +401,7 @@ In supervised mode, follow the summary with:
    ```
    Append to CONTEXT.md as `D-09 Admin User Email`.
 
-3. Capture connector inputs:
+3. Capture connector inputs (same for both platforms):
    - If `catalogSlug == medusa`, ask for Medusa base URL and publishable key. Append as `D-10 Connector Config`. Append `D-11 Connector Secrets Checklist: secretApiKey`.
    - If `catalogSlug == zendesk`, ask for Zendesk subdomain and agent email. Append as `D-10 Connector Config`. Append `D-11 Connector Secrets Checklist: apiToken`.
    - If `connectorType == custom`, check handoff status:
@@ -381,12 +414,30 @@ In supervised mode, follow the summary with:
      - If `requested` or `blocked`: note that connector is still in progress; continue setup without connector inputs — they'll be captured on resume.
    - If `connectorType == none`, record `D-10 Connector Config: none`.
 
-4. Generate:
-   - `agent/.env.example` from `references/python-templates.md`
-   - `.modelguide/users.yaml` from `references/yaml-templates.md`
-   Substitute all `{{variables}}` from CONTEXT.md.
+4. Generate `.modelguide/users.yaml` from `references/yaml-templates.md`. Substitute all `{{variables}}` from CONTEXT.md.
 
-5. Tell the user:
+5. **Platform-specific env setup:**
+
+   **If ElevenLabs:**
+   Tell the user:
+   ```
+   You need one API key to get started:
+     - ELEVENLABS_API_KEY   → https://elevenlabs.io/app/settings/api-keys
+
+   The ModelGuide API key will be generated automatically in the next step.
+
+   Add it to modelguide-api/.env:
+     ELEVENLABS_API_KEY_PLACEHOLDER=<your key>
+
+   (It will be stored securely in the ModelGuide secrets vault — not used directly from .env)
+   Let me know when you have the key ready.
+   ```
+   Ask the user to paste the key so you can include it in `agents.yaml` secrets in Stage [2].
+   Store it as `D-12 ElevenLabs API Key` in CONTEXT.md (mark: will be stored in vault, not .env).
+
+   **If LiveKit:**
+   Generate `agent/.env.example` from `references/python-templates.md`. Substitute all `{{variables}}` from CONTEXT.md.
+   Tell the user:
    ```
    I've created a template at agent/.env.example. Copy it to agent/.env:
      cp agent/.env.example agent/.env
@@ -401,33 +452,22 @@ In supervised mode, follow the summary with:
 
    Let me know when agent/.env is ready.
    ```
-
-6. Verify file exists and required keys are set (without reading values):
+   Verify file exists and required keys are set (without reading values):
    ```bash
    test -s agent/.env && echo "Found" || echo "Missing or empty"
    grep -q "^OPENAI_API_KEY=.\+" agent/.env && echo "OPENAI_API_KEY: set" || echo "OPENAI_API_KEY: MISSING"
    grep -q "^DEEPGRAM_API_KEY=.\+" agent/.env && echo "DEEPGRAM_API_KEY: set" || echo "DEEPGRAM_API_KEY: MISSING"
    grep -q "^ELEVENLABS_API_KEY=.\+" agent/.env && echo "ELEVENLABS_API_KEY: set" || echo "ELEVENLABS_API_KEY: MISSING"
    ```
-   Format the result as a status block:
-   ```
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-     agent/.env
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-     ✓  OPENAI_API_KEY       set
-     ✗  DEEPGRAM_API_KEY     MISSING
-     ✓  ELEVENLABS_API_KEY   set
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ```
-   Don't proceed until all three are set.
+   Format as a status block. Don't proceed until all three are set.
 
-7. Verify users.yaml:
+6. Verify users.yaml:
    ```bash
    test -s .modelguide/users.yaml && echo "users.yaml: Found" || echo "users.yaml: Missing"
    grep -q "role: admin" .modelguide/users.yaml && echo "admin: present" || echo "admin: missing"
    ```
 
-8. Ensure `API_EXTERNAL_ADDRESS` is set:
+7. Ensure `API_EXTERNAL_ADDRESS` is set (required for ElevenLabs webhooks; good practice for LiveKit too):
    ```bash
    if ! grep -q "^API_EXTERNAL_ADDRESS=" modelguide-api/.env; then
      echo "API_EXTERNAL_ADDRESS=http://localhost:3000" >> modelguide-api/.env
@@ -451,18 +491,51 @@ Write provisioning files into `.modelguide/` from `references/yaml-templates.md`
 
 Always generate:
 - `org.yaml` — slug from D-02
-- `agents.yaml` — platform: livekit, config.url: ws://localhost:7880, active: true
 - `sops.yaml` — 3 SOPs from Conv-1/2/3, status: active
 - `guardrails.yaml` — from D-08, always include no-fabrication baseline
 - `evals.yaml` — 5-10 test cases per SOP (happy path + missing info + guardrail trigger)
 
-Connector handling:
+**`agents.yaml`** — differs by platform:
+
+_ElevenLabs:_
+```yaml
+agents:
+  - name: {{agentName}}
+    slug: {{agentSlug}}
+    description: "{{agentDescription}}"
+    platform: elevenlabs
+    modality: voice
+    active: true
+    config:
+      llmModel: {{llmModel}}   # from D-06, e.g. gpt-4o-mini
+    secrets:
+      - field: elevenlabs_api_key
+        name: ElevenLabs API Key
+        type: elevenlabs_api_key
+        value: "{{elevenLabsApiKey}}"  # from D-12; stored in vault, not .env
+```
+
+_LiveKit:_
+```yaml
+agents:
+  - name: {{agentName}}
+    slug: {{agentSlug}}
+    platform: livekit
+    config:
+      url: ws://localhost:7880
+      agentName: {{agentSlug}}
+    active: true
+```
+
+Connector handling (same for both platforms):
 - If `connectorStatus: done` (or no custom connector): generate `connectors.yaml` now
 - If `connectorStatus: pending`: skip `connectors.yaml` and omit `tool:` blocks from `sops.yaml`; use `PLACEHOLDER_TOOLS: [<awaiting connector>]` comment in `agents.yaml`; generate everything else
 
-### 2b. Generate Python agent code
+### 2b. Generate Python agent code (LiveKit only — skip for ElevenLabs)
 
-Create `agent/` files from `references/python-templates.md`.
+ElevenLabs is fully managed — no Python agent code needed. Skip this section and go straight to 2c.
+
+For LiveKit, create `agent/` files from `references/python-templates.md`.
 
 Copy these unchanged from `examples/agents/livekit-agent/src/`:
 ```bash
@@ -536,6 +609,9 @@ cd modelguide-api && bun run src/cli/mg.ts compile-agents --org {{orgSlug}}
 ```
 
 Expected: `Compiled agent: {{agentName}} (SOP: ...)` for each SOP.
+
+Evals run against MG's compiled prompt in the database — no sync to ElevenLabs needed yet.
+The live agent will be synced after evals pass (Stage [6]).
 
 Write STATE.md (`currentStage: 3`).
 
@@ -724,34 +800,30 @@ Write `currentStage: 6` when exiting.
 
 ## Stage [6]: Validate Manually
 
-Start the voice agent locally and share the URL to talk to it.
+### 6a. Sync to ElevenLabs (ElevenLabs only — skip for LiveKit)
 
-### 6a. Install Python deps
-
-```bash
-cd agent
-python3 -m venv .venv && source .venv/bin/activate && pip install -e .
-# Or with uv: uv venv && uv pip install -e .
-```
-
-### 6b. Start local LiveKit (if not running)
+Evals passed — now push the validated compiled prompt to the live agent:
 
 ```bash
-make livekit-up &   # native, requires: brew install livekit
-# OR: make livekit-up-docker
-
-until nc -z localhost 7880 2>/dev/null; do sleep 1; done
+cd modelguide-api && bun run src/cli/mg.ts sync-agent --org {{orgSlug}} --agent {{agentSlug}}
 ```
 
-### 6c. Start the agent
-
-```bash
-cd agent && source .venv/bin/activate && python agent.py dev
+Expected output:
+```
+✓ Create ElevenLabs agent: Agent ID: <el-agent-id>   ← first run only
+✓ API key secret: Created secret
+✓ MCP server: Created
+✓ Post-call webhook: Created
+✓ Agent configuration: Applied compiled prompt + LLM model ({{llmModel}})
+✓ Conversation-init webhook: URL: http://...
+✓ Save sync results
 ```
 
-### 6d. Generate simulation scripts
+If any step fails, diagnose before continuing — the live agent won't work correctly until sync succeeds.
 
-Before sharing the URL, generate realistic conversation scripts they can walk through. Base these on D-02 (business), D-08 (guardrails), the 3 example conversations from Q3, and domain research.
+### 6b. Generate simulation scripts
+
+Before giving the person a URL to test, generate realistic conversation scripts they can walk through. Base these on D-02 (business), D-08 (guardrails), the 3 example conversations from Q3, and domain research.
 
 For each SOP, generate:
 - **Happy path** — ideal customer, complete information, smooth resolution
@@ -775,6 +847,49 @@ You: [guardrail trigger or edge case if applicable]
 ---
 ```
 
+### 6b. Start and test — platform-specific
+
+**ElevenLabs:**
+
+No local setup needed — the agent is already live on ElevenLabs. Give the builder a direct link to test it:
+
+```
+Your agent is live on ElevenLabs!
+
+Test it here:
+  https://elevenlabs.io/app/conversational-ai/agents
+
+Open your agent → click "Test agent" in the top right.
+
+Your agent passed {{lastEvalScore}} eval cases. Work through these conversation scripts:
+
+[simulation scripts here]
+
+Type "done" when finished. If the agent behaved unexpectedly on any script, describe what happened and I'll tighten the SOPs.
+```
+
+**LiveKit:**
+
+Install Python deps:
+```bash
+cd agent
+python3 -m venv .venv && source .venv/bin/activate && pip install -e .
+# Or with uv: uv venv && uv pip install -e .
+```
+
+Start local LiveKit (if not running):
+```bash
+make livekit-up &   # native, requires: brew install livekit
+# OR: make livekit-up-docker
+
+until nc -z localhost 7880 2>/dev/null; do sleep 1; done
+```
+
+Start the agent:
+```bash
+cd agent && source .venv/bin/activate && python agent.py dev
+```
+
 Tell the user:
 ```
 Your agent is running!
@@ -788,12 +903,16 @@ Your agent passed {{lastEvalScore}} eval cases. Work through these conversation 
 Type "done" when finished. If the agent behaved unexpectedly on any script, describe what happened and I'll tighten the SOPs.
 ```
 
-### 6e. Post-test tighten (optional)
+### 6c. Post-test tighten (optional)
 
-If unexpected behavior is reported after manual testing, apply targeted fixes (same categorization as Stage [5]) and re-run the specific failing eval suite:
+If unexpected behavior is reported after manual testing, apply targeted fixes (same categorization as Stage [5]) and re-run the specific failing eval suite.
 
+Recompile and re-run evals first — only sync if they pass:
 ```bash
+cd modelguide-api && bun run src/cli/mg.ts compile-agents --org {{orgSlug}}
 cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}} --agent {{agentSlug}} --suite {{sopSlug}}
+# ElevenLabs only — push once evals pass:
+cd modelguide-api && bun run src/cli/mg.ts sync-agent --org {{orgSlug}} --agent {{agentSlug}}
 ```
 
 Write STATE.md (`currentStage: 7`).
@@ -822,14 +941,41 @@ Write STATE.md (`currentStage: done`).
 
 ## Completion
 
+**ElevenLabs:**
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✓  Build complete
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Agent    {{agentName}}  ·  {{orgSlug}}
-  Score    {{lastEvalScore}} evals passed
-  Code     agent/
-  Config   .modelguide/
+  Agent      {{agentName}}  ·  {{orgSlug}}
+  Platform   ElevenLabs Conversational AI
+  Score      {{lastEvalScore}} evals passed
+  Config     .modelguide/
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Re-deploy after changes:
+  cd modelguide-api && bun run src/cli/mg.ts compile-agents --org {{orgSlug}}
+  cd modelguide-api && bun run src/cli/mg.ts sync-agent --org {{orgSlug}} --agent {{agentSlug}}
+
+Re-run evals:
+  cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}}
+
+Test in ElevenLabs:
+  https://elevenlabs.io/app/conversational-ai/agents
+
+Dashboard:
+  make ui-dev  →  http://localhost:3001
+```
+
+**LiveKit:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✓  Build complete
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Agent      {{agentName}}  ·  {{orgSlug}}
+  Platform   LiveKit Agents
+  Score      {{lastEvalScore}} evals passed
+  Code       agent/
+  Config     .modelguide/
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Restart:

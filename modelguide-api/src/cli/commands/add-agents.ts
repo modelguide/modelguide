@@ -113,7 +113,15 @@ export async function handleAddAgents(
 
       // Build metadata from platform-specific config
       const metadata =
-        item.platform === "livekit" ? { livekit: item.config } : undefined;
+        item.platform === "livekit"
+          ? { livekit: item.config }
+          : item.platform === "elevenlabs" && item.config
+            ? {
+                elevenlabs: {
+                  llmModel: (item.config as { llmModel: string }).llmModel,
+                },
+              }
+            : undefined;
 
       const result = await createAgent(
         orgId,

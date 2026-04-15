@@ -87,14 +87,8 @@ async function _syncAgentToElevenLabs(
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
-  const elevenLabsAgentId = elMeta.agentId as string | undefined;
+  let elevenLabsAgentId = elMeta.agentId as string | undefined;
   const slug = agent.slug;
-
-  if (!elevenLabsAgentId) {
-    throw Errors.invalidInput(
-      "ElevenLabs Agent ID must be set in metadata.elevenlabs.agentId",
-    );
-  }
 
   // 2. Guard: LLM model must be configured before any ElevenLabs side effects
   const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
@@ -121,6 +115,31 @@ async function _syncAgentToElevenLabs(
   }
   const baseUrl = env.API_EXTERNAL_ADDRESS.replace(/\/$/, "");
   const steps: SyncStep[] = [];
+
+  // 5. Auto-provision ElevenLabs agent shell if not yet created
+  if (!elevenLabsAgentId) {
+    const created = await client.conversationalAi.agents.create({
+      name: agent.name,
+      conversationConfig: {},
+    });
+    elevenLabsAgentId = created.agentId;
+    await forOrg(orgId, (tx) =>
+      tx
+        .update(agents)
+        .set({
+          metadata: {
+            ...meta,
+            elevenlabs: { ...elMeta, agentId: elevenLabsAgentId },
+          },
+        })
+        .where(eq(agents.id, agentId)),
+    );
+    steps.push({
+      step: "Create ElevenLabs agent",
+      status: "success",
+      message: `Agent ID: ${elevenLabsAgentId}`,
+    });
+  }
 
   // Step 1: Create/update ElevenLabs secret (ModelGuide API key)
   let secretId = elMeta.secretId as string | undefined;

@@ -374,6 +374,75 @@
         "Response confirms the build continues right now without waiting",
         "Response explains the only pause point is at provisioning / mg setup if connector isn't ready"
       ]
+    },
+    {
+      "id": 26,
+      "prompt": "You are running Stage [2a] of /build-agent for org 'glowskin'. STATE.md shows:\n\n```\ncurrentStage: 2\nplatform: elevenlabs\norgSlug: glowskin\nagentSlug: glowskin-agent\nconnectorType: catalog\ncatalogSlug: medusa\nconnectorSlug: glowskin_store\n```\n\nCONTEXT.md contains:\n- D-01: Mode = auto-pilot\n- D-02: Org = glowskin (GlowSkin Beauty)\n- D-03: Agent name = Aria, slug = glowskin-agent\n- D-06: LLM model = gpt-4o-mini\n- D-07: Platform = ElevenLabs\n- D-12: ElevenLabs API Key = <stored in vault>\n\nGenerate the agents.yaml content for this ElevenLabs agent. Output it as a code block. Then explain what Stage [2b] (Python agent code) should do for an ElevenLabs platform agent. Do not write files.",
+      "expected_output": "agents.yaml with platform: elevenlabs, config.llmModel: gpt-4o-mini, secrets with elevenlabs_api_key. Stage [2b] should be noted as skipped/not needed for ElevenLabs.",
+      "files": [],
+      "expectations": [
+        "agents.yaml code block contains 'platform: elevenlabs'",
+        "agents.yaml code block contains 'llmModel' in a config section",
+        "agents.yaml code block contains 'elevenlabs_api_key' in secrets",
+        "agents.yaml code block does NOT contain 'platform: livekit'",
+        "Response explains that Stage [2b] Python agent code is skipped or not needed for ElevenLabs",
+        "agents.yaml code block does NOT contain LiveKit or Python agent configuration"
+      ]
+    },
+    {
+      "id": 27,
+      "prompt": "You are running Stage [6] of /build-agent for org 'coolairservices', agent 'coolair-agent'. STATE.md shows:\n\n```\ncurrentStage: 6\nplatform: livekit\norgSlug: coolairservices\nagentSlug: coolair-agent\nlastEvalScore: 7/8 (88%)\n```\n\nCONTEXT.md contains:\n- D-01: Mode = auto-pilot\n- D-02: Org = coolairservices (CoolAir HVAC)\n- D-03: Agent name = Aria, slug = coolair-agent\n- D-07: Platform = LiveKit\n- SOPs: schedule_maintenance, emergency_dispatch, service_inquiry\n- D-08 Guardrails: never quote repair costs without technician visit; always get customer address before dispatching\n\nThe agent just passed evals (88% pass rate). Walk through all of Stage [6] for this LiveKit agent \u2014 what to run, what instructions to give the developer. Include the exact bash commands. Do not write files.",
+      "expected_output": "LiveKit startup commands (agent.py dev), livekit-token command or meeting URL. No mg sync-agent command anywhere. Simulation scripts for the 3 SOPs.",
+      "files": [],
+      "expectations": [
+        "Response includes 'python agent.py dev' or similar LiveKit agent start command",
+        "Response includes 'make livekit-token' or meeting URL instructions",
+        "Response does NOT include 'mg sync-agent' anywhere",
+        "Response does NOT include 'elevenlabs.io/app/conversational-ai' link",
+        "Response includes conversation simulation scripts for the SOPs",
+        "Response does NOT include any reference to syncing to ElevenLabs platform"
+      ]
+    },
+    {
+      "id": 28,
+      "prompt": "You are running Stage [6] of /build-agent for org 'glowskin', agent 'glowskin-agent'. STATE.md shows:\n\n```\ncurrentStage: 6\nplatform: elevenlabs\norgSlug: glowskin\nagentSlug: glowskin-agent\nlastEvalScore: 8/9 (89%)\nllmModel: gpt-4o-mini\n```\n\nCONTEXT.md contains:\n- D-01: Mode = auto-pilot\n- D-02: Org = glowskin (GlowSkin Beauty, Medusa e-commerce)\n- D-03: Agent name = Aria, slug = glowskin-agent\n- D-07: Platform = ElevenLabs, llmModel = gpt-4o-mini\n- SOPs: order_status_inquiry, product_ingredient_inquiry, return_request\n- D-08 Guardrails: never quote delivery dates; escalate angry customers\n\nThe agent just passed evals (89% pass rate). Walk through all of Stage [6] for this ElevenLabs agent \u2014 what to do first, what commands to run, what instructions to give the developer. Include the exact bash commands in order. Do not write files.",
+      "expected_output": "Stage [6a] runs mg sync-agent first. Then Stage [6b] gives ElevenLabs playground link and simulation scripts. sync-agent appears BEFORE the test URL. No LiveKit commands.",
+      "files": [],
+      "expectations": [
+        "Response includes 'mg sync-agent' or 'bun run src/cli/mg.ts sync-agent' command",
+        "Response includes 'elevenlabs.io/app/conversational-ai' link for testing",
+        "The sync-agent command appears before the ElevenLabs test URL in the response",
+        "Response does NOT include 'python agent.py dev' or LiveKit startup commands",
+        "Response includes conversation simulation scripts",
+        "Response explains sync is needed to push the compiled prompt to the live agent"
+      ]
+    },
+    {
+      "id": 29,
+      "prompt": "You are helping with the 'Extend: Add a SOP' path of /build-agent. STATE.md shows:\n\n```\ncurrentStage: done\nplatform: elevenlabs\norgSlug: glowskin\nagentSlug: glowskin-agent\n```\n\nThe user says: \"I've just written a new SOP in .modelguide/sops.yaml for handling product subscription cancellations. The new SOP slug is 'subscription_cancellation'. Walk me through the exact steps to import it, test it, and get it live on ElevenLabs.\"\n\nProvide the complete step-by-step instructions including all bash commands. Do not write files.",
+      "expected_output": "Steps: import-sops \u2192 import-evals (if applicable) \u2192 compile-agents \u2192 run-evals (--suite subscription_cancellation) \u2192 sync-agent only if evals pass. sync-agent must come after run-evals.",
+      "files": [],
+      "expectations": [
+        "Response includes 'mg import-sops' or 'bun run src/cli/mg.ts import-sops' command",
+        "Response includes 'mg compile-agents' or 'bun run src/cli/mg.ts compile-agents' command",
+        "Response includes 'mg run-evals' or 'bun run src/cli/mg.ts run-evals' command with --suite flag",
+        "Response includes 'mg sync-agent' or 'bun run src/cli/mg.ts sync-agent' command",
+        "The sync-agent command appears AFTER the run-evals command in the response",
+        "Response qualifies the sync as conditional on evals passing (e.g., 'once evals pass', 'if they pass', 'only if')"
+      ]
+    },
+    {
+      "id": 30,
+      "prompt": "You are running Stage [1] of /build-agent for org 'glowskin'. STATE.md shows:\n\n```\ncurrentStage: 1\nplatform: elevenlabs\norgSlug: glowskin\nagentSlug: glowskin-agent\n```\n\nWhen you ask the user about the ElevenLabs API key, they respond: \"I don't have an ElevenLabs API key yet. Can we skip that for now and come back to it?\"\n\nHow should the skill handle this? What should it say and do? Should it continue to Stage [2] or block? Explain the exact response you would give.",
+      "expected_output": "Skill should NOT skip ahead. It should tell the user to get the API key first, provide the URL (elevenlabs.io/app/settings/api-keys), explain it will be stored in the vault (not .env), and wait. The key is required to proceed.",
+      "files": [],
+      "expectations": [
+        "Response tells the user the ElevenLabs API key is required (cannot be skipped)",
+        "Response includes 'elevenlabs.io/app/settings/api-keys' URL",
+        "Response does NOT proceed to Stage [2] or generate agents.yaml without the key",
+        "Response explains the key will be stored in the ModelGuide secrets vault",
+        "Response asks the user to provide the key before continuing"
+      ]
     }
   ]
 }
