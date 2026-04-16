@@ -22,6 +22,7 @@ import { enqueueSimulateAndRun } from "./eval-suites-simulate.service";
 import {
   createEvaluatorSchema,
   createSuiteSchema,
+  createTestCaseEvaluatorSchema,
   createTestCaseSchema,
   evalSuiteListQuerySchema,
   evalSuiteResponseSchema,
@@ -40,10 +41,14 @@ import {
   createEvaluator,
   createSuite,
   createTestCase,
+  createTestCaseEvaluator,
   deleteEvalSuite,
+  deleteSuiteEvaluator,
+  deleteTestCaseEvaluator,
   getEvalSuiteById,
   getEvalSuiteRunById,
   getEvalSuiteRuns,
+  getTestCaseEffectiveEvaluators,
   initSuiteFromSop,
   listEvalSuites,
   runEvalSuite,
@@ -66,6 +71,24 @@ const runIdParams = z.object({
 
 const taskIdParams = z.object({
   taskId: z.string().uuid().openapi({ description: "Generation Task ID" }),
+});
+
+const suiteEvaluatorIdParams = z.object({
+  suiteId: z.string().uuid().openapi({ description: "Eval Suite ID" }),
+  evaluatorId: z.string().uuid().openapi({ description: "Suite Evaluator ID" }),
+});
+
+const testCaseIdParams = z.object({
+  suiteId: z.string().uuid().openapi({ description: "Eval Suite ID" }),
+  caseId: z.string().uuid().openapi({ description: "Test Case ID" }),
+});
+
+const testCaseEvaluatorIdParams = z.object({
+  suiteId: z.string().uuid().openapi({ description: "Eval Suite ID" }),
+  caseId: z.string().uuid().openapi({ description: "Test Case ID" }),
+  overrideId: z.string().uuid().openapi({
+    description: "Test Case Evaluator Override ID",
+  }),
 });
 
 // ============================================================================
@@ -100,6 +123,16 @@ function formatTestCase(tc: SuiteDetail["testCases"][number]) {
     input: tc.input as Record<string, unknown> | null,
     expectedBehavior: tc.expectedBehavior,
     order: tc.order,
+    evaluatorOverrides: tc.evaluatorOverrides?.map((o) => ({
+      id: o.id,
+      evalConfigId: o.evalConfigId,
+      overrideType: o.overrideType,
+      name: o.name,
+      order: o.order,
+      required: o.required,
+      source: o.source,
+      createdAt: o.createdAt.toISOString(),
+    })),
     createdAt: tc.createdAt.toISOString(),
     updatedAt: tc.updatedAt?.toISOString() ?? null,
   };
@@ -296,6 +329,30 @@ router.post(
 );
 router.post(
   "/:suiteId/evaluators",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.delete(
+  "/:suiteId/evaluators/:evaluatorId",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.post(
+  "/:suiteId/test-cases/:caseId/evaluators",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.get(
+  "/:suiteId/test-cases/:caseId/evaluators",
+  requireUser(),
+  requirePermission("eval_suites:read"),
+  requireOrganization(),
+);
+router.delete(
+  "/:suiteId/test-cases/:caseId/evaluators/:overrideId",
   requireUser(),
   requirePermission("eval_suites:create"),
   requireOrganization(),
@@ -851,6 +908,173 @@ router.openapi(createEvaluatorRoute, async (c) => {
     },
     201,
   );
+});
+
+// DELETE /:suiteId/evaluators/:evaluatorId — delete suite evaluator (AC 21)
+const deleteSuiteEvaluatorRoute = createRoute({
+  method: "delete",
+  path: "/{suiteId}/evaluators/{evaluatorId}",
+  tags: ["Eval Suites"],
+  summary: "Delete suite evaluator",
+  description:
+    "Removes a suite-level evaluator. Cascades cleanup of related case-level exclude overrides.",
+  security: [{ bearerAuth: [] }],
+  request: { params: suiteEvaluatorIdParams },
+  responses: {
+    204: { description: "Evaluator deleted" },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Evaluator not found"),
+  },
+});
+
+router.openapi(deleteSuiteEvaluatorRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, evaluatorId } = c.req.valid("param");
+  await deleteSuiteEvaluator(orgId, suiteId, evaluatorId);
+  return c.body(null, 204);
+});
+
+// POST /:suiteId/test-cases/:caseId/evaluators — create per-case evaluator override (AC 2)
+const createTestCaseEvaluatorRoute = createRoute({
+  method: "post",
+  path: "/{suiteId}/test-cases/{caseId}/evaluators",
+  tags: ["Eval Suites"],
+  summary: "Create test case evaluator override",
+  description:
+    "Creates a per-case evaluator override (add or exclude). Adds append extra evaluators; excludes remove inherited suite evaluators.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: testCaseIdParams,
+    body: {
+      content: {
+        "application/json": { schema: createTestCaseEvaluatorSchema },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Override created",
+      content: {
+        "application/json": {
+          schema: z.object({
+            id: z.string().uuid(),
+            testCaseId: z.string().uuid(),
+            evalConfigId: z.string().uuid(),
+            overrideType: z.enum(["add", "exclude"]),
+            name: z.string(),
+            order: z.number(),
+            required: z.boolean(),
+            source: z.enum(["auto", "manual"]),
+            createdAt: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse("Validation error"),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Not found"),
+    409: errorResponse("Already exists"),
+  },
+});
+
+router.openapi(createTestCaseEvaluatorRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, caseId } = c.req.valid("param");
+  const body = c.req.valid("json");
+
+  const override = await createTestCaseEvaluator(orgId, suiteId, caseId, body);
+
+  return c.json(
+    {
+      id: override.id,
+      testCaseId: override.testCaseId,
+      evalConfigId: override.evalConfigId,
+      overrideType: override.overrideType,
+      name: override.name,
+      order: override.order,
+      required: override.required,
+      source: override.source,
+      createdAt: override.createdAt.toISOString(),
+    },
+    201,
+  );
+});
+
+// GET /:suiteId/test-cases/:caseId/evaluators — get effective evaluators (AC 3)
+const getTestCaseEvaluatorsRoute = createRoute({
+  method: "get",
+  path: "/{suiteId}/test-cases/{caseId}/evaluators",
+  tags: ["Eval Suites"],
+  summary: "Get test case effective evaluators",
+  description:
+    "Returns the effective evaluator list for a test case: inherited suite evaluators merged with case-level overrides.",
+  security: [{ bearerAuth: [] }],
+  request: { params: testCaseIdParams },
+  responses: {
+    200: {
+      description: "Effective evaluator list",
+      content: {
+        "application/json": {
+          schema: z.object({
+            data: z.array(
+              z.object({
+                id: z.string().uuid(),
+                evalConfigId: z.string().uuid(),
+                name: z.string(),
+                order: z.number(),
+                required: z.boolean(),
+                source: z.enum(["inherited", "auto", "manual"]),
+                overrideType: z.enum(["add", "exclude"]).optional(),
+                sopStepId: z.string().nullable().optional(),
+                tags: z.array(z.string()),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    404: errorResponse("Test case not found"),
+  },
+});
+
+router.openapi(getTestCaseEvaluatorsRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, caseId } = c.req.valid("param");
+
+  const evaluators = await getTestCaseEffectiveEvaluators(
+    orgId,
+    suiteId,
+    caseId,
+  );
+
+  return c.json({ data: evaluators }, 200);
+});
+
+// DELETE /:suiteId/test-cases/:caseId/evaluators/:overrideId — delete override (AC 4)
+const deleteTestCaseEvaluatorRoute = createRoute({
+  method: "delete",
+  path: "/{suiteId}/test-cases/{caseId}/evaluators/{overrideId}",
+  tags: ["Eval Suites"],
+  summary: "Delete test case evaluator override",
+  description: "Removes a per-case evaluator override.",
+  security: [{ bearerAuth: [] }],
+  request: { params: testCaseEvaluatorIdParams },
+  responses: {
+    204: { description: "Override deleted" },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Override not found"),
+  },
+});
+
+router.openapi(deleteTestCaseEvaluatorRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, caseId, overrideId } = c.req.valid("param");
+  await deleteTestCaseEvaluator(orgId, suiteId, caseId, overrideId);
+  return c.body(null, 204);
 });
 
 export default router;
