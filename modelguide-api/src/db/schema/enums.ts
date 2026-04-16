@@ -200,3 +200,11 @@ export const modelFamilyEnum = pgEnum("model_family", [
 export const knowledgeBaseTypeEnum = pgEnum("knowledge_base_type", [
   "guardrail",
 ]);
+
+/**
+ * Eval test case evaluator override type — add extra evaluator or exclude inherited one
+ */
+export const evalTestCaseEvaluatorOverrideTypeEnum = pgEnum(
+  "eval_suite_test_case_evaluator_override_type",
+  ["add", "exclude"],
+);
