@@ -37,6 +37,7 @@ export function makeEvalSuiteTestCase(
     source: 'auto',
     input: { userMessage: 'Where is my order?' },
     expectedBehavior: 'Agent looks up order and reports status',
+    evaluatorOverrides: [],
     order: 1,
     createdAt: '2026-02-15T10:00:00Z',
     updatedAt: '2026-02-16T12:00:00Z',
