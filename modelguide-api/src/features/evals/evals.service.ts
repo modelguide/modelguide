@@ -3,7 +3,14 @@
  */
 
 import { forOrg } from "@db/rls";
-import { type SessionMessage, evalRunScores, evalRuns, sops } from "@db/schema";
+import {
+  type SessionMessage,
+  evalRunScores,
+  evalRuns,
+  evalSuiteTestCases,
+  evalSuites,
+  sops,
+} from "@db/schema";
 import { Errors } from "@lib/errors";
 import {
   type PaginationParams,
@@ -122,10 +129,21 @@ export async function listEvalRuns(
     sessionId?: string;
     sourceType?: string;
     sourceId?: string;
+    testCaseId?: string;
+    agentId?: string;
     status?: string;
   } & PaginationParams,
 ) {
-  const { page, pageSize, sessionId, sourceType, sourceId, status } = params;
+  const {
+    page,
+    pageSize,
+    sessionId,
+    sourceType,
+    sourceId,
+    testCaseId,
+    agentId,
+    status,
+  } = params;
   const offset = getOffset(page, pageSize);
 
   return forOrg(orgId, async (tx) => {
@@ -136,6 +154,8 @@ export async function listEvalRuns(
         eq(evalRuns.sourceType, sourceType as "suite" | "replay_test" | "live"),
       );
     if (sourceId) conditions.push(eq(evalRuns.sourceId, sourceId));
+    if (testCaseId) conditions.push(eq(evalRuns.testCaseId, testCaseId));
+    if (agentId) conditions.push(eq(evalSuites.agentId, agentId));
     if (status)
       conditions.push(
         eq(
@@ -146,15 +166,47 @@ export async function listEvalRuns(
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
+    const joinCondition = eq(evalRuns.testCaseId, evalSuiteTestCases.id);
+    const suiteJoin = eq(evalRuns.sourceId, evalSuites.id);
+
+    const dataQuery = tx
+      .select({
+        id: evalRuns.id,
+        sessionId: evalRuns.sessionId,
+        sourceType: evalRuns.sourceType,
+        sourceId: evalRuns.sourceId,
+        testCaseId: evalRuns.testCaseId,
+        testCaseName: evalSuiteTestCases.name,
+        status: evalRuns.status,
+        passed: evalRuns.passed,
+        durationMs: evalRuns.durationMs,
+        triggeredBy: evalRuns.triggeredBy,
+        metadata: evalRuns.metadata,
+        createdAt: evalRuns.createdAt,
+        updatedAt: evalRuns.updatedAt,
+        completedAt: evalRuns.completedAt,
+      })
+      .from(evalRuns)
+      .leftJoin(evalSuiteTestCases, joinCondition);
+
+    const countQuery = tx
+      .select({ total: count() })
+      .from(evalRuns)
+      .leftJoin(evalSuiteTestCases, joinCondition);
+
+    // Inner-join suites only when filtering by agentId
+    if (agentId) {
+      dataQuery.innerJoin(evalSuites, suiteJoin);
+      countQuery.innerJoin(evalSuites, suiteJoin);
+    }
+
     const [items, [{ total }]] = await Promise.all([
-      tx
-        .select()
-        .from(evalRuns)
+      dataQuery
         .where(where)
         .orderBy(desc(evalRuns.createdAt))
         .limit(pageSize)
         .offset(offset),
-      tx.select({ total: count() }).from(evalRuns).where(where),
+      countQuery.where(where),
     ]);
 
     return {

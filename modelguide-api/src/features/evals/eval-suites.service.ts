@@ -47,6 +47,7 @@ import type {
   CreateTestCaseInput,
   InitEvalSuiteOpts,
   ListEvalSuitesParams,
+  RecordedTestCaseInput,
   RunEvalSuiteOpts,
   SuiteRunDetail,
   SuiteRunResult,
@@ -70,6 +71,31 @@ export {
 } from "./eval-suites-evaluators.service";
 
 const log = getLogger();
+
+// ============================================================================
+// Shared helpers
+// ============================================================================
+
+/**
+ * Assert that a session belongs to the expected agent and is terminal
+ * (completed or abandoned). Throws 409 on agent mismatch, 422 if still active.
+ */
+function assertTerminalSessionForAgent(
+  session: { id: string; agentId: string; status: string },
+  expectedAgentId: string,
+): void {
+  if (session.agentId !== expectedAgentId) {
+    throw Errors.conflict(
+      `Session "${session.id}" belongs to agent "${session.agentId}", not agent "${expectedAgentId}"`,
+    );
+  }
+
+  if (session.status !== "completed" && session.status !== "abandoned") {
+    throw Errors.validationError(
+      `Session "${session.id}" has status "${session.status}" — only completed or abandoned sessions can be used`,
+    );
+  }
+}
 
 // ============================================================================
 // Init Suite from SOP
@@ -380,6 +406,137 @@ export async function initSuiteFromSop(
 }
 
 // ============================================================================
+// Pin Session as Recorded Test Case (AC 1-8)
+// ============================================================================
+
+/**
+ * Pin a live session as a regression test case.
+ *
+ * Clones the session + messages, creates a 'recorded' test case pointing
+ * at the clone. The original session is preserved for traceability.
+ */
+export async function pinSessionAsTestCase(
+  orgId: string,
+  suiteId: string,
+  sessionId: string,
+  opts?: { name?: string; description?: string },
+): Promise<EvalSuiteTestCase> {
+  return forOrg(orgId, async (tx) => {
+    // 1. Validate suite exists
+    const [suite] = await tx
+      .select({ id: evalSuites.id, agentId: evalSuites.agentId })
+      .from(evalSuites)
+      .where(eq(evalSuites.id, suiteId));
+
+    if (!suite) throw Errors.evalSuiteNotFound(suiteId);
+
+    // 2. Validate session exists, belongs to suite agent, and is terminal
+    const [session] = await tx
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+
+    if (!session) throw Errors.sessionNotFound(sessionId);
+    assertTerminalSessionForAgent(session, suite.agentId);
+
+    // 3. Clone session with mode: simulation, status: completed
+    const [clonedSession] = await tx
+      .insert(sessions)
+      .values({
+        organizationId: orgId,
+        agentId: session.agentId,
+        externalId: null,
+        channelType: session.channelType,
+        userIdentifier: session.userIdentifier,
+        userMetadata: session.userMetadata ?? {},
+        status: "completed",
+        mode: "simulation",
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        metadata: {
+          ...(session.metadata as Record<string, unknown> | null),
+          clonedFrom: sessionId,
+          source: "recorded-test-case",
+        },
+      })
+      .returning();
+
+    // 6. Copy all session messages preserving fields
+    const messages = await tx
+      .select()
+      .from(sessionMessages)
+      .where(eq(sessionMessages.sessionId, sessionId))
+      .orderBy(asc(sessionMessages.occurredAt), asc(sessionMessages.createdAt));
+
+    if (messages.length > 0) {
+      await tx.insert(sessionMessages).values(
+        messages.map((m) => ({
+          sessionId: clonedSession.id,
+          role: m.role,
+          content: m.content,
+          audioUrl: m.audioUrl,
+          audioDurationMs: m.audioDurationMs,
+          toolCallId: m.toolCallId,
+          toolName: m.toolName,
+          toolInput: m.toolInput,
+          toolOutput: m.toolOutput,
+          toolStatus: m.toolStatus,
+          modelUsed: m.modelUsed,
+          tokensUsed: m.tokensUsed,
+          latencyMs: m.latencyMs,
+          occurredAt: m.occurredAt,
+        })),
+      );
+    }
+
+    // 7. Create test case with source: 'recorded'
+    const existing = await tx
+      .select({ order: evalSuiteTestCases.order })
+      .from(evalSuiteTestCases)
+      .where(eq(evalSuiteTestCases.suiteId, suiteId))
+      .orderBy(desc(evalSuiteTestCases.order))
+      .limit(1);
+
+    const nextOrder = existing.length > 0 ? existing[0].order + 1 : 0;
+
+    const defaultName = `Regression: ${session.userIdentifier ?? "unknown"} — ${session.startedAt.toISOString().slice(0, 16).replace("T", " ")}`;
+
+    const input: RecordedTestCaseInput = {
+      sessionId: clonedSession.id,
+      originalSessionId: sessionId,
+    };
+
+    const [testCase] = await tx
+      .insert(evalSuiteTestCases)
+      .values({
+        organizationId: orgId,
+        suiteId,
+        name: opts?.name ?? defaultName,
+        description: opts?.description ?? null,
+        source: "recorded",
+        input: input as unknown as Record<string, unknown>,
+        order: nextOrder,
+      })
+      .returning();
+
+    // Update cloned session metadata with testCaseId for traceability
+    await tx
+      .update(sessions)
+      .set({
+        metadata: {
+          ...(clonedSession.metadata as Record<string, unknown> | null),
+          clonedFrom: sessionId,
+          source: "recorded-test-case",
+          testCaseId: testCase.id,
+        },
+      })
+      .where(eq(sessions.id, clonedSession.id));
+
+    return testCase;
+  });
+}
+
+// ============================================================================
 // Create Suite (manual)
 // ============================================================================
 
@@ -413,6 +570,57 @@ export async function createSuite(
       .returning();
 
     return suite;
+  });
+}
+
+/** Update suite name and/or description. */
+export async function updateSuite(
+  orgId: string,
+  suiteId: string,
+  data: { name?: string; description?: string },
+): Promise<void> {
+  return forOrg(orgId, async (tx) => {
+    const [existing] = await tx
+      .select({ id: evalSuites.id })
+      .from(evalSuites)
+      .where(eq(evalSuites.id, suiteId));
+
+    if (!existing) throw Errors.evalSuiteNotFound(suiteId);
+
+    await tx
+      .update(evalSuites)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(evalSuites.id, suiteId));
+  });
+}
+
+/** Update test case name and/or description. */
+export async function updateTestCase(
+  orgId: string,
+  suiteId: string,
+  caseId: string,
+  data: { name?: string; description?: string },
+): Promise<void> {
+  return forOrg(orgId, async (tx) => {
+    const [existing] = await tx
+      .select({ id: evalSuiteTestCases.id })
+      .from(evalSuiteTestCases)
+      .where(
+        and(
+          eq(evalSuiteTestCases.id, caseId),
+          eq(evalSuiteTestCases.suiteId, suiteId),
+        ),
+      );
+
+    if (!existing)
+      throw Errors.notFound(
+        `Test case "${caseId}" not found in suite "${suiteId}"`,
+      );
+
+    await tx
+      .update(evalSuiteTestCases)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(evalSuiteTestCases.id, caseId));
   });
 }
 
@@ -675,13 +883,146 @@ export async function runEvalSuite(
 }
 
 /**
+ * Run evaluation for a single test case against a provided session.
+ * Creates an eval_run with sourceType 'replay_test' and suiteRunId: null.
+ * Works for any test case type (auto, manual, recorded).
+ */
+export async function runSingleTestCase(
+  orgId: string,
+  suiteId: string,
+  caseId: string,
+  sessionId: string,
+  promptSource: string,
+  opts?: RunEvalSuiteOpts,
+): Promise<TestCaseEvalResult> {
+  return forOrg(orgId, async (tx) => {
+    // 1. Validate suite exists
+    const [suite] = await tx
+      .select()
+      .from(evalSuites)
+      .where(eq(evalSuites.id, suiteId));
+
+    if (!suite) throw Errors.evalSuiteNotFound(suiteId);
+
+    // 2. Validate test case belongs to suite
+    const [testCase] = await tx
+      .select()
+      .from(evalSuiteTestCases)
+      .where(
+        and(
+          eq(evalSuiteTestCases.id, caseId),
+          eq(evalSuiteTestCases.suiteId, suiteId),
+        ),
+      );
+
+    if (!testCase)
+      throw Errors.notFound(
+        `Test case "${caseId}" not found in suite "${suiteId}"`,
+      );
+
+    // 3. Validate session exists, belongs to suite agent, and is terminal
+    const [session] = await tx
+      .select({
+        id: sessions.id,
+        agentId: sessions.agentId,
+        status: sessions.status,
+      })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+
+    if (!session) throw Errors.notFound(`Session "${sessionId}" not found`);
+    assertTerminalSessionForAgent(session, suite.agentId);
+
+    // 4. Resolve assertions for this test case
+    const resolved = await resolveAssertions(tx, suite.id, testCase.id);
+
+    // 5. Create eval run with sourceType: replay_test, suiteRunId: null
+    const [evalRun] = await tx
+      .insert(evalRuns)
+      .values({
+        organizationId: orgId,
+        sessionId,
+        sourceType: "replay_test",
+        sourceId: suite.id,
+        status: "running",
+        triggeredBy: opts?.triggeredBy,
+        suiteRunId: null,
+        testCaseId: testCase.id,
+        metadata: { promptSource },
+      })
+      .returning();
+
+    // 6. Load messages and execute assertions
+    const [sessionRow, messages] = await Promise.all([
+      tx
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .then((r) => r[0]),
+      tx
+        .select()
+        .from(sessionMessages)
+        .where(eq(sessionMessages.sessionId, sessionId))
+        .orderBy(
+          asc(sessionMessages.occurredAt),
+          asc(sessionMessages.createdAt),
+        ),
+    ]);
+
+    const evalStartTime = performance.now();
+    const { scoreRows } = await executeAssertions(
+      resolved,
+      messages,
+      evalRun.id,
+      orgId,
+      sessionRow
+        ? {
+            userIdentifier: sessionRow.userIdentifier ?? undefined,
+            channelType: sessionRow.channelType,
+            mode: sessionRow.mode ?? undefined,
+          }
+        : undefined,
+    );
+
+    const failedRequired = scoreRows.filter(
+      (s) => s.required && (s.result === "fail" || s.result === "error"),
+    );
+    const allSkipped = scoreRows.every((s) => s.result === "skip");
+    const passed = allSkipped ? null : failedRequired.length === 0;
+    const durationMs = elapsedMs(evalStartTime);
+
+    if (scoreRows.length > 0) {
+      await tx.insert(evalRunScores).values(scoreRows);
+    }
+
+    await tx
+      .update(evalRuns)
+      .set({
+        status: "completed" as EvalStatus,
+        passed,
+        durationMs,
+        completedAt: new Date(),
+      })
+      .where(eq(evalRuns.id, evalRun.id));
+
+    return {
+      testCaseId: testCase.id,
+      testCaseName: testCase.name,
+      evalRunId: evalRun.id,
+      passed,
+      scores: scoreRows,
+    };
+  });
+}
+
+/**
  * Evaluate an existing session against a test case's resolved assertions.
  */
 export async function runTestCaseEval(
   orgId: string,
   suite: EvalSuite,
   testCase: EvalSuiteTestCase,
-  suiteRunId: string,
+  suiteRunId: string | null,
   sessionId: string,
   opts?: RunEvalSuiteOpts,
 ): Promise<TestCaseEvalResult> {
@@ -915,8 +1256,79 @@ export async function deleteEvalSuite(
 
     if (!existing) throw Errors.evalSuiteNotFound(suiteId);
 
+    // Clean up cloned sessions for recorded test cases (AC 38)
+    await cleanupRecordedSessions(tx, suiteId);
+
     await tx.delete(evalSuites).where(eq(evalSuites.id, suiteId));
   });
+}
+
+/** Delete a single test case. Cleans up cloned session for recorded cases. */
+export async function deleteTestCase(
+  orgId: string,
+  suiteId: string,
+  caseId: string,
+): Promise<void> {
+  return forOrg(orgId, async (tx) => {
+    const [testCase] = await tx
+      .select({
+        id: evalSuiteTestCases.id,
+        source: evalSuiteTestCases.source,
+        input: evalSuiteTestCases.input,
+      })
+      .from(evalSuiteTestCases)
+      .where(
+        and(
+          eq(evalSuiteTestCases.id, caseId),
+          eq(evalSuiteTestCases.suiteId, suiteId),
+        ),
+      );
+
+    if (!testCase)
+      throw Errors.notFound(
+        `Test case "${caseId}" not found in suite "${suiteId}"`,
+      );
+
+    // Clean up cloned session for recorded test case (AC 38)
+    if (testCase.source === "recorded") {
+      const input = testCase.input as RecordedTestCaseInput | null;
+      if (input?.sessionId) {
+        await tx.delete(sessions).where(eq(sessions.id, input.sessionId));
+      }
+    }
+
+    await tx
+      .delete(evalSuiteTestCases)
+      .where(eq(evalSuiteTestCases.id, caseId));
+  });
+}
+
+/**
+ * Clean up cloned sessions for all recorded test cases in a suite.
+ * Called before suite deletion to avoid orphaned sessions.
+ */
+async function cleanupRecordedSessions(
+  tx: Transaction,
+  suiteId: string,
+): Promise<void> {
+  const recordedCases = await tx
+    .select({
+      input: evalSuiteTestCases.input,
+    })
+    .from(evalSuiteTestCases)
+    .where(
+      and(
+        eq(evalSuiteTestCases.suiteId, suiteId),
+        eq(evalSuiteTestCases.source, "recorded"),
+      ),
+    );
+
+  for (const tc of recordedCases) {
+    const input = tc.input as RecordedTestCaseInput | null;
+    if (input?.sessionId) {
+      await tx.delete(sessions).where(eq(sessions.id, input.sessionId));
+    }
+  }
 }
 
 // ============================================================================
@@ -965,8 +1377,6 @@ export async function createTestCase(
     return testCase;
   });
 }
-
-
 
 // ============================================================================
 // Suite Runs Queries

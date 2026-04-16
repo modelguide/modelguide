@@ -33,11 +33,16 @@ import {
   generateTestCasesSchema,
   generationTaskStatusResponseSchema,
   initSuiteFromSopSchema,
+  pinSessionAsTestCaseResponseSchema,
+  pinSessionAsTestCaseSchema,
   runEvalSuiteSchema,
+  runTestCaseSchema,
   simulateAndRunResponseSchema,
   simulateAndRunSchema,
   updateSuiteEvaluatorSchema,
+  updateSuiteSchema,
   updateTestCaseEvaluatorSchema,
+  updateTestCaseSchema,
 } from "./eval-suites.schemas";
 import {
   createEvaluator,
@@ -46,6 +51,7 @@ import {
   createTestCaseEvaluator,
   deleteEvalSuite,
   deleteSuiteEvaluator,
+  deleteTestCase,
   deleteTestCaseEvaluator,
   getEvalSuiteById,
   getEvalSuiteRunById,
@@ -53,10 +59,16 @@ import {
   getTestCaseEffectiveEvaluators,
   initSuiteFromSop,
   listEvalSuites,
+  pinSessionAsTestCase,
   runEvalSuite,
+  runSingleTestCase,
+  updateSuite,
   updateSuiteEvaluator,
+  updateTestCase,
   updateTestCaseEvaluator,
 } from "./eval-suites.service";
+import { evalRunResponseSchema } from "./evals.schemas";
+import { getEvalRunById } from "./evals.service";
 
 const router = createRouter();
 
@@ -107,7 +119,7 @@ function formatEvaluator(a: {
   evalConfigId: string;
   name: string;
   sopStepId?: string | null;
-  source: "auto" | "manual";
+  source: "auto" | "manual" | "recorded";
   order: number;
   required: boolean;
   tags?: string[];
@@ -140,7 +152,7 @@ type TestCaseOverrideRow = {
   name: string;
   order: number;
   required: boolean;
-  source: "auto" | "manual";
+  source: "auto" | "manual" | "recorded";
   createdAt: Date;
   evaluatorType?: string | null;
   evalConfigConfig?: Record<string, unknown> | null;
@@ -152,7 +164,7 @@ function formatTestCase(tc: {
   suiteId: string;
   name: string;
   description: string | null;
-  source: "auto" | "manual";
+  source: "auto" | "manual" | "recorded";
   input: unknown;
   expectedBehavior: string | null;
   order: number;
@@ -312,6 +324,29 @@ function formatSuiteRunSummary(
   };
 }
 
+type EvalRunDetail = Awaited<ReturnType<typeof getEvalRunById>>;
+
+function formatEvalRunDetail(r: EvalRunDetail) {
+  return {
+    id: r.id,
+    sessionId: r.sessionId,
+    sourceType: r.sourceType,
+    sourceId: r.sourceId,
+    sourceName: r.sourceName ?? null,
+    status: r.status as "pending" | "running" | "completed" | "failed",
+    passed: r.passed,
+    durationMs: r.durationMs,
+    triggeredBy: r.triggeredBy,
+    externalRunId: r.externalRunId,
+    externalRunUrl: r.externalRunUrl,
+    metadata: r.metadata as Record<string, unknown> | null,
+    scores: r.scores.map(formatScore),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+    completedAt: r.completedAt?.toISOString() ?? null,
+  };
+}
+
 // ============================================================================
 // Middleware registration
 // ============================================================================
@@ -340,10 +375,22 @@ router.get(
   requirePermission("eval_suites:read"),
   requireOrganization(),
 );
+router.patch(
+  "/:suiteId",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
 router.delete(
   "/:suiteId",
   requireUser(),
   requirePermission("eval_suites:delete"),
+  requireOrganization(),
+);
+router.patch(
+  "/:suiteId/test-cases/:caseId",
+  requireUser(),
+  requirePermission("eval_suites:create"),
   requireOrganization(),
 );
 router.post(
@@ -389,6 +436,12 @@ router.post(
   requireOrganization(),
 );
 router.post(
+  "/:suiteId/test-cases/from-session",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.post(
   "/:suiteId/evaluators",
   requireUser(),
   requirePermission("eval_suites:create"),
@@ -407,6 +460,18 @@ router.patch(
   "/:suiteId/evaluators/:evaluatorId",
   requireUser(),
   requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.delete(
+  "/:suiteId/test-cases/:caseId",
+  requireUser(),
+  requirePermission("eval_suites:delete"),
+  requireOrganization(),
+);
+router.post(
+  "/:suiteId/test-cases/:caseId/run",
+  requireUser(),
+  requirePermission("eval_suites:run"),
   requireOrganization(),
 );
 router.post(
@@ -580,6 +645,66 @@ router.openapi(getSuiteRoute, async (c) => {
   const { suiteId } = c.req.valid("param");
   const detail = await getEvalSuiteById(orgId, suiteId);
   return c.json(formatSuiteDetail(detail), 200);
+});
+
+// PATCH /:suiteId — update suite name/description
+const updateSuiteRoute = createRoute({
+  method: "patch",
+  path: "/{suiteId}",
+  tags: ["Eval Suites"],
+  summary: "Update eval suite",
+  description: "Updates the name and/or description of an eval suite.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: suiteIdParams,
+    body: {
+      content: { "application/json": { schema: updateSuiteSchema } },
+    },
+  },
+  responses: {
+    204: { description: "Suite updated" },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Eval suite not found"),
+  },
+});
+
+router.openapi(updateSuiteRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId } = c.req.valid("param");
+  const body = c.req.valid("json");
+  await updateSuite(orgId, suiteId, body);
+  return c.body(null, 204);
+});
+
+// PATCH /:suiteId/test-cases/:caseId — update test case name/description
+const updateTestCaseRoute = createRoute({
+  method: "patch",
+  path: "/{suiteId}/test-cases/{caseId}",
+  tags: ["Eval Suites"],
+  summary: "Update test case",
+  description: "Updates the name and/or description of a test case.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: testCaseIdParams,
+    body: {
+      content: { "application/json": { schema: updateTestCaseSchema } },
+    },
+  },
+  responses: {
+    204: { description: "Test case updated" },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Test case not found"),
+  },
+});
+
+router.openapi(updateTestCaseRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, caseId } = c.req.valid("param");
+  const body = c.req.valid("json");
+  await updateTestCase(orgId, suiteId, caseId, body);
+  return c.body(null, 204);
 });
 
 // DELETE /:suiteId
@@ -891,7 +1016,7 @@ const createTestCaseRoute = createRoute({
             suiteId: z.string().uuid(),
             name: z.string(),
             description: z.string().nullable(),
-            source: z.enum(["auto", "manual"]),
+            source: z.enum(["auto", "manual", "recorded"]),
             order: z.number(),
             createdAt: z.string(),
           }),
@@ -925,6 +1050,73 @@ router.openapi(createTestCaseRoute, async (c) => {
   );
 });
 
+// POST /:suiteId/test-cases/from-session — pin a live session as a recorded test case
+const pinSessionRoute = createRoute({
+  method: "post",
+  path: "/{suiteId}/test-cases/from-session",
+  tags: ["Eval Suites"],
+  summary: "Pin session as recorded test case",
+  description:
+    "Clones a terminal session and creates a 'recorded' test case for regression testing. Session must belong to the same agent as the suite.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: suiteIdParams,
+    body: {
+      content: {
+        "application/json": { schema: pinSessionAsTestCaseSchema },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Recorded test case created",
+      content: {
+        "application/json": {
+          schema: pinSessionAsTestCaseResponseSchema,
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Suite or session not found"),
+    409: errorResponse("Session does not belong to suite agent"),
+    422: errorResponse("Session is not terminal"),
+  },
+});
+
+router.openapi(pinSessionRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId } = c.req.valid("param");
+  const body = c.req.valid("json");
+
+  const testCase = await pinSessionAsTestCase(orgId, suiteId, body.sessionId, {
+    name: body.name,
+    description: body.description,
+  });
+
+  const input = testCase.input as {
+    sessionId: string;
+    originalSessionId: string;
+  };
+
+  return c.json(
+    {
+      id: testCase.id,
+      suiteId: testCase.suiteId,
+      name: testCase.name,
+      description: testCase.description,
+      source: testCase.source as "recorded",
+      input: {
+        sessionId: input.sessionId,
+        originalSessionId: input.originalSessionId,
+      },
+      order: testCase.order,
+      createdAt: testCase.createdAt.toISOString(),
+    },
+    201,
+  );
+});
+
 // POST /:suiteId/evaluators — create manual evaluator
 const createEvaluatorRoute = createRoute({
   method: "post",
@@ -950,7 +1142,7 @@ const createEvaluatorRoute = createRoute({
             suiteId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
             name: z.string(),
-            source: z.enum(["auto", "manual"]),
+            source: z.enum(["auto", "manual", "recorded"]),
             order: z.number(),
             required: z.boolean(),
             createdAt: z.string(),
@@ -1011,6 +1203,89 @@ router.openapi(deleteSuiteEvaluatorRoute, async (c) => {
   return c.body(null, 204);
 });
 
+// DELETE /:suiteId/test-cases/:caseId — delete test case (AC 38 cleanup)
+const deleteTestCaseRoute = createRoute({
+  method: "delete",
+  path: "/{suiteId}/test-cases/{caseId}",
+  tags: ["Eval Suites"],
+  summary: "Delete test case",
+  description:
+    "Deletes a test case. For recorded test cases, also deletes the cloned session.",
+  security: [{ bearerAuth: [] }],
+  request: { params: testCaseIdParams },
+  responses: {
+    204: { description: "Test case deleted" },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Test case not found"),
+  },
+});
+
+router.openapi(deleteTestCaseRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, caseId } = c.req.valid("param");
+  await deleteTestCase(orgId, suiteId, caseId);
+  return c.body(null, 204);
+});
+
+// POST /:suiteId/test-cases/:caseId/run — run a single test case against a session (AC 9-14)
+const runTestCaseRoute = createRoute({
+  method: "post",
+  path: "/{suiteId}/test-cases/{caseId}/run",
+  tags: ["Eval Suites"],
+  summary: "Run single test case",
+  description:
+    "Runs evaluation for a single test case against a provided session. Creates an eval_run with sourceType 'replay_test' and suiteRunId: null. Works for any test case type.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: testCaseIdParams,
+    body: {
+      content: {
+        "application/json": { schema: runTestCaseSchema },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Test case evaluation completed",
+      content: {
+        "application/json": { schema: evalRunResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Suite or test case not found"),
+    409: errorResponse("Session does not belong to suite agent"),
+    422: errorResponse("Session is not terminal"),
+  },
+});
+
+router.openapi(runTestCaseRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, caseId } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const auth = c.get("auth");
+  const triggeredBy = auth.type === "user" ? auth.user.id : undefined;
+
+  const result = await runSingleTestCase(
+    orgId,
+    suiteId,
+    caseId,
+    body.sessionId,
+    body.promptSource,
+    { triggeredBy },
+  );
+
+  if (!result.evalRunId) {
+    throw Errors.internal("Eval run was not created");
+  }
+
+  // Fetch full eval run detail to match GET /evals/runs/{runId} shape (AC 11)
+  const detail = await getEvalRunById(orgId, result.evalRunId);
+
+  return c.json(formatEvalRunDetail(detail), 201);
+});
+
 // POST /:suiteId/test-cases/:caseId/evaluators — create per-case evaluator override (AC 2)
 const createTestCaseEvaluatorRoute = createRoute({
   method: "post",
@@ -1041,7 +1316,7 @@ const createTestCaseEvaluatorRoute = createRoute({
             name: z.string(),
             order: z.number(),
             required: z.boolean(),
-            source: z.enum(["auto", "manual"]),
+            source: z.enum(["auto", "manual", "recorded"]),
             createdAt: z.string(),
           }),
         },
@@ -1180,7 +1455,7 @@ const updateSuiteEvaluatorRoute = createRoute({
             suiteId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
             name: z.string(),
-            source: z.enum(["auto", "manual"]),
+            source: z.enum(["auto", "manual", "recorded"]),
             order: z.number(),
             required: z.boolean(),
             createdAt: z.string(),
@@ -1247,7 +1522,7 @@ const updateTestCaseEvaluatorRoute = createRoute({
             name: z.string(),
             order: z.number(),
             required: z.boolean(),
-            source: z.enum(["auto", "manual"]),
+            source: z.enum(["auto", "manual", "recorded"]),
             createdAt: z.string(),
           }),
         },

@@ -8,7 +8,7 @@ export const evalSuiteAssertionSchema = z.object({
   evalConfigId: z.string().uuid(),
   name: z.string(),
   sopStepId: z.string().nullable().optional(),
-  source: z.enum(['auto', 'manual']),
+  source: z.enum(['auto', 'manual', 'recorded']),
   order: z.number(),
   required: z.boolean(),
   tags: z.array(z.string()).default([]),
@@ -28,7 +28,7 @@ export const evalTestCaseEvaluatorOverrideSchema = z.object({
   name: z.string(),
   order: z.number(),
   required: z.boolean(),
-  source: z.enum(['auto', 'manual']),
+  source: z.enum(['auto', 'manual', 'recorded']),
   evaluatorType: z.string().nullable().optional(),
   config: z.record(z.unknown()).nullable().optional(),
   createdAt: z.string(),
@@ -43,7 +43,7 @@ export const evalSuiteTestCaseSchema = z.object({
   suiteId: z.string().uuid(),
   name: z.string(),
   description: z.string().nullable().optional(),
-  source: z.enum(['auto', 'manual']),
+  source: z.enum(['auto', 'manual', 'recorded']),
   input: z.record(z.unknown()).nullable().optional(),
   expectedBehavior: z.string().nullable().optional(),
   order: z.number(),
@@ -147,6 +147,27 @@ export const runSuiteRequestSchema = z.object({
 })
 
 export type RunSuiteRequest = z.infer<typeof runSuiteRequestSchema>
+
+// --- Recorded test case input ---
+
+export interface RecordedTestCaseInput {
+  sessionId: string
+  originalSessionId: string
+}
+
+// --- Eval run summary (for run history lists) ---
+
+export const evalRunSummarySchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  testCaseId: z.string().uuid().nullable().optional(),
+  testCaseName: z.string().nullable().optional(),
+  status: z.string(),
+  passed: z.boolean().nullable(),
+  createdAt: z.string(),
+})
+
+export type EvalRunSummary = z.infer<typeof evalRunSummarySchema>
 
 // --- Prompt source labels ---
 

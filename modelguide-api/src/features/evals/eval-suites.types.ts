@@ -41,8 +41,8 @@ export interface CreateTestCaseInput {
   description?: string;
   input?: Record<string, unknown>;
   expectedBehavior?: string;
-  /** Test case source — "auto" for generated, "manual" for user-created. Defaults to "manual". */
-  source?: "auto" | "manual";
+  /** Test case source — "auto" for generated, "manual" for user-created, "recorded" for pinned sessions. Defaults to "manual". */
+  source?: "auto" | "manual" | "recorded";
   /** Mock tool responses for deterministic simulation testing. */
   mockToolResponses?: Record<string, unknown>;
 }
@@ -58,6 +58,14 @@ export interface CreateTestCaseEvaluatorInput {
   overrideType: "add" | "exclude";
   name?: string;
   required?: boolean;
+}
+
+/** Expected shape of eval_suite_test_cases.input for recorded (pinned) test cases. */
+export interface RecordedTestCaseInput {
+  /** Cloned session ID used for evaluation. */
+  sessionId: string;
+  /** Original live session that was pinned. */
+  originalSessionId: string;
 }
 
 /** Expected shape of eval_suite_test_cases.input for simulation. */

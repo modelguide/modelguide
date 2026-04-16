@@ -1,11 +1,32 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, Minus, Pencil, Plus, Search, Undo2 } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  FlaskConical,
+  Minus,
+  Pencil,
+  Plus,
+  Search,
+  Undo2,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
+import { InlineEditableText } from '~/components/ui/inline-editable-text'
+import { Transcript } from '~/features/sessions/components/transcript'
 import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
-import type { EvalSuiteAssertion, EvalSuiteTestCase } from '~/schemas/eval-suites'
+import type { PaginatedResponse } from '~/lib/pagination'
+import { formatDate } from '~/lib/utils'
+import type {
+  EvalRunSummary,
+  EvalSuiteAssertion,
+  EvalSuiteTestCase,
+  RecordedTestCaseInput,
+} from '~/schemas/eval-suites'
+import type { SessionMessage } from '~/schemas/sessions'
 import type { EvalConfigForEdit } from './eval-config-edit-dialog'
 import { EvalConfigEditDialog } from './eval-config-edit-dialog'
 import { EvalConfigPickerDialog } from './eval-config-picker-dialog'
@@ -27,23 +48,34 @@ const EVALUATOR_TYPE_BADGE: Record<string, 'info' | 'success' | 'warning' | 'def
 export interface TestCasesPanelProps {
   testCases: EvalSuiteTestCase[]
   suiteId: string
+  agentId?: string
   evaluators?: EvalSuiteAssertion[]
   pendingCount?: number
   isAdmin?: boolean
 }
 
-type SourceFilter = 'all' | 'auto' | 'manual'
+type SourceFilter = 'all' | 'auto' | 'manual' | 'recorded'
 
 export function TestCasesPanel({
   testCases,
   suiteId,
+  agentId,
   evaluators = [],
   pendingCount = 0,
   isAdmin = false,
 }: TestCasesPanelProps) {
+  const queryClient = useQueryClient()
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
+
+  const updateTestCaseMutation = useMutation({
+    mutationFn: (data: { caseId: string; name: string }) =>
+      api.patch(`eval-suites/${suiteId}/test-cases/${data.caseId}`, { json: { name: data.name } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+    },
+  })
 
   const toggle = (id: string) => {
     setExpandedIds((prev) => {
@@ -92,21 +124,29 @@ export function TestCasesPanel({
           />
         </div>
         <div className="flex gap-1 rounded-lg bg-bg-subtle p-0.5">
-          {(['all', 'auto', 'manual'] as const).map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              onClick={() => setSourceFilter(filter)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                sourceFilter === filter
-                  ? 'bg-bg-elevated text-fg-primary shadow-sm'
-                  : 'text-fg-secondary hover:text-fg-primary',
-              )}
-            >
-              {filter === 'all' ? 'All' : filter === 'auto' ? 'Auto' : 'Manual'}
-            </button>
-          ))}
+          {(['all', 'auto', 'manual', 'recorded'] as const).map((filter) => {
+            const labels: Record<SourceFilter, string> = {
+              all: 'All',
+              auto: 'Auto',
+              manual: 'Manual',
+              recorded: 'Recorded',
+            }
+            return (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setSourceFilter(filter)}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                  sourceFilter === filter
+                    ? 'bg-bg-elevated text-fg-primary shadow-sm'
+                    : 'text-fg-secondary hover:text-fg-primary',
+                )}
+              >
+                {labels[filter]}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -145,14 +185,39 @@ export function TestCasesPanel({
                   >
                     #{tc.order}
                   </span>
-                  <span className="flex-1 text-sm font-medium text-fg-primary">{tc.name}</span>
+                  {isAdmin ? (
+                    <span
+                      className="flex-1"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <InlineEditableText
+                        value={tc.name}
+                        onSave={(name) => updateTestCaseMutation.mutate({ caseId: tc.id, name })}
+                        className="text-sm font-medium text-fg-primary"
+                        inputClassName="text-sm font-medium"
+                      />
+                    </span>
+                  ) : (
+                    <span className="flex-1 text-sm font-medium text-fg-primary">{tc.name}</span>
+                  )}
                   {(tc.evaluatorOverrides?.length ?? 0) > 0 ? (
                     <Badge variant="warning">
                       {tc.evaluatorOverrides?.length} override
                       {(tc.evaluatorOverrides?.length ?? 0) > 1 ? 's' : ''}
                     </Badge>
                   ) : null}
-                  <Badge variant={tc.source === 'auto' ? 'info' : 'default'}>{tc.source}</Badge>
+                  <Badge
+                    variant={
+                      tc.source === 'auto'
+                        ? 'info'
+                        : tc.source === 'recorded'
+                          ? 'warning'
+                          : 'default'
+                    }
+                  >
+                    {tc.source}
+                  </Badge>
                   {isExpanded ? (
                     <ChevronUp className="h-4 w-4 text-fg-muted transition-transform" />
                   ) : (
@@ -175,7 +240,9 @@ export function TestCasesPanel({
                       </div>
                     ) : null}
 
-                    {tc.input ? (
+                    {tc.source === 'recorded' ? (
+                      <RecordedTestCaseContent input={tc.input as RecordedTestCaseInput | null} />
+                    ) : tc.input ? (
                       <div className="mb-3">
                         <span className="font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                           Input:{' '}
@@ -190,10 +257,14 @@ export function TestCasesPanel({
                     {isAdmin ? (
                       <TestCaseEvaluatorOverrides
                         suiteId={suiteId}
+                        agentId={agentId}
                         testCase={tc}
                         suiteEvaluators={evaluators}
                       />
                     ) : null}
+
+                    {/* Run history + Re-run */}
+                    <TestCaseRunHistory suiteId={suiteId} testCase={tc} isAdmin={isAdmin} />
                   </div>
                 ) : null}
               </div>
@@ -229,17 +300,198 @@ export function TestCasesPanel({
 }
 
 // ============================================================================
+// Test case run history + Run Against Session (AC 31-32)
+// ============================================================================
+
+function TestCaseRunHistory({
+  suiteId,
+  testCase,
+  isAdmin,
+}: {
+  suiteId: string
+  testCase: EvalSuiteTestCase
+  isAdmin: boolean
+}) {
+  const queryClient = useQueryClient()
+
+  // Fetch past runs for this test case
+  const runsQuery = useQuery({
+    queryKey: ['eval-runs', { testCaseId: testCase.id }],
+    queryFn: () =>
+      api
+        .get('evals/runs', { searchParams: { testCaseId: testCase.id, pageSize: '5' } })
+        .json<PaginatedResponse<EvalRunSummary>>(),
+  })
+
+  // Determine the session ID for re-runs
+  const recordedInput =
+    testCase.source === 'recorded' ? (testCase.input as RecordedTestCaseInput | null) : null
+  const rerunSessionId = recordedInput?.sessionId ?? runsQuery.data?.data?.[0]?.sessionId
+  const canRerun = !!rerunSessionId
+
+  // Re-run mutation
+  const rerunMutation = useMutation({
+    mutationFn: () =>
+      api
+        .post(`eval-suites/${suiteId}/test-cases/${testCase.id}/run`, {
+          json: { sessionId: rerunSessionId, promptSource: 'compiled' },
+        })
+        .json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-runs', { testCaseId: testCase.id }] })
+    },
+  })
+
+  const runs = runsQuery.data?.data ?? []
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+          Run History
+        </span>
+        {isAdmin && canRerun ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => rerunMutation.mutate()}
+            loading={rerunMutation.isPending}
+          >
+            <FlaskConical className="h-3 w-3" />
+            Re-run
+          </Button>
+        ) : null}
+      </div>
+
+      {/* Past runs list */}
+      {runs.length > 0 ? (
+        <div className="space-y-0.5 rounded-lg border border-fg-subtle/10 bg-bg-base p-1">
+          {runs.map((run) => {
+            const isOwnTranscript =
+              testCase.source === 'recorded' && recordedInput?.sessionId === run.sessionId
+
+            return (
+              <div
+                key={run.id}
+                className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-fg-secondary"
+              >
+                <Badge
+                  variant={run.passed ? 'success' : run.passed === false ? 'error' : 'default'}
+                >
+                  {run.passed ? 'pass' : run.passed === false ? 'fail' : run.status}
+                </Badge>
+                {isOwnTranscript ? (
+                  <span className="flex-1 text-fg-muted truncate">Own transcript</span>
+                ) : (
+                  <Link
+                    to="/sessions/$id"
+                    params={{ id: run.sessionId }}
+                    className="flex-1 font-mono text-brand-500 hover:text-brand-400 truncate transition-colors"
+                  >
+                    Session {run.sessionId.slice(0, 8)}
+                  </Link>
+                )}
+                <span className="text-fg-muted">
+                  {formatDate(run.createdAt, { format: 'relative' })}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-fg-muted">No runs yet</p>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Recorded test case content (AC 20-22)
+// ============================================================================
+
+function RecordedTestCaseContent({ input }: { input: RecordedTestCaseInput | null }) {
+  const [showTranscript, setShowTranscript] = useState(false)
+  const clonedSessionId = input?.sessionId
+  const originalSessionId = input?.originalSessionId
+
+  const messagesQuery = useQuery({
+    queryKey: ['sessions', clonedSessionId],
+    queryFn: () => api.get(`sessions/${clonedSessionId}`).json<{ messages: SessionMessage[] }>(),
+    enabled: showTranscript && !!clonedSessionId,
+  })
+
+  // Check if original session still exists
+  const originalSessionQuery = useQuery({
+    queryKey: ['session-exists', originalSessionId],
+    queryFn: () => api.get(`sessions/${originalSessionId}`).json(),
+    enabled: !!originalSessionId,
+    retry: false,
+  })
+
+  return (
+    <div className="mb-3 space-y-2">
+      {/* Original session link (AC 22) */}
+      <div className="flex items-center gap-2">
+        <span className="font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+          Source session:{' '}
+        </span>
+        {originalSessionId ? (
+          originalSessionQuery.isError ? (
+            <span className="text-xs text-fg-muted italic">Original session removed</span>
+          ) : (
+            <Link
+              to="/sessions/$id"
+              params={{ id: originalSessionId }}
+              className="inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-400"
+            >
+              View original
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )
+        ) : null}
+      </div>
+
+      {/* Collapsible transcript (AC 20) */}
+      <button
+        type="button"
+        onClick={() => setShowTranscript(!showTranscript)}
+        className="flex items-center gap-1.5 text-xs text-fg-secondary hover:text-fg-primary transition-colors"
+      >
+        {showTranscript ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        {showTranscript ? 'Hide transcript' : 'Show transcript'}
+      </button>
+
+      {showTranscript ? (
+        <div className="max-h-80 overflow-y-auto rounded-lg border border-fg-subtle/10 bg-bg-base p-3">
+          {messagesQuery.isLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+            </div>
+          ) : messagesQuery.data?.messages ? (
+            <Transcript messages={messagesQuery.data.messages} />
+          ) : (
+            <p className="text-xs text-fg-muted text-center py-4">No messages available</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// ============================================================================
 // Test Case Evaluator Overrides sub-component (AC 18-20, AC-28, AC-29, AC-30)
 // ============================================================================
 
 interface TestCaseEvaluatorOverridesProps {
   suiteId: string
+  agentId?: string
   testCase: EvalSuiteTestCase
   suiteEvaluators: EvalSuiteAssertion[]
 }
 
 function TestCaseEvaluatorOverrides({
   suiteId,
+  agentId,
   testCase,
   suiteEvaluators,
 }: TestCaseEvaluatorOverridesProps) {
@@ -494,6 +746,7 @@ function TestCaseEvaluatorOverrides({
       <EvalConfigPickerDialog
         open={showPicker}
         onClose={() => setShowPicker(false)}
+        agentId={agentId}
         onSelect={(config) => {
           addMutation.mutate({ evalConfigId: config.id, name: config.name })
         }}

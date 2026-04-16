@@ -104,7 +104,11 @@ function formatRunDetail(r: ServiceRunDetail) {
 }
 
 function formatRunSummary(r: ServiceRunSummary) {
-  return formatRunCore(r);
+  return {
+    ...formatRunCore(r),
+    testCaseId: r.testCaseId ?? null,
+    testCaseName: r.testCaseName ?? null,
+  };
 }
 
 // ============================================================================
