@@ -40,15 +40,23 @@ function truncate(str: string, maxLen: number): string {
 // Shared helpers
 // ============================================================================
 
-/** Load evaluators for a suite, joined with eval config tags. */
+/** Load evaluators for a suite, joined with eval config tags and type. */
 export async function loadSuiteEvaluators(
   tx: Transaction,
   suiteId: string,
-): Promise<(EvalSuiteEvaluator & { tags: string[] })[]> {
+): Promise<
+  (EvalSuiteEvaluator & {
+    tags: string[];
+    evaluatorType: string | null;
+    config: Record<string, unknown> | null;
+  })[]
+> {
   const rows = await tx
     .select({
       evaluator: evalSuiteEvaluators,
       tags: evalConfigs.tags,
+      evaluatorType: evalConfigs.evaluatorType,
+      config: evalConfigs.config,
     })
     .from(evalSuiteEvaluators)
     .leftJoin(evalConfigs, eq(evalSuiteEvaluators.evalConfigId, evalConfigs.id))
@@ -58,6 +66,8 @@ export async function loadSuiteEvaluators(
   return rows.map((r) => ({
     ...r.evaluator,
     tags: r.tags ?? [],
+    evaluatorType: r.evaluatorType ?? null,
+    config: (r.config as Record<string, unknown> | null) ?? null,
   }));
 }
 
@@ -301,6 +311,52 @@ export async function createEvaluator(
       .returning();
 
     return assertion;
+  });
+}
+
+/**
+ * Update the eval config referenced by a suite-level evaluator (AC-26).
+ * Only evalConfigId can be changed — order/name/required are untouched.
+ */
+export async function updateSuiteEvaluator(
+  orgId: string,
+  suiteId: string,
+  evaluatorId: string,
+  data: { evalConfigId: string },
+): Promise<EvalSuiteEvaluator> {
+  return forOrg(orgId, async (tx) => {
+    // Validate evaluator belongs to suite
+    const [evaluator] = await tx
+      .select()
+      .from(evalSuiteEvaluators)
+      .where(
+        and(
+          eq(evalSuiteEvaluators.id, evaluatorId),
+          eq(evalSuiteEvaluators.suiteId, suiteId),
+        ),
+      );
+
+    if (!evaluator) {
+      throw Errors.notFound("Evaluator not found in this suite");
+    }
+
+    // Validate the new eval config exists
+    const [config] = await tx
+      .select({ id: evalConfigs.id })
+      .from(evalConfigs)
+      .where(eq(evalConfigs.id, data.evalConfigId));
+
+    if (!config) {
+      throw Errors.notFound(`Eval config "${data.evalConfigId}" not found`);
+    }
+
+    const [updated] = await tx
+      .update(evalSuiteEvaluators)
+      .set({ evalConfigId: data.evalConfigId })
+      .where(eq(evalSuiteEvaluators.id, evaluatorId))
+      .returning();
+
+    return updated;
   });
 }
 
@@ -590,6 +646,67 @@ export async function getTestCaseEffectiveEvaluators(
     }
 
     return effective;
+  });
+}
+
+/**
+ * Update the eval config referenced by a test-case-level evaluator override (AC-27).
+ */
+export async function updateTestCaseEvaluator(
+  orgId: string,
+  suiteId: string,
+  testCaseId: string,
+  overrideId: string,
+  data: { evalConfigId: string },
+): Promise<EvalTestCaseEvaluator> {
+  return forOrg(orgId, async (tx) => {
+    // Validate test case belongs to suite
+    const [testCase] = await tx
+      .select({ id: evalSuiteTestCases.id })
+      .from(evalSuiteTestCases)
+      .where(
+        and(
+          eq(evalSuiteTestCases.id, testCaseId),
+          eq(evalSuiteTestCases.suiteId, suiteId),
+        ),
+      );
+
+    if (!testCase) {
+      throw Errors.notFound("Test case not found in this suite");
+    }
+
+    // Validate override belongs to test case
+    const [override] = await tx
+      .select()
+      .from(evalTestCaseEvaluators)
+      .where(
+        and(
+          eq(evalTestCaseEvaluators.id, overrideId),
+          eq(evalTestCaseEvaluators.testCaseId, testCaseId),
+        ),
+      );
+
+    if (!override) {
+      throw Errors.notFound("Evaluator override not found");
+    }
+
+    // Validate the new eval config exists
+    const [config] = await tx
+      .select({ id: evalConfigs.id })
+      .from(evalConfigs)
+      .where(eq(evalConfigs.id, data.evalConfigId));
+
+    if (!config) {
+      throw Errors.notFound(`Eval config "${data.evalConfigId}" not found`);
+    }
+
+    const [updated] = await tx
+      .update(evalTestCaseEvaluators)
+      .set({ evalConfigId: data.evalConfigId })
+      .where(eq(evalTestCaseEvaluators.id, overrideId))
+      .returning();
+
+    return updated;
   });
 }
 

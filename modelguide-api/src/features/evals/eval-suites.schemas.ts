@@ -97,6 +97,16 @@ export const createTestCaseEvaluatorSchema = z.object({
   required: z.boolean().optional(),
 });
 
+// AC-26: update evalConfigId on a suite-level evaluator
+export const updateSuiteEvaluatorSchema = z.object({
+  evalConfigId: z.string().uuid(),
+});
+
+// AC-27: update evalConfigId on a test-case-level evaluator override
+export const updateTestCaseEvaluatorSchema = z.object({
+  evalConfigId: z.string().uuid(),
+});
+
 // ============================================================================
 // Response schemas
 // ============================================================================
@@ -111,6 +121,8 @@ const evalSuiteEvaluatorResponseSchema = z.object({
   order: z.number(),
   required: z.boolean(),
   tags: z.array(z.string()),
+  evaluatorType: z.string().nullable(),
+  config: z.record(z.string(), z.unknown()).nullable(),
   createdAt: z.string(),
 });
 
@@ -122,6 +134,8 @@ const evalTestCaseEvaluatorOverrideResponseSchema = z.object({
   order: z.number(),
   required: z.boolean(),
   source: z.enum(["auto", "manual"]),
+  evaluatorType: z.string().nullable().optional(),
+  config: z.record(z.string(), z.unknown()).nullable().optional(),
   createdAt: z.string(),
 });
 

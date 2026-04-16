@@ -36,6 +36,8 @@ import {
   runEvalSuiteSchema,
   simulateAndRunResponseSchema,
   simulateAndRunSchema,
+  updateSuiteEvaluatorSchema,
+  updateTestCaseEvaluatorSchema,
 } from "./eval-suites.schemas";
 import {
   createEvaluator,
@@ -52,6 +54,8 @@ import {
   initSuiteFromSop,
   listEvalSuites,
   runEvalSuite,
+  updateSuiteEvaluator,
+  updateTestCaseEvaluator,
 } from "./eval-suites.service";
 
 const router = createRouter();
@@ -95,25 +99,63 @@ const testCaseEvaluatorIdParams = z.object({
 // Formatters
 // ============================================================================
 
-type SuiteDetail = Awaited<ReturnType<typeof getEvalSuiteById>>;
 type SuiteRunDetail = Awaited<ReturnType<typeof getEvalSuiteRunById>>;
 
-function formatEvaluator(a: SuiteDetail["evaluators"][number]) {
+function formatEvaluator(a: {
+  id: string;
+  suiteId: string;
+  evalConfigId: string;
+  name: string;
+  sopStepId?: string | null;
+  source: "auto" | "manual";
+  order: number;
+  required: boolean;
+  tags?: string[];
+  evaluatorType?: string | null;
+  config?: Record<string, unknown> | null;
+  createdAt: Date;
+}) {
   return {
     id: a.id,
     suiteId: a.suiteId,
     evalConfigId: a.evalConfigId,
     name: a.name,
-    sopStepId: a.sopStepId,
+    sopStepId: a.sopStepId ?? null,
     source: a.source,
     order: a.order,
     required: a.required,
     tags: a.tags ?? [],
+    evaluatorType: a.evaluatorType ?? null,
+    config: a.config ?? null,
     createdAt: a.createdAt.toISOString(),
   };
 }
 
-function formatTestCase(tc: SuiteDetail["testCases"][number]) {
+type AnyTestCaseOverride = {
+  id: string;
+  evalConfigId: string;
+  overrideType: "add" | "exclude";
+  name: string;
+  order: number;
+  required: boolean;
+  source: "auto" | "manual";
+  createdAt: Date;
+  [key: string]: unknown;
+};
+
+function formatTestCase(tc: {
+  id: string;
+  suiteId: string;
+  name: string;
+  description: string | null;
+  source: "auto" | "manual";
+  input: unknown;
+  expectedBehavior: string | null;
+  order: number;
+  evaluatorOverrides?: AnyTestCaseOverride[];
+  createdAt: Date;
+  updatedAt?: Date | null;
+}) {
   return {
     id: tc.id,
     suiteId: tc.suiteId,
@@ -131,6 +173,10 @@ function formatTestCase(tc: SuiteDetail["testCases"][number]) {
       order: o.order,
       required: o.required,
       source: o.source,
+      evaluatorType: (o.evaluatorType as string | null | undefined) ?? null,
+      config:
+        (o.evalConfigConfig as Record<string, unknown> | null | undefined) ??
+        null,
       createdAt: o.createdAt.toISOString(),
     })),
     createdAt: tc.createdAt.toISOString(),
@@ -138,7 +184,20 @@ function formatTestCase(tc: SuiteDetail["testCases"][number]) {
   };
 }
 
-function formatSuiteDetail(s: SuiteDetail) {
+type AnySuiteDetail = {
+  id: string;
+  agentId: string;
+  sopId: string | null;
+  name: string;
+  description: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date | null;
+  testCases: Parameters<typeof formatTestCase>[0][];
+  evaluators: Parameters<typeof formatEvaluator>[0][];
+};
+
+function formatSuiteDetail(s: AnySuiteDetail) {
   return {
     id: s.id,
     agentId: s.agentId,
@@ -339,6 +398,12 @@ router.delete(
   requirePermission("eval_suites:create"),
   requireOrganization(),
 );
+router.patch(
+  "/:suiteId/evaluators/:evaluatorId",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
 router.post(
   "/:suiteId/test-cases/:caseId/evaluators",
   requireUser(),
@@ -352,6 +417,12 @@ router.get(
   requireOrganization(),
 );
 router.delete(
+  "/:suiteId/test-cases/:caseId/evaluators/:overrideId",
+  requireUser(),
+  requirePermission("eval_suites:create"),
+  requireOrganization(),
+);
+router.patch(
   "/:suiteId/test-cases/:caseId/evaluators/:overrideId",
   requireUser(),
   requirePermission("eval_suites:create"),
@@ -1075,6 +1146,142 @@ router.openapi(deleteTestCaseEvaluatorRoute, async (c) => {
   const { suiteId, caseId, overrideId } = c.req.valid("param");
   await deleteTestCaseEvaluator(orgId, suiteId, caseId, overrideId);
   return c.body(null, 204);
+});
+
+// PATCH /:suiteId/evaluators/:evaluatorId — update suite evaluator's eval config (AC-26)
+const updateSuiteEvaluatorRoute = createRoute({
+  method: "patch",
+  path: "/{suiteId}/evaluators/{evaluatorId}",
+  tags: ["Eval Suites"],
+  summary: "Update suite evaluator",
+  description:
+    "Updates the eval config referenced by a suite-level evaluator. The evaluator type, order and name are preserved.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: suiteEvaluatorIdParams,
+    body: {
+      content: {
+        "application/json": { schema: updateSuiteEvaluatorSchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Evaluator updated",
+      content: {
+        "application/json": {
+          schema: z.object({
+            id: z.string().uuid(),
+            suiteId: z.string().uuid(),
+            evalConfigId: z.string().uuid(),
+            name: z.string(),
+            source: z.enum(["auto", "manual"]),
+            order: z.number(),
+            required: z.boolean(),
+            createdAt: z.string(),
+          }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Evaluator not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(updateSuiteEvaluatorRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, evaluatorId } = c.req.valid("param");
+  const body = c.req.valid("json");
+
+  const updated = await updateSuiteEvaluator(orgId, suiteId, evaluatorId, body);
+
+  return c.json(
+    {
+      id: updated.id,
+      suiteId: updated.suiteId,
+      evalConfigId: updated.evalConfigId,
+      name: updated.name,
+      source: updated.source,
+      order: updated.order,
+      required: updated.required,
+      createdAt: updated.createdAt.toISOString(),
+    },
+    200,
+  );
+});
+
+// PATCH /:suiteId/test-cases/:caseId/evaluators/:overrideId — update test case evaluator override's eval config (AC-27)
+const updateTestCaseEvaluatorRoute = createRoute({
+  method: "patch",
+  path: "/{suiteId}/test-cases/{caseId}/evaluators/{overrideId}",
+  tags: ["Eval Suites"],
+  summary: "Update test case evaluator override",
+  description:
+    "Updates the eval config referenced by a per-case evaluator override. The override type, order and name are preserved.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: testCaseEvaluatorIdParams,
+    body: {
+      content: {
+        "application/json": { schema: updateTestCaseEvaluatorSchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Override updated",
+      content: {
+        "application/json": {
+          schema: z.object({
+            id: z.string().uuid(),
+            testCaseId: z.string().uuid(),
+            evalConfigId: z.string().uuid(),
+            overrideType: z.enum(["add", "exclude"]),
+            name: z.string(),
+            order: z.number(),
+            required: z.boolean(),
+            source: z.enum(["auto", "manual"]),
+            createdAt: z.string(),
+          }),
+        },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Override not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(updateTestCaseEvaluatorRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { suiteId, caseId, overrideId } = c.req.valid("param");
+  const body = c.req.valid("json");
+
+  const updated = await updateTestCaseEvaluator(
+    orgId,
+    suiteId,
+    caseId,
+    overrideId,
+    body,
+  );
+
+  return c.json(
+    {
+      id: updated.id,
+      testCaseId: updated.testCaseId,
+      evalConfigId: updated.evalConfigId,
+      overrideType: updated.overrideType,
+      name: updated.name,
+      order: updated.order,
+      required: updated.required,
+      source: updated.source,
+      createdAt: updated.createdAt.toISOString(),
+    },
+    200,
+  );
 });
 
 export default router;

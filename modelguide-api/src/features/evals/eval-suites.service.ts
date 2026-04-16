@@ -62,7 +62,9 @@ export {
   resolveAssertions,
   createEvaluator,
   deleteSuiteEvaluator,
+  updateSuiteEvaluator,
   createTestCaseEvaluator,
+  updateTestCaseEvaluator,
   getTestCaseEffectiveEvaluators,
   deleteTestCaseEvaluator,
 } from "./eval-suites-evaluators.service";
@@ -775,9 +777,16 @@ export async function getEvalSuiteById(
 ): Promise<
   EvalSuite & {
     testCases: (EvalSuiteTestCase & {
-      evaluatorOverrides: EvalTestCaseEvaluator[];
+      evaluatorOverrides: (EvalTestCaseEvaluator & {
+        evaluatorType: string | null;
+        evalConfigConfig: Record<string, unknown> | null;
+      })[];
     })[];
-    evaluators: (EvalSuiteEvaluator & { tags: string[] })[];
+    evaluators: (EvalSuiteEvaluator & {
+      tags: string[];
+      evaluatorType: string | null;
+      config: Record<string, unknown> | null;
+    })[];
   }
 > {
   return forOrg(orgId, async (tx) => {
@@ -791,22 +800,40 @@ export async function getEvalSuiteById(
     const testCases = await loadTestCases(tx, suiteId);
     const evaluators = await loadSuiteEvaluators(tx, suiteId);
 
-    // AC 22: Load evaluator overrides per test case
+    // AC 22: Load evaluator overrides per test case (joined with eval_configs for type+config)
     const testCaseIds = testCases.map((tc) => tc.id);
-    let overridesByTestCase = new Map<string, EvalTestCaseEvaluator[]>();
+    type OverrideWithConfig = EvalTestCaseEvaluator & {
+      evaluatorType: string | null;
+      evalConfigConfig: Record<string, unknown> | null;
+    };
+    let overridesByTestCase = new Map<string, OverrideWithConfig[]>();
 
     if (testCaseIds.length > 0) {
       const allOverrides = await tx
-        .select()
+        .select({
+          override: evalTestCaseEvaluators,
+          evaluatorType: evalConfigs.evaluatorType,
+          evalConfigConfig: evalConfigs.config,
+        })
         .from(evalTestCaseEvaluators)
+        .leftJoin(
+          evalConfigs,
+          eq(evalTestCaseEvaluators.evalConfigId, evalConfigs.id),
+        )
         .where(inArray(evalTestCaseEvaluators.testCaseId, testCaseIds))
         .orderBy(asc(evalTestCaseEvaluators.order));
 
-      overridesByTestCase = new Map<string, EvalTestCaseEvaluator[]>();
-      for (const o of allOverrides) {
-        const list = overridesByTestCase.get(o.testCaseId) ?? [];
-        list.push(o);
-        overridesByTestCase.set(o.testCaseId, list);
+      overridesByTestCase = new Map<string, OverrideWithConfig[]>();
+      for (const row of allOverrides) {
+        const enriched: OverrideWithConfig = {
+          ...row.override,
+          evaluatorType: row.evaluatorType ?? null,
+          evalConfigConfig:
+            (row.evalConfigConfig as Record<string, unknown> | null) ?? null,
+        };
+        const list = overridesByTestCase.get(row.override.testCaseId) ?? [];
+        list.push(enriched);
+        overridesByTestCase.set(row.override.testCaseId, list);
       }
     }
 
