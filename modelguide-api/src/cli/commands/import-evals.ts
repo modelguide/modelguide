@@ -306,6 +306,14 @@ export async function handleImportEvals(
       if (tc.guardrailsTested.length > 0)
         descParts.push(`guardrails: ${tc.guardrailsTested.join(", ")}`);
 
+      // Build expectedBehavior from the test case's specific evaluators
+      const expectedBehavior = tc.evaluatorNames
+        .map((name, i) => {
+          const criterion = evaluatorCriterionMap.get(name) ?? name;
+          return `${i + 1}. ${criterion}`;
+        })
+        .join("\n");
+
       const testCase = await createTestCase(orgId, suiteId, {
         name: tc.id,
         description: descParts.length > 0 ? descParts.join(" | ") : undefined,
