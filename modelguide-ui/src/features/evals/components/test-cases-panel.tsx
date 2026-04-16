@@ -1,17 +1,30 @@
-import { ChevronDown, ChevronUp, Search } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronUp, Minus, Plus, Search, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
+import { Button } from '~/components/ui/button'
+import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
-import type { EvalSuiteTestCase } from '~/schemas/eval-suites'
+import type { EvalSuiteAssertion, EvalSuiteTestCase } from '~/schemas/eval-suites'
+import { EvalConfigPickerDialog } from './eval-config-picker-dialog'
 
 export interface TestCasesPanelProps {
   testCases: EvalSuiteTestCase[]
+  suiteId: string
+  evaluators?: EvalSuiteAssertion[]
   pendingCount?: number
+  isAdmin?: boolean
 }
 
 type SourceFilter = 'all' | 'auto' | 'manual'
 
-export function TestCasesPanel({ testCases, pendingCount = 0 }: TestCasesPanelProps) {
+export function TestCasesPanel({
+  testCases,
+  suiteId,
+  evaluators = [],
+  pendingCount = 0,
+  isAdmin = false,
+}: TestCasesPanelProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -117,6 +130,12 @@ export function TestCasesPanel({ testCases, pendingCount = 0 }: TestCasesPanelPr
                     #{tc.order}
                   </span>
                   <span className="flex-1 text-sm font-medium text-fg-primary">{tc.name}</span>
+                  {(tc.evaluatorOverrides?.length ?? 0) > 0 ? (
+                    <Badge variant="warning">
+                      {tc.evaluatorOverrides?.length} override
+                      {(tc.evaluatorOverrides?.length ?? 0) > 1 ? 's' : ''}
+                    </Badge>
+                  ) : null}
                   <Badge variant={tc.source === 'auto' ? 'info' : 'default'}>{tc.source}</Badge>
                   {isExpanded ? (
                     <ChevronUp className="h-4 w-4 text-fg-muted transition-transform" />
@@ -150,6 +169,15 @@ export function TestCasesPanel({ testCases, pendingCount = 0 }: TestCasesPanelPr
                         </code>
                       </div>
                     ) : null}
+
+                    {/* Evaluator overrides section */}
+                    {isAdmin ? (
+                      <TestCaseEvaluatorOverrides
+                        suiteId={suiteId}
+                        testCase={tc}
+                        suiteEvaluators={evaluators}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -180,6 +208,169 @@ export function TestCasesPanel({ testCases, pendingCount = 0 }: TestCasesPanelPr
             : null}
         </div>
       )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Test Case Evaluator Overrides sub-component (AC 18-20)
+// ============================================================================
+
+interface TestCaseEvaluatorOverridesProps {
+  suiteId: string
+  testCase: EvalSuiteTestCase
+  suiteEvaluators: EvalSuiteAssertion[]
+}
+
+function TestCaseEvaluatorOverrides({
+  suiteId,
+  testCase,
+  suiteEvaluators,
+}: TestCaseEvaluatorOverridesProps) {
+  const queryClient = useQueryClient()
+  const [showPicker, setShowPicker] = useState(false)
+  const overrides = testCase.evaluatorOverrides ?? []
+
+  const excludedConfigIds = new Set(
+    overrides.filter((o) => o.overrideType === 'exclude').map((o) => o.evalConfigId),
+  )
+  const addOverrides = overrides.filter((o) => o.overrideType === 'add')
+
+  // Create exclude override
+  const excludeMutation = useMutation({
+    mutationFn: (data: { evalConfigId: string; name: string }) =>
+      api
+        .post(`eval-suites/${suiteId}/test-cases/${testCase.id}/evaluators`, {
+          json: { evalConfigId: data.evalConfigId, overrideType: 'exclude', name: data.name },
+        })
+        .json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+    },
+  })
+
+  // Delete override (undo exclude or remove add)
+  const deleteOverrideMutation = useMutation({
+    mutationFn: (overrideId: string) =>
+      api.delete(`eval-suites/${suiteId}/test-cases/${testCase.id}/evaluators/${overrideId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+    },
+  })
+
+  // Create add override
+  const addMutation = useMutation({
+    mutationFn: (data: { evalConfigId: string; name: string }) =>
+      api
+        .post(`eval-suites/${suiteId}/test-cases/${testCase.id}/evaluators`, {
+          json: { evalConfigId: data.evalConfigId, overrideType: 'add', name: data.name },
+        })
+        .json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+      setShowPicker(false)
+    },
+  })
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="font-display text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+          Evaluators
+        </span>
+        <Button variant="ghost" size="sm" onClick={() => setShowPicker(true)}>
+          <Plus className="h-3 w-3" />
+          Add
+        </Button>
+      </div>
+
+      {/* Inherited evaluators */}
+      {suiteEvaluators.length > 0 ? (
+        <div className="space-y-0.5 rounded-lg border border-fg-subtle/10 bg-bg-base p-1">
+          {suiteEvaluators.map((se) => {
+            const isExcluded = excludedConfigIds.has(se.evalConfigId)
+            const excludeOverride = overrides.find(
+              (o) => o.evalConfigId === se.evalConfigId && o.overrideType === 'exclude',
+            )
+
+            return (
+              <div
+                key={se.id}
+                className={cn(
+                  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
+                  isExcluded ? 'opacity-50' : 'hover:bg-bg-subtle/30',
+                )}
+              >
+                <span
+                  className={cn('flex-1 font-mono text-fg-secondary', isExcluded && 'line-through')}
+                >
+                  {se.name}
+                </span>
+                <Badge variant="default">inherited</Badge>
+                {isExcluded && excludeOverride ? (
+                  <button
+                    type="button"
+                    onClick={() => deleteOverrideMutation.mutate(excludeOverride.id)}
+                    className="rounded p-0.5 text-brand-400 hover:bg-brand-500/10"
+                    title="Undo exclude"
+                  >
+                    <Undo2 className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      excludeMutation.mutate({
+                        evalConfigId: se.evalConfigId,
+                        name: se.name,
+                      })
+                    }
+                    className="rounded p-0.5 text-fg-muted opacity-0 transition-opacity hover:text-error group-hover/tc:opacity-100"
+                    title="Exclude for this test case"
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {/* Case-level add overrides */}
+      {addOverrides.length > 0 ? (
+        <div className="space-y-0.5 rounded-lg border border-brand-500/20 bg-bg-base p-1">
+          <span className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-brand-400">
+            Case-specific
+          </span>
+          {addOverrides.map((ao) => (
+            <div
+              key={ao.id}
+              className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs hover:bg-bg-subtle/30"
+            >
+              <span className="flex-1 font-mono text-fg-secondary">{ao.name}</span>
+              <Badge variant="warning">add</Badge>
+              <button
+                type="button"
+                onClick={() => deleteOverrideMutation.mutate(ao.id)}
+                className="rounded p-0.5 text-fg-muted hover:text-error"
+                title="Remove override"
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Eval config picker for adding */}
+      <EvalConfigPickerDialog
+        open={showPicker}
+        onClose={() => setShowPicker(false)}
+        onSelect={(config) => {
+          addMutation.mutate({ evalConfigId: config.id, name: config.name })
+        }}
+      />
     </div>
   )
 }

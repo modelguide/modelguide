@@ -1,0 +1,288 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, Search } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Badge } from '~/components/ui/badge'
+import { Button } from '~/components/ui/button'
+import { Dialog, DialogFooter } from '~/components/ui/dialog'
+import { Input } from '~/components/ui/input'
+import { Select } from '~/components/ui/select'
+import { api } from '~/lib/api'
+import { cn } from '~/lib/cn'
+import type { PaginatedResponse } from '~/lib/pagination'
+
+// --- Inline eval config type (no separate schema file exists yet) ---
+
+interface EvalConfigItem {
+  id: string
+  name: string
+  description: string | null
+  evaluatorType: string
+  config: Record<string, unknown>
+  tags: string[]
+  createdAt: string
+}
+
+// --- Evaluator type labels ---
+
+const EVALUATOR_TYPE_LABELS: Record<string, string> = {
+  tool_called: 'Tool Called',
+  tool_input_contains: 'Tool Input Contains',
+  no_tool_called: 'No Tool Called',
+  llm_judge: 'LLM Judge',
+}
+
+const EVALUATOR_TYPES = [
+  'tool_called',
+  'tool_input_contains',
+  'no_tool_called',
+  'llm_judge',
+] as const
+
+// --- Component ---
+
+export interface EvalConfigPickerDialogProps {
+  open: boolean
+  onClose: () => void
+  onSelect: (config: EvalConfigItem) => void
+  /** If true, shows an inline creation form */
+  allowCreate?: boolean
+}
+
+export function EvalConfigPickerDialog({
+  open,
+  onClose,
+  onSelect,
+  allowCreate = true,
+}: EvalConfigPickerDialogProps) {
+  const queryClient = useQueryClient()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [showCreateForm, setShowCreateForm] = useState(false)
+
+  // Create form state
+  const [newName, setNewName] = useState('')
+  const [newType, setNewType] = useState<string>('llm_judge')
+  const [newCriterion, setNewCriterion] = useState('')
+  const [newConnectorToolId, setNewConnectorToolId] = useState('')
+
+  const { data: configsData, isLoading } = useQuery({
+    queryKey: ['eval-configs', { pageSize: 100 }],
+    queryFn: () =>
+      api
+        .get('eval-configs', { searchParams: { pageSize: '100' } })
+        .json<PaginatedResponse<EvalConfigItem>>(),
+    enabled: open,
+  })
+
+  const configs = configsData?.data ?? []
+
+  const filteredConfigs = useMemo(() => {
+    let result = configs
+    if (typeFilter !== 'all') {
+      result = result.filter((c) => c.evaluatorType === typeFilter)
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      result = result.filter(
+        (c) => c.name.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q),
+      )
+    }
+    return result
+  }, [configs, typeFilter, searchQuery])
+
+  const createMutation = useMutation({
+    mutationFn: (data: { name: string; evaluatorType: string; config: Record<string, unknown> }) =>
+      api.post('eval-configs', { json: data }).json<EvalConfigItem>(),
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: ['eval-configs'] })
+      setShowCreateForm(false)
+      resetCreateForm()
+      onSelect(created)
+    },
+  })
+
+  function resetCreateForm() {
+    setNewName('')
+    setNewType('llm_judge')
+    setNewCriterion('')
+    setNewConnectorToolId('')
+  }
+
+  function handleCreate() {
+    let config: Record<string, unknown> = {}
+    if (newType === 'llm_judge') {
+      config = { criterion: newCriterion }
+    } else {
+      config = { connectorToolId: newConnectorToolId }
+    }
+    createMutation.mutate({
+      name: newName,
+      evaluatorType: newType,
+      config,
+    })
+  }
+
+  function handleClose() {
+    setShowCreateForm(false)
+    resetCreateForm()
+    setSearchQuery('')
+    setTypeFilter('all')
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} title="Select Evaluator Config" size="lg">
+      {showCreateForm ? (
+        <div className="space-y-3">
+          <Input
+            label="Name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g. Check order lookup"
+            required
+          />
+          <Select
+            label="Evaluator Type"
+            value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+          >
+            {EVALUATOR_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {EVALUATOR_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </Select>
+          {newType === 'llm_judge' ? (
+            <div>
+              <label
+                htmlFor="criterion"
+                className="mb-1.5 block text-sm font-medium text-fg-secondary"
+              >
+                Criterion <span className="text-error">*</span>
+              </label>
+              <textarea
+                id="criterion"
+                value={newCriterion}
+                onChange={(e) => setNewCriterion(e.target.value)}
+                placeholder="The agent should..."
+                rows={3}
+                className="w-full rounded-lg border border-fg-subtle/20 bg-bg-subtle px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+          ) : (
+            <Input
+              label="Connector Tool ID"
+              value={newConnectorToolId}
+              onChange={(e) => setNewConnectorToolId(e.target.value)}
+              placeholder="UUID of the connector tool"
+              required
+            />
+          )}
+          {createMutation.error ? (
+            <p className="text-xs text-error">Failed to create config. Please try again.</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowCreateForm(false)
+                resetCreateForm()
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={
+                !newName.trim() ||
+                (newType === 'llm_judge' ? !newCriterion.trim() : !newConnectorToolId.trim())
+              }
+              loading={createMutation.isPending}
+            >
+              Create & Select
+            </Button>
+          </DialogFooter>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Search and filter */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted" />
+              <input
+                type="text"
+                placeholder="Search configs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-lg border border-fg-subtle/10 bg-bg-subtle py-2 pl-9 pr-3 text-sm text-fg-primary placeholder:text-fg-muted focus:border-brand-500/30 focus:outline-none"
+              />
+            </div>
+            <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="all">All types</option>
+              {EVALUATOR_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {EVALUATOR_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {/* Config list */}
+          <div className="max-h-64 space-y-0.5 overflow-y-auto rounded-lg border border-fg-subtle/10 bg-bg-base p-1.5">
+            {isLoading ? (
+              <div className="px-4 py-8 text-center text-sm text-fg-muted">Loading configs...</div>
+            ) : filteredConfigs.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-fg-muted">
+                No configs match your search
+              </div>
+            ) : (
+              filteredConfigs.map((config) => (
+                <button
+                  key={config.id}
+                  type="button"
+                  onClick={() => onSelect(config)}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm transition-colors',
+                    'hover:bg-bg-subtle/60',
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-medium text-fg-primary">{config.name}</p>
+                    {config.description ? (
+                      <p className="truncate text-xs text-fg-muted">{config.description}</p>
+                    ) : null}
+                  </div>
+                  <Badge variant="info">{EVALUATOR_TYPE_LABELS[config.evaluatorType]}</Badge>
+                  {config.tags.length > 0 ? (
+                    <div className="flex gap-1">
+                      {config.tags.slice(0, 2).map((tag) => (
+                        <Badge key={tag} variant="default">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Footer with create option */}
+          <DialogFooter className="justify-between">
+            {allowCreate ? (
+              <Button variant="ghost" onClick={() => setShowCreateForm(true)}>
+                <Plus className="h-4 w-4" />
+                Create new
+              </Button>
+            ) : (
+              <div />
+            )}
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </div>
+      )}
+    </Dialog>
+  )
+}

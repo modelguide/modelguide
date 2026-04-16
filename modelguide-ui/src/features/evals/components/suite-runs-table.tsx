@@ -9,6 +9,7 @@ import { PROMPT_SOURCE_LABELS } from '~/schemas/eval-suites'
 export interface SuiteRunsTableProps {
   runs: EvalSuiteRun[]
   suiteId: string
+  totalTestCases?: number
   isLoading?: boolean
 }
 
@@ -18,7 +19,7 @@ function getPassCount(run: EvalSuiteRun): { passed: number; total: number } {
   return { passed, total }
 }
 
-export function SuiteRunsTable({ runs, suiteId, isLoading }: SuiteRunsTableProps) {
+export function SuiteRunsTable({ runs, suiteId, totalTestCases, isLoading }: SuiteRunsTableProps) {
   const navigate = useNavigate()
 
   if (isLoading) {
@@ -124,6 +125,11 @@ export function SuiteRunsTable({ runs, suiteId, isLoading }: SuiteRunsTableProps
                   <span className="text-sm tabular-nums text-fg-secondary">
                     {passed}/{total} passed
                   </span>
+                  {totalTestCases != null && total < totalTestCases ? (
+                    <Badge variant="default" className="ml-1.5">
+                      partial
+                    </Badge>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">
                   <span className="font-mono text-sm tabular-nums text-fg-secondary">

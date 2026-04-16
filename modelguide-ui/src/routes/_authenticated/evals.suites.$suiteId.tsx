@@ -281,11 +281,26 @@ function SuiteDetailPage() {
 
           {/* Tab Content */}
           {activeTab === 'test-cases' ? (
-            <TestCasesPanel testCases={suite.testCases ?? []} pendingCount={generatingRemaining} />
+            <TestCasesPanel
+              testCases={suite.testCases ?? []}
+              suiteId={suiteId}
+              evaluators={suite.evaluators ?? []}
+              pendingCount={generatingRemaining}
+              isAdmin={isAdmin}
+            />
           ) : activeTab === 'evaluators' ? (
-            <EvaluatorsPanel evaluators={suite.evaluators ?? []} />
+            <EvaluatorsPanel
+              evaluators={suite.evaluators ?? []}
+              suiteId={suiteId}
+              isAdmin={isAdmin}
+            />
           ) : (
-            <SuiteRunsTable runs={runsData?.data ?? []} suiteId={suiteId} isLoading={runsLoading} />
+            <SuiteRunsTable
+              runs={runsData?.data ?? []}
+              suiteId={suiteId}
+              totalTestCases={suite.testCases?.length}
+              isLoading={runsLoading}
+            />
           )}
         </>
       ) : null}

@@ -17,6 +17,21 @@ export const evalSuiteAssertionSchema = z.object({
 
 export type EvalSuiteAssertion = z.infer<typeof evalSuiteAssertionSchema>
 
+// --- Evaluator Override ---
+
+export const evalTestCaseEvaluatorOverrideSchema = z.object({
+  id: z.string().uuid(),
+  evalConfigId: z.string().uuid(),
+  overrideType: z.enum(['add', 'exclude']),
+  name: z.string(),
+  order: z.number(),
+  required: z.boolean(),
+  source: z.enum(['auto', 'manual']),
+  createdAt: z.string(),
+})
+
+export type EvalTestCaseEvaluatorOverride = z.infer<typeof evalTestCaseEvaluatorOverrideSchema>
+
 // --- Test Case ---
 
 export const evalSuiteTestCaseSchema = z.object({
@@ -28,6 +43,7 @@ export const evalSuiteTestCaseSchema = z.object({
   input: z.record(z.unknown()).nullable().optional(),
   expectedBehavior: z.string().nullable().optional(),
   order: z.number(),
+  evaluatorOverrides: z.array(evalTestCaseEvaluatorOverrideSchema).optional().default([]),
   createdAt: z.string(),
   updatedAt: z.string().nullable().optional(),
 })
