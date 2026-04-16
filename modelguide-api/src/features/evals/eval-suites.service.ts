@@ -86,7 +86,9 @@ export async function initSuiteFromSop(
   opts?: InitEvalSuiteOpts,
 ): Promise<
   EvalSuite & {
-    testCases: EvalSuiteTestCase[];
+    testCases: (EvalSuiteTestCase & {
+      evaluatorOverrides: EvalTestCaseEvaluator[];
+    })[];
     evaluators: (EvalSuiteEvaluator & { tags: string[] })[];
   }
 > {
@@ -357,7 +359,10 @@ export async function initSuiteFromSop(
 
     return {
       ...suite,
-      testCases,
+      testCases: testCases.map((tc) => ({
+        ...tc,
+        evaluatorOverrides: [] as EvalTestCaseEvaluator[],
+      })),
       evaluators,
     };
   });
