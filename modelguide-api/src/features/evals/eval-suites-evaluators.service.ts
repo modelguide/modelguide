@@ -431,6 +431,25 @@ export async function createTestCaseEvaluator(
       }
     }
 
+    // Guard: reject `add` when the config is already inherited at suite level
+    if (data.overrideType === "add") {
+      const [suiteEval] = await tx
+        .select({ id: evalSuiteEvaluators.id })
+        .from(evalSuiteEvaluators)
+        .where(
+          and(
+            eq(evalSuiteEvaluators.suiteId, suiteId),
+            eq(evalSuiteEvaluators.evalConfigId, data.evalConfigId),
+          ),
+        );
+
+      if (suiteEval) {
+        throw Errors.validationError(
+          "Evaluator already inherited from suite — exclude it first or choose a different config",
+        );
+      }
+    }
+
     // AC 6: Check for duplicate override (same test_case_id + eval_config_id + override_type)
     const [existing] = await tx
       .select({ id: evalTestCaseEvaluators.id })
