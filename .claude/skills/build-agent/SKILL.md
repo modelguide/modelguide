@@ -289,6 +289,7 @@ Derive:
 - `agentFirstName` — the human name (e.g. "Aria", "Max")
 - `agentSlug` — always `{{orgSlug}}-voice-agent` (e.g. `glowskin-voice-agent`, `coolair-voice-agent`)
 - `AgentClassName` — PascalCase of the first name + "Agent" (e.g. `AriaAgent`, `MaxAgent`)
+- `agentDescription` — a 1-2 sentence persona statement written **as the agent's role identity**, used verbatim as the "Role & Objective" opening of the compiled system prompt. This is NOT an internal dev note. Write it as if addressing the LLM directly (e.g. "You are a voice assistant for GlowSkin handling skincare product questions and order support. Answer only in English."). Include the language instruction if non-English.
 
 Record name/slug/class as D-03/D-04, style as D-05.
 
@@ -461,13 +462,51 @@ In supervised mode, follow the summary with:
    ```
    Format as a status block. Don't proceed until all three are set.
 
-6. Verify users.yaml:
+6. **Eval pipeline keys** (required for both platforms — evals return 0/0 without these):
+
+   Check whether the keys are already set:
+   ```bash
+   grep -q "^EVAL_LLM_API_KEY=.\+" modelguide-api/.env && echo "EVAL_LLM_API_KEY: set" || echo "EVAL_LLM_API_KEY: MISSING"
+   grep -q "^SIMULATION_LLM_API_KEY=.\+" modelguide-api/.env && echo "SIMULATION_LLM_API_KEY: set" || echo "SIMULATION_LLM_API_KEY: MISSING"
+   ```
+
+   If either is missing, append placeholder lines to `modelguide-api/.env`:
+   ```bash
+   cat >> modelguide-api/.env << 'EOF'
+
+   # Eval pipeline — required for run-evals to produce results (all can use same OpenAI key)
+   SIMULATION_LLM_API_KEY=<your-openai-key>
+   SIMULATION_LLM_MODEL=gpt-5.4-mini
+   SIMULATION_LLM_BASE_URL=https://api.openai.com/v1
+   SIMULATION_AGENT_MODEL=openai/gpt-4.1-mini
+   EVAL_LLM_API_KEY=<your-openai-key>
+   EVAL_LLM_MODEL=gpt-5.4-mini
+   EVAL_LLM_BASE_URL=https://api.openai.com/v1
+   EOF
+   ```
+
+   Then tell the user:
+   ```
+   Open modelguide-api/.env and replace both <your-openai-key> placeholders with your OpenAI API key.
+   Get one at: https://platform.openai.com/api-keys
+   Both SIMULATION_LLM_API_KEY and EVAL_LLM_API_KEY can use the same key.
+   Let me know when you've filled them in.
+   ```
+
+   Verify (without reading values):
+   ```bash
+   grep -q "^EVAL_LLM_API_KEY=[^<]" modelguide-api/.env && echo "EVAL_LLM_API_KEY: set" || echo "EVAL_LLM_API_KEY: MISSING or placeholder"
+   grep -q "^SIMULATION_LLM_API_KEY=[^<]" modelguide-api/.env && echo "SIMULATION_LLM_API_KEY: set" || echo "SIMULATION_LLM_API_KEY: MISSING or placeholder"
+   ```
+   Do not proceed to Stage [2] until both are set.
+
+7. Verify users.yaml:
    ```bash
    test -s .modelguide/users.yaml && echo "users.yaml: Found" || echo "users.yaml: Missing"
    grep -q "role: admin" .modelguide/users.yaml && echo "admin: present" || echo "admin: missing"
    ```
 
-7. Ensure `API_EXTERNAL_ADDRESS` is set (required for ElevenLabs webhooks; good practice for LiveKit too):
+8. Ensure `API_EXTERNAL_ADDRESS` is set (required for ElevenLabs webhooks; good practice for LiveKit too):
    ```bash
    if ! grep -q "^API_EXTERNAL_ADDRESS=" modelguide-api/.env; then
      echo "API_EXTERNAL_ADDRESS=http://localhost:3000" >> modelguide-api/.env
@@ -487,45 +526,23 @@ In supervised mode: show each YAML file and wait for approval before running `mg
 
 ### 2a. Generate YAML artifacts
 
-Write provisioning files into `.modelguide/` from `references/yaml-templates.md`. Do **not** overwrite `users.yaml`. Substitute all `{{variables}}` from CONTEXT.md.
+Write provisioning files into `.modelguide/`. Do **not** overwrite `users.yaml`. Substitute all `{{variables}}` from CONTEXT.md.
+
+**Reference files — read before generating:**
+- `references/yaml-templates.md` — opinionated templates for each file (use these as the starting point)
+- `.claude/skills/mg-cli/references/schemas.md` — complete field-by-field schema spec (source of truth for valid fields and values)
+- `.claude/skills/mg-cli/references/examples.md` — working end-to-end example (useful for cross-checking)
+
+If field names or valid values are unclear, consult the mg-cli schemas before inventing fields — invalid fields cause `mg setup` to fail silently or with confusing errors.
 
 Always generate:
 - `org.yaml` — slug from D-02
 - `sops.yaml` — 3 SOPs from Conv-1/2/3, status: active
 - `guardrails.yaml` — from D-08, always include no-fabrication baseline
 - `evals.yaml` — 5-10 test cases per SOP (happy path + missing info + guardrail trigger)
+- `personas.yaml` — 1-2 simulation personas. See `references/yaml-templates.md` for format. Reference in test cases via `persona: <id>`; missing persona ID causes silent fallback to raw message.
 
-**`agents.yaml`** — differs by platform:
-
-_ElevenLabs:_
-```yaml
-agents:
-  - name: {{agentName}}
-    slug: {{agentSlug}}
-    description: "{{agentDescription}}"
-    platform: elevenlabs
-    modality: voice
-    active: true
-    config:
-      llmModel: {{llmModel}}   # from D-06, e.g. gpt-4o-mini
-    secrets:
-      - field: elevenlabs_api_key
-        name: ElevenLabs API Key
-        type: elevenlabs_api_key
-        value: "{{elevenLabsApiKey}}"  # from D-12; stored in vault, not .env
-```
-
-_LiveKit:_
-```yaml
-agents:
-  - name: {{agentName}}
-    slug: {{agentSlug}}
-    platform: livekit
-    config:
-      url: ws://localhost:7880
-      agentName: {{agentSlug}}
-    active: true
-```
+**`agents.yaml`** — see `references/yaml-templates.md` for ElevenLabs and LiveKit formats.
 
 Connector handling (same for both platforms):
 - If `connectorStatus: done` (or no custom connector): generate `connectors.yaml` now
@@ -619,11 +636,19 @@ Write STATE.md (`currentStage: 3`).
 
 ## Stage [3]: Generate Test Assets
 
-Import eval suites into ModelGuide:
+Import personas first (must exist before evals reference them), then eval suites:
 
 ```bash
+cd modelguide-api && bun run src/cli/mg.ts import-personas --org {{orgSlug}} ../.modelguide/personas.yaml
 cd modelguide-api && bun run src/cli/mg.ts import-evals --org {{orgSlug}} ../.modelguide/evals.yaml
 ```
+
+To update a persona after the first import, use `--replace`:
+```bash
+cd modelguide-api && bun run src/cli/mg.ts import-personas --org {{orgSlug}} --replace ../.modelguide/personas.yaml
+```
+
+**Important:** `import-evals` is **not idempotent for updates** — it skips any evaluator or test case that already exists by name. If you need to update an evaluator criterion or test case input after the first import, re-running import will not apply the change. This is a known CLI gap — updating existing evaluators via `mg import-evals` is not yet supported. Track it as a follow-up if encountered.
 
 Write STATE.md (`currentStage: 4`).
 
@@ -649,7 +674,18 @@ Print this at the start of Stage [4]:
 
 Check each off as it completes.
 
-### 4a. Ensure API is running
+### 4a. Pre-flight: verify eval LLM keys
+
+Before starting any simulation, check that the LLM keys are set — missing keys cause silent 0/0 results with no error:
+
+```bash
+grep -q "^EVAL_LLM_API_KEY=[^<]" modelguide-api/.env && echo "EVAL_LLM_API_KEY: set" || echo "EVAL_LLM_API_KEY: MISSING or placeholder"
+grep -q "^SIMULATION_LLM_API_KEY=[^<]" modelguide-api/.env && echo "SIMULATION_LLM_API_KEY: set" || echo "SIMULATION_LLM_API_KEY: MISSING or placeholder"
+```
+
+If either shows MISSING or placeholder: stop. Tell the user to open `modelguide-api/.env`, replace the `<your-openai-key>` placeholders with their real OpenAI key, and restart the API before re-running evals. Do NOT run evals with placeholder values.
+
+### 4b. Ensure API is running
 
 ```bash
 if ! curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
@@ -660,13 +696,13 @@ if ! curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
 fi
 ```
 
-### 4b. Run simulations
+### 4c. Run simulations
 
 ```bash
 cd modelguide-api && bun run src/cli/mg.ts run-evals --org {{orgSlug}} --agent {{agentSlug}}
 ```
 
-### 4c. Decision
+### 4d. Decision
 
 - Pass rate ≥ 80%: skip stage [5], proceed to [6]
 - Pass rate < 80%: proceed to [5] (tighten)
@@ -702,14 +738,31 @@ Print this before doing any work in Stage [5], and update it each iteration:
 Check each item off (`[✓]`) as it completes. This gives the person a live view of
 where things stand without them needing to ask.
 
+### Eval quality standards
+
+Before running the tighten loop, verify the eval suite itself is sound. Weak evals produce misleading pass rates.
+
+**Minimum per SOP:** happy path · missing-info (customer omits required field, agent must ask) · guardrail trigger. Add edge cases for any step marked CRITICAL in the SOP.
+
+**Conversation history strategy for reliability:** LLM simulations are non-deterministic. Long multi-turn flows from scratch produce inconsistent results. Use `conversation_history` to pre-populate the flow up to just before the behavior you're testing — leave only 1-2 turns for the simulation.
+
+Example: to test that an agent proactively mentions Apple Pay deactivation, fill history through identity → card blocked → standing orders → card ordered, then set `customer_message` to "Dziękuję, to wszystko." — one predictable turn left.
+
+**Evaluator criteria scoping:** LLM judges evaluate the entire transcript including `conversation_history`. For multi-SOP agents, a criterion like "agent does not mention Apple Pay" will fire on prior turns from a different SOP that legitimately mentioned it. Always scope criteria to the current response:
+- Bad:  `"The agent does not give information about X"`
+- Good: `"In the agent's response to this customer message, the agent does not give information about X. Information provided in earlier turns as part of a different SOP workflow does NOT count as a violation."`
+
+**Evaluator vs. SOP failures:** Before editing a SOP, check whether the agent actually behaved correctly and the criterion is too broad. Signs of a false positive: the agent does the right thing but the evaluator still fails; failure only appears on test cases with long conversation_history. If you suspect a false positive but the CLI does not yet support updating existing evaluator criteria (known gap — `import-evals --update`), note the affected cases and treat them as known non-issues when interpreting the pass rate.
+
 ### Failure categorization
 
 | Failure type | Symptom | Fix location |
 |---|---|---|
 | SOP | Wrong tool called, steps out of order, missing clarification | `.modelguide/sops.yaml` |
-| Persona | Wrong tone, scope too broad/narrow | `agent/prompts/base.py` PERSONA_HEADER |
+| Persona | Wrong tone, scope too broad/narrow | `agents.yaml` description field + DB UPDATE + recompile (ElevenLabs) or `agent/prompts/base.py` PERSONA_HEADER (LiveKit) |
 | Guardrail | Rule violated or too vague | `.modelguide/guardrails.yaml` |
 | Tool | Wrong parameters, bad docstring | `agent/my_agent.py` `@function_tool` docstring/params |
+| Evaluator | Criterion fires on correct behavior (false positive) | Update `evals.yaml` criterion + note as known CLI gap if re-import can't apply it |
 
 After categorizing, print a brief summary before making any changes:
 

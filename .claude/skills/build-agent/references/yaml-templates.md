@@ -30,11 +30,37 @@ users:
 
 ## agents.yaml
 
+`agentDescription` is the agent's role identity — written as a first-person LLM instruction and used verbatim as the "Role & Objective" opener of the compiled system prompt. Do NOT use internal dev notes here. Include language instruction if non-English (e.g. "Odpowiadaj wyłącznie po polsku.").
+
+### ElevenLabs
+
 ```yaml
 agents:
   - name: "{{agentName}}"
-    slug: "{{agentSlug}}"    # e.g. "glowbox-voice-agent"
-    description: "{{agentDescription}}"
+    slug: "{{agentSlug}}"
+    description: "{{agentDescription}}"   # first-person persona statement — becomes system prompt opener
+    platform: elevenlabs
+    modality: voice
+    active: true
+    config:
+      llmModel: "{{llmModel}}"   # e.g. gpt-4.1-mini, gpt-4o-mini
+    # Conversation-only agents: omit the `tools:` block entirely.
+    tools:
+      - connectorSlug: "{{connectorSlug}}"
+    secrets:
+      - field: platform_api_key     # MUST be platform_api_key — any other value breaks sync
+        name: ElevenLabs API Key
+        type: platform_api_key
+        value: "{{elevenLabsApiKey}}"   # stored in vault, not .env
+```
+
+### LiveKit
+
+```yaml
+agents:
+  - name: "{{agentName}}"
+    slug: "{{agentSlug}}"
+    description: "{{agentDescription}}"   # first-person persona statement — becomes system prompt opener
     modality: voice
     platform: livekit
     active: true
@@ -43,7 +69,6 @@ agents:
       agentName: "{{agentSlug}}"
     # Conversation-only agents: omit the `tools:` block entirely.
     tools:
-      # `connectorSlug` is the org connector instance slug, e.g. `glowskin_store`.
       - connectorSlug: "{{connectorSlug}}"
 ```
 
@@ -252,4 +277,51 @@ test_cases:
           content: "Hi, I'm {{agentFirstName}}. How can I help you today?"
 
   # Repeat pattern for remaining SOPs...
+```
+
+## personas.yaml
+
+1-2 simulation personas representing realistic customer types. Referenced in eval test cases via `persona: <id>`.
+If a test case references an unknown persona ID, the simulation silently falls back to the raw message.
+
+```yaml
+personas:
+  - id: "{{orgSlug}}-customer"
+    name: "{{Business}} Customer"
+    description: "Cooperative customer calling {{support line}}. Provides details when asked."
+    traits: [cooperative, {{language}}-speaking, responsive]
+    max_turns: 20
+    system_prompt: |
+      You are a customer of {{Business}} calling {{support line}}.
+
+      Your details (provide when the agent asks):
+        - Name: {{realistic full name}}
+        - {{Any relevant ID, account, or verification fields}}
+
+      Behavior:
+        - Answer in {{language}}.
+        - Provide your details only when the agent explicitly asks for verification.
+        - {{Scenario-specific instructions, e.g. "If agent asks about a transaction amount, provide the amount from the test scenario."}}
+        - Stay in character until the conversation naturally ends.
+        - Be polite and concise.
+
+  # Optional: add a second persona for edge-case customer types (e.g. impatient, incomplete info)
+  - id: "{{orgSlug}}-customer-impatient"
+    name: "{{Business}} Customer (Impatient)"
+    description: "Impatient customer who wants fast resolution and may skip providing details."
+    traits: [impatient, {{language}}-speaking]
+    max_turns: 15
+    system_prompt: |
+      You are an impatient customer of {{Business}}.
+      You want the issue resolved as quickly as possible.
+      You may initially skip providing details — only provide them if the agent explicitly asks.
+      Answer in {{language}}.
+```
+
+To reference a persona in a test case, add `persona: "{{orgSlug}}-customer"` to the `input` block:
+```yaml
+    input:
+      customer_message: "..."
+      persona: "{{orgSlug}}-customer"
+      conversation_history: [...]
 ```
