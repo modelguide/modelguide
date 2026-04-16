@@ -19,6 +19,7 @@ ALTER TABLE "eval_test_case_evaluators" ADD CONSTRAINT "eval_test_case_evaluator
 CREATE INDEX "eval_test_case_evaluators_test_case_idx" ON "eval_test_case_evaluators" USING btree ("test_case_id");--> statement-breakpoint
 CREATE INDEX "eval_test_case_evaluators_config_idx" ON "eval_test_case_evaluators" USING btree ("eval_config_id");--> statement-breakpoint
 CREATE INDEX "eval_test_case_evaluators_org_idx" ON "eval_test_case_evaluators" USING btree ("organization_id");--> statement-breakpoint
+-- RLS policies: org-scoped access
 CREATE POLICY "eval_test_case_evaluators_org_isolation" ON "eval_test_case_evaluators"
   USING ("organization_id" = current_setting('app.organization_id')::uuid);--> statement-breakpoint
 CREATE POLICY "eval_test_case_evaluators_org_insert" ON "eval_test_case_evaluators"
