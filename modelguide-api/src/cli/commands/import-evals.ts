@@ -51,6 +51,7 @@ export interface ImportEvalsResult {
   suitesExisting: number;
   testCasesCreated: number;
   testCasesSkipped: number;
+  testCasesReplaced: number;
   evalConfigsCreated: number;
 }
 
@@ -167,26 +168,48 @@ async function findExistingEvalConfig(
   return rows[0]?.id ?? null;
 }
 
-/** Load existing test case external IDs for a suite. */
-async function loadExistingTestCaseIds(
+/** Load existing test cases for a suite: externalId → DB row id. */
+async function loadExistingTestCases(
   orgId: string,
   suiteId: string,
-): Promise<Set<string>> {
+): Promise<Map<string, string>> {
   const rows = await forOrg(orgId, (tx) =>
     tx
-      .select({ input: evalSuiteTestCases.input })
+      .select({ id: evalSuiteTestCases.id, input: evalSuiteTestCases.input })
       .from(evalSuiteTestCases)
       .where(eq(evalSuiteTestCases.suiteId, suiteId)),
   );
 
-  const ids = new Set<string>();
+  const map = new Map<string, string>();
   for (const row of rows) {
     const input = row.input as Record<string, unknown> | null;
     if (input?.externalId && typeof input.externalId === "string") {
-      ids.add(input.externalId);
+      map.set(input.externalId, row.id);
     }
   }
-  return ids;
+  return map;
+}
+
+/** Replace (update) an existing test case by its DB id. */
+async function replaceTestCase(
+  orgId: string,
+  testCaseId: string,
+  data: {
+    description?: string;
+    input: Record<string, unknown>;
+    mockToolResponses?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await forOrg(orgId, (tx) =>
+    tx
+      .update(evalSuiteTestCases)
+      .set({
+        description: data.description ?? null,
+        input: data.input,
+        mockToolResponses: data.mockToolResponses ?? {},
+      })
+      .where(eq(evalSuiteTestCases.id, testCaseId)),
+  );
 }
 
 // ============================================================================
@@ -196,13 +219,14 @@ async function loadExistingTestCaseIds(
 export async function handleImportEvals(
   orgId: string,
   normalized: NormalizedEvalsInput,
-  options?: { registry?: IdRegistry },
+  options?: { registry?: IdRegistry; replace?: boolean },
 ): Promise<ImportEvalsResult> {
   const result: ImportEvalsResult = {
     suitesCreated: 0,
     suitesExisting: 0,
     testCasesCreated: 0,
     testCasesSkipped: 0,
+    testCasesReplaced: 0,
     evalConfigsCreated: 0,
   };
 
@@ -288,16 +312,11 @@ export async function handleImportEvals(
       }
     }
 
-    // 6b. Load existing test case IDs for dedup
-    const existingIds = await loadExistingTestCaseIds(orgId, suiteId);
+    // 6b. Load existing test cases for dedup / replace
+    const existingTestCases = await loadExistingTestCases(orgId, suiteId);
 
-    // 6c. Create test cases with per-case evaluator overrides
+    // 6c. Create or replace test cases with per-case evaluator overrides
     for (const tc of testCases) {
-      if (existingIds.has(tc.id)) {
-        result.testCasesSkipped++;
-        continue;
-      }
-
       // Build description from metadata
       const descParts: string[] = [];
       if (tc.scenarioKey) descParts.push(`scenario: ${tc.scenarioKey}`);
@@ -306,16 +325,36 @@ export async function handleImportEvals(
       if (tc.guardrailsTested.length > 0)
         descParts.push(`guardrails: ${tc.guardrailsTested.join(", ")}`);
 
+      const inputPayload = {
+        externalId: tc.id,
+        message: tc.input.message,
+        conversationHistory: tc.input.conversationHistory,
+        context: tc.input.context,
+        persona: tc.input.persona,
+      };
+
+      const existingDbId = existingTestCases.get(tc.id);
+      if (existingDbId) {
+        if (options?.replace) {
+          await replaceTestCase(orgId, existingDbId, {
+            description:
+              descParts.length > 0 ? descParts.join(" | ") : undefined,
+            input: inputPayload,
+            mockToolResponses: tc.mockToolResponses,
+          });
+          result.testCasesReplaced++;
+        } else {
+          result.testCasesSkipped++;
+        }
+        continue;
+      }
+
       const testCase = await createTestCase(orgId, suiteId, {
         name: tc.id,
         description: descParts.length > 0 ? descParts.join(" | ") : undefined,
         source: "manual",
-        input: {
-          externalId: tc.id,
-          message: tc.input.message,
-          conversationHistory: tc.input.conversationHistory,
-          context: tc.input.context,
-        },
+        input: inputPayload,
+        mockToolResponses: tc.mockToolResponses,
       });
 
       // Insert per-case evaluator overrides (add type)
@@ -364,19 +403,37 @@ export function registerImportEvalsCommand(program: Command): void {
       "--agent <slug>",
       "Agent slug (required for JSON, optional for YAML)",
     )
+    .option(
+      "--replace",
+      "Replace existing test cases instead of skipping them",
+      false,
+    )
     .argument("<file-or-dir>", "YAML/JSON file or directory containing evals")
     .action(
-      async (fileOrDir: string, opts: { org: string; agent?: string }) => {
+      async (
+        fileOrDir: string,
+        opts: { org: string; agent?: string; replace: boolean },
+      ) => {
         try {
           const orgId = await resolveOrgId(opts.org);
           const normalized = resolveEvalsInput(fileOrDir, opts.agent);
 
-          const result = await handleImportEvals(orgId, normalized);
+          const result = await handleImportEvals(orgId, normalized, {
+            replace: opts.replace,
+          });
+
+          const tcParts = [
+            `${result.testCasesCreated} created`,
+            `${result.testCasesSkipped} skipped`,
+          ];
+          if (result.testCasesReplaced > 0) {
+            tcParts.push(`${result.testCasesReplaced} replaced`);
+          }
 
           log.success(
             [
               `Suites: ${result.suitesCreated} created, ${result.suitesExisting} existing`,
-              `Test cases: ${result.testCasesCreated} created, ${result.testCasesSkipped} skipped`,
+              `Test cases: ${tcParts.join(", ")}`,
               `Eval configs: ${result.evalConfigsCreated} created`,
             ].join("\n"),
           );

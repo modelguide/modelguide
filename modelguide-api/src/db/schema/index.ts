@@ -3,6 +3,7 @@ export * from "./core";
 export * from "./eval-configs";
 export * from "./eval-runs";
 export * from "./eval-suites";
+export * from "./simulation-personas";
 
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import type {
@@ -36,6 +37,7 @@ import type {
   evalSuites,
   evalTestCaseEvaluators,
 } from "./eval-suites";
+import type { simulationPersonas } from "./simulation-personas";
 
 export type Organization = InferSelectModel<typeof organizations>;
 export type NewOrganization = InferInsertModel<typeof organizations>;
@@ -117,3 +119,6 @@ export type EvalSuiteEvaluator = InferSelectModel<typeof evalSuiteEvaluators>;
 export type EvalTestCaseEvaluator = InferSelectModel<
   typeof evalTestCaseEvaluators
 >;
+
+export type SimulationPersona = InferSelectModel<typeof simulationPersonas>;
+export type NewSimulationPersona = InferInsertModel<typeof simulationPersonas>;

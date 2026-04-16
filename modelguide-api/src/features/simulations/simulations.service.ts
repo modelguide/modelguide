@@ -16,7 +16,7 @@ export async function startSimulation(
   maxTurns?: number,
 ): Promise<SimulationResult> {
   // Validate persona exists
-  const persona = getPersona(personaId);
+  const persona = await getPersona(personaId, orgId);
   if (!persona) {
     throw Errors.personaNotFound(personaId);
   }

@@ -28,6 +28,8 @@ import { getLogger } from "@lib/logger";
 import { taskRunner } from "@lib/task-runner";
 import { asc, eq } from "drizzle-orm";
 
+import { compileAgent } from "@features/compiler/compiler.service";
+
 import { runTestCaseEval } from "./eval-suites.service";
 import type {
   RunEvalSuiteOpts,
@@ -268,6 +270,30 @@ async function executeSimulateAndRunInner(
     return { suite: suite!, agent: agent!, testCases };
   });
 
+  // If the suite is linked to a SOP, recompile for that SOP in dry-run mode
+  // so multi-SOP agents always get the right compiled instructions.
+  let compiledInstructions = suiteData.agent.compiledInstructions!;
+  if (suiteData.suite.sopId) {
+    try {
+      const compiled = await compileAgent({
+        orgId,
+        agentId: suiteData.agent.id,
+        sopId: suiteData.suite.sopId,
+        dryRun: true,
+      });
+      compiledInstructions = compiled.ir.systemPrompt;
+      log.info(
+        { suiteId, sopId: suiteData.suite.sopId },
+        "simulation: using SOP-specific compiled instructions (dry run)",
+      );
+    } catch (err) {
+      log.warn(
+        { suiteId, sopId: suiteData.suite.sopId, err },
+        "simulation: SOP dry compile failed — falling back to agent's last compiled instructions",
+      );
+    }
+  }
+
   const results: TestCaseEvalResult[] = [];
 
   for (let i = 0; i < suiteData.testCases.length; i++) {
@@ -295,7 +321,7 @@ async function executeSimulateAndRunInner(
     );
 
     // 0. Resolve persona for personalization + multi-turn follow-ups
-    const persona = personaId ? getPersona(personaId) : undefined;
+    const persona = personaId ? await getPersona(personaId, orgId) : undefined;
     if (personaId && !persona) {
       log.warn({ personaId }, "unknown persona ID — using raw message");
     }
@@ -315,7 +341,7 @@ async function executeSimulateAndRunInner(
     }
 
     // 1. Pre-create simulation session with mock config in metadata
-    const userIdentifier = personaToIdentifier(personaId);
+    const userIdentifier = personaToIdentifier(personaId, persona);
     let adapter: MastraAdapter | null = null;
     let sessionId: string | null = null;
     try {
@@ -340,7 +366,7 @@ async function executeSimulateAndRunInner(
       const simulationMcpUrl = `${apiBaseUrl}/simulations/${sessionId}/mcp`;
       const simulationToken = await generateSimulationJWT(sessionId);
       adapter = new MastraAdapter({
-        compiledInstructions: suiteData.agent.compiledInstructions!,
+        compiledInstructions,
         model: env.SIMULATION_AGENT_MODEL,
         agentId: suiteData.agent.id,
         agentName: suiteData.agent.name,
@@ -357,6 +383,7 @@ async function executeSimulateAndRunInner(
         inputMessage,
         sessionId,
         conversationHistory,
+        persona,
       });
 
       if (simResult.status === "error") {
