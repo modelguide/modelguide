@@ -349,7 +349,6 @@ function TestCaseEvaluatorOverrides({
               className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs hover:bg-bg-subtle/30"
             >
               <span className="flex-1 font-mono text-fg-secondary">{ao.name}</span>
-              <Badge variant="warning">add</Badge>
               <button
                 type="button"
                 onClick={() => deleteOverrideMutation.mutate(ao.id)}
