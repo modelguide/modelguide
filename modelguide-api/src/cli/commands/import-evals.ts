@@ -248,13 +248,7 @@ export async function handleImportEvals(
     }
   }
 
-  // 4. Build evaluator name → criterion lookup
-  const evaluatorCriterionMap = new Map<string, string>();
-  for (const evaluator of normalized.evaluators) {
-    evaluatorCriterionMap.set(evaluator.name, evaluator.criterion);
-  }
-
-  // 5. Group test cases by SOP slug
+  // 4. Group test cases by SOP slug
   const groupedBySop = new Map<string, NormalizedTestCase[]>();
   for (const tc of normalized.testCases) {
     const group = groupedBySop.get(tc.sopSlug) ?? [];
@@ -312,14 +306,6 @@ export async function handleImportEvals(
       if (tc.guardrailsTested.length > 0)
         descParts.push(`guardrails: ${tc.guardrailsTested.join(", ")}`);
 
-      // Build expectedBehavior from the test case's specific evaluators
-      const expectedBehavior = tc.evaluatorNames
-        .map((name, i) => {
-          const criterion = evaluatorCriterionMap.get(name) ?? name;
-          return `${i + 1}. ${criterion}`;
-        })
-        .join("\n");
-
       const testCase = await createTestCase(orgId, suiteId, {
         name: tc.id,
         description: descParts.length > 0 ? descParts.join(" | ") : undefined,
@@ -330,7 +316,6 @@ export async function handleImportEvals(
           conversationHistory: tc.input.conversationHistory,
           context: tc.input.context,
         },
-        expectedBehavior,
       });
 
       // Insert per-case evaluator overrides (add type)
