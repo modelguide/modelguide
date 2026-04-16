@@ -34,10 +34,10 @@ type ScoreInsert = typeof evalRunScores.$inferInsert;
  * This gives forensic visibility into what else went wrong, which is critical
  * for debugging and improving SOPs.
  *
- * Assertions run in parallel via Promise.all. The outer loop in runTestCaseEval
- * already serialises across test cases, and N here is the number of evaluators
- * on a single test case (typically 2–10), so no windowed batching is needed.
+ * Concurrency is capped at EVAL_CONCURRENCY to avoid flooding the LLM API
+ * with too many simultaneous judge calls.
  */
+const EVAL_CONCURRENCY = 5;
 
 export async function executeAssertions(
   assertions: ResolvedAssertion[],
@@ -103,6 +103,14 @@ export async function executeAssertions(
       actual: evalResult.actual ?? null,
       durationMs: evalResult.durationMs ?? null,
     };
+  }
+
+  // Run up to EVAL_CONCURRENCY evaluators at a time.
+  const scoreRows: ScoreInsert[] = [];
+  for (let i = 0; i < assertions.length; i += EVAL_CONCURRENCY) {
+    const batch = assertions.slice(i, i + EVAL_CONCURRENCY);
+    const results = await Promise.all(batch.map(runOne));
+    scoreRows.push(...results);
   }
 
   const scoreRows = await Promise.all(assertions.map(runOne));
