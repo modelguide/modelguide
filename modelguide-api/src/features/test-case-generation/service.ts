@@ -16,7 +16,11 @@ import { getLogger } from "@lib/logger";
 import { taskRunner } from "@lib/task-runner";
 import { and, eq } from "drizzle-orm";
 
-import { createTestCase } from "@features/evals/eval-suites.service";
+import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
+import {
+  createTestCase,
+  createTestCaseEvaluator,
+} from "@features/evals/eval-suites.service";
 import {
   deriveDimensionsFromSop,
   selectTuples,
@@ -263,7 +267,7 @@ async function executeGenerateTestCases(
 
         // Insert accepted test case
         const personaId = toneToPersonaId(tuple.tone);
-        await createTestCase(orgId, suiteId, {
+        const testCase = await createTestCase(orgId, suiteId, {
           name: generated.name,
           description: generated.scenario,
           source: "auto",
@@ -272,6 +276,20 @@ async function executeGenerateTestCases(
             persona: personaId,
           },
           mockToolResponses: generated.mock_tool_responses,
+        });
+
+        // Create a per-case LLM judge evaluator from the generated criterion
+        const evalConfig = await createEvalConfig(orgId, {
+          name: `Judge: ${generated.name}`,
+          evaluatorType: "llm_judge",
+          config: { criterion: generated.llm_judge_criterion },
+          tags: ["auto-generated"],
+        });
+        await createTestCaseEvaluator(orgId, suiteId, testCase.id, {
+          evalConfigId: evalConfig.id,
+          overrideType: "add",
+          name: `Judge: ${generated.name}`,
+          required: true,
         });
 
         accepted++;

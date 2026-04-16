@@ -78,6 +78,8 @@ export interface GeneratedTestCase {
   scenario: string;
   customer_message: string;
   mock_tool_responses: Record<string, ToolStateVariant>;
+  /** LLM judge criterion derived from the scenario for per-case evaluation. */
+  llm_judge_criterion: string;
 }
 
 // ============================================================================
