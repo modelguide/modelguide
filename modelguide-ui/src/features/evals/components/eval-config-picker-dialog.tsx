@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -9,6 +9,7 @@ import { Select } from '~/components/ui/select'
 import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
 import type { PaginatedResponse } from '~/lib/pagination'
+import type { Connector, ConnectorTool } from '~/schemas/connectors'
 
 // --- Inline eval config type (no separate schema file exists yet) ---
 
@@ -38,6 +39,156 @@ const EVALUATOR_TYPES = [
   'llm_judge',
 ] as const
 
+// --- Assertion rows ---
+
+interface AssertionRow {
+  rowId: string
+  key: string
+  op: string
+  value: string
+}
+
+const OP_OPTIONS = ['equals', 'contains', 'gt', 'lt', 'exists', 'matches'] as const
+
+let _rowIdCounter = 0
+function newRowId() {
+  return `row-${++_rowIdCounter}`
+}
+
+// --- Connector tools hook ---
+
+interface ConnectorWithTools {
+  connector: Connector
+  tools: ConnectorTool[]
+}
+
+function useAllConnectorTools() {
+  const { data: connectorsData } = useQuery({
+    queryKey: ['connectors'],
+    queryFn: () => api.get('connectors').json<{ data: Connector[] }>(),
+  })
+
+  const connectorIds = connectorsData?.data?.map((c) => c.id)
+
+  const { data: connectorTools } = useQuery({
+    queryKey: ['connector-tools-all', connectorIds],
+    queryFn: async () => {
+      const connectors = connectorsData?.data ?? []
+      return Promise.all(
+        connectors.map(async (c) => ({
+          connector: c,
+          tools: (await api.get(`connectors/${c.id}/tools`).json<{ data: ConnectorTool[] }>()).data,
+        })),
+      )
+    },
+    enabled: !!connectorsData?.data?.length,
+  })
+
+  return connectorTools ?? []
+}
+
+// --- Tool dropdown ---
+
+function ConnectorToolSelect({
+  value,
+  onChange,
+  connectorTools,
+}: {
+  value: string
+  onChange: (id: string) => void
+  connectorTools: ConnectorWithTools[]
+}) {
+  return (
+    <Select label="Connector Tool" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">— select a tool —</option>
+      {connectorTools.map(({ connector, tools }) => (
+        <optgroup key={connector.id} label={connector.name}>
+          {tools.map((t) => (
+            <option key={t.id} value={t.id}>
+              {connector.name} / {t.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </Select>
+  )
+}
+
+// --- Assertion rows editor ---
+
+function AssertionRowsEditor({
+  rows,
+  onChange,
+}: {
+  rows: AssertionRow[]
+  onChange: (rows: AssertionRow[]) => void
+}) {
+  function update(rowId: string, patch: Partial<AssertionRow>) {
+    onChange(rows.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)))
+  }
+
+  function remove(rowId: string) {
+    onChange(rows.filter((r) => r.rowId !== rowId))
+  }
+
+  function add() {
+    onChange([...rows, { rowId: newRowId(), key: '', op: 'equals', value: '' }])
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: static label for group */}
+      <label className="mb-1.5 block text-sm font-medium text-fg-secondary">
+        Assertions <span className="text-error">*</span>
+      </label>
+      {rows.map((row) => (
+        <div key={row.rowId} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={row.key}
+            onChange={(e) => update(row.rowId, { key: e.target.value })}
+            placeholder="input key"
+            className="w-28 rounded-lg border border-fg-subtle/20 bg-bg-subtle px-2 py-1.5 text-xs text-fg-primary placeholder:text-fg-muted focus:border-brand-500 focus:outline-none"
+          />
+          <Select
+            value={row.op}
+            onChange={(e) => update(row.rowId, { op: e.target.value })}
+            className="w-28 text-xs"
+          >
+            {OP_OPTIONS.map((op) => (
+              <option key={op} value={op}>
+                {op}
+              </option>
+            ))}
+          </Select>
+          {row.op !== 'exists' ? (
+            <input
+              type="text"
+              value={row.value}
+              onChange={(e) => update(row.rowId, { value: e.target.value })}
+              placeholder="value"
+              className="flex-1 rounded-lg border border-fg-subtle/20 bg-bg-subtle px-2 py-1.5 text-xs text-fg-primary placeholder:text-fg-muted focus:border-brand-500 focus:outline-none"
+            />
+          ) : (
+            <div className="flex-1" />
+          )}
+          <button
+            type="button"
+            onClick={() => remove(row.rowId)}
+            className="rounded p-1 text-fg-muted hover:text-error"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <Button variant="ghost" size="sm" onClick={add}>
+        <Plus className="h-3.5 w-3.5" />
+        Add assertion
+      </Button>
+    </div>
+  )
+}
+
 // --- Component ---
 
 export interface EvalConfigPickerDialogProps {
@@ -55,6 +206,7 @@ export function EvalConfigPickerDialog({
   allowCreate = true,
 }: EvalConfigPickerDialogProps) {
   const queryClient = useQueryClient()
+  const connectorTools = useAllConnectorTools()
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -64,6 +216,9 @@ export function EvalConfigPickerDialog({
   const [newType, setNewType] = useState<string>('llm_judge')
   const [newCriterion, setNewCriterion] = useState('')
   const [newConnectorToolId, setNewConnectorToolId] = useState('')
+  const [newAssertionRows, setNewAssertionRows] = useState<AssertionRow[]>([
+    { rowId: newRowId(), key: '', op: 'equals', value: '' },
+  ])
 
   const { data: configsData, isLoading } = useQuery({
     queryKey: ['eval-configs', { pageSize: 100 }],
@@ -106,19 +261,42 @@ export function EvalConfigPickerDialog({
     setNewType('llm_judge')
     setNewCriterion('')
     setNewConnectorToolId('')
+    setNewAssertionRows([{ rowId: newRowId(), key: '', op: 'equals', value: '' }])
+  }
+
+  function buildConfig(): Record<string, unknown> {
+    if (newType === 'llm_judge') {
+      return { criterion: newCriterion }
+    }
+    if (newType === 'tool_input_contains') {
+      const assertions: Record<string, { op: string; value?: string }> = {}
+      for (const row of newAssertionRows) {
+        if (!row.key.trim()) continue
+        const entry: { op: string; value?: string } = { op: row.op }
+        if (row.op !== 'exists' && row.value.trim()) entry.value = row.value
+        assertions[row.key.trim()] = entry
+      }
+      return { connectorToolId: newConnectorToolId, assertions }
+    }
+    // tool_called / no_tool_called
+    return { connectorToolId: newConnectorToolId }
+  }
+
+  function isCreateValid() {
+    if (!newName.trim()) return false
+    if (newType === 'llm_judge') return newCriterion.trim().length > 0
+    if (newType === 'tool_input_contains') {
+      if (!newConnectorToolId) return false
+      return newAssertionRows.some((r) => r.key.trim())
+    }
+    return newConnectorToolId.length > 0
   }
 
   function handleCreate() {
-    let config: Record<string, unknown> = {}
-    if (newType === 'llm_judge') {
-      config = { criterion: newCriterion }
-    } else {
-      config = { connectorToolId: newConnectorToolId }
-    }
     createMutation.mutate({
       name: newName,
       evaluatorType: newType,
-      config,
+      config: buildConfig(),
     })
   }
 
@@ -144,7 +322,11 @@ export function EvalConfigPickerDialog({
           <Select
             label="Evaluator Type"
             value={newType}
-            onChange={(e) => setNewType(e.target.value)}
+            onChange={(e) => {
+              setNewType(e.target.value)
+              setNewConnectorToolId('')
+              setNewAssertionRows([{ rowId: newRowId(), key: '', op: 'equals', value: '' }])
+            }}
           >
             {EVALUATOR_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -152,6 +334,7 @@ export function EvalConfigPickerDialog({
               </option>
             ))}
           </Select>
+
           {newType === 'llm_judge' ? (
             <div>
               <label
@@ -169,15 +352,23 @@ export function EvalConfigPickerDialog({
                 className="w-full rounded-lg border border-fg-subtle/20 bg-bg-subtle px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
+          ) : newType === 'tool_input_contains' ? (
+            <div className="space-y-3">
+              <ConnectorToolSelect
+                value={newConnectorToolId}
+                onChange={setNewConnectorToolId}
+                connectorTools={connectorTools}
+              />
+              <AssertionRowsEditor rows={newAssertionRows} onChange={setNewAssertionRows} />
+            </div>
           ) : (
-            <Input
-              label="Connector Tool ID"
+            <ConnectorToolSelect
               value={newConnectorToolId}
-              onChange={(e) => setNewConnectorToolId(e.target.value)}
-              placeholder="UUID of the connector tool"
-              required
+              onChange={setNewConnectorToolId}
+              connectorTools={connectorTools}
             />
           )}
+
           {createMutation.error ? (
             <p className="text-xs text-error">Failed to create config. Please try again.</p>
           ) : null}
@@ -193,13 +384,10 @@ export function EvalConfigPickerDialog({
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={
-                !newName.trim() ||
-                (newType === 'llm_judge' ? !newCriterion.trim() : !newConnectorToolId.trim())
-              }
+              disabled={!isCreateValid()}
               loading={createMutation.isPending}
             >
-              Create & Select
+              Create &amp; Select
             </Button>
           </DialogFooter>
         </div>
@@ -246,7 +434,7 @@ export function EvalConfigPickerDialog({
                     'hover:bg-bg-subtle/60',
                   )}
                 >
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-fg-primary">{config.name}</p>
                     {config.description ? (
                       <p className="truncate text-xs text-fg-muted">{config.description}</p>

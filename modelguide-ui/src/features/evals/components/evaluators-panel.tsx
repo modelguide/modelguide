@@ -1,12 +1,36 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
 import { api } from '~/lib/api'
 import type { EvalSuiteAssertion } from '~/schemas/eval-suites'
+import type { EvalConfigForEdit } from './eval-config-edit-dialog'
+import { EvalConfigEditDialog } from './eval-config-edit-dialog'
 import { EvalConfigPickerDialog } from './eval-config-picker-dialog'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+const EVALUATOR_TYPE_LABELS: Record<string, string> = {
+  tool_called: 'Tool Called',
+  tool_input_contains: 'Tool Input',
+  no_tool_called: 'No Tool',
+  llm_judge: 'LLM Judge',
+}
+
+const EVALUATOR_TYPE_BADGE: Record<string, 'info' | 'success' | 'warning' | 'default'> = {
+  tool_called: 'success',
+  tool_input_contains: 'info',
+  no_tool_called: 'warning',
+  llm_judge: 'default',
+}
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 export interface EvaluatorsPanelProps {
   evaluators: EvalSuiteAssertion[]
@@ -14,10 +38,17 @@ export interface EvaluatorsPanelProps {
   isAdmin?: boolean
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: EvaluatorsPanelProps) {
   const queryClient = useQueryClient()
   const [showPicker, setShowPicker] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<EvalSuiteAssertion | null>(null)
+  const [editTarget, setEditTarget] = useState<EvalConfigForEdit | null>(null)
+  /** evaluatorId whose config is being edited (for AC-30 clone-and-replace) */
+  const [editingEvaluatorId, setEditingEvaluatorId] = useState<string | null>(null)
 
   const addMutation = useMutation({
     mutationFn: (data: { evalConfigId: string; name: string }) =>
@@ -36,6 +67,52 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
       setDeleteTarget(null)
     },
   })
+
+  // AC-30: create clone and immediately patch this evaluator to use it
+  const cloneMutation = useMutation({
+    mutationFn: async ({
+      evaluatorId,
+      sourceConfig,
+    }: {
+      evaluatorId: string
+      sourceConfig: EvalConfigForEdit
+    }) => {
+      const cloned = await api
+        .post('eval-configs', {
+          json: {
+            name: `${sourceConfig.name} (copy)`,
+            evaluatorType: sourceConfig.evaluatorType,
+            config: sourceConfig.config,
+          },
+        })
+        .json<EvalConfigForEdit>()
+
+      await api
+        .patch(`eval-suites/${suiteId}/evaluators/${evaluatorId}`, {
+          json: { evalConfigId: cloned.id },
+        })
+        .json()
+
+      return cloned
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+      queryClient.invalidateQueries({ queryKey: ['eval-configs'] })
+    },
+  })
+
+  function openEditDialog(evaluator: EvalSuiteAssertion) {
+    if (!evaluator.evaluatorType || !evaluator.config) return
+    setEditTarget({
+      id: evaluator.evalConfigId,
+      name: evaluator.name,
+      description: null,
+      evaluatorType: evaluator.evaluatorType,
+      config: evaluator.config as Record<string, unknown>,
+      tags: evaluator.tags ?? [],
+    })
+    setEditingEvaluatorId(evaluator.id)
+  }
 
   if (evaluators.length === 0 && !isAdmin) {
     return (
@@ -70,6 +147,19 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
                 className="group flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-bg-subtle/40"
               >
                 <span className="flex-1 font-mono text-xs text-fg-secondary">{evaluator.name}</span>
+                {/* AC-28: type badge — clickable to open edit dialog */}
+                {evaluator.evaluatorType ? (
+                  <button
+                    type="button"
+                    onClick={() => isAdmin && openEditDialog(evaluator)}
+                    title={isAdmin ? 'Edit evaluator config' : undefined}
+                    className={isAdmin ? 'cursor-pointer' : 'cursor-default'}
+                  >
+                    <Badge variant={EVALUATOR_TYPE_BADGE[evaluator.evaluatorType] ?? 'default'}>
+                      {EVALUATOR_TYPE_LABELS[evaluator.evaluatorType] ?? evaluator.evaluatorType}
+                    </Badge>
+                  </button>
+                ) : null}
                 {evaluator.tags?.length > 0 ? (
                   <div className="flex gap-1">
                     {evaluator.tags.map((tag) => (
@@ -91,14 +181,26 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
                   <span className="text-[10px] text-fg-muted">step: {evaluator.sopStepId}</span>
                 ) : null}
                 {isAdmin ? (
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(evaluator)}
-                    className="rounded p-1 text-fg-muted opacity-0 transition-all hover:bg-error/10 hover:text-error group-hover:opacity-100"
-                    title="Delete evaluator"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <>
+                    {evaluator.evaluatorType ? (
+                      <button
+                        type="button"
+                        onClick={() => openEditDialog(evaluator)}
+                        className="rounded p-1 text-fg-muted opacity-0 transition-all hover:bg-bg-subtle hover:text-fg-primary group-hover:opacity-100"
+                        title="Edit config"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(evaluator)}
+                      className="rounded p-1 text-fg-muted opacity-0 transition-all hover:bg-error/10 hover:text-error group-hover:opacity-100"
+                      title="Delete evaluator"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
                 ) : null}
               </div>
             ))}
@@ -113,6 +215,32 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
         onSelect={(config) => {
           addMutation.mutate({ evalConfigId: config.id, name: config.name })
         }}
+      />
+
+      {/* AC-29: Edit config dialog */}
+      <EvalConfigEditDialog
+        open={!!editTarget}
+        onClose={() => {
+          setEditTarget(null)
+          setEditingEvaluatorId(null)
+        }}
+        config={editTarget}
+        onSaved={() => {
+          setEditTarget(null)
+          setEditingEvaluatorId(null)
+        }}
+        onClone={
+          editingEvaluatorId
+            ? (sourceConfig) => {
+                cloneMutation.mutate({
+                  evaluatorId: editingEvaluatorId,
+                  sourceConfig,
+                })
+                setEditTarget(null)
+                setEditingEvaluatorId(null)
+              }
+            : undefined
+        }
       />
 
       {/* Delete confirmation */}

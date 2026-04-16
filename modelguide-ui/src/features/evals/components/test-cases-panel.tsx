@@ -1,12 +1,28 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, Minus, Plus, Search, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Minus, Pencil, Plus, Search, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
 import type { EvalSuiteAssertion, EvalSuiteTestCase } from '~/schemas/eval-suites'
+import type { EvalConfigForEdit } from './eval-config-edit-dialog'
+import { EvalConfigEditDialog } from './eval-config-edit-dialog'
 import { EvalConfigPickerDialog } from './eval-config-picker-dialog'
+
+const EVALUATOR_TYPE_LABELS: Record<string, string> = {
+  tool_called: 'Tool Called',
+  tool_input_contains: 'Tool Input',
+  no_tool_called: 'No Tool',
+  llm_judge: 'LLM Judge',
+}
+
+const EVALUATOR_TYPE_BADGE: Record<string, 'info' | 'success' | 'warning' | 'default'> = {
+  tool_called: 'success',
+  tool_input_contains: 'info',
+  no_tool_called: 'warning',
+  llm_judge: 'default',
+}
 
 export interface TestCasesPanelProps {
   testCases: EvalSuiteTestCase[]
@@ -213,7 +229,7 @@ export function TestCasesPanel({
 }
 
 // ============================================================================
-// Test Case Evaluator Overrides sub-component (AC 18-20)
+// Test Case Evaluator Overrides sub-component (AC 18-20, AC-28, AC-29, AC-30)
 // ============================================================================
 
 interface TestCaseEvaluatorOverridesProps {
@@ -229,6 +245,9 @@ function TestCaseEvaluatorOverrides({
 }: TestCaseEvaluatorOverridesProps) {
   const queryClient = useQueryClient()
   const [showPicker, setShowPicker] = useState(false)
+  const [editTarget, setEditTarget] = useState<EvalConfigForEdit | null>(null)
+  /** overrideId whose config is being edited (for AC-30 clone-and-replace) */
+  const [editingOverrideId, setEditingOverrideId] = useState<string | null>(null)
   const overrides = testCase.evaluatorOverrides ?? []
 
   const excludedConfigIds = new Set(
@@ -272,6 +291,52 @@ function TestCaseEvaluatorOverrides({
     },
   })
 
+  // AC-30: clone config and immediately patch the override to use it
+  const cloneMutation = useMutation({
+    mutationFn: async ({
+      overrideId,
+      sourceConfig,
+    }: {
+      overrideId: string
+      sourceConfig: EvalConfigForEdit
+    }) => {
+      const cloned = await api
+        .post('eval-configs', {
+          json: {
+            name: `${sourceConfig.name} (copy)`,
+            evaluatorType: sourceConfig.evaluatorType,
+            config: sourceConfig.config,
+          },
+        })
+        .json<EvalConfigForEdit>()
+
+      await api
+        .patch(`eval-suites/${suiteId}/test-cases/${testCase.id}/evaluators/${overrideId}`, {
+          json: { evalConfigId: cloned.id },
+        })
+        .json()
+
+      return cloned
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+      queryClient.invalidateQueries({ queryKey: ['eval-configs'] })
+    },
+  })
+
+  function openEditDialogForOverride(ao: (typeof addOverrides)[number]) {
+    if (!ao.evaluatorType || !ao.config) return
+    setEditTarget({
+      id: ao.evalConfigId,
+      name: ao.name,
+      description: null,
+      evaluatorType: ao.evaluatorType,
+      config: ao.config as Record<string, unknown>,
+      tags: [],
+    })
+    setEditingOverrideId(ao.id)
+  }
+
   return (
     <div className="mt-3 space-y-2">
       <div className="flex items-center justify-between">
@@ -297,7 +362,7 @@ function TestCaseEvaluatorOverrides({
               <div
                 key={se.id}
                 className={cn(
-                  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
+                  'group/row flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
                   isExcluded ? 'opacity-50' : 'hover:bg-bg-subtle/30',
                 )}
               >
@@ -306,6 +371,12 @@ function TestCaseEvaluatorOverrides({
                 >
                   {se.name}
                 </span>
+                {/* AC-28: type badge on inherited row */}
+                {se.evaluatorType ? (
+                  <Badge variant={EVALUATOR_TYPE_BADGE[se.evaluatorType] ?? 'default'}>
+                    {EVALUATOR_TYPE_LABELS[se.evaluatorType] ?? se.evaluatorType}
+                  </Badge>
+                ) : null}
                 <Badge variant="default">inherited</Badge>
                 {isExcluded && excludeOverride ? (
                   <button
@@ -346,9 +417,32 @@ function TestCaseEvaluatorOverrides({
           {addOverrides.map((ao) => (
             <div
               key={ao.id}
-              className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs hover:bg-bg-subtle/30"
+              className="group/row flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs hover:bg-bg-subtle/30"
             >
               <span className="flex-1 font-mono text-fg-secondary">{ao.name}</span>
+              {/* AC-28: type badge on case-specific row */}
+              {ao.evaluatorType ? (
+                <button
+                  type="button"
+                  onClick={() => openEditDialogForOverride(ao)}
+                  title="Edit evaluator config"
+                  className="cursor-pointer"
+                >
+                  <Badge variant={EVALUATOR_TYPE_BADGE[ao.evaluatorType] ?? 'default'}>
+                    {EVALUATOR_TYPE_LABELS[ao.evaluatorType] ?? ao.evaluatorType}
+                  </Badge>
+                </button>
+              ) : null}
+              {ao.evaluatorType ? (
+                <button
+                  type="button"
+                  onClick={() => openEditDialogForOverride(ao)}
+                  className="rounded p-0.5 text-fg-muted opacity-0 transition-opacity hover:text-fg-primary group-hover/row:opacity-100"
+                  title="Edit config"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => deleteOverrideMutation.mutate(ao.id)}
@@ -369,6 +463,32 @@ function TestCaseEvaluatorOverrides({
         onSelect={(config) => {
           addMutation.mutate({ evalConfigId: config.id, name: config.name })
         }}
+      />
+
+      {/* AC-29 / AC-30: edit dialog for case-specific overrides */}
+      <EvalConfigEditDialog
+        open={!!editTarget}
+        onClose={() => {
+          setEditTarget(null)
+          setEditingOverrideId(null)
+        }}
+        config={editTarget}
+        onSaved={() => {
+          setEditTarget(null)
+          setEditingOverrideId(null)
+        }}
+        onClone={
+          editingOverrideId
+            ? (sourceConfig) => {
+                cloneMutation.mutate({
+                  overrideId: editingOverrideId,
+                  sourceConfig,
+                })
+                setEditTarget(null)
+                setEditingOverrideId(null)
+              }
+            : undefined
+        }
       />
     </div>
   )
