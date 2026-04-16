@@ -283,7 +283,7 @@ export function useSopForm({
           estimatedDuration: estimatedDuration || undefined,
         },
       },
-      agentIds: isEditMode ? agentIds : agentIds.length > 0 ? agentIds : undefined,
+      agentIds: isEditMode || agentIds.length > 0 ? agentIds : undefined,
     })
   }
 
