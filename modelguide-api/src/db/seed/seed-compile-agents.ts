@@ -67,7 +67,9 @@ export async function seedCompileAgents(db: SeedDb): Promise<void> {
   }
 
   if (assignmentsByAgent.size === 0) {
-    console.log("  No active agent→SOP assignments found, skipping compilation");
+    console.log(
+      "  No active agent→SOP assignments found, skipping compilation",
+    );
     return;
   }
 
