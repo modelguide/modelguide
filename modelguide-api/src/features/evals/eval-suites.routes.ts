@@ -113,13 +113,14 @@ function formatEvaluator(a: {
   tags?: string[];
   evaluatorType?: string | null;
   config?: Record<string, unknown> | null;
+  configName?: string | null;
   createdAt: Date;
 }) {
   return {
     id: a.id,
     suiteId: a.suiteId,
     evalConfigId: a.evalConfigId,
-    name: a.name,
+    name: a.configName ?? a.name,
     sopStepId: a.sopStepId ?? null,
     source: a.source,
     order: a.order,
@@ -169,7 +170,7 @@ function formatTestCase(tc: {
       id: o.id,
       evalConfigId: o.evalConfigId,
       overrideType: o.overrideType,
-      name: o.name,
+      name: (o.evalConfigName as string | null | undefined) ?? o.name,
       order: o.order,
       required: o.required,
       source: o.source,

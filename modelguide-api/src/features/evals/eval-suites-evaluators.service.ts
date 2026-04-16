@@ -40,7 +40,7 @@ function truncate(str: string, maxLen: number): string {
 // Shared helpers
 // ============================================================================
 
-/** Load evaluators for a suite, joined with eval config tags and type. */
+/** Load evaluators for a suite, joined with eval config tags, type, and live name. */
 export async function loadSuiteEvaluators(
   tx: Transaction,
   suiteId: string,
@@ -49,6 +49,7 @@ export async function loadSuiteEvaluators(
     tags: string[];
     evaluatorType: string | null;
     config: Record<string, unknown> | null;
+    configName: string | null;
   })[]
 > {
   const rows = await tx
@@ -57,6 +58,7 @@ export async function loadSuiteEvaluators(
       tags: evalConfigs.tags,
       evaluatorType: evalConfigs.evaluatorType,
       config: evalConfigs.config,
+      configName: evalConfigs.name,
     })
     .from(evalSuiteEvaluators)
     .leftJoin(evalConfigs, eq(evalSuiteEvaluators.evalConfigId, evalConfigs.id))
@@ -68,6 +70,7 @@ export async function loadSuiteEvaluators(
     tags: r.tags ?? [],
     evaluatorType: r.evaluatorType ?? null,
     config: (r.config as Record<string, unknown> | null) ?? null,
+    configName: r.configName ?? null,
   }));
 }
 

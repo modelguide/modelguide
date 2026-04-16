@@ -1,9 +1,10 @@
 /**
- * EvalConfigEditDialog — edit an existing eval config in-place.
+ * EvalConfigEditDialog — view/edit an eval config.
  *
- * Warns the user that saving will update the shared config globally
- * (affecting all suites/cases that reference it). A "Clone & use here"
- * path is handled by the parent; this dialog only handles the global edit.
+ * The parent controls which actions are available via props:
+ *  - `onSaved` present → show "Save" button
+ *  - `onClone` present → show clone button with `cloneLabel`
+ *  - `warning` → optional amber banner text
  *
  * AC-29
  */
@@ -37,10 +38,14 @@ export interface EvalConfigEditDialogProps {
   onClose: () => void
   /** The config to edit. When null the dialog is not shown. */
   config: EvalConfigForEdit | null
-  /** Called after a successful save with the updated config. */
+  /** When provided, show "Save" button. Omit to make the dialog read-only / clone-only. */
   onSaved?: (updated: EvalConfigForEdit) => void
-  /** Called when the user clicks "Clone & use here". */
+  /** When provided, show clone button. Omit to hide it. */
   onClone?: (config: EvalConfigForEdit) => void
+  /** Label for the clone button. Defaults to "Clone & use here". */
+  cloneLabel?: string
+  /** Optional warning banner text. Omit to hide the banner entirely. */
+  warning?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +272,8 @@ export function EvalConfigEditDialog({
   config,
   onSaved,
   onClone,
+  cloneLabel = 'Clone & use here',
+  warning,
 }: EvalConfigEditDialogProps) {
   const queryClient = useQueryClient()
   const connectorTools = useAllConnectorTools()
@@ -332,15 +339,13 @@ export function EvalConfigEditDialog({
   return (
     <Dialog open={open} onClose={onClose} title="Edit Evaluator Config" size="lg">
       <div className="space-y-4">
-        {/* Global-update warning banner */}
-        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs text-warning">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            <strong>Global update.</strong> Saving will update this config everywhere it is used —
-            across all suites, test cases, and SOP steps. Use <strong>Clone &amp; use here</strong>{' '}
-            below to create a copy that only affects this suite or test case.
-          </span>
-        </div>
+        {/* Warning banner — only shown when parent passes a warning */}
+        {warning ? (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs text-warning">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{warning}</span>
+          </div>
+        ) : null}
 
         {/* Type badge */}
         {config ? (
@@ -398,14 +403,8 @@ export function EvalConfigEditDialog({
 
       <DialogFooter className="justify-between">
         {onClone && config ? (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              onClone(config)
-              onClose()
-            }}
-          >
-            Clone &amp; use here
+          <Button variant="secondary" onClick={() => onClone(config)}>
+            {cloneLabel}
           </Button>
         ) : (
           <div />
@@ -414,9 +413,11 @@ export function EvalConfigEditDialog({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!isValid()} loading={saveMutation.isPending}>
-            Save globally
-          </Button>
+          {onSaved ? (
+            <Button onClick={handleSave} disabled={!isValid()} loading={saveMutation.isPending}>
+              Save
+            </Button>
+          ) : null}
         </div>
       </DialogFooter>
     </Dialog>

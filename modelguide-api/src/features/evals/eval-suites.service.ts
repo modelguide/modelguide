@@ -780,12 +780,14 @@ export async function getEvalSuiteById(
       evaluatorOverrides: (EvalTestCaseEvaluator & {
         evaluatorType: string | null;
         evalConfigConfig: Record<string, unknown> | null;
+        evalConfigName: string | null;
       })[];
     })[];
     evaluators: (EvalSuiteEvaluator & {
       tags: string[];
       evaluatorType: string | null;
       config: Record<string, unknown> | null;
+      configName: string | null;
     })[];
   }
 > {
@@ -805,6 +807,7 @@ export async function getEvalSuiteById(
     type OverrideWithConfig = EvalTestCaseEvaluator & {
       evaluatorType: string | null;
       evalConfigConfig: Record<string, unknown> | null;
+      evalConfigName: string | null;
     };
     let overridesByTestCase = new Map<string, OverrideWithConfig[]>();
 
@@ -814,6 +817,7 @@ export async function getEvalSuiteById(
           override: evalTestCaseEvaluators,
           evaluatorType: evalConfigs.evaluatorType,
           evalConfigConfig: evalConfigs.config,
+          evalConfigName: evalConfigs.name,
         })
         .from(evalTestCaseEvaluators)
         .leftJoin(
@@ -830,6 +834,7 @@ export async function getEvalSuiteById(
           evaluatorType: row.evaluatorType ?? null,
           evalConfigConfig:
             (row.evalConfigConfig as Record<string, unknown> | null) ?? null,
+          evalConfigName: row.evalConfigName ?? null,
         };
         const list = overridesByTestCase.get(row.override.testCaseId) ?? [];
         list.push(enriched);

@@ -47,8 +47,6 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
   const [showPicker, setShowPicker] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<EvalSuiteAssertion | null>(null)
   const [editTarget, setEditTarget] = useState<EvalConfigForEdit | null>(null)
-  /** evaluatorId whose config is being edited (for AC-30 clone-and-replace) */
-  const [editingEvaluatorId, setEditingEvaluatorId] = useState<string | null>(null)
 
   const addMutation = useMutation({
     mutationFn: (data: { evalConfigId: string; name: string }) =>
@@ -68,36 +66,40 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
     },
   })
 
-  // AC-30: create clone and immediately patch this evaluator to use it
+  // AC-30: clone config, add as new evaluator to this suite, then open edit dialog
   const cloneMutation = useMutation({
-    mutationFn: async ({
-      evaluatorId,
-      sourceConfig,
-    }: {
-      evaluatorId: string
-      sourceConfig: EvalConfigForEdit
-    }) => {
+    mutationFn: async ({ sourceConfig }: { sourceConfig: EvalConfigForEdit }) => {
       const cloned = await api
         .post('eval-configs', {
           json: {
-            name: `${sourceConfig.name} (copy)`,
+            name: `Cloned - ${sourceConfig.name}`,
             evaluatorType: sourceConfig.evaluatorType,
             config: sourceConfig.config,
           },
         })
         .json<EvalConfigForEdit>()
 
+      // Pin the clone to this suite as a new evaluator
       await api
-        .patch(`eval-suites/${suiteId}/evaluators/${evaluatorId}`, {
-          json: { evalConfigId: cloned.id },
+        .post(`eval-suites/${suiteId}/evaluators`, {
+          json: { evalConfigId: cloned.id, name: cloned.name },
         })
         .json()
 
       return cloned
     },
-    onSuccess: () => {
+    onSuccess: (cloned) => {
       queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
       queryClient.invalidateQueries({ queryKey: ['eval-configs'] })
+      // Show cloned config in edit dialog so the user can edit it
+      setEditTarget({
+        id: cloned.id,
+        name: cloned.name,
+        description: cloned.description ?? null,
+        evaluatorType: cloned.evaluatorType,
+        config: cloned.config,
+        tags: cloned.tags ?? [],
+      })
     },
   })
 
@@ -111,7 +113,6 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
       config: evaluator.config as Record<string, unknown>,
       tags: evaluator.tags ?? [],
     })
-    setEditingEvaluatorId(evaluator.id)
   }
 
   if (evaluators.length === 0 && !isAdmin) {
@@ -217,30 +218,15 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
         }}
       />
 
-      {/* AC-29: Edit config dialog */}
+      {/* AC-29: Edit config dialog — suite level: save + clone */}
       <EvalConfigEditDialog
         open={!!editTarget}
-        onClose={() => {
-          setEditTarget(null)
-          setEditingEvaluatorId(null)
-        }}
+        onClose={() => setEditTarget(null)}
         config={editTarget}
-        onSaved={() => {
-          setEditTarget(null)
-          setEditingEvaluatorId(null)
-        }}
-        onClone={
-          editingEvaluatorId
-            ? (sourceConfig) => {
-                cloneMutation.mutate({
-                  evaluatorId: editingEvaluatorId,
-                  sourceConfig,
-                })
-                setEditTarget(null)
-                setEditingEvaluatorId(null)
-              }
-            : undefined
-        }
+        onSaved={() => setEditTarget(null)}
+        warning="Saving updates this config everywhere it is used — across all suites and test cases."
+        cloneLabel="Clone & edit"
+        onClone={(sourceConfig) => cloneMutation.mutate({ sourceConfig })}
       />
 
       {/* Delete confirmation */}
