@@ -27,12 +27,18 @@ type ScoreInsert = typeof evalRunScores.$inferInsert;
 // Evaluator execution
 // ============================================================================
 
-/** Execute evaluators for all assertions, returning score rows.
+/**
+ * Execute evaluators for all assertions concurrently, returning score rows.
  *
  * All assertions are always evaluated — no short-circuit on required assertion failure.
  * This gives forensic visibility into what else went wrong, which is critical
  * for debugging and improving SOPs.
+ *
+ * Concurrency is capped at EVAL_CONCURRENCY to avoid flooding the LLM API
+ * with too many simultaneous judge calls.
  */
+const EVAL_CONCURRENCY = 5;
+
 export async function executeAssertions(
   assertions: ResolvedAssertion[],
   messages: SessionMessage[],
@@ -41,9 +47,8 @@ export async function executeAssertions(
   sessionContext?: EvalSessionContext,
 ): Promise<{ scoreRows: ScoreInsert[]; metadata: Record<string, unknown> }> {
   const toolMsgs = messages.filter((m) => m.role === "tool");
-  const scoreRows: ScoreInsert[] = [];
 
-  for (const assertion of assertions) {
+  async function runOne(assertion: ResolvedAssertion): Promise<ScoreInsert> {
     const resolvedToolNames = new Map(Object.entries(assertion.toolNameMap));
     const ctx: EvalContext = {
       messages,
@@ -52,14 +57,13 @@ export async function executeAssertions(
       sessionContext,
     };
 
-    // Parse + validate config against the evaluator's runtime shape before dispatch.
     const parsedConfig = parseStepEvaluatorConfig(
       assertion.evaluator.evaluatorType,
       assertion.evaluator.config,
     );
     if (!parsedConfig.success) {
       const details = parsedConfig.issues.map((i) => i.message).join("; ");
-      scoreRows.push({
+      return {
         evalRunId,
         organizationId: orgId,
         evalConfigId: assertion.evaluator.configId,
@@ -69,8 +73,7 @@ export async function executeAssertions(
         evaluatorType: assertion.evaluator.evaluatorType,
         result: "error" as EvalScoreResult,
         reasoning: `Invalid eval config: ${details}`,
-      });
-      continue;
+      };
     }
 
     const evaluator = getEvaluator(assertion.evaluator.evaluatorType);
@@ -85,7 +88,7 @@ export async function executeAssertions(
       };
     }
 
-    scoreRows.push({
+    return {
       evalRunId,
       organizationId: orgId,
       evalConfigId: assertion.evaluator.configId,
@@ -99,7 +102,15 @@ export async function executeAssertions(
       expected: evalResult.expected ?? null,
       actual: evalResult.actual ?? null,
       durationMs: evalResult.durationMs ?? null,
-    });
+    };
+  }
+
+  // Run up to EVAL_CONCURRENCY evaluators at a time.
+  const scoreRows: ScoreInsert[] = [];
+  for (let i = 0; i < assertions.length; i += EVAL_CONCURRENCY) {
+    const batch = assertions.slice(i, i + EVAL_CONCURRENCY);
+    const results = await Promise.all(batch.map(runOne));
+    scoreRows.push(...results);
   }
 
   const metadata: Record<string, unknown> = {};
