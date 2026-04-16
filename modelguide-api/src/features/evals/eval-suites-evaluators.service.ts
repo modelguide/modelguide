@@ -226,7 +226,7 @@ export async function resolveAssertions(
 
     return {
       order,
-      name: name || `${truncate(cfg.evaluatorType, 40)}`,
+      name: cfg.name || name || `${truncate(cfg.evaluatorType, 40)}`,
       required,
       evaluator: {
         configId: cfg.id,
@@ -574,18 +574,25 @@ export async function getTestCaseEffectiveEvaluators(
     // Load suite evaluators
     const suiteEvals = await loadSuiteEvaluators(tx, suiteId);
 
-    // Load case overrides
+    // Load case overrides with live config name
     const overrides = await tx
-      .select()
+      .select({
+        override: evalTestCaseEvaluators,
+        configName: evalConfigs.name,
+      })
       .from(evalTestCaseEvaluators)
+      .leftJoin(
+        evalConfigs,
+        eq(evalTestCaseEvaluators.evalConfigId, evalConfigs.id),
+      )
       .where(eq(evalTestCaseEvaluators.testCaseId, testCaseId))
       .orderBy(asc(evalTestCaseEvaluators.order));
 
     // Build excluded config IDs
     const excludedConfigIds = new Set(
       overrides
-        .filter((o) => o.overrideType === "exclude")
-        .map((o) => o.evalConfigId),
+        .filter((row) => row.override.overrideType === "exclude")
+        .map((row) => row.override.evalConfigId),
     );
 
     // Start with inherited suite evaluators (minus excludes)
@@ -603,15 +610,15 @@ export async function getTestCaseEffectiveEvaluators(
 
     for (const se of suiteEvals) {
       if (excludedConfigIds.has(se.evalConfigId)) {
-        // Show excluded evaluator with override info
-        const excludeOverride = overrides.find(
-          (o) =>
-            o.evalConfigId === se.evalConfigId && o.overrideType === "exclude",
+        const excludeRow = overrides.find(
+          (row) =>
+            row.override.evalConfigId === se.evalConfigId &&
+            row.override.overrideType === "exclude",
         );
         effective.push({
-          id: excludeOverride?.id ?? se.id,
+          id: excludeRow?.override.id ?? se.id,
           evalConfigId: se.evalConfigId,
-          name: se.name,
+          name: se.configName ?? se.name,
           order: se.order,
           required: se.required,
           source: "inherited",
@@ -623,7 +630,7 @@ export async function getTestCaseEffectiveEvaluators(
         effective.push({
           id: se.id,
           evalConfigId: se.evalConfigId,
-          name: se.name,
+          name: se.configName ?? se.name,
           order: se.order,
           required: se.required,
           source: "inherited",
@@ -634,12 +641,14 @@ export async function getTestCaseEffectiveEvaluators(
     }
 
     // Append case-level adds
-    const addOverrides = overrides.filter((o) => o.overrideType === "add");
-    for (const ao of addOverrides) {
+    const addRows = overrides.filter(
+      (row) => row.override.overrideType === "add",
+    );
+    for (const { override: ao, configName } of addRows) {
       effective.push({
         id: ao.id,
         evalConfigId: ao.evalConfigId,
-        name: ao.name,
+        name: configName ?? ao.name,
         order: ao.order,
         required: ao.required,
         source: "manual",
