@@ -27,6 +27,7 @@ export function SopFormTriggerTab({ form }: SopFormTriggerTabProps) {
                 <option value="channel">Channel</option>
                 <option value="intent_detected">Intent Detected</option>
                 <option value="tool_present">Tool Present</option>
+                <option value="campaign_start">Campaign Start</option>
               </select>
             </dd>
           </div>

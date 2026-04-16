@@ -51,7 +51,7 @@ describe("compile() + toMastra() full pipeline", () => {
 
   it("AC 4: compile() returns a CompilerIR with all fields", () => {
     expect(ir.agentConfig).toBeDefined();
-    expect(ir.sop).toBeDefined();
+    expect(ir.sops).toBeDefined();
     expect(ir.systemPrompt).toBeTruthy();
     expect(ir.tools).toHaveLength(2);
     expect(ir.guardrails).toHaveLength(5);
@@ -84,12 +84,12 @@ describe("compile() + toMastra() full pipeline", () => {
   });
 
   it("IR has 5 enriched steps with correct types", () => {
-    expect(ir.sop.steps).toHaveLength(5);
-    expect(ir.sop.steps[0].type).toBe("llm"); // classify-intent
-    expect(ir.sop.steps[1].type).toBe("llm"); // extract-order-number
-    expect(ir.sop.steps[2].type).toBe("tool"); // lookup-order
-    expect(ir.sop.steps[3].type).toBe("llm"); // compose-reply
-    expect(ir.sop.steps[4].type).toBe("tool"); // escalate-if-needed
+    expect(ir.sops[0].steps).toHaveLength(5);
+    expect(ir.sops[0].steps[0].type).toBe("llm"); // classify-intent
+    expect(ir.sops[0].steps[1].type).toBe("llm"); // extract-order-number
+    expect(ir.sops[0].steps[2].type).toBe("tool"); // lookup-order
+    expect(ir.sops[0].steps[3].type).toBe("llm"); // compose-reply
+    expect(ir.sops[0].steps[4].type).toBe("tool"); // escalate-if-needed
   });
 
   it("system prompt contains all guardrails", () => {
@@ -137,13 +137,13 @@ describe("AC 21: recompile with modified guardrail", () => {
     expect(modifiedIr.systemPrompt).toContain("New Critical Rule");
 
     // All step scoped prompts should include the new critical guardrail
-    for (const step of modifiedIr.sop.steps) {
+    for (const step of modifiedIr.sops[0].steps) {
       expect(step.scopedPrompt).toContain("New Critical Rule");
       expect(step.matchedGuardrailIds).toContain("gr-new-critical");
     }
 
     // Original should NOT have it
-    for (const step of originalIr.sop.steps) {
+    for (const step of originalIr.sops[0].steps) {
       expect(step.scopedPrompt).not.toContain("New Critical Rule");
     }
   });
@@ -152,7 +152,7 @@ describe("AC 21: recompile with modified guardrail", () => {
 describe("AC 22: recompile with added/removed step", () => {
   it("adding a step produces more enriched steps", () => {
     const originalIr = compile(makeInput());
-    expect(originalIr.sop.steps).toHaveLength(5);
+    expect(originalIr.sops[0].steps).toHaveLength(5);
 
     // Clone SOP and add a step
     const modifiedSop: SopDetailResponse = JSON.parse(
@@ -166,9 +166,9 @@ describe("AC 22: recompile with added/removed step", () => {
     });
 
     const modifiedIr = compile(makeInput(modifiedSop));
-    expect(modifiedIr.sop.steps).toHaveLength(6);
-    expect(modifiedIr.sop.steps[5].id).toBe("confirm-reply");
-    expect(modifiedIr.sop.steps[5].type).toBe("llm");
+    expect(modifiedIr.sops[0].steps).toHaveLength(6);
+    expect(modifiedIr.sops[0].steps[5].id).toBe("confirm-reply");
+    expect(modifiedIr.sops[0].steps[5].type).toBe("llm");
   });
 
   it("removing a step produces fewer enriched steps", () => {
@@ -181,8 +181,8 @@ describe("AC 22: recompile with added/removed step", () => {
     );
 
     const modifiedIr = compile(makeInput(modifiedSop));
-    expect(modifiedIr.sop.steps).toHaveLength(4);
-    expect(modifiedIr.sop.steps.map((s) => s.id)).not.toContain(
+    expect(modifiedIr.sops[0].steps).toHaveLength(4);
+    expect(modifiedIr.sops[0].steps.map((s) => s.id)).not.toContain(
       "escalate-if-needed",
     );
     // Tools should only have store_look_up_order now
@@ -197,9 +197,9 @@ describe("AC 20: E2E compile email WISMO SOP → Mastra agent + workflow", () =>
   const result = toMastra(ir);
 
   it("compiles with correct SOP identity", () => {
-    expect(ir.sop.name).toBe("Email — Order Not Arrived");
-    expect(ir.sop.slug).toBe("email-order-not-arrived");
-    expect(ir.sop.steps).toHaveLength(5);
+    expect(ir.sops[0].name).toBe("Email — Order Not Arrived");
+    expect(ir.sops[0].slug).toBe("email-order-not-arrived");
+    expect(ir.sops[0].steps).toHaveLength(5);
     expect(ir.tools.map((t) => t.resolvedName)).toEqual([
       "store_look_up_order",
       "helpdesk_create_ticket",
@@ -208,7 +208,7 @@ describe("AC 20: E2E compile email WISMO SOP → Mastra agent + workflow", () =>
   });
 
   it("enriched steps have correct types and guardrail match counts", () => {
-    const stepDetails = ir.sop.steps.map((s) => ({
+    const stepDetails = ir.sops[0].steps.map((s) => ({
       id: s.id,
       type: s.type,
       matchCount: s.matchedGuardrailIds.length,
@@ -247,7 +247,7 @@ describe("AC 20: E2E compile email WISMO SOP → Mastra agent + workflow", () =>
   });
 
   it("compose-reply scoped prompt has correct structure", () => {
-    const composeStep = ir.sop.steps.find((s) => s.id === "compose-reply");
+    const composeStep = ir.sops[0].steps.find((s) => s.id === "compose-reply");
     expect(composeStep).toBeDefined();
 
     const prompt = composeStep!.scopedPrompt;

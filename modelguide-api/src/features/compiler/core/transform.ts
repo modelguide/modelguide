@@ -70,15 +70,12 @@ function enrichStep(
 // ============================================================================
 
 /**
- * Transform a parsed SOP + guardrails into a CompilerIR.
+ * Enrich a single SOP into an EnrichedSop.
  */
-export function transform(
+function enrichSop(
   sop: SopDetailResponse,
-  tools: ResolvedTool[],
   guardrails: ParsedGuardrail[],
-  agentConfig: CompilerInput["agentConfig"],
-): TransformResult {
-  // Normalize and enrich each step
+): EnrichedSop {
   const normalizedSteps = sop.definition.steps
     .slice()
     .sort((a, b) => a.order - b.order)
@@ -88,14 +85,12 @@ export function transform(
     enrichStep(step, guardrails),
   );
 
-  // Normalize the definition for the enriched SOP
   const normalizedDefinition = {
     ...sop.definition,
     steps: normalizedSteps,
   };
 
-  // Assemble enriched SOP
-  const enrichedSop: EnrichedSop = {
+  return {
     id: sop.id,
     name: sop.name,
     slug: sop.slug,
@@ -103,10 +98,22 @@ export function transform(
     definition: normalizedDefinition,
     steps: enrichedSteps,
   };
+}
+
+/**
+ * Transform parsed SOPs + guardrails into a TransformResult.
+ */
+export function transform(
+  sops: SopDetailResponse[],
+  tools: ResolvedTool[],
+  guardrails: ParsedGuardrail[],
+  agentConfig: CompilerInput["agentConfig"],
+): TransformResult {
+  const enrichedSops = sops.map((sop) => enrichSop(sop, guardrails));
 
   return {
     agentConfig,
-    sop: enrichedSop,
+    sops: enrichedSops,
     tools,
     guardrails,
   };

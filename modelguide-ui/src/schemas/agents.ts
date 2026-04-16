@@ -18,11 +18,15 @@ export type PromptConfig = z.infer<typeof promptConfigSchema>
 
 export const compiledFromSchema = z
   .object({
-    sopId: z.string().uuid(),
-    sopName: z.string(),
+    sops: z.array(
+      z.object({
+        sopId: z.string().uuid(),
+        sopName: z.string(),
+        stepCount: z.number(),
+      }),
+    ),
     guardrailIds: z.array(z.string().uuid()),
     toolCount: z.number(),
-    stepCount: z.number(),
   })
   .nullable()
 

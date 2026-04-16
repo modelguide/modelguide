@@ -106,14 +106,8 @@ describe('CompileDialog', () => {
 
       expect(screen.getByText('Compile Prompt')).toBeInTheDocument()
       expect(
-        screen.getByText('Select an SOP and preview the compiled system prompt.'),
+        screen.getByText('Select SOPs and preview the compiled system prompt.'),
       ).toBeInTheDocument()
-    })
-
-    it('shows SOP select with placeholder', () => {
-      render(<CompileDialog {...defaultProps} />, { wrapper })
-
-      expect(screen.getByText('Select an SOP...')).toBeInTheDocument()
     })
 
     it('disables Apply button before preview', () => {
@@ -132,11 +126,11 @@ describe('CompileDialog', () => {
   })
 
   describe('SOP selection', () => {
-    it('shows only SOPs assigned to the current agent', async () => {
+    it('shows only SOPs assigned to the current agent as checkboxes', async () => {
       render(<CompileDialog {...defaultProps} />, { wrapper })
 
       await waitFor(() => {
-        expect(screen.getByText('WISMO Flow (active)')).toBeInTheDocument()
+        expect(screen.getByText('WISMO Flow')).toBeInTheDocument()
       })
 
       // SOP assigned to 'other-agent' should not appear
@@ -153,16 +147,18 @@ describe('CompileDialog', () => {
       })
     })
 
-    it('pre-selects SOP when preselectedSopId is provided', async () => {
+    it('pre-selects SOPs when preselectedSopIds is provided', async () => {
       render(
-        <CompileDialog {...defaultProps} preselectedSopId="00000000-0000-0000-0000-000000000050" />,
+        <CompileDialog
+          {...defaultProps}
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
+        />,
         { wrapper },
       )
 
-      // Wait for SOPs to load, then verify the select has the preselected value
       await waitFor(() => {
-        const select = screen.getByLabelText('SOP') as HTMLSelectElement
-        expect(select.value).toBe('00000000-0000-0000-0000-000000000050')
+        const checkbox = screen.getByText('WISMO Flow').closest('label')?.querySelector('input')
+        expect(checkbox).toBeChecked()
       })
     })
   })
@@ -170,7 +166,10 @@ describe('CompileDialog', () => {
   describe('preview flow', () => {
     it('calls dry-run compile when Preview is clicked', async () => {
       render(
-        <CompileDialog {...defaultProps} preselectedSopId="00000000-0000-0000-0000-000000000050" />,
+        <CompileDialog
+          {...defaultProps}
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
+        />,
         { wrapper },
       )
 
@@ -180,7 +179,7 @@ describe('CompileDialog', () => {
         expect(mockPost).toHaveBeenCalledWith(
           'agents/agent-1/compile',
           expect.objectContaining({
-            json: { sopId: '00000000-0000-0000-0000-000000000050' },
+            json: { sopIds: ['00000000-0000-0000-0000-000000000050'] },
             searchParams: { dryRun: 'true' },
           }),
         )
@@ -189,7 +188,10 @@ describe('CompileDialog', () => {
 
     it('shows summary bar after successful preview', async () => {
       render(
-        <CompileDialog {...defaultProps} preselectedSopId="00000000-0000-0000-0000-000000000050" />,
+        <CompileDialog
+          {...defaultProps}
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
+        />,
         { wrapper },
       )
 
@@ -202,7 +204,10 @@ describe('CompileDialog', () => {
 
     it('shows compiled prompt viewer after preview', async () => {
       render(
-        <CompileDialog {...defaultProps} preselectedSopId="00000000-0000-0000-0000-000000000050" />,
+        <CompileDialog
+          {...defaultProps}
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
+        />,
         { wrapper },
       )
 
@@ -215,7 +220,10 @@ describe('CompileDialog', () => {
 
     it('enables Apply button after successful preview', async () => {
       render(
-        <CompileDialog {...defaultProps} preselectedSopId="00000000-0000-0000-0000-000000000050" />,
+        <CompileDialog
+          {...defaultProps}
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
+        />,
         { wrapper },
       )
 
@@ -233,7 +241,7 @@ describe('CompileDialog', () => {
         <CompileDialog
           {...defaultProps}
           currentPrompt="Old prompt content"
-          preselectedSopId="00000000-0000-0000-0000-000000000050"
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
         />,
         { wrapper },
       )
@@ -255,7 +263,7 @@ describe('CompileDialog', () => {
         <CompileDialog
           {...defaultProps}
           currentPrompt={null}
-          preselectedSopId="00000000-0000-0000-0000-000000000050"
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
         />,
         { wrapper },
       )
@@ -276,7 +284,7 @@ describe('CompileDialog', () => {
         <CompileDialog
           {...defaultProps}
           currentPrompt="Same content"
-          preselectedSopId="00000000-0000-0000-0000-000000000050"
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
         />,
         { wrapper },
       )
@@ -299,7 +307,10 @@ describe('CompileDialog', () => {
   describe('apply flow', () => {
     it('calls compile without dryRun when Apply is clicked', async () => {
       render(
-        <CompileDialog {...defaultProps} preselectedSopId="00000000-0000-0000-0000-000000000050" />,
+        <CompileDialog
+          {...defaultProps}
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
+        />,
         { wrapper },
       )
 
@@ -317,7 +328,7 @@ describe('CompileDialog', () => {
         expect(mockPost).toHaveBeenCalledWith(
           'agents/agent-1/compile',
           expect.objectContaining({
-            json: { sopId: '00000000-0000-0000-0000-000000000050' },
+            json: { sopIds: ['00000000-0000-0000-0000-000000000050'] },
           }),
         )
       })
@@ -334,7 +345,7 @@ describe('CompileDialog', () => {
         <CompileDialog
           {...defaultProps}
           onClose={onClose}
-          preselectedSopId="00000000-0000-0000-0000-000000000050"
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
         />,
         { wrapper },
       )
@@ -353,22 +364,17 @@ describe('CompileDialog', () => {
   })
 
   describe('state reset on close', () => {
-    it('resets SOP selection to preselected value on close', () => {
+    it('resets state on close', () => {
       const onClose = vi.fn()
 
       render(
         <CompileDialog
           {...defaultProps}
           onClose={onClose}
-          preselectedSopId="00000000-0000-0000-0000-000000000050"
+          preselectedSopIds={['00000000-0000-0000-0000-000000000050']}
         />,
         { wrapper },
       )
-
-      // Change selection
-      const select = screen.getByLabelText('SOP') as HTMLSelectElement
-      fireEvent.change(select, { target: { value: '' } })
-      expect(select.value).toBe('')
 
       // Close dialog (via the X button, which triggers handleClose)
       fireEvent.click(screen.getByLabelText('Close dialog'))

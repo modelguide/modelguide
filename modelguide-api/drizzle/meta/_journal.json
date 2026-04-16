@@ -239,6 +239,13 @@
       "when": 1775736766520,
       "tag": "0033_add-model-family-prompt-config",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1776364800000,
+      "tag": "0034_migrate-compiled-from-to-multi-sop",
+      "breakpoints": true
     }
   ]
 }

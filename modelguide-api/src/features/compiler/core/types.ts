@@ -159,7 +159,7 @@ export interface CompilerMetadata {
 /** Output of transform() — structured data for strategies to build prompts from. */
 export interface TransformResult {
   agentConfig: CompilerInput["agentConfig"];
-  sop: EnrichedSop;
+  sops: EnrichedSop[];
   tools: ResolvedTool[];
   guardrails: ParsedGuardrail[];
 }

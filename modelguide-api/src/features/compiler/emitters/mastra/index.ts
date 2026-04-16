@@ -31,11 +31,14 @@ export interface MastraEmitterResult {
  */
 export function toMastra(ir: CompilerIR): MastraEmitterResult {
   const agent = buildAgent(ir);
-  const workflows = buildWorkflows(
-    ir.sop.slug,
-    ir.sop.steps,
-    ir.agentConfig.id,
-  );
+
+  // Build workflows for each SOP
+  let workflows: Record<string, unknown> = {};
+  for (const sop of ir.sops) {
+    const sopWorkflows = buildWorkflows(sop.slug, sop.steps, ir.agentConfig.id);
+    workflows = { ...workflows, ...sopWorkflows };
+  }
+
   const tools = buildTools(ir.tools);
 
   return { agent, workflows, tools };

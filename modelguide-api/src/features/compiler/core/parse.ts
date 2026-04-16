@@ -30,61 +30,61 @@ export class CompilerError extends Error {
 // ============================================================================
 
 /**
- * Validate exactly one SOP is provided, validate its definition,
- * and collect unique tool references.
+ * Validate one or more SOPs, validate each definition,
+ * and collect unique tool references (deduped across all SOPs).
  */
-export function parseSop(sops: SopDetailResponse[]): {
-  sop: SopDetailResponse;
+export function parseSops(sops: SopDetailResponse[]): {
+  sops: SopDetailResponse[];
   tools: ResolvedTool[];
 } {
-  // Phase 1: exactly one SOP
-  if (sops.length !== 1) {
+  if (sops.length === 0) {
     throw new CompilerError(
-      `Phase 1 compiler requires exactly one SOP, received ${sops.length}`,
+      "Compiler requires at least one SOP, received 0",
       "INVALID_SOP_COUNT",
     );
   }
 
-  const sop = sops[0];
-  const definition = sop.definition;
-
-  // Validate definition against Zod schema (catches invalid schemaVersion, etc.)
-  const result = sopDefinitionSchema.safeParse(definition);
-  if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `${i.path.join(".")}: ${i.message}`)
-      .join("; ");
-    throw new CompilerError(
-      `Invalid SOP definition: ${issues}`,
-      "INVALID_SOP_DEFINITION",
-    );
-  }
-
-  // Validate tool references: steps with a tool must have resolvedName
   const tools: ResolvedTool[] = [];
   const seenTools = new Set<string>();
 
-  for (const step of definition.steps) {
-    if (step.tool) {
-      if (!step.tool.resolvedName) {
-        throw new CompilerError(
-          `Step "${step.id}" has a tool reference but no resolvedName`,
-          "MISSING_RESOLVED_NAME",
-        );
-      }
+  for (const sop of sops) {
+    const definition = sop.definition;
 
-      if (!seenTools.has(step.tool.resolvedName)) {
-        seenTools.add(step.tool.resolvedName);
-        tools.push({
-          resolvedName: step.tool.resolvedName,
-          connectorToolId: step.tool.connectorToolId,
-          connectorId: step.tool.connectorId,
-        });
+    // Validate definition against Zod schema (catches invalid schemaVersion, etc.)
+    const result = sopDefinitionSchema.safeParse(definition);
+    if (!result.success) {
+      const issues = result.error.issues
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join("; ");
+      throw new CompilerError(
+        `Invalid SOP definition for "${sop.name}" (${sop.id}): ${issues}`,
+        "INVALID_SOP_DEFINITION",
+      );
+    }
+
+    // Validate tool references: steps with a tool must have resolvedName
+    for (const step of definition.steps) {
+      if (step.tool) {
+        if (!step.tool.resolvedName) {
+          throw new CompilerError(
+            `Step "${step.id}" in SOP "${sop.name}" (${sop.id}) has a tool reference but no resolvedName`,
+            "MISSING_RESOLVED_NAME",
+          );
+        }
+
+        if (!seenTools.has(step.tool.resolvedName)) {
+          seenTools.add(step.tool.resolvedName);
+          tools.push({
+            resolvedName: step.tool.resolvedName,
+            connectorToolId: step.tool.connectorToolId,
+            connectorId: step.tool.connectorId,
+          });
+        }
       }
     }
   }
 
-  return { sop, tools };
+  return { sops, tools };
 }
 
 // ============================================================================
@@ -124,7 +124,7 @@ export function parseGuardrails(
  * Run the full parse stage.
  */
 export function parse(input: CompilerInput) {
-  const { sop, tools } = parseSop(input.sops);
+  const { sops, tools } = parseSops(input.sops);
   const guardrails = parseGuardrails(input.guardrails);
-  return { sop, tools, guardrails };
+  return { sops, tools, guardrails };
 }

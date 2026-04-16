@@ -169,6 +169,7 @@ export const updateSopSchema = z
     description: z.string().max(2000).optional(),
     definition: sopDefinitionWriteSchema.optional(),
     version: z.string().max(50).optional(),
+    agentIds: z.array(z.string().uuid()).optional(),
   })
   .strict()
   .refine(
@@ -176,7 +177,8 @@ export const updateSopSchema = z
       data.name !== undefined ||
       data.description !== undefined ||
       data.definition !== undefined ||
-      data.version !== undefined,
+      data.version !== undefined ||
+      data.agentIds !== undefined,
     { message: "At least one field must be provided" },
   );
 

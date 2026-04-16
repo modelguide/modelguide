@@ -174,7 +174,7 @@ describe("Appointment Booking E2E: second SOP dry run", () => {
       const compileResult = await compileAgent({
         orgId,
         agentId,
-        sopId: sop.id,
+        sopIds: [sop.id],
         agentModel: "anthropic/claude-haiku-4-5-20251001",
         agentDescription:
           "You are a friendly receptionist handling appointment bookings over the phone.",

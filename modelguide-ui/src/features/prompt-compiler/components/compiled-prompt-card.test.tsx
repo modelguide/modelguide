@@ -111,7 +111,7 @@ describe('CompiledPromptCard', () => {
 
       // Dialog opens — verify its unique description text and controls are present
       expect(
-        screen.getByText('Select an SOP and preview the compiled system prompt.'),
+        screen.getByText('Select SOPs and preview the compiled system prompt.'),
       ).toBeInTheDocument()
       expect(screen.getByText('Preview')).toBeInTheDocument()
       expect(screen.getByText('Apply')).toBeInTheDocument()

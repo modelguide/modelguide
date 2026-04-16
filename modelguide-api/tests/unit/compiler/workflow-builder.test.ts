@@ -29,8 +29,8 @@ const ir = compile(input);
 
 describe("buildWorkflows", () => {
   const workflows = buildWorkflows(
-    ir.sop.slug,
-    ir.sop.steps,
+    ir.sops[0].slug,
+    ir.sops[0].steps,
     ir.agentConfig.id,
   );
 
@@ -47,7 +47,7 @@ describe("buildWorkflows", () => {
   });
 
   it("handles single-step SOP", () => {
-    const singleStep = [ir.sop.steps[0]];
+    const singleStep = [ir.sops[0].steps[0]];
     const wfs = buildWorkflows("single-step", singleStep, "test-agent");
     expect(Object.keys(wfs)).toHaveLength(1);
     expect(wfs["single-step"]).toBeDefined();
