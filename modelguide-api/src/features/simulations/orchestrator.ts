@@ -4,8 +4,6 @@
  */
 
 import { env } from "@/env";
-import { forOrg } from "@db/rls";
-import { sessions } from "@db/schema";
 import {
   executeTool,
   getAgentTools,
@@ -15,11 +13,13 @@ import type { ResolvedTool } from "@features/mcp/mcp.types";
 import {
   addMessage,
   createSession,
+  mergeSessionMetadata,
   updateSession,
 } from "@features/sessions/sessions.service";
-import { eq } from "drizzle-orm";
+import { getLogger } from "@lib/logger";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
+  MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES,
   generateAgentResponse,
   generatePersonaMessage,
   toOpenAiTools,
@@ -27,9 +27,11 @@ import {
 import { personaToIdentifier } from "./personas";
 import type { Persona } from "./personas";
 import {
-  toPersonaLlmHistory,
   type SimulationHistoryMessage,
+  toPersonaLlmHistory,
 } from "./transcript";
+
+const log = getLogger();
 
 export interface SimulationResult {
   sessionId: string;
@@ -99,6 +101,7 @@ export async function runSimulation(params: {
   let turnCount = 0;
   let status: SimulationResult["status"] = "completed";
   let error: string | undefined;
+  let consecutivePersonaParseFailures = 0;
 
   try {
     for (let turn = 0; turn < maxTurns; turn++) {
@@ -110,6 +113,28 @@ export async function runSimulation(params: {
         personaLlmHistory,
         persona.systemPrompt,
       );
+
+      // If the persona LLM keeps ignoring the JSON contract we lose the
+      // `done` signal. After N failures in a row, force-stop the simulation
+      // rather than run until SIMULATION_MAX_TURNS.
+      if (personaResponse.parseFailed) {
+        consecutivePersonaParseFailures++;
+      } else {
+        consecutivePersonaParseFailures = 0;
+      }
+      const forceStop =
+        consecutivePersonaParseFailures >=
+        MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES;
+      if (forceStop) {
+        log.warn(
+          {
+            sessionId: session.id,
+            personaId: persona.id,
+            failures: consecutivePersonaParseFailures,
+          },
+          "persona JSON contract broken repeatedly; forcing simulation stop",
+        );
+      }
 
       // Store user message
       await addMessage(orgId, session.id, agentId, {
@@ -203,14 +228,21 @@ export async function runSimulation(params: {
           [],
         );
 
-        await addMessage(orgId, session.id, agentId, {
-          role: "assistant",
-          content: followUp.content,
-          occurredAt: new Date(),
-        });
+        // Skip empty follow-ups — they'd project into empty `user` turns for
+        // the persona on the next loop and confuse it.
+        if (followUp.content.trim().length > 0) {
+          await addMessage(orgId, session.id, agentId, {
+            role: "assistant",
+            content: followUp.content,
+            occurredAt: new Date(),
+          });
 
-        agentHistory.push({ role: "assistant", content: followUp.content });
-        dialogueHistory.push({ role: "assistant", content: followUp.content });
+          agentHistory.push({ role: "assistant", content: followUp.content });
+          dialogueHistory.push({
+            role: "assistant",
+            content: followUp.content,
+          });
+        }
       } else {
         // No tool calls — store the agent's text response directly
         await addMessage(orgId, session.id, agentId, {
@@ -232,7 +264,7 @@ export async function runSimulation(params: {
       turnCount = turn + 1;
 
       // Stop after the agent replies to a persona turn marked final.
-      if (personaResponse.done) {
+      if (personaResponse.done || forceStop) {
         status = "completed";
         break;
       }
@@ -256,21 +288,14 @@ export async function runSimulation(params: {
     // Session may already be ended if error occurred during addMessage
   }
 
-  // Store simulation summary in session metadata
-  await forOrg(orgId, async (tx) => {
-    await tx
-      .update(sessions)
-      .set({
-        metadata: {
-          personaId: persona.id,
-          personaName: persona.name,
-          turnCount,
-          status,
-          durationMs: Date.now() - startTime,
-          ...(error && { error }),
-        },
-      })
-      .where(eq(sessions.id, session.id));
+  // Merge simulation summary into session metadata (preserves the
+  // personaId/personaName written at createSession and anything else a
+  // concurrent writer may have added).
+  await mergeSessionMetadata(orgId, session.id, {
+    turnCount,
+    status,
+    durationMs: Date.now() - startTime,
+    ...(error && { error }),
   });
 
   return {

@@ -7,8 +7,8 @@
 
 import type { evalSuiteRuns } from "@db/schema";
 import type { EvalRunScore, NewEvalRunScore } from "@db/schema";
-import type { PaginationParams } from "@lib/pagination";
 import type { SimulationHistoryMessage } from "@features/simulations/transcript";
+import type { PaginationParams } from "@lib/pagination";
 import type { InferSelectModel } from "drizzle-orm";
 
 /** Row shape for eval_suite_runs table. */

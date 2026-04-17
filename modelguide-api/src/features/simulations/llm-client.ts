@@ -21,6 +21,13 @@ import type {
 const SIMULATION_MAX_TOKENS = 16_000;
 const logger = getLogger();
 
+/**
+ * How many consecutive prose fallbacks from the persona LLM we tolerate before
+ * force-stopping the simulation. Without the `done` signal we'd otherwise burn
+ * the whole max-turns budget every run.
+ */
+export const MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES = 3;
+
 let client: OpenAI | null = null;
 
 function getClient(): OpenAI {
@@ -52,6 +59,13 @@ export interface LlmResponse {
 export interface PersonaMessageResponse {
   content: string;
   done: boolean;
+  /**
+   * True when the model ignored the JSON output contract and we fell back
+   * to treating raw text as the customer utterance. Orchestrators use this
+   * to force termination after several consecutive failures, since without
+   * a `done` signal we'd otherwise burn SIMULATION_MAX_TURNS on every run.
+   */
+  parseFailed?: boolean;
 }
 
 /**
@@ -181,13 +195,16 @@ function buildPersonaSystemPrompt(personaSystemPrompt: string): string {
   return `${personaSystemPrompt.trim()}
 
 Output contract:
-- Stay fully in character.
-- Stay engaged until the agent has fully answered and wrapped up.
-- Respond with valid JSON only.
+- Stay fully in character as the customer.
+- Respond with valid JSON only. No prose, no markdown, no code fences.
 - Use exactly this shape: {"message":"<customer utterance>","done":false}
-- Put only the customer's next utterance in "message" with no extra narration or markdown.
-- Set "done" to true only when this message is your final customer utterance and the simulation should stop after the agent replies to it.
-- Set "done" to false when the conversation should continue beyond the agent's next reply.`;
+- Put only the customer's next utterance in "message".
+
+How to set "done":
+- Classify the "message" you are about to send. If that message itself is a farewell, sign-off, or explicit "no more questions" ("thanks, that's all", "no further questions", "goodbye", "have a good day", or the same thing in any other language), set "done" to true.
+- Set "done" to true even when you are just echoing the agent's goodbye back — that is still a farewell.
+- Set "done" to false in every other case: open questions, confirmations, clarifications, or a thanks that still expects a reply.
+- Never set "done" to true on your very first message.`;
 }
 
 export function parsePersonaMessageResponse(
@@ -196,7 +213,7 @@ export function parsePersonaMessageResponse(
   const trimmed = rawContent?.trim() ?? "";
   if (!trimmed) {
     logger.warn("persona response returned empty content");
-    return { content: "", done: false };
+    return { content: "", done: false, parseFailed: true };
   }
 
   try {
@@ -231,7 +248,7 @@ export function parsePersonaMessageResponse(
     );
   }
 
-  return { content: trimmed, done: false };
+  return { content: trimmed, done: false, parseFailed: true };
 }
 
 function stripJsonCodeFence(content: string): string {

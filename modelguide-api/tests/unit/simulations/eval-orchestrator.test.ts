@@ -220,6 +220,53 @@ describe("runEvalSimulation", () => {
     ]);
   });
 
+  test("force-stops after N consecutive persona parse failures", async () => {
+    let callCount = 0;
+    const adapter: AgentAdapter = {
+      sendMessage: async () => {
+        callCount++;
+        return {
+          response: `Response ${callCount}`,
+          toolCalls: [],
+          conversationEnded: false,
+        };
+      },
+    };
+
+    // Persona always falls back to raw text (parseFailed: true) — i.e. the
+    // LLM ignores the JSON contract every turn. Without the guard this would
+    // run until maxTurns.
+    mock.module("@features/simulations/llm-client", () => ({
+      MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES: 3,
+      generatePersonaMessage: async () => ({
+        content: "some prose",
+        done: false,
+        parseFailed: true,
+      }),
+    }));
+
+    const result = await runEvalSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      adapter,
+      inputMessage: "Hi",
+      persona: {
+        id: "test-persona",
+        name: "Test Customer",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      sessionId: "pre-created-session",
+      maxTurns: 20,
+    });
+
+    // Loop stops after N consecutive failures + one more agent reply.
+    expect(result.status).toBe("completed");
+    expect(result.turnCount).toBeLessThan(20);
+    expect(result.turnCount).toBeLessThanOrEqual(5);
+  });
+
   test("returns error status on adapter failure", async () => {
     const failingAdapter: AgentAdapter = {
       sendMessage: async () => {

@@ -15,11 +15,14 @@ import { env } from "@/env";
 import { addMessage, updateSession } from "@features/sessions/sessions.service";
 import { getLogger } from "@lib/logger";
 import type { AgentAdapter } from "./adapters/agent-adapter";
-import { generatePersonaMessage } from "./llm-client";
+import {
+  MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES,
+  generatePersonaMessage,
+} from "./llm-client";
 import type { Persona } from "./personas";
 import {
-  toPersonaLlmHistory,
   type SimulationHistoryMessage,
+  toPersonaLlmHistory,
 } from "./transcript";
 
 const log = getLogger();
@@ -157,6 +160,7 @@ async function runConversationLoop(
   let currentMessage = inputMessage;
   let turnCount = 0;
   let stopAfterAgentReply = false;
+  let consecutivePersonaParseFailures = 0;
   const conversationHistory: SimulationHistoryMessage[] = [];
 
   for (let turn = 0; turn < maxTurns; turn++) {
@@ -240,8 +244,29 @@ async function runConversationLoop(
       persona.systemPrompt,
     );
 
+    // If the persona LLM keeps ignoring the JSON contract we lose the
+    // `done` signal. After N failures in a row, force-stop on the next turn
+    // rather than run until SIMULATION_MAX_TURNS.
+    if (personaResponse.parseFailed) {
+      consecutivePersonaParseFailures++;
+    } else {
+      consecutivePersonaParseFailures = 0;
+    }
+    const forceStop =
+      consecutivePersonaParseFailures >= MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES;
+    if (forceStop) {
+      log.warn(
+        {
+          sessionId,
+          personaId: persona.id,
+          failures: consecutivePersonaParseFailures,
+        },
+        "persona JSON contract broken repeatedly; forcing simulation stop",
+      );
+    }
+
     currentMessage = personaResponse.content;
-    stopAfterAgentReply = personaResponse.done;
+    stopAfterAgentReply = personaResponse.done || forceStop;
   }
 
   return {

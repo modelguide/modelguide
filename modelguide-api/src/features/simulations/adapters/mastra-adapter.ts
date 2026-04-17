@@ -14,11 +14,11 @@ import { getLogger } from "@lib/logger";
 import { Agent } from "@mastra/core/agent";
 import type { CoreMessage } from "@mastra/core/llm";
 import { MCPClient } from "@mastra/mcp";
-import type { AgentAdapter, AgentAdapterResponse } from "./agent-adapter";
 import {
-  toAgentCoreHistory,
   type SimulationHistoryMessage,
+  toAgentCoreHistory,
 } from "../transcript";
+import type { AgentAdapter, AgentAdapterResponse } from "./agent-adapter";
 
 const log = getLogger();
 

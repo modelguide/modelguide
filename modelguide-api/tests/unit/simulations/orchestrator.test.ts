@@ -35,6 +35,15 @@ describe("parsePersonaMessageResponse", () => {
     expect(parsePersonaMessageResponse("Goodbye for now")).toEqual({
       content: "Goodbye for now",
       done: false,
+      parseFailed: true,
+    });
+  });
+
+  test("flags parseFailed on empty content", () => {
+    expect(parsePersonaMessageResponse("")).toEqual({
+      content: "",
+      done: false,
+      parseFailed: true,
     });
   });
 });
@@ -53,6 +62,7 @@ describe("runSimulation", () => {
       addMessage,
       createSession: async () => ({ id: "mock-session-id" }),
       updateSession: async () => ({}),
+      mergeSessionMetadata: async () => ({}),
     }));
 
     mock.module("@db/rls", () => ({
@@ -114,6 +124,7 @@ describe("runSimulation", () => {
       addMessage: async () => ({ id: "mock-message-id" }),
       createSession: async () => ({ id: "mock-session-id" }),
       updateSession: async () => ({}),
+      mergeSessionMetadata: async () => ({}),
     }));
 
     mock.module("@db/rls", () => ({
