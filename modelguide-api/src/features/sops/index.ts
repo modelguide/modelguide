@@ -12,6 +12,7 @@ export {
   forkFromTemplate,
   updateSop,
   deleteSop,
+  findSopBySlug,
   activateSop,
   archiveSop,
   getAssignedAgents,

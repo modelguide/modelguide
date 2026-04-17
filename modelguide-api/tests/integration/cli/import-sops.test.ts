@@ -257,6 +257,65 @@ describe("import-sops", () => {
     ).rejects.toThrow("must have at least one step");
   });
 
+  test("--replace deletes and recreates SOP with same slug", async () => {
+    const createResult = await handleImportSops(
+      orgId,
+      [
+        {
+          name: "Replaceable SOP",
+          slug: "replaceable-sop",
+          status: "active",
+          agents: ["sop-test-agent"],
+          steps: [
+            { id: "original", instruction: "Original step", required: true },
+          ],
+        },
+      ],
+      { registry },
+    );
+    expect(createResult.created).toBe(1);
+    const originalId = registry.get("sop", "replaceable-sop");
+
+    const replaceResult = await handleImportSops(
+      orgId,
+      [
+        {
+          name: "Replaceable SOP",
+          slug: "replaceable-sop",
+          status: "active",
+          agents: ["sop-test-agent"],
+          steps: [
+            { id: "new-a", instruction: "New step A", required: true },
+            { id: "new-b", instruction: "New step B", required: true },
+          ],
+        },
+      ],
+      { registry, replace: true },
+    );
+    expect(replaceResult.replaced).toBe(1);
+    expect(replaceResult.created).toBe(1);
+    expect(replaceResult.existing).toBe(0);
+
+    const newId = registry.get("sop", "replaceable-sop");
+    expect(newId).not.toBe(originalId);
+
+    const steps = await forApp(async (tx) => {
+      return tx.select().from(sopSteps).where(eq(sopSteps.sopId, newId));
+    });
+    expect(steps.length).toBe(2);
+    expect(steps.map((s) => s.stepId).sort()).toEqual(["new-a", "new-b"]);
+
+    const originalStillExists = await forApp(async (tx) => {
+      return tx.select().from(sops).where(eq(sops.id, originalId));
+    });
+    expect(originalStillExists.length).toBe(0);
+
+    const assignments = await forApp(async (tx) => {
+      return tx.select().from(agentSops).where(eq(agentSops.sopId, newId));
+    });
+    expect(assignments.length).toBe(1);
+  });
+
   test("resolves agents and connector tools without registry", async () => {
     const [tool] = await forApp(async (tx) => {
       return tx

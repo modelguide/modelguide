@@ -9,6 +9,8 @@
 import {
   activateSop,
   createSop,
+  deleteSop,
+  findSopBySlug,
   forkFromTemplate,
   listTemplates,
 } from "@features/sops/sops.service";
@@ -130,12 +132,18 @@ async function importInlineSop(
 export async function handleImportSops(
   orgId: string,
   items: SopItemInput[],
-  options?: { registry?: IdRegistry },
-): Promise<{ created: number; existing: number; activated: number }> {
+  options?: { registry?: IdRegistry; replace?: boolean },
+): Promise<{
+  created: number;
+  existing: number;
+  activated: number;
+  replaced: number;
+}> {
   const templates = await resolveTemplates();
   let created = 0;
   let existing = 0;
   let activated = 0;
+  let replaced = 0;
 
   for (const item of items) {
     try {
@@ -144,6 +152,20 @@ export async function handleImportSops(
         item.agents,
         options?.registry,
       );
+
+      // If --replace, delete any existing SOP with the same slug first.
+      // Cascade drops sop_steps and agent_sops; the recreate below re-links agents
+      // from the yaml's `agents:` list, so yaml stays the source of truth.
+      if (options?.replace && item.slug) {
+        const existingSop = await findSopBySlug(orgId, item.slug);
+        if (existingSop) {
+          await deleteSop(orgId, existingSop.id);
+          log.warn(
+            `Replaced existing SOP: ${existingSop.name} (${item.slug}) — dashboard-only agent links dropped`,
+          );
+          replaced++;
+        }
+      }
 
       const sopId = item.templateSlug
         ? await importTemplateSop(
@@ -175,7 +197,7 @@ export async function handleImportSops(
     }
   }
 
-  return { created, existing, activated };
+  return { created, existing, activated, replaced };
 }
 
 export function registerImportSopsCommand(program: Command): void {
@@ -183,15 +205,24 @@ export function registerImportSopsCommand(program: Command): void {
     .command("import-sops")
     .description("Import SOPs from YAML file")
     .requiredOption("--org <slug>", "Organization slug")
+    .option(
+      "--replace",
+      "Delete and recreate SOPs whose slugs already exist (drops manual agent links)",
+    )
     .argument("<file>", "YAML file path")
-    .action(async (file: string, opts: { org: string }) => {
+    .action(async (file: string, opts: { org: string; replace?: boolean }) => {
       const orgId = await resolveOrgId(opts.org);
       const data = loadYaml(file, sopsFileSchema);
 
       try {
-        const result = await handleImportSops(orgId, data.sops);
+        const result = await handleImportSops(orgId, data.sops, {
+          replace: opts.replace,
+        });
+        const replacedSuffix = result.replaced
+          ? `, ${result.replaced} replaced`
+          : "";
         log.success(
-          `SOPs: ${result.created} imported (${result.activated} active), ${result.existing} existing`,
+          `SOPs: ${result.created} imported (${result.activated} active), ${result.existing} existing${replacedSuffix}`,
         );
       } catch (err) {
         log.error(`Failed: ${getErrorMessage(err)}`);

@@ -635,6 +635,20 @@ export async function deleteSop(orgId: string, sopId: string): Promise<void> {
   }
 }
 
+export async function findSopBySlug(
+  orgId: string,
+  slug: string,
+): Promise<{ id: string; name: string } | null> {
+  const rows = await forOrg(orgId, (tx) =>
+    tx
+      .select({ id: sops.id, name: sops.name })
+      .from(sops)
+      .where(eq(sops.slug, slug))
+      .limit(1),
+  );
+  return rows[0] ?? null;
+}
+
 export async function activateSop(orgId: string, sopId: string) {
   return forOrg(orgId, async (tx) => {
     await requireSopExists(tx, sopId);

@@ -45,6 +45,7 @@ interface SetupOptions {
   skipCompile?: boolean;
   skipSessions?: boolean;
   skipEvals?: boolean;
+  replaceSops?: boolean;
 }
 
 interface SetupFiles {
@@ -241,9 +242,13 @@ export async function handleSetup(
     log.step("Importing SOPs...");
     const sopResult = await handleImportSops(orgId, files.sops.sops, {
       registry,
+      replace: options.replaceSops,
     });
+    const replacedSuffix = sopResult.replaced
+      ? `, ${sopResult.replaced} replaced`
+      : "";
     log.success(
-      `SOPs: ${sopResult.created} imported (${sopResult.activated} active)`,
+      `SOPs: ${sopResult.created} imported (${sopResult.activated} active)${replacedSuffix}`,
     );
   }
 
@@ -326,6 +331,10 @@ export function registerSetupCommand(program: Command): void {
     .option("--skip-compile", "Skip agent compilation")
     .option("--skip-sessions", "Skip session import")
     .option("--skip-evals", "Skip eval import")
+    .option(
+      "--replace-sops",
+      "Delete and recreate SOPs whose slugs already exist (drops manual agent links)",
+    )
     .action(async (dir: string, opts) => {
       try {
         await handleSetup(dir, {
@@ -334,6 +343,7 @@ export function registerSetupCommand(program: Command): void {
           skipCompile: opts.skipCompile,
           skipSessions: opts.skipSessions,
           skipEvals: opts.skipEvals,
+          replaceSops: opts.replaceSops,
         });
       } catch (err) {
         log.error(`Setup failed: ${getErrorMessage(err)}`);
