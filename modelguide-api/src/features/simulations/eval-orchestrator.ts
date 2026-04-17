@@ -152,6 +152,10 @@ async function runConversationLoop(
 
   let currentMessage = inputMessage;
   let turnCount = 0;
+  // Used to detect farewell loops: if the persona produces the same output
+  // two turns in a row, both sides are stuck in a goodbye echo and we should
+  // exit instead of burning maxTurns.
+  let previousPersonaMessage: string | undefined;
   const conversationHistory: Array<{
     role: "user" | "assistant";
     content: string;
@@ -245,6 +249,28 @@ async function runConversationLoop(
     );
 
     currentMessage = personaResponse.content;
+
+    // Farewell-loop guard: once the persona repeats the same short message
+    // two turns running, both sides are almost certainly stuck echoing
+    // goodbyes. Exit rather than wasting the remaining maxTurns.
+    const normalized = normalizeForLoopCompare(currentMessage);
+    if (
+      previousPersonaMessage !== undefined &&
+      normalized.length > 0 &&
+      normalized === normalizeForLoopCompare(previousPersonaMessage)
+    ) {
+      log.info(
+        { sessionId, turnCount, repeated: currentMessage.slice(0, 80) },
+        "persona repeated itself — ending simulation to avoid farewell loop",
+      );
+      return {
+        sessionId,
+        turnCount,
+        status: "completed",
+        durationMs: Date.now() - startTime,
+      };
+    }
+    previousPersonaMessage = currentMessage;
   }
 
   return {
@@ -259,4 +285,17 @@ function rejectAfterTimeout(ms: number): Promise<never> {
   return new Promise((_, reject) => {
     setTimeout(() => reject(new Error("Simulation timeout")), ms);
   });
+}
+
+/**
+ * Normalize a message for loop detection: lowercase, trim, collapse whitespace
+ * and strip trailing punctuation. Goal is "Do widzenia!" === "Do widzenia." ===
+ * " do widzenia " — all treated as the same farewell.
+ */
+function normalizeForLoopCompare(message: string): string {
+  return message
+    .trim()
+    .toLowerCase()
+    .replace(/[\s.,!?;:…]+/g, " ")
+    .trim();
 }
