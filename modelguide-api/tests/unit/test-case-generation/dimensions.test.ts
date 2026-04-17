@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { getPersona } from "@features/simulations/personas";
+import { getBuiltInPersona } from "@features/simulations/personas";
 import {
   selectTuples,
   toneToPersonaId,
@@ -236,7 +236,7 @@ describe("toneToPersonaId", () => {
   test("every tone maps to a persona that exists in the persona registry", () => {
     for (const tone of TONES) {
       const personaId = toneToPersonaId(tone);
-      const persona = getPersona(personaId);
+      const persona = getBuiltInPersona(personaId);
       expect(persona).toBeDefined();
       expect(persona!.id).toBe(personaId);
     }

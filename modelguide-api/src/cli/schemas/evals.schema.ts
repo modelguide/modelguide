@@ -22,7 +22,7 @@ const conversationMessageSchema = z.object({
 
 /**
  * Input block — accepts either candidate_message or customer_message,
- * plus optional conversation history and context.
+ * plus optional conversation history, context, and persona.
  */
 const evalInputSchema = z
   .object({
@@ -30,6 +30,7 @@ const evalInputSchema = z
     customer_message: z.string().min(1).optional(),
     conversation_history: z.array(conversationMessageSchema).optional(),
     context: z.record(z.unknown()).optional(),
+    persona: z.string().optional(),
   })
   .refine(
     (data) => data.candidate_message || data.customer_message,
@@ -55,6 +56,7 @@ const yamlTestCaseSchema = z.object({
   guardrails_tested: z.array(z.string()).default([]),
   evaluators: z.array(z.string().min(1)).min(1),
   input: evalInputSchema,
+  mock_tool_responses: z.record(z.unknown()).optional(),
 });
 
 export const evalsYamlFileSchema = z
@@ -123,7 +125,9 @@ export interface NormalizedTestCase {
     message: string;
     conversationHistory?: Array<{ role: string; content: string }>;
     context?: Record<string, unknown>;
+    persona?: string;
   };
+  mockToolResponses?: Record<string, unknown>;
 }
 
 export interface NormalizedEvalsInput {
@@ -175,7 +179,9 @@ export function normalizeYaml(
         message: normalizeMessage(tc.input),
         conversationHistory: tc.input.conversation_history,
         context: tc.input.context,
+        persona: tc.input.persona,
       },
+      mockToolResponses: tc.mock_tool_responses,
     })),
   };
 }
@@ -227,6 +233,7 @@ export function normalizeJson(
         message: normalizeMessage(s.input),
         conversationHistory: s.input.conversation_history,
         context: s.input.context,
+        persona: s.input.persona,
       },
     })),
   };

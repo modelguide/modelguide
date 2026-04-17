@@ -54,13 +54,14 @@ describe("GET /api/simulations/personas", () => {
 
     const body = await response.json();
     expect(body.data).toBeArray();
-    expect(body.data.length).toBe(4);
+    expect(body.data.length).toBe(5);
 
     const ids = body.data.map((p: { id: string }) => p.id);
     expect(ids).toContain("polite-buyer");
     expect(ids).toContain("impatient-returner");
     expect(ids).toContain("terse-buyer");
     expect(ids).toContain("confused-browser");
+    expect(ids).toContain("bank-nowa-customer");
 
     // Each persona has required fields
     for (const persona of body.data) {
@@ -224,7 +225,7 @@ describe.skipIf(!hasLlmKey)(
       expect(session).toBeDefined();
       expect(session.mode).toBe("simulation");
       expect(session.channelType).toBe("api");
-      expect(session.userIdentifier).toBe("simulation:polite-buyer");
+      expect(session.userIdentifier).toBe("sarah.johnson@modelguide.ai");
     }, 300_000);
   },
 );
