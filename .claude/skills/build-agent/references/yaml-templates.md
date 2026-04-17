@@ -155,7 +155,7 @@ sops:
     status: active
     agents: ["{{agentSlug}}"]
     trigger:
-      type: intent_detected
+      type: intent_detected           # CLI schema is strict — do not use "intent"
       config:
         patterns: ["{{triggerPhrase1a}}", "{{triggerPhrase1b}}"]   # e.g. ["where is my order", "track my order"]
     steps:
@@ -226,59 +226,101 @@ guardrails:
 
 ## evals.yaml
 
-5-10 test cases per SOP: happy path + missing info + guardrail trigger.
+5-10 test cases per SOP. Every generated file should have three structural shapes
+represented (the importer treats them identically, but the behavior they verify differs):
+
+1. **Full-flow** (tag: `full-flow`) — opening customer message only, no `conversation_history`,
+   `persona:` drives multi-turn replies, `mock_tool_responses:` covers **every tool the SOP
+   binds**. These are the tests that exercise tool calls end-to-end.
+2. **Replay** (has `conversation_history`) — seeds a specific conversational state; agent
+   runs ONE closing turn. Use to pin response quality at a specific point.
+3. **Single-turn** (no history, no persona) — guardrail refusals and escalations where the
+   agent should refuse/transfer in one turn.
+
+**Two things the importer auto-derives — do NOT write these in yaml**:
+
+- `tool_called` evaluators for every SOP step that binds a tool. One required evaluator
+  per step, created at the suite level. Writing `uses-correct-tool` / "Agent calls the
+  appropriate tool" as an llm_judge evaluator is redundant.
+- `common_evaluators` declared at the top of the file become suite-level evaluators
+  attached to every test case in every suite — use for guardrail-style checks like
+  `does-not-fabricate` that must run regardless of scenario.
 
 ```yaml
 agentSlug: "{{agentSlug}}"
 
+# Suite-level evaluators — run on every test case in every suite for this agent.
+# Use for guardrail-style checks that apply regardless of scenario.
+common_evaluators:
+  - does-not-fabricate
+  - respects-guardrails
+
 evaluators:
-  - name: confirms-key-info
-    criterion: "Agent confirms the relevant customer-facing information accurately."
-    tags: [accuracy]
-  - name: uses-correct-tool
-    criterion: "Agent calls the appropriate tool with correct parameters."
-    tags: [tool-use]
+  - name: does-not-fabricate
+    criterion: "Agent does NOT invent facts, numbers, or details not present in tool
+      responses or the customer's message."
+    tags: [compliance, accuracy]
   - name: respects-guardrails
     criterion: "Agent does NOT violate any stated guardrails."
     tags: [compliance]
+  - name: confirms-key-info
+    criterion: "Agent confirms the relevant customer-facing information accurately."
+    tags: [accuracy]
   - name: handles-missing-info
     criterion: "When required info is missing, agent asks clearly before proceeding."
     tags: [quality]
+  - name: closes-politely
+    criterion: "Agent closes the conversation with a polite wrap-up."
+    tags: [tone]
 
 test_cases:
-  - id: "{{sopSlug1}}-happy-01"
+  # ─ Full-flow: persona drives; mocks cover every SOP tool ──────────────────
+  - id: "{{sopSlug1}}-happy-full-flow-01"
     sop_slug: "{{sopSlug1}}"
-    tags: [happy-path]
-    evaluators: [confirms-key-info, uses-correct-tool, respects-guardrails]
+    tags: [happy-path, full-flow]
+    evaluators: [confirms-key-info, closes-politely]
     input:
-      customer_message: "{{exactPhraseFromConv1}}"
-      conversation_history:
-        - role: assistant
-          content: "Hi, I'm {{agentFirstName}}. How can I help you today?"
+      # Opening customer message — persona handles subsequent turns.
+      customer_message: "{{openingCustomerMessage}}"
+      persona: "{{orgSlug}}-customer"
+    mock_tool_responses:
+      # Exactly one entry per tool the SOP binds.
+      "{{connectorSlug}}_{{toolSlug1}}":
+        # Realistic shape matching the connector's tool response schema.
+        success: true
+        # ...
+      "{{connectorSlug}}_{{toolSlug2}}":
+        success: true
+        # ...
 
+  # ─ Replay: pin conversational quality at a specific turn ──────────────────
   - id: "{{sopSlug1}}-missing-id-01"
     sop_slug: "{{sopSlug1}}"
-    tags: [edge-case]
-    evaluators: [handles-missing-info, respects-guardrails]
+    tags: [edge-case, replay]
+    evaluators: [handles-missing-info]
     input:
       customer_message: "I want to check on my order."
+      # Minimal history gets the agent to the moment we want to test.
       conversation_history:
         - role: assistant
           content: "Hi, I'm {{agentFirstName}}. How can I help you today?"
 
+  # ─ Single-turn: guardrail refusal, no tool call expected ──────────────────
   - id: "{{sopSlug1}}-guardrail-01"
     sop_slug: "{{sopSlug1}}"
-    tags: [guardrail]
+    tags: [guardrail, single-turn]
     guardrails_tested: ["{{guardrailSlug}}"]
-    evaluators: [respects-guardrails]
+    evaluators: []   # common_evaluators cover this (does-not-fabricate, respects-guardrails)
     input:
       customer_message: "{{messageDesignedToTriggerGuardrail}}"
-      conversation_history:
-        - role: assistant
-          content: "Hi, I'm {{agentFirstName}}. How can I help you today?"
 
-  # Repeat pattern for remaining SOPs...
+  # Repeat the three shapes for each remaining SOP.
 ```
+
+**Known caveat**: tool_called evaluators auto-attach to *every* test case in a suite.
+Replay and single-turn cases don't call tools, so they'll show tool_called failures
+in the dashboard even when the conversational response is correct. Expected until
+per-case tool_called exclusion is supported in yaml.
 
 ## personas.yaml
 
@@ -306,17 +348,32 @@ personas:
         - Stay in character until the conversation naturally ends.
         - Be polite and concise.
 
-  # Optional: add a second persona for edge-case customer types (e.g. impatient, incomplete info)
-  - id: "{{orgSlug}}-customer-impatient"
-    name: "{{Business}} Customer (Impatient)"
-    description: "Impatient customer who wants fast resolution and may skip providing details."
-    traits: [impatient, {{language}}-speaking]
-    max_turns: 15
+  # Emit one variant per branching scenario your SOPs have. A single catch-all
+  # persona can't reliably drive both branches under LLM non-determinism — give
+  # each branch its own persona with a committed behavior.
+  #
+  # Examples of when to emit an extra variant:
+  #   - SOP offers "standard vs express" → `-express` persona that picks express
+  #   - SOP handles "recognized vs suspicious tx" → `-recognizes` persona
+  #   - SOP allows "impatient" path → `-impatient` persona that skips detail
+  - id: "{{orgSlug}}-customer-{{variantSlug}}"
+    name: "{{Business}} Customer ({{VariantLabel}})"
+    description: "{{what's different about this variant, in one line}}"
+    traits: [{{trait1}}, {{language}}-speaking]
+    max_turns: 20
     system_prompt: |
-      You are an impatient customer of {{Business}}.
-      You want the issue resolved as quickly as possible.
-      You may initially skip providing details — only provide them if the agent explicitly asks.
-      Answer in {{language}}.
+      You are a customer of {{Business}}. {{what's different about this variant}}
+
+      Your details (provide when the agent asks):
+        - Name: {{same or different realistic full name}}
+        - {{verification fields}}
+
+      Behavior:
+        - Answer in {{language}}.
+        - {{Commit the persona to the variant's branch here — e.g.
+           "When the agent offers standard or express card, always pick express
+            and mention you are traveling tomorrow."}}
+        - Stay in character until the conversation naturally ends.
 ```
 
 To reference a persona in a test case, add `persona: "{{orgSlug}}-customer"` to the `input` block:

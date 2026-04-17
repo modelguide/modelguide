@@ -539,8 +539,8 @@ Always generate:
 - `org.yaml` — slug from D-02
 - `sops.yaml` — 3 SOPs from Conv-1/2/3, status: active
 - `guardrails.yaml` — from D-08, always include no-fabrication baseline
-- `evals.yaml` — 5-10 test cases per SOP (happy path + missing info + guardrail trigger)
-- `personas.yaml` — 1-2 simulation personas. See `references/yaml-templates.md` for format. Reference in test cases via `persona: <id>`; missing persona ID causes silent fallback to raw message.
+- `evals.yaml` — 5-10 test cases per SOP across three shapes: full-flow (happy path + all SOP tool mocks + persona), replay (specific conversational moment via `conversation_history`), and single-turn (guardrail refusals, escalations). See `references/yaml-templates.md` for the structure + `common_evaluators:` pattern. Do NOT hand-write `tool_called` evaluators — the importer auto-derives them from each SOP step's tool binding.
+- `personas.yaml` — start with 1 baseline persona, and add a **variant per branching scenario** your SOPs contain. For example: if a SOP offers "standard vs express card", emit one persona that picks standard and a `-express` variant that picks express. If a SOP handles "recognized vs suspicious transaction", emit one persona that recognizes and another that doesn't. A single catch-all persona can't reliably drive both branches under LLM non-determinism. See `references/yaml-templates.md` for format. Reference in test cases via `persona: <id>`; missing persona ID causes silent fallback to raw message.
 
 **`agents.yaml`** — see `references/yaml-templates.md` for ElevenLabs and LiveKit formats.
 
@@ -676,14 +676,42 @@ Check each off as it completes.
 
 ### 4a. Pre-flight: verify eval LLM keys
 
-Before starting any simulation, check that the LLM keys are set — missing keys cause silent 0/0 results with no error:
+Three separate keys are consulted during `simulate-and-run`. If any are missing, sims
+fail in ~1s with no visible error and the dashboard shows `0/0 evaluators passed`.
 
 ```bash
-grep -q "^EVAL_LLM_API_KEY=[^<]" modelguide-api/.env && echo "EVAL_LLM_API_KEY: set" || echo "EVAL_LLM_API_KEY: MISSING or placeholder"
+# Persona driver (customer simulation) — reads SIMULATION_LLM_API_KEY
 grep -q "^SIMULATION_LLM_API_KEY=[^<]" modelguide-api/.env && echo "SIMULATION_LLM_API_KEY: set" || echo "SIMULATION_LLM_API_KEY: MISSING or placeholder"
+
+# Eval judge — reads EVAL_LLM_API_KEY (falls back to SIMULATION_LLM_API_KEY)
+grep -q "^EVAL_LLM_API_KEY=[^<]" modelguide-api/.env && echo "EVAL_LLM_API_KEY: set" || echo "EVAL_LLM_API_KEY: MISSING or placeholder"
+
+# Agent-under-test LLM — Mastra resolves SIMULATION_AGENT_MODEL (default
+# "anthropic/claude-haiku-4-5-20251001") by reading the provider's STANDARD env
+# var directly. It does NOT fall back to SIMULATION_LLM_API_KEY.
+#
+# Check the provider prefix in SIMULATION_AGENT_MODEL and ensure the matching
+# raw env var is set. Default is anthropic, so check ANTHROPIC_API_KEY unless
+# SIMULATION_AGENT_MODEL is overridden.
+model_env=$(grep "^SIMULATION_AGENT_MODEL=" modelguide-api/.env | cut -d= -f2- | tr -d '"')
+provider="${model_env%%/*}"
+case "$provider" in
+  openai|"")    # empty = default (anthropic)
+    if [ -z "$provider" ]; then provider="anthropic"; fi
+    ;;
+esac
+expected_key=$(echo "$provider" | tr '[:lower:]' '[:upper:]')_API_KEY
+grep -q "^${expected_key}=[^<]" modelguide-api/.env && echo "${expected_key}: set (provider: $provider)" || echo "${expected_key}: MISSING — required for SIMULATION_AGENT_MODEL (provider: $provider)"
 ```
 
-If either shows MISSING or placeholder: stop. Tell the user to open `modelguide-api/.env`, replace the `<your-openai-key>` placeholders with their real OpenAI key, and restart the API before re-running evals. Do NOT run evals with placeholder values.
+If any shows `MISSING or placeholder`: stop. Tell the user to open `modelguide-api/.env`,
+set the real key for that env var, and restart the API before re-running evals. Do NOT
+run evals with placeholders.
+
+Gotcha: `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` are **separate env vars** from
+`SIMULATION_LLM_API_KEY` / `EVAL_LLM_API_KEY`. If `SIMULATION_AGENT_MODEL` is
+`openai/gpt-4.1-mini` you need `OPENAI_API_KEY` set — reusing `SIMULATION_LLM_API_KEY`
+doesn't satisfy it.
 
 ### 4b. Ensure API is running
 
