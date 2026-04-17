@@ -59,7 +59,10 @@ describe("runEvalSimulation", () => {
 
     // Mock persona to enable multi-turn
     mock.module("@features/simulations/llm-client", () => ({
-      generatePersonaMessage: async () => ({ content: "follow up" }),
+      generatePersonaMessage: async () => ({
+        content: "follow up",
+        done: false,
+      }),
     }));
 
     const result = await runEvalSimulation({
@@ -116,6 +119,152 @@ describe("runEvalSimulation", () => {
     expect(result.status).toBe("completed");
     expect(result.turnCount).toBe(1);
     expect(callCount).toBe(1);
+  });
+
+  test("lets the agent answer one final persona goodbye before stopping", async () => {
+    let callCount = 0;
+    const adapter: AgentAdapter = {
+      sendMessage: async () => {
+        callCount++;
+        return {
+          response: `Response ${callCount}`,
+          toolCalls: [],
+          conversationEnded: false,
+        };
+      },
+    };
+
+    mock.module("@features/simulations/llm-client", () => ({
+      generatePersonaMessage: async () => ({
+        content: "Thanks, that's all I needed.",
+        done: true,
+      }),
+    }));
+
+    const result = await runEvalSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      adapter,
+      inputMessage: "Hi",
+      persona: {
+        id: "test-persona",
+        name: "Test Customer",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      sessionId: "pre-created-session",
+      maxTurns: 10,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.turnCount).toBe(2);
+    expect(callCount).toBe(2);
+  });
+
+  test("passes the full transcript back to the agent on turn 2", async () => {
+    const histories: Array<
+      Array<{ role: string; content: string }> | undefined
+    > = [];
+    let callCount = 0;
+    const adapter: AgentAdapter = {
+      sendMessage: async (_sessionId, _message, history) => {
+        histories.push(history);
+        callCount++;
+        return {
+          response: `Response ${callCount}`,
+          toolCalls: [],
+          conversationEnded: false,
+        };
+      },
+    };
+
+    let personaCallCount = 0;
+    mock.module("@features/simulations/llm-client", () => ({
+      generatePersonaMessage: async () => {
+        personaCallCount++;
+        return personaCallCount === 1
+          ? { content: "One more question.", done: false }
+          : { content: "Thanks, that's all.", done: true };
+      },
+    }));
+
+    const result = await runEvalSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      adapter,
+      inputMessage: "Hi",
+      persona: {
+        id: "test-persona",
+        name: "Test Customer",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      sessionId: "pre-created-session",
+      maxTurns: 10,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(callCount).toBe(3);
+    expect(histories[0]).toBeUndefined();
+    expect(histories[1]).toEqual([
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Response 1" },
+    ]);
+    expect(histories[2]).toEqual([
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Response 1" },
+      { role: "user", content: "One more question." },
+      { role: "assistant", content: "Response 2" },
+    ]);
+  });
+
+  test("force-stops after N consecutive persona parse failures", async () => {
+    let callCount = 0;
+    const adapter: AgentAdapter = {
+      sendMessage: async () => {
+        callCount++;
+        return {
+          response: `Response ${callCount}`,
+          toolCalls: [],
+          conversationEnded: false,
+        };
+      },
+    };
+
+    // Persona always falls back to raw text (parseFailed: true) — i.e. the
+    // LLM ignores the JSON contract every turn. Without the guard this would
+    // run until maxTurns.
+    mock.module("@features/simulations/llm-client", () => ({
+      MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES: 3,
+      generatePersonaMessage: async () => ({
+        content: "some prose",
+        done: false,
+        parseFailed: true,
+      }),
+    }));
+
+    const result = await runEvalSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      adapter,
+      inputMessage: "Hi",
+      persona: {
+        id: "test-persona",
+        name: "Test Customer",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      sessionId: "pre-created-session",
+      maxTurns: 20,
+    });
+
+    // Loop stops after N consecutive failures + one more agent reply.
+    expect(result.status).toBe("completed");
+    expect(result.turnCount).toBeLessThan(20);
+    expect(result.turnCount).toBeLessThanOrEqual(5);
   });
 
   test("returns error status on adapter failure", async () => {

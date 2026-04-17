@@ -14,6 +14,10 @@ import { getLogger } from "@lib/logger";
 import { Agent } from "@mastra/core/agent";
 import type { CoreMessage } from "@mastra/core/llm";
 import { MCPClient } from "@mastra/mcp";
+import {
+  type SimulationHistoryMessage,
+  toAgentCoreHistory,
+} from "../transcript";
 import type { AgentAdapter, AgentAdapterResponse } from "./agent-adapter";
 
 const log = getLogger();
@@ -73,7 +77,7 @@ export class MastraAdapter implements AgentAdapter {
   async sendMessage(
     sessionId: string,
     message: string,
-    conversationHistory?: Array<{ role: string; content: string }>,
+    conversationHistory?: SimulationHistoryMessage[],
   ): Promise<AgentAdapterResponse> {
     log.debug(
       {
@@ -87,9 +91,9 @@ export class MastraAdapter implements AgentAdapter {
 
     const toolsets = await this.mcpClient.listToolsets();
 
-    // When conversation history is provided (replay tests), build a structured
-    // CoreMessage[] so the model sees prior turns as proper user/assistant messages.
-    // Otherwise, pass the raw string (original single-turn behavior).
+    // When replay history is provided, project the stored transcript into the
+    // agent model's POV before calling Mastra. This keeps "customer" and
+    // "agent" semantics explicit instead of relying on raw chat-role labels.
     const generateOpts = {
       toolsets,
       maxSteps: this.config.maxSteps ?? 5,
@@ -99,10 +103,7 @@ export class MastraAdapter implements AgentAdapter {
       conversationHistory && conversationHistory.length > 0
         ? await this.agent.generate(
             [
-              ...conversationHistory.map((msg) => ({
-                role: msg.role as "user" | "assistant" | "system",
-                content: msg.content,
-              })),
+              ...toAgentCoreHistory(conversationHistory),
               { role: "user" as const, content: message },
             ] as CoreMessage[],
             generateOpts,

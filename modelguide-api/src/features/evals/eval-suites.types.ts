@@ -7,6 +7,7 @@
 
 import type { evalSuiteRuns } from "@db/schema";
 import type { EvalRunScore, NewEvalRunScore } from "@db/schema";
+import type { SimulationHistoryMessage } from "@features/simulations/transcript";
 import type { PaginationParams } from "@lib/pagination";
 import type { InferSelectModel } from "drizzle-orm";
 
@@ -73,7 +74,7 @@ export interface SimulationTestCaseInput {
   message?: string;
   persona?: string;
   /** Prior conversation turns for replay tests — stored in session before the live turn. */
-  conversationHistory?: Array<{ role: string; content: string }>;
+  conversationHistory?: SimulationHistoryMessage[];
 }
 
 /** Expected shape of sessions.metadata for simulation sessions. */

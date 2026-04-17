@@ -15,8 +15,15 @@ import { env } from "@/env";
 import { addMessage, updateSession } from "@features/sessions/sessions.service";
 import { getLogger } from "@lib/logger";
 import type { AgentAdapter } from "./adapters/agent-adapter";
-import { generatePersonaMessage } from "./llm-client";
+import {
+  MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES,
+  generatePersonaMessage,
+} from "./llm-client";
 import type { Persona } from "./personas";
+import {
+  type SimulationHistoryMessage,
+  toPersonaLlmHistory,
+} from "./transcript";
 
 const log = getLogger();
 
@@ -38,7 +45,7 @@ export interface EvalOrchestrationInput {
    * When provided, these are stored in the session as context messages
    * and passed to the adapter so the model sees full conversational history.
    */
-  conversationHistory?: Array<{ role: string; content: string }>;
+  conversationHistory?: SimulationHistoryMessage[];
   /** Timeout in ms (defaults to SIMULATION_TIMEOUT_MS env var). */
   timeoutMs?: number;
   /** Max conversation turns (defaults to SIMULATION_MAX_TURNS env var). */
@@ -143,7 +150,7 @@ async function runConversationLoop(
   if (priorHistory && priorHistory.length > 0) {
     for (const msg of priorHistory) {
       await addMessage(orgId, sessionId, agentId, {
-        role: msg.role as "user" | "assistant",
+        role: msg.role,
         content: msg.content,
         occurredAt: new Date(),
       });
@@ -152,10 +159,9 @@ async function runConversationLoop(
 
   let currentMessage = inputMessage;
   let turnCount = 0;
-  const conversationHistory: Array<{
-    role: "user" | "assistant";
-    content: string;
-  }> = [];
+  let stopAfterAgentReply = false;
+  let consecutivePersonaParseFailures = 0;
+  const conversationHistory: SimulationHistoryMessage[] = [];
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Store user message
@@ -165,13 +171,16 @@ async function runConversationLoop(
       occurredAt: new Date(),
     });
 
-    // Send to agent via adapter — include prior history on the first turn
-    // so the model sees full conversational context for replay tests.
-    const historyForAdapter = turn === 0 ? priorHistory : undefined;
+    // Send to agent via adapter — pass the full running conversation each turn
+    // (priorHistory from replay yaml + everything we've accumulated so far).
+    // Mastra's Agent.generate() is stateless without memory config, so without
+    // this the agent has amnesia on turn 1+ and re-asks questions it already
+    // asked (re-verifies identity, etc.).
+    const historyForAdapter = [...(priorHistory ?? []), ...conversationHistory];
     const agentResponse = await adapter.sendMessage(
       sessionId,
       currentMessage,
-      historyForAdapter,
+      historyForAdapter.length > 0 ? historyForAdapter : undefined,
     );
 
     // Store agent response with tool calls
@@ -204,8 +213,8 @@ async function runConversationLoop(
 
     turnCount = turn + 1;
 
-    // If agent signals conversation ended, stop
-    if (agentResponse.conversationEnded) {
+    // Stop after the agent replies to a final persona turn.
+    if (agentResponse.conversationEnded || stopAfterAgentReply) {
       return {
         sessionId,
         turnCount,
@@ -224,13 +233,40 @@ async function runConversationLoop(
       };
     }
 
-    // Generate persona follow-up with full conversation history
+    // Project the stored transcript into the customer's POV before asking
+    // the persona model for the next turn.
+    const personaHistory = toPersonaLlmHistory([
+      ...(priorHistory ?? []),
+      ...conversationHistory,
+    ]);
     const personaResponse = await generatePersonaMessage(
-      conversationHistory,
+      personaHistory,
       persona.systemPrompt,
     );
 
+    // If the persona LLM keeps ignoring the JSON contract we lose the
+    // `done` signal. After N failures in a row, force-stop on the next turn
+    // rather than run until SIMULATION_MAX_TURNS.
+    if (personaResponse.parseFailed) {
+      consecutivePersonaParseFailures++;
+    } else {
+      consecutivePersonaParseFailures = 0;
+    }
+    const forceStop =
+      consecutivePersonaParseFailures >= MAX_CONSECUTIVE_PERSONA_PARSE_FAILURES;
+    if (forceStop) {
+      log.warn(
+        {
+          sessionId,
+          personaId: persona.id,
+          failures: consecutivePersonaParseFailures,
+        },
+        "persona JSON contract broken repeatedly; forcing simulation stop",
+      );
+    }
+
     currentMessage = personaResponse.content;
+    stopAfterAgentReply = personaResponse.done || forceStop;
   }
 
   return {

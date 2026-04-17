@@ -1,3 +1,5 @@
+import type { SimulationHistoryMessage } from "../transcript";
+
 /**
  * Agent adapter interface — abstraction between the orchestrator
  * and specific agent implementations (Mastra, LiveKit, etc.).
@@ -37,6 +39,6 @@ export interface AgentAdapter {
   sendMessage(
     sessionId: string,
     message: string,
-    conversationHistory?: Array<{ role: string; content: string }>,
+    conversationHistory?: SimulationHistoryMessage[],
   ): Promise<AgentAdapterResponse>;
 }

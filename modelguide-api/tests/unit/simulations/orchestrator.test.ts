@@ -1,38 +1,183 @@
-import { describe, expect, test } from "bun:test";
-import { isConversationEnding } from "@features/simulations/orchestrator";
+import { describe, expect, mock, test } from "bun:test";
+import { parsePersonaMessageResponse } from "@features/simulations/llm-client";
 import confusedBrowser from "../../fixtures/simulations/confused-browser.json";
 import impatientReturner from "../../fixtures/simulations/impatient-returner.json";
 import politeBuyer from "../../fixtures/simulations/polite-buyer.json";
 
 // ============================================================================
-// isConversationEnding
+// parsePersonaMessageResponse
 // ============================================================================
 
-describe("isConversationEnding", () => {
-  test("detects explicit goodbye phrases", () => {
-    expect(isConversationEnding("Goodbye!")).toBe(true);
-    expect(isConversationEnding("bye")).toBe(true);
-    expect(isConversationEnding("That's all I needed, thank you!")).toBe(true);
-    expect(isConversationEnding("Have a good day!")).toBe(true);
-    expect(isConversationEnding("Nothing else, thanks")).toBe(true);
-    expect(isConversationEnding("That's everything I needed.")).toBe(true);
+describe("parsePersonaMessageResponse", () => {
+  test("parses structured persona output", () => {
+    expect(
+      parsePersonaMessageResponse(
+        '{"message":"Thanks for your help.","done":true}',
+      ),
+    ).toEqual({
+      content: "Thanks for your help.",
+      done: true,
+    });
   });
 
-  test("does not false-positive on words containing ending substrings", () => {
-    expect(isConversationEnding("Maybe I should look at another option")).toBe(
-      false,
+  test("accepts json wrapped in code fences", () => {
+    expect(
+      parsePersonaMessageResponse(
+        '```json\n{"message":"I need one more detail.","done":false}\n```',
+      ),
+    ).toEqual({
+      content: "I need one more detail.",
+      done: false,
+    });
+  });
+
+  test("falls back to raw text when the model ignores the json contract", () => {
+    expect(parsePersonaMessageResponse("Goodbye for now")).toEqual({
+      content: "Goodbye for now",
+      done: false,
+      parseFailed: true,
+    });
+  });
+
+  test("flags parseFailed on empty content", () => {
+    expect(parsePersonaMessageResponse("")).toEqual({
+      content: "",
+      done: false,
+      parseFailed: true,
+    });
+  });
+});
+
+describe("runSimulation", () => {
+  test("stops after the agent replies to a persona turn marked done", async () => {
+    const addMessage = mock(async () => ({ id: "mock-message-id" }));
+
+    mock.module("@features/mcp/mcp.service", () => ({
+      executeTool: async () => ({}),
+      getAgentTools: async () => [],
+      resolveConnectorConfigById: async () => ({}),
+    }));
+
+    mock.module("@features/sessions/sessions.service", () => ({
+      addMessage,
+      createSession: async () => ({ id: "mock-session-id" }),
+      updateSession: async () => ({}),
+      mergeSessionMetadata: async () => ({}),
+    }));
+
+    mock.module("@db/rls", () => ({
+      forOrg: async (_orgId: string, cb: (tx: unknown) => Promise<unknown>) =>
+        cb({
+          update: () => ({
+            set: () => ({
+              where: async () => ({}),
+            }),
+          }),
+        }),
+    }));
+
+    mock.module("@features/simulations/llm-client", () => ({
+      generateAgentResponse: async () => ({
+        content: "Happy to help. Goodbye!",
+        toolCalls: [],
+      }),
+      generatePersonaMessage: async () => ({
+        content: "Thanks, that's all I needed.",
+        done: true,
+      }),
+      toOpenAiTools: () => [],
+    }));
+
+    const { runSimulation } = await import(
+      "@features/simulations/orchestrator"
     );
-    expect(isConversationEnding("I'll buy it")).toBe(false);
-    expect(isConversationEnding("Can you help me?")).toBe(false);
-    expect(isConversationEnding("I need a bypass for this issue")).toBe(false);
+
+    const result = await runSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      agentName: "Test Agent",
+      persona: {
+        id: "test-persona",
+        name: "Test Persona",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      maxTurns: 5,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.turnCount).toBe(1);
+    expect(addMessage).toHaveBeenCalledTimes(2);
   });
 
-  test("detects endings in fixture conversations", () => {
-    const lastUserMessage = politeBuyer.messages
-      .filter((m) => m.role === "user")
-      .at(-1);
-    expect(lastUserMessage).toBeDefined();
-    expect(isConversationEnding(lastUserMessage!.content)).toBe(true);
+  test("projects prior dialogue into the persona's customer POV", async () => {
+    const personaHistories: unknown[] = [];
+
+    mock.module("@features/mcp/mcp.service", () => ({
+      executeTool: async () => ({}),
+      getAgentTools: async () => [],
+      resolveConnectorConfigById: async () => ({}),
+    }));
+
+    mock.module("@features/sessions/sessions.service", () => ({
+      addMessage: async () => ({ id: "mock-message-id" }),
+      createSession: async () => ({ id: "mock-session-id" }),
+      updateSession: async () => ({}),
+      mergeSessionMetadata: async () => ({}),
+    }));
+
+    mock.module("@db/rls", () => ({
+      forOrg: async (_orgId: string, cb: (tx: unknown) => Promise<unknown>) =>
+        cb({
+          update: () => ({
+            set: () => ({
+              where: async () => ({}),
+            }),
+          }),
+        }),
+    }));
+
+    let personaCallCount = 0;
+    mock.module("@features/simulations/llm-client", () => ({
+      generateAgentResponse: async () => ({
+        content: "What's your order number?",
+        toolCalls: [],
+      }),
+      generatePersonaMessage: async (history: unknown) => {
+        personaHistories.push(history);
+        personaCallCount++;
+        return personaCallCount === 1
+          ? { content: "I need help with my order.", done: false }
+          : { content: "Thanks, that's all I needed.", done: true };
+      },
+      toOpenAiTools: () => [],
+    }));
+
+    const { runSimulation } = await import(
+      "@features/simulations/orchestrator"
+    );
+
+    const result = await runSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      agentName: "Test Agent",
+      persona: {
+        id: "test-persona",
+        name: "Test Persona",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      maxTurns: 5,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(personaHistories[0]).toEqual([]);
+    expect(personaHistories[1]).toEqual([
+      { role: "assistant", content: "I need help with my order." },
+      { role: "user", content: "What's your order number?" },
+    ]);
   });
 });
 
