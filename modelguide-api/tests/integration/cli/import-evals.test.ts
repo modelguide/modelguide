@@ -166,6 +166,7 @@ beforeAll(async () => {
       {
         name: "Evals Test SOP Reconcile",
         slug: SOP_SLUG_RECONCILE,
+        status: "active" as const,
         agents: [AGENT_SLUG],
         steps: [
           {
@@ -178,6 +179,7 @@ beforeAll(async () => {
       {
         name: "Evals Test SOP Empty",
         slug: SOP_SLUG_EMPTY,
+        status: "active" as const,
         agents: [AGENT_SLUG],
         steps: [
           {
