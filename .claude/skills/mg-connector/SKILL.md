@@ -91,6 +91,10 @@ interface CatalogTool {
 
 ### Step 0: Gather Requirements
 
+If `.modelguide/CONNECTOR_HANDOFF.md` exists, read it first and use it as the
+source of truth for the requested service, auth, operations, and requested org
+connector slug. Only ask follow-up questions for missing details.
+
 Ask the user for:
 - **Service name** and **slug** (lowercase, alphanumeric + hyphens)
 - **Description** of what the connector does
@@ -98,6 +102,35 @@ Ask the user for:
 - **Config fields**: what the connector needs (base URL, API key, etc.)
 - **Auth method**: `api_key`, `oauth2`, `bearer_token`, etc.
 - **Initial tools**: list of operations to expose
+
+### Build-Agent Handoff Contract
+
+When this skill is invoked from `/build-agent`, update
+`.modelguide/CONNECTOR_HANDOFF.md` in place instead of returning the result only
+in prose.
+
+Do not delete the original request fields. Preserve `serviceName`,
+`serviceSlug`, `requestedConnectorSlug`, `authModel`, `baseUrl`, and
+`operations` so build-agent can resume without losing the builder's API summary.
+
+Minimum required fields on completion:
+- `status: completed` or `status: blocked`
+- `catalogSlug` — the new catalog connector slug
+- `connectorSlug` — the org connector instance slug to use in `agents.yaml` and `sops.yaml`
+- `toolSlugs` — exact tool slugs exposed by the connector
+- `configFields` — objects with `name`, `description`, and `required` for each
+  non-secret field that `connectors.yaml` must provide
+- `secretFields` — objects with `field`, `name`, and `type` for each secret
+  that `mg setup` will prompt for
+- `changedFiles` — exact repo file paths you modified
+- `verification` — commands run, or `(pending)` if verification was skipped
+- `blocker` — only when `status: blocked`
+
+Important: `catalogSlug` and `connectorSlug` are different. `catalogSlug`
+identifies the connector type in the global catalog. `connectorSlug` is the org
+instance slug that becomes the MCP prefix at runtime. `serviceSlug` is only the
+interview-time service identifier and must not be used as either of those final
+slugs.
 
 ### Step 1: Create `client.ts`
 
@@ -431,7 +464,7 @@ cd modelguide-api && bun run src/features/connectors/catalog/sync.ts
 ### Naming
 - **Tool names**: Human-readable in `catalog.name` (e.g. "List Products")
 - **Tool slugs**: Auto-derived from name as snake_case (e.g. "list_products")
-- **MCP tool names**: `{connectorSlug}_{toolSlug}` (e.g. "medusa_list_products")
+- **MCP tool names**: `{connectorSlug}_{toolSlug}` (e.g. "glowbox_store_list_products")
 
 ### Error Handling
 - Always use the `with{Name}()` HOF wrapper — never throw from handlers

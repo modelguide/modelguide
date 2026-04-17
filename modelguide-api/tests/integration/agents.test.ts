@@ -220,6 +220,51 @@ describe("GET /api/agents/:id", () => {
 
     expect(response.status).toBe(404);
   });
+
+  test("roundtrips multi-SOP compiledFrom shape through the API", async () => {
+    // Regression guard: the API response schema for compiledFrom must match the
+    // multi-SOP shape that compiler.service persists. If the schema drifts back
+    // to the single-SOP shape, safeParse falls through to null and the UI loses
+    // the compile-summary panel for every compiled agent.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "CompiledFrom Roundtrip Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    const sopId = "11111111-1111-1111-1111-111111111111";
+    const compiledFrom = {
+      sops: [{ sopId, sopName: "Test SOP", stepCount: 3 }],
+      guardrailIds: [],
+      toolCount: 2,
+    };
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          compiledInstructions: "stub prompt",
+          compiledAt: new Date(),
+          compiledFrom,
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(`/api/agents/${agentId}`, {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.compiledFrom).not.toBeNull();
+    expect(body.compiledFrom.sops).toEqual([
+      { sopId, sopName: "Test SOP", stepCount: 3 },
+    ]);
+    expect(body.compiledFrom.toolCount).toBe(2);
+    expect(body.compiledFrom.guardrailIds).toEqual([]);
+  });
 });
 
 // ============================================================================

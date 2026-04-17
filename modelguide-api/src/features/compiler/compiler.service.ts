@@ -14,7 +14,7 @@ import {
 } from "@db/schema";
 import { Errors } from "@lib/errors";
 import { getLogger } from "@lib/logger";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { resolveAgentSops } from "@features/mcp/mcp.service";
 import { getSopById } from "@features/sops/sops.service";
@@ -102,19 +102,19 @@ export async function compileAgent(input: CompileAgentInput) {
 
     if (assignedIds.length === 0) return [];
 
-    const rows = await tx
+    return tx
       .select()
       .from(knowledgeBase)
       .where(
         and(
           eq(knowledgeBase.isActive, true),
           eq(knowledgeBase.type, "guardrail"),
+          inArray(
+            knowledgeBase.id,
+            assignedIds.map((r) => r.knowledgeBaseId),
+          ),
         ),
       );
-
-    // Filter to only assigned ones
-    const assignedSet = new Set(assignedIds.map((r) => r.knowledgeBaseId));
-    return rows.filter((r) => assignedSet.has(r.id));
   });
 
   // Convert DB rows to KnowledgeBaseDetailResponse shape

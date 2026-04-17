@@ -52,6 +52,7 @@ export const agentSchema = z.object({
       sessionInit: z.string(),
       mcp: z.string(),
       postCallWebhook: z.string(),
+      conversationInitWebhook: z.string(),
     })
     .optional(),
   compiledInstructions: z.string().nullable().optional(),

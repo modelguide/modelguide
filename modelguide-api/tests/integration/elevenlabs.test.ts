@@ -216,6 +216,32 @@ describe("POST /api/agents/:id/platform-agent", () => {
     expect(body.message).toBeDefined();
   });
 
+  test("returns 409 when agent already has an ElevenLabs externalId", async () => {
+    const createRes = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "EL Create Test — Already Has External ID",
+        agentPlatform: "elevenlabs",
+        metadata: {
+          elevenlabs: { externalId: "agent_existing_external_123" },
+        },
+      }),
+    });
+    const created = await createRes.json();
+    createdAgentIds.push(created.id);
+
+    const response = await request(`/api/agents/${created.id}/platform-agent`, {
+      method: "POST",
+      headers: { ...orgAAdminHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: "elevenlabs" }),
+    });
+
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.message).toBeDefined();
+  });
+
   test("rejects support role (403)", async () => {
     const response = await request(`/api/agents/${agentId}/platform-agent`, {
       method: "POST",

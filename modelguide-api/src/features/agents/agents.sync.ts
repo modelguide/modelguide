@@ -18,6 +18,10 @@ import { encryptSecret } from "@lib/crypto";
 import { Errors, getErrorMessage, logAndThrow } from "@lib/errors";
 import { getLogger } from "@lib/logger";
 import { eq } from "drizzle-orm";
+import {
+  getElevenLabsExternalId,
+  setElevenLabsExternalId,
+} from "./elevenlabs-metadata";
 
 /**
  * Thin wrapper around ElevenLabs secrets API.
@@ -86,18 +90,23 @@ async function _syncAgentToElevenLabs(
   }
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
-  const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
-  const elevenLabsAgentId = elMeta.agentId as string | undefined;
-  const slug = agent.slug;
-
-  if (!elevenLabsAgentId) {
+  const elMetaRaw = meta.elevenlabs;
+  if (
+    elMetaRaw !== undefined &&
+    (typeof elMetaRaw !== "object" ||
+      elMetaRaw === null ||
+      Array.isArray(elMetaRaw))
+  ) {
     throw Errors.invalidInput(
-      "ElevenLabs Agent ID must be set in metadata.elevenlabs.agentId",
+      "Corrupt elevenlabs metadata — expected an object",
     );
   }
+  const elMeta = (elMetaRaw ?? {}) as Record<string, unknown>;
+  let elevenLabsAgentId = getElevenLabsExternalId(elMeta);
+  const slug = agent.slug;
 
   // 2. Guard: LLM model must be configured before any ElevenLabs side effects
-  const llmModel = (elMeta.llmModel as string | undefined) ?? undefined;
+  const llmModel = elMeta.llmModel as string | undefined;
   if (!llmModel) {
     throw Errors.invalidInput(
       "LLM model must be configured before syncing to ElevenLabs",
@@ -122,7 +131,50 @@ async function _syncAgentToElevenLabs(
   const baseUrl = env.API_EXTERNAL_ADDRESS.replace(/\/$/, "");
   const steps: SyncStep[] = [];
 
-  // Step 1: Create/update ElevenLabs secret (ModelGuide API key)
+  // 5. Auto-provision ElevenLabs agent shell if not yet created
+  if (!elevenLabsAgentId) {
+    try {
+      const created = await client.conversationalAi.agents.create({
+        name: agent.name,
+        conversationConfig: {},
+      });
+      const createdExternalId = created.agentId;
+      // Defensive: the ElevenLabs SDK types agentId as string but resolves
+      // could theoretically return empty — catch it here with an actionable
+      // message instead of letting downstream calls fail opaquely.
+      if (!createdExternalId) {
+        throw new Error(
+          "ElevenLabs agents.create resolved without an agentId — retry or check the ElevenLabs dashboard",
+        );
+      }
+      elevenLabsAgentId = createdExternalId;
+      await forOrg(orgId, (tx) =>
+        tx
+          .update(agents)
+          .set({
+            metadata: {
+              ...meta,
+              elevenlabs: setElevenLabsExternalId(elMeta, createdExternalId),
+            },
+          })
+          .where(eq(agents.id, agentId)),
+      );
+      steps.push({
+        step: "Create ElevenLabs agent",
+        status: "success",
+        message: `Agent ID: ${elevenLabsAgentId}`,
+      });
+    } catch (err) {
+      steps.push({
+        step: "Create ElevenLabs agent",
+        status: "error",
+        message: getErrorMessage(err),
+      });
+      throw err;
+    }
+  }
+
+  // 6. Create/update ElevenLabs secret (ModelGuide API key)
   let secretId = elMeta.secretId as string | undefined;
   if (!mgApiKey) {
     steps.push({
@@ -164,7 +216,7 @@ async function _syncAgentToElevenLabs(
     }
   }
 
-  // Step 2: Create/update MCP server (STREAMABLE_HTTP)
+  // 7. Create/update MCP server (STREAMABLE_HTTP)
   let mcpServerId = elMeta.mcpServerId as string | undefined;
   const mcpName = `${slug}_mcp`;
   const mcpConfig = {
@@ -223,16 +275,22 @@ async function _syncAgentToElevenLabs(
             // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs SDK types don't expose mcpServerIds
           } as any,
         });
-      } catch {
-        // Best-effort
+      } catch (err) {
+        getLogger().warn(
+          { agentId, err: getErrorMessage(err) },
+          "MCP server unassign failed (best-effort) — proceeding with cleanup",
+        );
       }
 
       // Delete all our old MCP servers
       for (const id of ourMcpIds) {
         try {
           await client.conversationalAi.mcpServers.delete(id);
-        } catch {
-          // Best-effort: may already be deleted
+        } catch (err) {
+          getLogger().warn(
+            { agentId, mcpServerId: id, err: getErrorMessage(err) },
+            "MCP server delete failed (best-effort) — server may already be deleted or orphaned",
+          );
         }
       }
     }
@@ -258,7 +316,7 @@ async function _syncAgentToElevenLabs(
     throw err;
   }
 
-  // Step 3: Delete + recreate webhook to ensure URL is current
+  // 8. Delete + recreate webhook to ensure URL is current
   let webhookId = elMeta.webhookId as string | undefined;
   let webhookSecret: string | undefined;
 
@@ -297,7 +355,7 @@ async function _syncAgentToElevenLabs(
   // Determine compiled prompt (llmModel already validated above)
   const compiledPrompt = agent.compiledInstructions ?? undefined;
 
-  // Step 4: Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
+  // 9. Assign new MCP server + webhook + conversation-init + prompt + model to ElevenLabs agent
   try {
     const mergedMcpIds = [...foreignMcpIds, mcpServerId!];
 
@@ -374,7 +432,7 @@ async function _syncAgentToElevenLabs(
     });
   }
 
-  // Step 5: Save webhook secret to encrypted secrets table + save metadata
+  // 10. Save webhook secret to encrypted secrets table + save metadata
   const elAgentName = elAgent.name;
   const syncedAt = new Date().toISOString();
 
@@ -382,14 +440,17 @@ async function _syncAgentToElevenLabs(
   const { webhook_hmac_secret: _removed, ...cleanMeta } = meta;
   const updatedMetadata: Record<string, unknown> = {
     ...cleanMeta,
-    elevenlabs: {
-      ...elMeta,
-      secretId,
-      mcpServerId,
-      webhookId,
-      ...(elAgentName ? { agentName: elAgentName } : {}),
-      lastSyncedAt: syncedAt,
-    },
+    elevenlabs: setElevenLabsExternalId(
+      {
+        ...elMeta,
+        secretId,
+        mcpServerId,
+        webhookId,
+        ...(elAgentName ? { agentName: elAgentName } : {}),
+        lastSyncedAt: syncedAt,
+      },
+      elevenLabsAgentId,
+    ),
   };
 
   await forOrg(orgId, async (tx) => {

@@ -1,0 +1,10 @@
+currentStage: 4
+mode: auto-pilot
+orgSlug: luminary
+agentSlug: luminary-voice-agent
+agentId: 550e8400-e29b-41d4-a716-446655440000
+connectorType: catalog
+catalogSlug: medusa
+connectorSlug: luminary_store
+evalIteration: 0
+lastEvalScore: (none)

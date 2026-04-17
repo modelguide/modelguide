@@ -16,6 +16,10 @@ const livekitConfigSchema = z.object({
   agentName: z.string().min(1),
 });
 
+const elevenlabsConfigSchema = z.object({
+  llmModel: z.string().min(1),
+});
+
 const agentToolLinkSchema = z.object({
   connectorSlug: z.string().min(1),
   toolSlugs: z.array(z.string()).optional(), // omit = all tools
@@ -31,16 +35,48 @@ export const agentItemSchema = z
     active: z.boolean().default(false),
     compiledPrompt: z.string().min(1).optional(),
     tools: z.array(agentToolLinkSchema).default([]),
-    config: livekitConfigSchema.optional(),
+    config: z.union([livekitConfigSchema, elevenlabsConfigSchema]).optional(),
     secrets: z.array(agentSecretSchema).default([]),
   })
   .superRefine((data, ctx) => {
-    if (data.platform === "livekit" && !data.config) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'config is required when platform is "livekit"',
-        path: ["config"],
-      });
+    if (data.platform === "livekit") {
+      if (!data.config) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'config is required when platform is "livekit"',
+          path: ["config"],
+        });
+      } else {
+        // Validate config matches livekit shape (url + agentName required)
+        const result = livekitConfigSchema.safeParse(data.config);
+        if (!result.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              'config must have url and agentName when platform is "livekit"',
+            path: ["config"],
+          });
+        }
+      }
+    }
+    if (data.platform === "elevenlabs") {
+      if (!data.config) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'config.llmModel is required when platform is "elevenlabs"',
+          path: ["config"],
+        });
+      } else {
+        // Validate config matches elevenlabs shape (llmModel required)
+        const result = elevenlabsConfigSchema.safeParse(data.config);
+        if (!result.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'config must have llmModel when platform is "elevenlabs"',
+            path: ["config"],
+          });
+        }
+      }
     }
   });
 

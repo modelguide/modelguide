@@ -17,12 +17,27 @@ interface ElevenLabsFieldsProps {
   isAdmin: boolean
 }
 
+function getSavedElevenLabsExternalId(elMeta: Record<string, unknown>): string {
+  const externalId = elMeta.externalId
+  if (typeof externalId === 'string' && externalId.length > 0) {
+    return externalId
+  }
+
+  const legacyAgentId = elMeta.agentId
+  if (typeof legacyAgentId === 'string' && legacyAgentId.length > 0) {
+    return legacyAgentId
+  }
+
+  return ''
+}
+
 export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
   const queryClient = useQueryClient()
   const meta = (agent.metadata ?? {}) as Record<string, unknown>
   const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>
+  const savedExternalId = getSavedElevenLabsExternalId(elMeta)
 
-  const [elAgentId, setElAgentId] = useState((elMeta.agentId as string) ?? '')
+  const [elAgentId, setElAgentId] = useState(savedExternalId)
   const [elApiKey, setElApiKey] = useState('')
   const [showApiKeyInput, setShowApiKeyInput] = useState(false)
   const [showSyncDialog, setShowSyncDialog] = useState(false)
@@ -31,23 +46,25 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
   const [createElError, setCreateElError] = useState<string | null>(null)
 
   // Sync form state when server data changes (e.g. after create/save mutations invalidate)
+  // Also clears llm model selection when model family changes (it may no longer be valid)
   useEffect(() => {
     const m = ((agent.metadata ?? {}) as Record<string, unknown>).elevenlabs as
       | Record<string, unknown>
       | undefined
-    setElAgentId((m?.agentId as string) ?? '')
+    setElAgentId(getSavedElevenLabsExternalId(m ?? {}))
     setLlmModel((m?.llmModel as string) ?? '')
     setElApiKey('')
     setShowApiKeyInput(false)
   }, [agent.metadata])
 
-  // When model family changes, clear the llm model selection (it may no longer be valid)
   const modelFamily = agent.modelFamily ?? 'generic'
   const [prevModelFamily, setPrevModelFamily] = useState(modelFamily)
-  if (prevModelFamily !== modelFamily) {
-    setPrevModelFamily(modelFamily)
-    setLlmModel('')
-  }
+  useEffect(() => {
+    if (prevModelFamily !== modelFamily) {
+      setPrevModelFamily(modelFamily)
+      setLlmModel('')
+    }
+  }, [modelFamily, prevModelFamily])
 
   const { data: modelsData } = useQuery({
     queryKey: ['elevenlabs-models', modelFamily],
@@ -62,11 +79,10 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
 
   const modelOptions = modelsData?.data.flatMap((g) => g.models) ?? []
 
-  const savedAgentId = (elMeta.agentId as string) ?? ''
   const savedLlmModel = (elMeta.llmModel as string) ?? ''
-  const isDirty = elAgentId !== savedAgentId || llmModel !== savedLlmModel || elApiKey.length > 0
+  const isDirty = elAgentId !== savedExternalId || llmModel !== savedLlmModel || elApiKey.length > 0
 
-  const canSync = !!elMeta.agentId && agent.hasElevenLabsKey && !!elMeta.llmModel
+  const canSync = !!savedExternalId && agent.hasElevenLabsKey && !!elMeta.llmModel
 
   // All non-API-key fields are disabled until the API key is configured
   const fieldsDisabled = !agent.hasElevenLabsKey || !isAdmin
@@ -90,6 +106,7 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
               ...currentMeta,
               elevenlabs: {
                 ...currentEl,
+                externalId: elAgentId || undefined,
                 agentId: elAgentId || undefined,
                 llmModel: llmModel || undefined,
               },
@@ -109,7 +126,7 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
     mutationFn: () =>
       api
         .post(`agents/${agent.id}/platform-agent`, {
-          json: { platform: 'elevenlabs', ...(elMeta.agentId ? { force: true } : {}) },
+          json: { platform: 'elevenlabs', ...(savedExternalId ? { force: true } : {}) },
         })
         .json<{ platformAgentId: string }>(),
     onSuccess: (data) => {
@@ -211,7 +228,7 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
                 size="sm"
                 variant="secondary"
                 onClick={() => {
-                  if (elMeta.agentId) {
+                  if (savedExternalId) {
                     setShowRecreateConfirm(true)
                   } else {
                     createElevenLabsAgentMutation.mutate()
@@ -249,8 +266,8 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
         ) : null}
 
         <div className="flex items-center gap-4 text-xs text-fg-muted">
-          <span className={elMeta.agentId ? 'text-success' : ''}>
-            {elMeta.agentId ? '\u2713' : '\u2717'} Agent ID
+          <span className={savedExternalId ? 'text-success' : ''}>
+            {savedExternalId ? '\u2713' : '\u2717'} Agent ID
           </span>
           <span className={agent.hasElevenLabsKey ? 'text-success' : ''}>
             {agent.hasElevenLabsKey ? '\u2713' : '\u2717'} API Key
@@ -275,7 +292,7 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
             </Button>
             {elMeta.lastSyncedAt ? (
               <a
-                href={`https://elevenlabs.io/app/conversational-ai/agents/${elMeta.agentId as string}`}
+                href={`https://elevenlabs.io/app/conversational-ai/agents/${savedExternalId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 flex items-center gap-1.5 rounded-md bg-bg-subtle px-2.5 py-1.5 text-xs transition-colors hover:bg-bg-subtle/70"
@@ -303,7 +320,7 @@ export function ElevenLabsFields({ agent, isAdmin }: ElevenLabsFieldsProps) {
         open={showRecreateConfirm}
         onClose={() => setShowRecreateConfirm(false)}
         title="Replace ElevenLabs Agent?"
-        description={`This will create a new ElevenLabs agent and replace the saved agent ID (${elMeta.agentId as string}). The existing ElevenLabs agent will not be deleted.`}
+        description={`This will create a new ElevenLabs agent and replace the saved agent ID (${savedExternalId}). The existing ElevenLabs agent will not be deleted.`}
       >
         <DialogFooter>
           <Button variant="secondary" onClick={() => setShowRecreateConfirm(false)}>

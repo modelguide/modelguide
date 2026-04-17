@@ -21,7 +21,9 @@ import { registerImportEvalsCommand } from "./commands/import-evals";
 import { registerImportGuardrailsCommand } from "./commands/import-guardrails";
 import { registerImportSessionsCommand } from "./commands/import-sessions";
 import { registerImportSopsCommand } from "./commands/import-sops";
+import { registerRunEvalsCommand } from "./commands/run-evals";
 import { registerSetupCommand } from "./commands/setup";
+import { registerSyncAgentCommand } from "./commands/sync-agent";
 import { getErrorMessage } from "./lib/errors";
 import { log } from "./lib/logger";
 
@@ -40,6 +42,8 @@ registerImportGuardrailsCommand(program);
 registerImportEvalsCommand(program);
 registerImportSessionsCommand(program);
 registerCompileAgentsCommand(program);
+registerSyncAgentCommand(program);
+registerRunEvalsCommand(program);
 registerSetupCommand(program);
 
 if (import.meta.main) {
