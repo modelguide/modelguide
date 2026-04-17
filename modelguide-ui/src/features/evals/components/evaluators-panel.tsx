@@ -66,7 +66,10 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
     },
   })
 
-  // AC-30: clone config, add as new evaluator to this suite, then open edit dialog
+  // AC-30: clone config, add as new evaluator to this suite, then open edit dialog.
+  // Note: these are two sequential API calls with no server-side transaction. If the
+  // second call (POST evaluators) fails, the cloned eval_config is left orphaned with
+  // no suite evaluator pointing to it. Cleanup of unreferenced configs is a future task.
   const cloneMutation = useMutation({
     mutationFn: async ({ sourceConfig }: { sourceConfig: EvalConfigForEdit }) => {
       const cloned = await api

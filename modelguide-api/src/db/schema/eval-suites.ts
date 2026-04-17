@@ -164,6 +164,9 @@ export const evalSuiteEvaluators = pgTable(
     evalConfigId: uuid("eval_config_id")
       .notNull()
       .references(() => evalConfigs.id), // NO ACTION — no cascade
+    // TODO: make nullable in a follow-up migration — display names come from eval_configs.name
+    // via JOIN (configName field in loadSuiteEvaluators). This column is written on insert
+    // as a shadow copy but is never used for display or runtime resolution.
     name: varchar("name", { length: 255 }).notNull(),
     sopStepId: varchar("sop_step_id", { length: 100 }),
     source: evalSuiteTestCaseSourceEnum("source").notNull().default("auto"),
@@ -217,6 +220,8 @@ export const evalTestCaseEvaluators = pgTable(
       .references(() => evalConfigs.id), // NO ACTION — no cascade
     overrideType:
       evalTestCaseEvaluatorOverrideTypeEnum("override_type").notNull(),
+    // TODO: make nullable in a follow-up migration — display names come from eval_configs.name
+    // via JOIN. Written on insert as a shadow copy; never used for display or runtime.
     name: varchar("name", { length: 255 }).notNull(),
     order: integer("order").notNull().default(0),
     required: boolean("required").notNull().default(true),

@@ -132,7 +132,8 @@ function formatEvaluator(a: {
   };
 }
 
-type AnyTestCaseOverride = {
+/** Override row shape — base fields always present; join fields present when loaded via getEvalSuiteById. */
+type TestCaseOverrideRow = {
   id: string;
   evalConfigId: string;
   overrideType: "add" | "exclude";
@@ -141,7 +142,9 @@ type AnyTestCaseOverride = {
   required: boolean;
   source: "auto" | "manual";
   createdAt: Date;
-  [key: string]: unknown;
+  evaluatorType?: string | null;
+  evalConfigConfig?: Record<string, unknown> | null;
+  evalConfigName?: string | null;
 };
 
 function formatTestCase(tc: {
@@ -153,7 +156,7 @@ function formatTestCase(tc: {
   input: unknown;
   expectedBehavior: string | null;
   order: number;
-  evaluatorOverrides?: AnyTestCaseOverride[];
+  evaluatorOverrides?: TestCaseOverrideRow[];
   createdAt: Date;
   updatedAt?: Date | null;
 }) {
@@ -170,14 +173,12 @@ function formatTestCase(tc: {
       id: o.id,
       evalConfigId: o.evalConfigId,
       overrideType: o.overrideType,
-      name: (o.evalConfigName as string | null | undefined) ?? o.name,
+      name: o.evalConfigName ?? o.name,
       order: o.order,
       required: o.required,
       source: o.source,
-      evaluatorType: (o.evaluatorType as string | null | undefined) ?? null,
-      config:
-        (o.evalConfigConfig as Record<string, unknown> | null | undefined) ??
-        null,
+      evaluatorType: o.evaluatorType ?? null,
+      config: o.evalConfigConfig ?? null,
       createdAt: o.createdAt.toISOString(),
     })),
     createdAt: tc.createdAt.toISOString(),
@@ -393,6 +394,9 @@ router.post(
   requirePermission("eval_suites:create"),
   requireOrganization(),
 );
+// Evaluator mutations (add, remove, edit slots) are treated as "editing the suite",
+// not destroying it, so they require eval_suites:create rather than eval_suites:delete.
+// Only deleting the entire suite uses eval_suites:delete.
 router.delete(
   "/:suiteId/evaluators/:evaluatorId",
   requireUser(),

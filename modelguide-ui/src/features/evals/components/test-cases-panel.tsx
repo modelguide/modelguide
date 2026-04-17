@@ -291,7 +291,10 @@ function TestCaseEvaluatorOverrides({
     },
   })
 
-  // AC-30: clone config and add as new override on this test case
+  // AC-30: clone config and add as new override on this test case.
+  // Note: these are two sequential API calls with no server-side transaction. If the
+  // second call (POST evaluators) fails, the cloned eval_config is left orphaned with
+  // no override pointing to it. Cleanup of unreferenced configs is a future task.
   const cloneMutation = useMutation({
     mutationFn: async ({ sourceConfig }: { sourceConfig: EvalConfigForEdit }) => {
       const cloned = await api
