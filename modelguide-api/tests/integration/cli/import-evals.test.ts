@@ -279,6 +279,7 @@ afterAll(async () => {
 // Tests: suite-level evaluator reconciliation
 // ============================================================================
 
+// Tests 1–6 run sequentially — each builds on the DB state left by the previous test.
 describe("import-evals — suite-level evaluator reconciliation", () => {
   test("Test 1: first import creates suite and attaches common evaluators as auto rows", async () => {
     const result = await handleImportEvals(
@@ -325,9 +326,13 @@ describe("import-evals — suite-level evaluator reconciliation", () => {
 
   test("Test 3: re-import with same names is idempotent — no duplicates", async () => {
     // Re-import with identical input (suite already exists)
-    await handleImportEvals(orgId, makeInput(SOP_SLUG_RECONCILE, ["e-suite"]), {
-      registry,
-    });
+    const reimportResult = await handleImportEvals(
+      orgId,
+      makeInput(SOP_SLUG_RECONCILE, ["e-suite"]),
+      { registry },
+    );
+    expect(reimportResult.suitesExisting).toBe(1);
+    expect(reimportResult.suitesCreated).toBe(0);
 
     const suiteId = await getEvalSuiteId(SOP_SLUG_RECONCILE);
     const rows = await getSuiteEvaluators(suiteId);
@@ -348,6 +353,7 @@ describe("import-evals — suite-level evaluator reconciliation", () => {
     const rows = await getSuiteEvaluators(suiteId);
 
     expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.name).sort()).toEqual(["e-case", "e-suite"]);
   });
 
   test("Test 5: removing a name from common_evaluators deletes its auto row", async () => {
