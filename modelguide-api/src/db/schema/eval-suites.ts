@@ -20,6 +20,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -180,6 +181,10 @@ export const evalSuiteEvaluators = pgTable(
     index("eval_suite_evaluators_suite_idx").on(table.suiteId),
     index("eval_suite_evaluators_config_idx").on(table.evalConfigId),
     index("eval_suite_evaluators_org_idx").on(table.organizationId),
+    uniqueIndex("eval_suite_evaluators_suite_name_uidx").on(
+      table.suiteId,
+      table.name,
+    ),
   ],
 ).enableRLS();
 

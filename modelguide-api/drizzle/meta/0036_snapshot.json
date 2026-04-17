@@ -4443,7 +4443,8 @@
         "pending",
         "running",
         "completed",
-        "failed"
+        "failed",
+        "error"
       ]
     },
     "public.eval_suite_run_status": {
@@ -4469,8 +4470,7 @@
       "schema": "public",
       "values": [
         "auto",
-        "manual",
-        "recorded"
+        "manual"
       ]
     },
     "public.eval_suite_test_case_evaluator_override_type": {

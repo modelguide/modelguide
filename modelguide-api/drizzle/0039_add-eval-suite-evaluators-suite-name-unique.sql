@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "eval_suite_evaluators_suite_name_uidx" ON "eval_suite_evaluators" USING btree ("suite_id","name");
