@@ -165,13 +165,16 @@ async function runConversationLoop(
       occurredAt: new Date(),
     });
 
-    // Send to agent via adapter — include prior history on the first turn
-    // so the model sees full conversational context for replay tests.
-    const historyForAdapter = turn === 0 ? priorHistory : undefined;
+    // Send to agent via adapter — pass the full running conversation each turn
+    // (priorHistory from replay yaml + everything we've accumulated so far).
+    // Mastra's Agent.generate() is stateless without memory config, so without
+    // this the agent has amnesia on turn 1+ and re-asks questions it already
+    // asked (re-verifies identity, etc.).
+    const historyForAdapter = [...(priorHistory ?? []), ...conversationHistory];
     const agentResponse = await adapter.sendMessage(
       sessionId,
       currentMessage,
-      historyForAdapter,
+      historyForAdapter.length > 0 ? historyForAdapter : undefined,
     );
 
     // Store agent response with tool calls
@@ -224,9 +227,20 @@ async function runConversationLoop(
       };
     }
 
-    // Generate persona follow-up with full conversation history
+    // Generate persona follow-up with full conversation history.
+    // Role flip: from the persona LLM's POV it IS the customer, so the
+    // customer's prior turns are its own ("assistant") and the agent's
+    // turns are incoming ("user"). Without this flip the persona reads
+    // the agent's messages as its own past outputs and echoes them back.
+    const personaHistory = [
+      ...(priorHistory ?? []),
+      ...conversationHistory,
+    ].map((msg) => ({
+      role: msg.role === "user" ? ("assistant" as const) : ("user" as const),
+      content: msg.content,
+    }));
     const personaResponse = await generatePersonaMessage(
-      conversationHistory,
+      personaHistory,
       persona.systemPrompt,
     );
 
