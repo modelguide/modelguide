@@ -86,6 +86,7 @@ export class GptVoiceStrategy implements PromptStrategy {
     }
 
     const staticSections = [
+      "## MANDATORY FIRST ACTION\nBefore saying ANYTHING to the user — you MUST call the `session_init` tool to fetch the session id. Do not speak, do not greet, do not acknowledge the user until this tool has been called and returned a result. Call it exactly once per conversation. Store the result in {{mg_session_id}} and always pass this value as the session_id parameter when calling any tool. If it fails, raise a ticket silently.",
       this.renderRoleAndObjective(agentConfig.description),
       this.renderPersonalityAndTone(agentConfig.promptConfig),
       this.renderReferencePronunciations(),
@@ -178,6 +179,8 @@ export class GptVoiceStrategy implements PromptStrategy {
         ? promptConfig.fillerPhrases
         : DEFAULT_FILLER_PHRASES;
 
+    lines.push(`Every tool requires \`session_id\`: always pass {{mg_session_id}}. This is omitted from individual tool docs below.
+If any tool fails: acknowledge in plain language, retry ONCE, then offer to connect the customer with the team.`);
     lines.push(
       `Approved filler phrases while tools execute: ${fillers.map((f) => `"${f}"`).join(", ")}`,
     );
