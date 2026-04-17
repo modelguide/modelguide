@@ -240,13 +240,10 @@ export async function initSuiteFromSop(
     // Create step-specific evaluators for ALL steps
     for (const step of stepRows) {
       let configId = step.evalConfigId;
-      let evaluatorType: string | undefined;
 
       if (configId) {
         // Step already has an eval config — use it
-        const cfg = evalConfigMap.get(configId);
-        if (!cfg) continue;
-        evaluatorType = cfg.evaluatorType;
+        if (!evalConfigMap.get(configId)) continue;
       } else if (step.connectorToolId) {
         // Auto-create tool_called eval config
         const autoName = buildAutoEvalConfigName(
@@ -284,7 +281,6 @@ export async function initSuiteFromSop(
             .returning({ id: evalConfigs.id });
           configId = created.id;
         }
-        evaluatorType = "tool_called";
       } else if (step.instruction) {
         // Auto-create llm_judge eval config for instruction steps
         const autoName = buildAutoEvalConfigName(
@@ -324,20 +320,14 @@ export async function initSuiteFromSop(
             .returning({ id: evalConfigs.id });
           configId = created.id;
         }
-        evaluatorType = "llm_judge";
       } else {
         continue;
       }
-
-      const stepLabel = step.instruction
-        ? truncate(step.instruction, 80)
-        : `step ${step.order}`;
 
       await tx.insert(evalSuiteEvaluators).values({
         organizationId: orgId,
         suiteId,
         evalConfigId: configId!,
-        name: `${stepLabel} (${evaluatorType})`,
         sopStepId: step.stepId,
         source: "auto",
         order: step.order,
@@ -352,7 +342,6 @@ export async function initSuiteFromSop(
         organizationId: orgId,
         suiteId,
         evalConfigId: guardConfig.id,
-        name: `${guardConfig.guardrailName} (guardrail)`,
         source: "auto",
         order: 1000 + gi,
         required: true,
@@ -506,12 +495,6 @@ async function loadTestCases(
 // ============================================================================
 // Run Suite
 // ============================================================================
-
-/** Truncate instruction to N chars for score name. */
-function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return `${str.slice(0, maxLen - 1)}…`;
-}
 
 /**
  * Run an entire eval suite — executes each test case's assertions

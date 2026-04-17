@@ -343,7 +343,6 @@ describe("Workflow 2: Manual suite lifecycle", () => {
     // 4. Create evaluator (now at suite level)
     const evaluator = await createEvaluator(ctx.orgId, suite.id, {
       evalConfigId: config.id,
-      name: "must-call-lookup",
     });
     expect(evaluator.suiteId).toBe(suite.id);
     expect(evaluator.evalConfigId).toBe(config.id);

@@ -253,6 +253,20 @@
       "when": 1776336788834,
       "tag": "0035_eval-test-case-evaluators",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1776400000000,
+      "tag": "0036_add-eval-status-error",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1776486400000,
+      "tag": "0037_drop-evaluator-name-columns",
+      "breakpoints": true
     }
   ]
 }

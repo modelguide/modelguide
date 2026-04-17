@@ -49,14 +49,12 @@ export interface CreateTestCaseInput {
 
 export interface CreateEvaluatorInput {
   evalConfigId: string;
-  name: string;
   required?: boolean;
 }
 
 export interface CreateTestCaseEvaluatorInput {
   evalConfigId: string;
   overrideType: "add" | "exclude";
-  name?: string;
   required?: boolean;
 }
 
