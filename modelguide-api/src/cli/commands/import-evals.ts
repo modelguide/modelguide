@@ -331,7 +331,8 @@ export async function handleImportEvals(
       evalConfigIdMap,
     );
 
-    // 6e. Create or replace test cases with per-case evaluator overrides
+    // 6d. Create or replace test cases with per-case evaluator overrides
+    const suiteEvaluatorSet = new Set(suiteEvaluatorNames);
     for (const tc of testCases) {
       // Build description from metadata
       const descParts: string[] = [];
@@ -375,7 +376,7 @@ export async function handleImportEvals(
 
       // Per-case `add` overrides only for evaluators NOT promoted to suite level.
       const caseSpecificNames = tc.evaluatorNames.filter(
-        (name) => !suiteEvaluatorNames.includes(name),
+        (name) => !suiteEvaluatorSet.has(name),
       );
       const overrideValues = caseSpecificNames
         .map((name, i) => {
@@ -450,18 +451,23 @@ async function reconcileSuiteEvaluators(
         .where(inArray(evalSuiteEvaluators.id, toRemove));
     }
 
-    // Insert missing target names (skip any already present as manual)
+    // Insert missing target names (skip any already present as manual).
+    // Index before filter so `order` reflects yaml position, not filtered-array position.
     const toInsert = targetNames
-      .filter((n) => !existingAuto.has(n) && !manualNames.has(n))
-      .map((name, i) => {
+      .map((name, order) => ({ name, order }))
+      .filter(({ name }) => !existingAuto.has(name) && !manualNames.has(name))
+      .map(({ name, order }) => {
         const configId = evalConfigIdMap.get(name);
-        if (!configId) return null;
+        if (!configId) {
+          log.warn(`common_evaluators: "${name}" has no eval config — skipped`);
+          return null;
+        }
         return {
           organizationId: orgId,
           suiteId,
           evalConfigId: configId,
           name,
-          order: i,
+          order,
           required: true,
           source: "auto" as const,
         };
