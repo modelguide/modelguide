@@ -436,9 +436,6 @@ async function reconcileSuiteEvaluators(
         .filter((r) => r.source === "auto")
         .map((r) => [r.name, r.id] as const),
     );
-    const manualNames = new Set(
-      existing.filter((r) => r.source === "manual").map((r) => r.name),
-    );
     const target = new Set(targetNames);
 
     // Remove stale auto rows no longer in target
@@ -451,12 +448,10 @@ async function reconcileSuiteEvaluators(
         .where(inArray(evalSuiteEvaluators.id, toRemove));
     }
 
-    // Insert missing target names (skip any already present as manual).
-    // Index before filter so `order` reflects yaml position, not filtered-array position.
+    // Insert targets; unique constraint on (suiteId, name) prevents duplicates from
+    // concurrent imports and skips names already present as manual rows.
     const toInsert = targetNames
-      .map((name, order) => ({ name, order }))
-      .filter(({ name }) => !existingAuto.has(name) && !manualNames.has(name))
-      .map(({ name, order }) => {
+      .map((name, order) => {
         const configId = evalConfigIdMap.get(name);
         if (!configId) {
           log.warn(`common_evaluators: "${name}" has no eval config — skipped`);
@@ -472,10 +467,15 @@ async function reconcileSuiteEvaluators(
           source: "auto" as const,
         };
       })
-      .filter((v) => v !== null);
+      .filter((v): v is NonNullable<typeof v> => v !== null);
 
     if (toInsert.length > 0) {
-      await tx.insert(evalSuiteEvaluators).values(toInsert);
+      await tx
+        .insert(evalSuiteEvaluators)
+        .values(toInsert)
+        .onConflictDoNothing({
+          target: [evalSuiteEvaluators.suiteId, evalSuiteEvaluators.name],
+        });
     }
   });
 }
