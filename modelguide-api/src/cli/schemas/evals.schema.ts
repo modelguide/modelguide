@@ -63,18 +63,31 @@ export const evalsYamlFileSchema = z
   .object({
     agentSlug: z.string().min(1),
     evaluators: z.array(yamlEvaluatorSchema).min(1),
+    /**
+     * Evaluator names that should run on every test case in every suite for
+     * this agent — typically guardrail-style checks like `does-not-fabricate`
+     * that apply regardless of scenario. Attached at the suite level by the
+     * importer, so the dashboard's "Evaluators" tab shows them.
+     */
+    common_evaluators: z.array(z.string().min(1)).default([]),
     test_cases: z.array(yamlTestCaseSchema).min(1),
   })
   .refine(
     (data) => {
       const definedNames = new Set(data.evaluators.map((e) => e.name));
-      const referenced = data.test_cases.flatMap((tc) => tc.evaluators);
+      const referenced = [
+        ...data.test_cases.flatMap((tc) => tc.evaluators),
+        ...data.common_evaluators,
+      ];
       const missing = referenced.filter((name) => !definedNames.has(name));
       return missing.length === 0;
     },
     (data) => {
       const definedNames = new Set(data.evaluators.map((e) => e.name));
-      const referenced = data.test_cases.flatMap((tc) => tc.evaluators);
+      const referenced = [
+        ...data.test_cases.flatMap((tc) => tc.evaluators),
+        ...data.common_evaluators,
+      ];
       const missing = [
         ...new Set(referenced.filter((name) => !definedNames.has(name))),
       ];
@@ -133,6 +146,8 @@ export interface NormalizedTestCase {
 export interface NormalizedEvalsInput {
   agentSlug: string;
   evaluators: NormalizedEvaluator[];
+  /** Evaluator names to attach at the suite level of every suite (from yaml `common_evaluators`). */
+  commonEvaluatorNames: string[];
   testCases: NormalizedTestCase[];
 }
 
@@ -167,6 +182,7 @@ export function normalizeYaml(
       criterion: e.criterion,
       tags: e.tags,
     })),
+    commonEvaluatorNames: parsed.common_evaluators,
     testCases: parsed.test_cases.map((tc) => ({
       id: tc.id,
       sopSlug: tc.sop_slug,
@@ -219,6 +235,7 @@ export function normalizeJson(
   return {
     agentSlug,
     evaluators,
+    commonEvaluatorNames: [],
     testCases: scenarios.map((s) => ({
       id: s.id,
       sopSlug: s.sop_slug,

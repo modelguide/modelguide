@@ -15,12 +15,14 @@ import path from "node:path";
 import { forOrg } from "@db/rls";
 import {
   evalConfigs,
+  evalSuiteEvaluators,
   evalSuiteTestCases,
   evalSuites,
   evalTestCaseEvaluators,
 } from "@db/schema";
 import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
 import {
+  createEvaluator,
   createSuite,
   createTestCase,
 } from "@features/evals/eval-suites.service";
@@ -315,7 +317,40 @@ export async function handleImportEvals(
     // 6b. Load existing test cases for dedup / replace
     const existingTestCases = await loadExistingTestCases(orgId, suiteId);
 
-    // 6c. Create or replace test cases with per-case evaluator overrides
+    // 6c. Compute suite-level evaluators: the union of (a) `common_evaluators`
+    // declared at the top of the yaml (explicit generic evaluators, typically
+    // guardrail-style), and (b) the intersection of per-case evaluators (any
+    // evaluator every test case in this suite already lists). Everything else
+    // stays as a per-case `add` override. This matches the mental model:
+    // suite = baseline every case runs against, overrides = test-case-specific.
+    const caseEvaluatorLists = testCases
+      .filter((tc) => !existingTestCases.has(tc.id))
+      .map((tc) => tc.evaluatorNames);
+    const intersection =
+      caseEvaluatorLists.length > 0
+        ? caseEvaluatorLists.reduce<string[]>(
+            (acc, names) => acc.filter((n) => names.includes(n)),
+            [...new Set(caseEvaluatorLists[0])],
+          )
+        : [];
+    const suiteEvaluatorNames = [
+      ...new Set([...normalized.commonEvaluatorNames, ...intersection]),
+    ];
+
+    // 6d. Attach suite-level evaluators (idempotent: skip names already attached)
+    const alreadyAttached = await loadSuiteEvaluatorNames(orgId, suiteId);
+    for (const name of suiteEvaluatorNames) {
+      if (alreadyAttached.has(name)) continue;
+      const configId = evalConfigIdMap.get(name);
+      if (!configId) continue;
+      await createEvaluator(orgId, suiteId, {
+        evalConfigId: configId,
+        name,
+        required: true,
+      });
+    }
+
+    // 6e. Create or replace test cases with per-case evaluator overrides
     for (const tc of testCases) {
       // Build description from metadata
       const descParts: string[] = [];
@@ -357,8 +392,11 @@ export async function handleImportEvals(
         mockToolResponses: tc.mockToolResponses,
       });
 
-      // Insert per-case evaluator overrides (add type)
-      const overrideValues = tc.evaluatorNames
+      // Per-case `add` overrides only for evaluators NOT promoted to suite level.
+      const caseSpecificNames = tc.evaluatorNames.filter(
+        (name) => !suiteEvaluatorNames.includes(name),
+      );
+      const overrideValues = caseSpecificNames
         .map((name, i) => {
           const configId = evalConfigIdMap.get(name);
           if (!configId) return null;
@@ -386,6 +424,20 @@ export async function handleImportEvals(
   }
 
   return result;
+}
+
+/** Load the set of evaluator names already attached to a suite (for dedup). */
+async function loadSuiteEvaluatorNames(
+  orgId: string,
+  suiteId: string,
+): Promise<Set<string>> {
+  const rows = await forOrg(orgId, (tx) =>
+    tx
+      .select({ name: evalSuiteEvaluators.name })
+      .from(evalSuiteEvaluators)
+      .where(eq(evalSuiteEvaluators.suiteId, suiteId)),
+  );
+  return new Set(rows.map((r) => r.name));
 }
 
 // ============================================================================
