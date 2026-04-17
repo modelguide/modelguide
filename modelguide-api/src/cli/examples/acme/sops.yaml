@@ -7,9 +7,12 @@ sops:
       - "acme-voice-agent"
       - "acme-chat-assistant"
     trigger:
-      type: intent
+      type: intent_detected
       config:
-        intent: order_status
+        patterns:
+          - "where is my order"
+          - "track my order"
+          - "order status"
     steps:
       - id: greet
         instruction: "Greet the customer and ask for their order number or email address"
@@ -33,9 +36,12 @@ sops:
     agents:
       - "acme-voice-agent"
     trigger:
-      type: intent
+      type: intent_detected
       config:
-        intent: return_request
+        patterns:
+          - "return"
+          - "refund"
+          - "send it back"
     steps:
       - id: identify
         instruction: "Ask the customer for their order number and the item they want to return"

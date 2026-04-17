@@ -155,8 +155,9 @@ sops:
     status: active
     agents: ["{{agentSlug}}"]
     trigger:
-      type: intent
-      config: { intent: "{{intentKey1}}" }   # e.g. "order_status"
+      type: intent_detected
+      config:
+        patterns: ["{{triggerPhrase1a}}", "{{triggerPhrase1b}}"]   # e.g. ["where is my order", "track my order"]
     steps:
       - id: greet
         instruction: "Greet the customer and ask how you can help."

@@ -160,8 +160,9 @@ sops:
     status: active              # draft | active | archived (default: draft)
     agents: ["acme-voice-agent"]
     trigger:
-      type: intent
-      config: { intent: order_status }
+      type: intent_detected          # see references/schemas.md for all trigger types
+      config:
+        patterns: ["where is my order", "track my order", "order status"]
     steps:
       - id: greet
         instruction: "Greet and ask for order number"
