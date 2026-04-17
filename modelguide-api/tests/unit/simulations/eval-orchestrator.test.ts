@@ -59,7 +59,10 @@ describe("runEvalSimulation", () => {
 
     // Mock persona to enable multi-turn
     mock.module("@features/simulations/llm-client", () => ({
-      generatePersonaMessage: async () => ({ content: "follow up" }),
+      generatePersonaMessage: async () => ({
+        content: "follow up",
+        done: false,
+      }),
     }));
 
     const result = await runEvalSimulation({
@@ -116,6 +119,47 @@ describe("runEvalSimulation", () => {
     expect(result.status).toBe("completed");
     expect(result.turnCount).toBe(1);
     expect(callCount).toBe(1);
+  });
+
+  test("lets the agent answer one final persona goodbye before stopping", async () => {
+    let callCount = 0;
+    const adapter: AgentAdapter = {
+      sendMessage: async () => {
+        callCount++;
+        return {
+          response: `Response ${callCount}`,
+          toolCalls: [],
+          conversationEnded: false,
+        };
+      },
+    };
+
+    mock.module("@features/simulations/llm-client", () => ({
+      generatePersonaMessage: async () => ({
+        content: "Thanks, that's all I needed.",
+        done: true,
+      }),
+    }));
+
+    const result = await runEvalSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      adapter,
+      inputMessage: "Hi",
+      persona: {
+        id: "test-persona",
+        name: "Test Customer",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      sessionId: "pre-created-session",
+      maxTurns: 10,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.turnCount).toBe(2);
+    expect(callCount).toBe(2);
   });
 
   test("returns error status on adapter failure", async () => {

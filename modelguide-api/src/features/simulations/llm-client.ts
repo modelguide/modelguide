@@ -49,6 +49,11 @@ export interface LlmResponse {
   toolCalls: LlmToolCall[];
 }
 
+export interface PersonaMessageResponse {
+  content: string;
+  done: boolean;
+}
+
 /**
  * Convert ResolvedTool[] from MCP to OpenAI function-calling format.
  */
@@ -110,20 +115,23 @@ Rules:
 export async function generatePersonaMessage(
   messages: ChatCompletionMessageParam[],
   personaSystemPrompt: string,
-): Promise<LlmResponse> {
+): Promise<PersonaMessageResponse> {
   const openai = getClient();
 
   const response = await openai.chat.completions.create({
     model: env.SIMULATION_LLM_MODEL,
     max_completion_tokens: SIMULATION_MAX_TOKENS,
-    messages: [{ role: "system", content: personaSystemPrompt }, ...messages],
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: buildPersonaSystemPrompt(personaSystemPrompt),
+      },
+      ...messages,
+    ],
   });
 
-  const choice = response.choices[0];
-  return {
-    content: choice?.message?.content ?? "",
-    toolCalls: [],
-  };
+  return parsePersonaMessageResponse(response.choices[0]?.message?.content);
 }
 
 /**
@@ -167,4 +175,66 @@ export async function generateAgentResponse(
     content: msg?.content ?? "",
     toolCalls,
   };
+}
+
+function buildPersonaSystemPrompt(personaSystemPrompt: string): string {
+  return `${personaSystemPrompt.trim()}
+
+Output contract:
+- Stay fully in character.
+- Stay engaged until the agent has fully answered and wrapped up.
+- Respond with valid JSON only.
+- Use exactly this shape: {"message":"<customer utterance>","done":false}
+- Put only the customer's next utterance in "message" with no extra narration or markdown.
+- Set "done" to true only when this message is your final customer utterance and the simulation should stop after the agent replies to it.
+- Set "done" to false when the conversation should continue beyond the agent's next reply.`;
+}
+
+export function parsePersonaMessageResponse(
+  rawContent: string | null | undefined,
+): PersonaMessageResponse {
+  const trimmed = rawContent?.trim() ?? "";
+  if (!trimmed) {
+    logger.warn("persona response returned empty content");
+    return { content: "", done: false };
+  }
+
+  try {
+    const parsed = JSON.parse(stripJsonCodeFence(trimmed)) as {
+      message?: unknown;
+      content?: unknown;
+      done?: unknown;
+    } | null;
+
+    if (parsed && typeof parsed === "object") {
+      const content =
+        typeof parsed.message === "string"
+          ? parsed.message.trim()
+          : typeof parsed.content === "string"
+            ? parsed.content.trim()
+            : "";
+      const done = typeof parsed.done === "boolean" ? parsed.done : false;
+
+      if (content.length > 0) {
+        return { content, done };
+      }
+    }
+
+    logger.warn(
+      { rawContent: trimmed.slice(0, 200) },
+      "persona response JSON missing message field; falling back to raw text",
+    );
+  } catch {
+    logger.warn(
+      { rawContent: trimmed.slice(0, 200) },
+      "persona response was not valid JSON; falling back to raw text",
+    );
+  }
+
+  return { content: trimmed, done: false };
+}
+
+function stripJsonCodeFence(content: string): string {
+  const match = content.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match?.[1]?.trim() ?? content;
 }

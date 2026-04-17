@@ -232,8 +232,8 @@ export async function runSimulation(params: {
 
       turnCount = turn + 1;
 
-      // Check stop condition — persona signals end of conversation
-      if (isConversationEnding(personaResponse.content)) {
+      // Stop after the agent replies to a persona turn marked final.
+      if (personaResponse.done) {
         status = "completed";
         break;
       }
@@ -299,24 +299,4 @@ Guidelines:
 - Use tools when needed to look up information or perform actions
 - Provide clear, concise responses
 - If you can't help with something, explain why`;
-}
-
-/**
- * Simple heuristic to detect if the persona is ending the conversation.
- * Uses word-boundary matching to avoid false positives (e.g. "maybe" matching "bye").
- */
-export function isConversationEnding(content: string): boolean {
-  const lower = content.toLowerCase();
-  const endings = [
-    /\bgoodbye\b/,
-    /\bbye\b/,
-    /that's all\b/,
-    /thanks,?\s*that's all/,
-    /thank you,?\s*goodbye/,
-    /i'll think about it/,
-    /have a good day/,
-    /nothing else\b/,
-    /that's everything\b/,
-  ];
-  return endings.some((re) => re.test(lower));
 }
