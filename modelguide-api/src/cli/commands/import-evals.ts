@@ -15,6 +15,7 @@ import path from "node:path";
 import { forOrg } from "@db/rls";
 import {
   evalConfigs,
+  evalSuiteEvaluators,
   evalSuiteTestCases,
   evalSuites,
   evalTestCaseEvaluators,
@@ -25,7 +26,7 @@ import {
   createTestCase,
 } from "@features/evals/eval-suites.service";
 import type { Command } from "commander";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
@@ -315,7 +316,23 @@ export async function handleImportEvals(
     // 6b. Load existing test cases for dedup / replace
     const existingTestCases = await loadExistingTestCases(orgId, suiteId);
 
-    // 6c. Create or replace test cases with per-case evaluator overrides
+    // 6c. Reconcile suite-level evaluators against `common_evaluators` yaml.
+    // Suite = "evaluators every case runs". Cases' own evaluator lists become
+    // per-case `add` overrides (excluding those already at suite level).
+    //
+    // Reconcile (not just attach): if a name was removed from common_evaluators,
+    // detach it. Only touch rows with source="auto" — dashboard-added manual
+    // evaluators are preserved.
+    const suiteEvaluatorNames = normalized.commonEvaluatorNames;
+    await reconcileSuiteEvaluators(
+      orgId,
+      suiteId,
+      suiteEvaluatorNames,
+      evalConfigIdMap,
+    );
+
+    // 6d. Create or replace test cases with per-case evaluator overrides
+    const suiteEvaluatorSet = new Set(suiteEvaluatorNames);
     for (const tc of testCases) {
       // Build description from metadata
       const descParts: string[] = [];
@@ -357,8 +374,11 @@ export async function handleImportEvals(
         mockToolResponses: tc.mockToolResponses,
       });
 
-      // Insert per-case evaluator overrides (add type)
-      const overrideValues = tc.evaluatorNames
+      // Per-case `add` overrides only for evaluators NOT promoted to suite level.
+      const caseSpecificNames = tc.evaluatorNames.filter(
+        (name) => !suiteEvaluatorSet.has(name),
+      );
+      const overrideValues = caseSpecificNames
         .map((name, i) => {
           const configId = evalConfigIdMap.get(name);
           if (!configId) return null;
@@ -386,6 +406,78 @@ export async function handleImportEvals(
   }
 
   return result;
+}
+
+/**
+ * Reconcile suite-level evaluators against a target list of names.
+ *
+ * Only rows with source="auto" are touched — manual evaluators added from the
+ * dashboard survive reimports. Missing names are inserted; stale auto rows not
+ * in the target list are removed.
+ */
+async function reconcileSuiteEvaluators(
+  orgId: string,
+  suiteId: string,
+  targetNames: string[],
+  evalConfigIdMap: Map<string, string>,
+): Promise<void> {
+  await forOrg(orgId, async (tx) => {
+    const existing = await tx
+      .select({
+        id: evalSuiteEvaluators.id,
+        name: evalSuiteEvaluators.name,
+        source: evalSuiteEvaluators.source,
+      })
+      .from(evalSuiteEvaluators)
+      .where(eq(evalSuiteEvaluators.suiteId, suiteId));
+
+    const existingAuto = new Map(
+      existing
+        .filter((r) => r.source === "auto")
+        .map((r) => [r.name, r.id] as const),
+    );
+    const manualNames = new Set(
+      existing.filter((r) => r.source === "manual").map((r) => r.name),
+    );
+    const target = new Set(targetNames);
+
+    // Remove stale auto rows no longer in target
+    const toRemove = [...existingAuto.entries()]
+      .filter(([name]) => !target.has(name))
+      .map(([, id]) => id);
+    if (toRemove.length > 0) {
+      await tx
+        .delete(evalSuiteEvaluators)
+        .where(inArray(evalSuiteEvaluators.id, toRemove));
+    }
+
+    // Insert missing target names (skip any already present as manual).
+    // Index before filter so `order` reflects yaml position, not filtered-array position.
+    const toInsert = targetNames
+      .map((name, order) => ({ name, order }))
+      .filter(({ name }) => !existingAuto.has(name) && !manualNames.has(name))
+      .map(({ name, order }) => {
+        const configId = evalConfigIdMap.get(name);
+        if (!configId) {
+          log.warn(`common_evaluators: "${name}" has no eval config — skipped`);
+          return null;
+        }
+        return {
+          organizationId: orgId,
+          suiteId,
+          evalConfigId: configId,
+          name,
+          order,
+          required: true,
+          source: "auto" as const,
+        };
+      })
+      .filter((v) => v !== null);
+
+    if (toInsert.length > 0) {
+      await tx.insert(evalSuiteEvaluators).values(toInsert);
+    }
+  });
 }
 
 // ============================================================================

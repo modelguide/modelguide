@@ -13,6 +13,7 @@ import {
   findSopBySlug,
   forkFromTemplate,
   listTemplates,
+  updateSop,
 } from "@features/sops/sops.service";
 import type { SopSchema, SopTrigger } from "@features/sops/sops.types";
 import type { Command } from "commander";
@@ -129,6 +130,23 @@ async function importInlineSop(
   return sop.id;
 }
 
+async function replaceInlineSop(
+  orgId: string,
+  sopId: string,
+  item: SopItemInput,
+  agentIds: string[],
+): Promise<void> {
+  const definition = await buildInlineDefinition(orgId, item);
+
+  await updateSop(orgId, sopId, {
+    name: item.name,
+    description: item.description,
+    definition,
+    agentIds,
+  });
+  log.success(`Updated inline SOP in place: ${item.name}`);
+}
+
 export async function handleImportSops(
   orgId: string,
   items: SopItemInput[],
@@ -153,17 +171,33 @@ export async function handleImportSops(
         options?.registry,
       );
 
-      // If --replace, delete any existing SOP with the same slug first.
-      // Cascade drops sop_steps and agent_sops; the recreate below re-links agents
-      // from the yaml's `agents:` list, so yaml stays the source of truth.
+      // --replace: when an SOP with this slug already exists, update it in
+      // place instead of deleting and recreating. This preserves the SOP's
+      // UUID, so foreign keys pointing at it (eval_suites.sop_id, etc.)
+      // survive the refresh. Template forks fall back to delete+recreate
+      // because forkFromTemplate doesn't have an in-place variant — this
+      // still cascades to eval_suites, so we log that loudly.
       if (options?.replace && item.slug) {
         const existingSop = await findSopBySlug(orgId, item.slug);
         if (existingSop) {
-          await deleteSop(orgId, existingSop.id);
-          log.warn(
-            `Replaced existing SOP: ${existingSop.name} (${item.slug}) — dashboard-only agent links dropped`,
-          );
-          replaced++;
+          if (item.templateSlug) {
+            await deleteSop(orgId, existingSop.id);
+            log.warn(
+              `Re-forked template SOP: ${existingSop.name} (${item.slug}) — eval_suites linked to this SOP were cascade-deleted, re-run import-evals to restore them`,
+            );
+            replaced++;
+          } else {
+            await replaceInlineSop(orgId, existingSop.id, item, agentIds);
+            if (options.registry) {
+              options.registry.set("sop", item.slug, existingSop.id);
+            }
+            if (item.status === "active") {
+              await activateSop(orgId, existingSop.id);
+              activated++;
+            }
+            replaced++;
+            continue;
+          }
         }
       }
 
