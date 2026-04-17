@@ -25,6 +25,18 @@ CRITICAL — each service MUST be deployed from its specific subdirectory:
 
 NEVER deploy from the monorepo root.
 
+## Preflight
+
+Before calling any deploy tool, confirm the Railway link resolves to the repo root — not a parent directory or a service subdir. Run `railway status` and check `Project` is set.
+
+If it's empty or points to the wrong place, re-link from the repo root:
+
+```bash
+railway link --project <projectId> --environment <env>
+```
+
+A stale parent link (e.g. at `~/Projects/modelguide/` instead of `~/Projects/modelguide/modelguide/`) silently wins — the Railway CLI walks up the tree looking for the nearest link, then uploads sibling directories, and Railpack fails with "could not determine how to build the app". Fix the link, don't work around it by relinking at a subdir.
+
 ## Procedure
 
 1. **Link to the correct project and environment** using Railway MCP `link-environment` tool:

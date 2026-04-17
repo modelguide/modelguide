@@ -111,7 +111,7 @@ describe("import-guardrails", () => {
         name: "No Medical Claims",
         slug: "no-medical-claims",
         content: "Never claim products cure diseases.",
-        config: {},
+        config: { priority: "critical" },
         agents: [],
       },
     ]);

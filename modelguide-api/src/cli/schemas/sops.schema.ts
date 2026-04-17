@@ -1,3 +1,4 @@
+import { sopTriggerSchema as serviceSopTriggerSchema } from "@features/sops/sops.schemas";
 import { z } from "zod";
 
 const sopStatuses = ["draft", "active", "archived"] as const;
@@ -14,10 +15,10 @@ const sopStepSchema = z.object({
     .optional(),
 });
 
-const sopTriggerSchema = z.object({
-  type: z.string().min(1),
-  config: z.record(z.unknown()).default({}),
-});
+// Reuse the service-layer discriminated union so CLI imports reject any trigger
+// shape that the compiler will later refuse (e.g. `type: intent` instead of
+// `intent_detected`, or `config.keywords` instead of `config.patterns`).
+const sopTriggerSchema = serviceSopTriggerSchema;
 
 /**
  * SOP: either fork from a template or define inline.

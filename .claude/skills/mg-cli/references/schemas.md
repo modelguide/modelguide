@@ -179,10 +179,17 @@ connectorMapping:
 
 ### Trigger object
 
-| Field | Type | Required |
-|-------|------|----------|
-| `type` | string | yes | any string, e.g., `"manual"`, `"intent"`, `"channel"`, `"tool_present"` |
-| `config` | object | no (default `{}`) | type-specific configuration |
+Discriminated union on `type`. Each type has its own required `config` shape:
+
+| `type` | Required `config` fields | Example |
+|---|---|---|
+| `manual` | `{}` | `{ type: manual, config: {} }` |
+| `intent_detected` | `patterns: string[]` (min 1) | `{ patterns: ["return my order", "refund"] }` |
+| `channel` | `channelTypes: ("voice"\|"chat"\|"email")[]` (min 1) | `{ channelTypes: ["voice"] }` |
+| `tool_present` | `toolSlugs: string[]` (min 1), `catalogSlug?: string` | `{ toolSlugs: ["get_order"] }` |
+| `campaign_start` | `campaign?: string` | `{ campaign: "insurance" }` |
+
+**Common mistakes:** using `type: intent` (invalid — use `intent_detected`) or `config.keywords` (invalid — use `config.patterns`). The compiler validates stored triggers on every run, so malformed triggers block `compile-agents`.
 
 ### Step object
 
@@ -214,8 +221,18 @@ Wrapper key: `guardrails` (array, min 1 item).
 | `slug` | string | no | — | auto-generated if omitted |
 | `content` | string | yes | — | the guardrail rule text (supports multiline) |
 | `description` | string | no | — | |
-| `config` | object | no | `{}` | arbitrary (e.g., `priority`, `category`) |
+| `config` | object | no | `{}` | must include `priority` (see below) for the guardrail to compile |
 | `agents` | string[] | no | `[]` | agent slugs to assign |
+
+### Guardrail config
+
+Although the CLI import schema is loose (`config: {}` passes), the compiler rejects guardrails without `config.priority`. Always set it:
+
+| Field | Type | Required | Values |
+|-------|------|----------|--------|
+| `priority` | string | yes (at compile time) | `critical` \| `high` \| `medium` \| `low` |
+| `category` | string | no | `compliance` \| `safety` \| `brand` \| `operational` |
+| `reason` | string | no | why this guardrail exists — surfaced in some prompt strategies |
 
 **Behavior:** Creates a knowledge base entry with type `"guardrail"`. Duplicates detected by slug.
 

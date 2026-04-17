@@ -250,13 +250,55 @@ describe("sopItemSchema", () => {
     }
   });
 
-  test("validates inline SOP with steps", () => {
+  test("validates inline SOP with manual trigger", () => {
     const result = sopItemSchema.safeParse({
       name: "Return Process",
       steps: [{ id: "step-1", instruction: "Greet customer" }],
       trigger: { type: "manual", config: {} },
     });
     expect(result.success).toBe(true);
+  });
+
+  test("validates inline SOP with intent_detected trigger", () => {
+    const result = sopItemSchema.safeParse({
+      name: "Order Lookup",
+      steps: [{ id: "s1", instruction: "greet" }],
+      trigger: {
+        type: "intent_detected",
+        config: { patterns: ["where is my order"] },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects legacy `type: intent` trigger", () => {
+    const result = sopItemSchema.safeParse({
+      name: "SOP",
+      steps: [{ id: "s1", instruction: "greet" }],
+      trigger: { type: "intent", config: { intent: "order_status" } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects intent_detected without patterns", () => {
+    const result = sopItemSchema.safeParse({
+      name: "SOP",
+      steps: [{ id: "s1", instruction: "greet" }],
+      trigger: { type: "intent_detected", config: {} },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects legacy `config.keywords` under intent_detected", () => {
+    const result = sopItemSchema.safeParse({
+      name: "SOP",
+      steps: [{ id: "s1", instruction: "greet" }],
+      trigger: {
+        type: "intent_detected",
+        config: { keywords: ["return"] },
+      },
+    });
+    expect(result.success).toBe(false);
   });
 
   test("rejects invalid status", () => {
@@ -269,21 +311,49 @@ describe("sopItemSchema", () => {
 });
 
 describe("guardrailItemSchema", () => {
-  test("validates correct guardrail", () => {
+  test("validates guardrail with required priority", () => {
+    const result = guardrailItemSchema.safeParse({
+      name: "No Medical Claims",
+      content: "Never claim products cure diseases.",
+      config: { priority: "critical", category: "compliance" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.config.priority).toBe("critical");
+      expect(result.data.agents).toEqual([]);
+    }
+  });
+
+  test("rejects guardrail without config.priority", () => {
     const result = guardrailItemSchema.safeParse({
       name: "No Medical Claims",
       content: "Never claim products cure diseases.",
     });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.config).toEqual({});
-      expect(result.data.agents).toEqual([]);
-    }
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects guardrail with unknown priority value", () => {
+    const result = guardrailItemSchema.safeParse({
+      name: "No Medical Claims",
+      content: "Never claim products cure diseases.",
+      config: { priority: "urgent" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects guardrail with unknown category value", () => {
+    const result = guardrailItemSchema.safeParse({
+      name: "No Medical Claims",
+      content: "Never claim products cure diseases.",
+      config: { priority: "high", category: "business" },
+    });
+    expect(result.success).toBe(false);
   });
 
   test("rejects missing content", () => {
     const result = guardrailItemSchema.safeParse({
       name: "Test",
+      config: { priority: "high" },
     });
     expect(result.success).toBe(false);
   });

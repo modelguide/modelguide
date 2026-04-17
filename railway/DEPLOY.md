@@ -14,12 +14,13 @@ railway init
 railway link
 ```
 
-If the project and services already exist, link each one from its directory:
+Link from the **repo root** (e.g. `~/Projects/modelguide/modelguide`). `railway status` must resolve to the repo root before you run any `railway up` — the CLI walks parent directories looking for the nearest link, so a stale link at the monorepo's parent silently wins and `railway up` uploads sibling directories instead of the repo.
+
+If the project and services already exist, link the project once from the repo root — per-service linking isn't required; the service is chosen with `--service` on each command:
 
 ```bash
-(cd modelguide-api && railway link --service api)
-(cd modelguide-ui && railway link --service ui)
-(cd railway/lb && railway link --service lb)
+railway link --project <projectId> --environment <env>
+railway status    # confirm Project + Environment resolve correctly
 ```
 
 ## 2. Add services
