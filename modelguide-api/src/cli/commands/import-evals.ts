@@ -22,12 +22,11 @@ import {
 } from "@db/schema";
 import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
 import {
-  createEvaluator,
   createSuite,
   createTestCase,
 } from "@features/evals/eval-suites.service";
 import type { Command } from "commander";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
@@ -317,38 +316,20 @@ export async function handleImportEvals(
     // 6b. Load existing test cases for dedup / replace
     const existingTestCases = await loadExistingTestCases(orgId, suiteId);
 
-    // 6c. Compute suite-level evaluators: the union of (a) `common_evaluators`
-    // declared at the top of the yaml (explicit generic evaluators, typically
-    // guardrail-style), and (b) the intersection of per-case evaluators (any
-    // evaluator every test case in this suite already lists). Everything else
-    // stays as a per-case `add` override. This matches the mental model:
-    // suite = baseline every case runs against, overrides = test-case-specific.
-    const caseEvaluatorLists = testCases
-      .filter((tc) => !existingTestCases.has(tc.id))
-      .map((tc) => tc.evaluatorNames);
-    const intersection =
-      caseEvaluatorLists.length > 0
-        ? caseEvaluatorLists.reduce<string[]>(
-            (acc, names) => acc.filter((n) => names.includes(n)),
-            [...new Set(caseEvaluatorLists[0])],
-          )
-        : [];
-    const suiteEvaluatorNames = [
-      ...new Set([...normalized.commonEvaluatorNames, ...intersection]),
-    ];
-
-    // 6d. Attach suite-level evaluators (idempotent: skip names already attached)
-    const alreadyAttached = await loadSuiteEvaluatorNames(orgId, suiteId);
-    for (const name of suiteEvaluatorNames) {
-      if (alreadyAttached.has(name)) continue;
-      const configId = evalConfigIdMap.get(name);
-      if (!configId) continue;
-      await createEvaluator(orgId, suiteId, {
-        evalConfigId: configId,
-        name,
-        required: true,
-      });
-    }
+    // 6c. Reconcile suite-level evaluators against `common_evaluators` yaml.
+    // Suite = "evaluators every case runs". Cases' own evaluator lists become
+    // per-case `add` overrides (excluding those already at suite level).
+    //
+    // Reconcile (not just attach): if a name was removed from common_evaluators,
+    // detach it. Only touch rows with source="auto" — dashboard-added manual
+    // evaluators are preserved.
+    const suiteEvaluatorNames = normalized.commonEvaluatorNames;
+    await reconcileSuiteEvaluators(
+      orgId,
+      suiteId,
+      suiteEvaluatorNames,
+      evalConfigIdMap,
+    );
 
     // 6e. Create or replace test cases with per-case evaluator overrides
     for (const tc of testCases) {
@@ -426,18 +407,71 @@ export async function handleImportEvals(
   return result;
 }
 
-/** Load the set of evaluator names already attached to a suite (for dedup). */
-async function loadSuiteEvaluatorNames(
+/**
+ * Reconcile suite-level evaluators against a target list of names.
+ *
+ * Only rows with source="auto" are touched — manual evaluators added from the
+ * dashboard survive reimports. Missing names are inserted; stale auto rows not
+ * in the target list are removed.
+ */
+async function reconcileSuiteEvaluators(
   orgId: string,
   suiteId: string,
-): Promise<Set<string>> {
-  const rows = await forOrg(orgId, (tx) =>
-    tx
-      .select({ name: evalSuiteEvaluators.name })
+  targetNames: string[],
+  evalConfigIdMap: Map<string, string>,
+): Promise<void> {
+  await forOrg(orgId, async (tx) => {
+    const existing = await tx
+      .select({
+        id: evalSuiteEvaluators.id,
+        name: evalSuiteEvaluators.name,
+        source: evalSuiteEvaluators.source,
+      })
       .from(evalSuiteEvaluators)
-      .where(eq(evalSuiteEvaluators.suiteId, suiteId)),
-  );
-  return new Set(rows.map((r) => r.name));
+      .where(eq(evalSuiteEvaluators.suiteId, suiteId));
+
+    const existingAuto = new Map(
+      existing
+        .filter((r) => r.source === "auto")
+        .map((r) => [r.name, r.id] as const),
+    );
+    const manualNames = new Set(
+      existing.filter((r) => r.source === "manual").map((r) => r.name),
+    );
+    const target = new Set(targetNames);
+
+    // Remove stale auto rows no longer in target
+    const toRemove = [...existingAuto.entries()]
+      .filter(([name]) => !target.has(name))
+      .map(([, id]) => id);
+    if (toRemove.length > 0) {
+      await tx
+        .delete(evalSuiteEvaluators)
+        .where(inArray(evalSuiteEvaluators.id, toRemove));
+    }
+
+    // Insert missing target names (skip any already present as manual)
+    const toInsert = targetNames
+      .filter((n) => !existingAuto.has(n) && !manualNames.has(n))
+      .map((name, i) => {
+        const configId = evalConfigIdMap.get(name);
+        if (!configId) return null;
+        return {
+          organizationId: orgId,
+          suiteId,
+          evalConfigId: configId,
+          name,
+          order: i,
+          required: true,
+          source: "auto" as const,
+        };
+      })
+      .filter((v) => v !== null);
+
+    if (toInsert.length > 0) {
+      await tx.insert(evalSuiteEvaluators).values(toInsert);
+    }
+  });
 }
 
 // ============================================================================
