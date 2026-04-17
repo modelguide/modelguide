@@ -12,6 +12,8 @@ export const evalSuiteAssertionSchema = z.object({
   order: z.number(),
   required: z.boolean(),
   tags: z.array(z.string()).default([]),
+  evaluatorType: z.string().nullable().optional(),
+  config: z.record(z.unknown()).nullable().optional(),
   createdAt: z.string(),
 })
 
@@ -27,6 +29,8 @@ export const evalTestCaseEvaluatorOverrideSchema = z.object({
   order: z.number(),
   required: z.boolean(),
   source: z.enum(['auto', 'manual']),
+  evaluatorType: z.string().nullable().optional(),
+  config: z.record(z.unknown()).nullable().optional(),
   createdAt: z.string(),
 })
 

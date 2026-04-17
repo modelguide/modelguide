@@ -1,12 +1,28 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, Minus, Plus, Search, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Minus, Pencil, Plus, Search, Undo2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { api } from '~/lib/api'
 import { cn } from '~/lib/cn'
 import type { EvalSuiteAssertion, EvalSuiteTestCase } from '~/schemas/eval-suites'
+import type { EvalConfigForEdit } from './eval-config-edit-dialog'
+import { EvalConfigEditDialog } from './eval-config-edit-dialog'
 import { EvalConfigPickerDialog } from './eval-config-picker-dialog'
+
+const EVALUATOR_TYPE_LABELS: Record<string, string> = {
+  tool_called: 'Tool Called',
+  tool_input_contains: 'Tool Input',
+  no_tool_called: 'No Tool',
+  llm_judge: 'LLM Judge',
+}
+
+const EVALUATOR_TYPE_BADGE: Record<string, 'info' | 'success' | 'warning' | 'default'> = {
+  tool_called: 'success',
+  tool_input_contains: 'info',
+  no_tool_called: 'warning',
+  llm_judge: 'default',
+}
 
 export interface TestCasesPanelProps {
   testCases: EvalSuiteTestCase[]
@@ -213,7 +229,7 @@ export function TestCasesPanel({
 }
 
 // ============================================================================
-// Test Case Evaluator Overrides sub-component (AC 18-20)
+// Test Case Evaluator Overrides sub-component (AC 18-20, AC-28, AC-29, AC-30)
 // ============================================================================
 
 interface TestCaseEvaluatorOverridesProps {
@@ -229,6 +245,9 @@ function TestCaseEvaluatorOverrides({
 }: TestCaseEvaluatorOverridesProps) {
   const queryClient = useQueryClient()
   const [showPicker, setShowPicker] = useState(false)
+  const [editTarget, setEditTarget] = useState<EvalConfigForEdit | null>(null)
+  /** true when editing a clone already pinned to this test case (global save is safe) */
+  const [isEditingClone, setIsEditingClone] = useState(false)
   const overrides = testCase.evaluatorOverrides ?? []
 
   const excludedConfigIds = new Set(
@@ -272,6 +291,69 @@ function TestCaseEvaluatorOverrides({
     },
   })
 
+  // AC-30: clone config and add as new override on this test case.
+  // Note: these are two sequential API calls with no server-side transaction. If the
+  // second call (POST evaluators) fails, the cloned eval_config is left orphaned with
+  // no override pointing to it. Cleanup of unreferenced configs is a future task.
+  const cloneMutation = useMutation({
+    mutationFn: async ({ sourceConfig }: { sourceConfig: EvalConfigForEdit }) => {
+      const cloned = await api
+        .post('eval-configs', {
+          json: {
+            name: `Cloned - ${sourceConfig.name}`,
+            evaluatorType: sourceConfig.evaluatorType,
+            config: sourceConfig.config,
+          },
+        })
+        .json<EvalConfigForEdit>()
+
+      // Pin the clone to this test case as a new "add" override
+      await api
+        .post(`eval-suites/${suiteId}/test-cases/${testCase.id}/evaluators`, {
+          json: { evalConfigId: cloned.id, overrideType: 'add', name: cloned.name },
+        })
+        .json()
+
+      return cloned
+    },
+    onSuccess: (cloned) => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+      queryClient.invalidateQueries({ queryKey: ['eval-configs'] })
+      // Reopen edit dialog with the private clone — now "Save globally" is safe
+      setEditTarget({
+        id: cloned.id,
+        name: cloned.name,
+        description: cloned.description ?? null,
+        evaluatorType: cloned.evaluatorType,
+        config: cloned.config,
+        tags: cloned.tags ?? [],
+      })
+      setIsEditingClone(true)
+    },
+  })
+
+  function openEditDialog(
+    evaluator: {
+      evalConfigId: string
+      name: string
+      evaluatorType?: string | null
+      config?: Record<string, unknown> | null
+      tags?: string[]
+    },
+    isPrivate: boolean,
+  ) {
+    if (!evaluator.evaluatorType || !evaluator.config) return
+    setEditTarget({
+      id: evaluator.evalConfigId,
+      name: evaluator.name,
+      description: null,
+      evaluatorType: evaluator.evaluatorType,
+      config: evaluator.config as Record<string, unknown>,
+      tags: evaluator.tags ?? [],
+    })
+    setIsEditingClone(isPrivate)
+  }
+
   return (
     <div className="mt-3 space-y-2">
       <div className="flex items-center justify-between">
@@ -297,7 +379,7 @@ function TestCaseEvaluatorOverrides({
               <div
                 key={se.id}
                 className={cn(
-                  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
+                  'group/row flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
                   isExcluded ? 'opacity-50' : 'hover:bg-bg-subtle/30',
                 )}
               >
@@ -306,7 +388,30 @@ function TestCaseEvaluatorOverrides({
                 >
                   {se.name}
                 </span>
+                {/* AC-28: type badge on inherited row — clickable to edit */}
+                {se.evaluatorType ? (
+                  <button
+                    type="button"
+                    onClick={() => openEditDialog(se, false)}
+                    title="Edit evaluator config"
+                    className="cursor-pointer"
+                  >
+                    <Badge variant={EVALUATOR_TYPE_BADGE[se.evaluatorType] ?? 'default'}>
+                      {EVALUATOR_TYPE_LABELS[se.evaluatorType] ?? se.evaluatorType}
+                    </Badge>
+                  </button>
+                ) : null}
                 <Badge variant="default">inherited</Badge>
+                {!isExcluded && se.evaluatorType ? (
+                  <button
+                    type="button"
+                    onClick={() => openEditDialog(se, false)}
+                    className="rounded p-0.5 text-fg-muted opacity-0 transition-opacity hover:text-fg-primary group-hover/row:opacity-100"
+                    title="Edit config"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                ) : null}
                 {isExcluded && excludeOverride ? (
                   <button
                     type="button"
@@ -346,9 +451,32 @@ function TestCaseEvaluatorOverrides({
           {addOverrides.map((ao) => (
             <div
               key={ao.id}
-              className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs hover:bg-bg-subtle/30"
+              className="group/row flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs hover:bg-bg-subtle/30"
             >
               <span className="flex-1 font-mono text-fg-secondary">{ao.name}</span>
+              {/* AC-28: type badge on case-specific row */}
+              {ao.evaluatorType ? (
+                <button
+                  type="button"
+                  onClick={() => openEditDialog(ao, true)}
+                  title="Edit evaluator config"
+                  className="cursor-pointer"
+                >
+                  <Badge variant={EVALUATOR_TYPE_BADGE[ao.evaluatorType] ?? 'default'}>
+                    {EVALUATOR_TYPE_LABELS[ao.evaluatorType] ?? ao.evaluatorType}
+                  </Badge>
+                </button>
+              ) : null}
+              {ao.evaluatorType ? (
+                <button
+                  type="button"
+                  onClick={() => openEditDialog(ao, true)}
+                  className="rounded p-0.5 text-fg-muted opacity-0 transition-opacity hover:text-fg-primary group-hover/row:opacity-100"
+                  title="Edit config"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => deleteOverrideMutation.mutate(ao.id)}
@@ -369,6 +497,34 @@ function TestCaseEvaluatorOverrides({
         onSelect={(config) => {
           addMutation.mutate({ evalConfigId: config.id, name: config.name })
         }}
+      />
+
+      {/* Edit dialog for test-case evaluators:
+          - inherited eval → clone-only (no save)
+          - case-specific / post-clone → save-only (no clone) */}
+      <EvalConfigEditDialog
+        open={!!editTarget}
+        onClose={() => {
+          setEditTarget(null)
+          setIsEditingClone(false)
+        }}
+        config={editTarget}
+        onSaved={
+          isEditingClone
+            ? () => {
+                setEditTarget(null)
+                setIsEditingClone(false)
+              }
+            : undefined
+        }
+        warning={
+          !isEditingClone
+            ? 'This config is shared. Clone it to create a private copy for this test case.'
+            : undefined
+        }
+        onClone={
+          !isEditingClone ? (sourceConfig) => cloneMutation.mutate({ sourceConfig }) : undefined
+        }
       />
     </div>
   )

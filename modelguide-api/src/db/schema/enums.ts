@@ -142,6 +142,7 @@ export const evalStatusEnum = pgEnum("eval_status", [
   "running",
   "completed",
   "failed",
+  "error",
 ]);
 
 /**
