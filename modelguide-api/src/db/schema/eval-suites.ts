@@ -29,6 +29,7 @@ import {
   evalSuiteRunStatusEnum,
   evalSuiteStatusEnum,
   evalSuiteTestCaseSourceEnum,
+  evalTestCaseEvaluatorOverrideTypeEnum,
 } from "./enums";
 import { evalConfigs } from "./eval-configs";
 
@@ -133,7 +134,7 @@ export const evalSuiteTestCases = pgTable(
 
 export const evalSuiteTestCasesRelations = relations(
   evalSuiteTestCases,
-  ({ one }) => ({
+  ({ one, many }) => ({
     organization: one(organizations, {
       fields: [evalSuiteTestCases.organizationId],
       references: [organizations.id],
@@ -142,6 +143,7 @@ export const evalSuiteTestCasesRelations = relations(
       fields: [evalSuiteTestCases.suiteId],
       references: [evalSuites.id],
     }),
+    evaluatorOverrides: many(evalTestCaseEvaluators),
   }),
 );
 
@@ -191,6 +193,58 @@ export const evalSuiteEvaluatorsRelations = relations(
     }),
     evalConfig: one(evalConfigs, {
       fields: [evalSuiteEvaluators.evalConfigId],
+      references: [evalConfigs.id],
+    }),
+  }),
+);
+
+// ============================================================================
+// Eval Test Case Evaluators — per-case overrides (add/exclude)
+// ============================================================================
+
+export const evalTestCaseEvaluators = pgTable(
+  "eval_test_case_evaluators",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    testCaseId: uuid("test_case_id")
+      .notNull()
+      .references(() => evalSuiteTestCases.id, { onDelete: "cascade" }),
+    evalConfigId: uuid("eval_config_id")
+      .notNull()
+      .references(() => evalConfigs.id), // NO ACTION — no cascade
+    overrideType:
+      evalTestCaseEvaluatorOverrideTypeEnum("override_type").notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    order: integer("order").notNull().default(0),
+    required: boolean("required").notNull().default(true),
+    source: evalSuiteTestCaseSourceEnum("source").notNull().default("manual"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("eval_test_case_evaluators_test_case_idx").on(table.testCaseId),
+    index("eval_test_case_evaluators_config_idx").on(table.evalConfigId),
+    index("eval_test_case_evaluators_org_idx").on(table.organizationId),
+  ],
+).enableRLS();
+
+export const evalTestCaseEvaluatorsRelations = relations(
+  evalTestCaseEvaluators,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [evalTestCaseEvaluators.organizationId],
+      references: [organizations.id],
+    }),
+    testCase: one(evalSuiteTestCases, {
+      fields: [evalTestCaseEvaluators.testCaseId],
+      references: [evalSuiteTestCases.id],
+    }),
+    evalConfig: one(evalConfigs, {
+      fields: [evalTestCaseEvaluators.evalConfigId],
       references: [evalConfigs.id],
     }),
   }),

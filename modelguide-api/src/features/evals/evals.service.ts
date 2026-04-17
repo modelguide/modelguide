@@ -27,12 +27,18 @@ type ScoreInsert = typeof evalRunScores.$inferInsert;
 // Evaluator execution
 // ============================================================================
 
-/** Execute evaluators for all assertions, returning score rows.
+/**
+ * Execute evaluators for all assertions concurrently, returning score rows.
  *
  * All assertions are always evaluated — no short-circuit on required assertion failure.
  * This gives forensic visibility into what else went wrong, which is critical
  * for debugging and improving SOPs.
+ *
+ * Assertions run in parallel via Promise.all. The outer loop in runTestCaseEval
+ * already serialises across test cases, and N here is the number of evaluators
+ * on a single test case (typically 2–10), so no windowed batching is needed.
  */
+
 export async function executeAssertions(
   assertions: ResolvedAssertion[],
   messages: SessionMessage[],
@@ -41,9 +47,8 @@ export async function executeAssertions(
   sessionContext?: EvalSessionContext,
 ): Promise<{ scoreRows: ScoreInsert[]; metadata: Record<string, unknown> }> {
   const toolMsgs = messages.filter((m) => m.role === "tool");
-  const scoreRows: ScoreInsert[] = [];
 
-  for (const assertion of assertions) {
+  async function runOne(assertion: ResolvedAssertion): Promise<ScoreInsert> {
     const resolvedToolNames = new Map(Object.entries(assertion.toolNameMap));
     const ctx: EvalContext = {
       messages,
@@ -52,14 +57,13 @@ export async function executeAssertions(
       sessionContext,
     };
 
-    // Parse + validate config against the evaluator's runtime shape before dispatch.
     const parsedConfig = parseStepEvaluatorConfig(
       assertion.evaluator.evaluatorType,
       assertion.evaluator.config,
     );
     if (!parsedConfig.success) {
       const details = parsedConfig.issues.map((i) => i.message).join("; ");
-      scoreRows.push({
+      return {
         evalRunId,
         organizationId: orgId,
         evalConfigId: assertion.evaluator.configId,
@@ -69,8 +73,7 @@ export async function executeAssertions(
         evaluatorType: assertion.evaluator.evaluatorType,
         result: "error" as EvalScoreResult,
         reasoning: `Invalid eval config: ${details}`,
-      });
-      continue;
+      };
     }
 
     const evaluator = getEvaluator(assertion.evaluator.evaluatorType);
@@ -85,7 +88,7 @@ export async function executeAssertions(
       };
     }
 
-    scoreRows.push({
+    return {
       evalRunId,
       organizationId: orgId,
       evalConfigId: assertion.evaluator.configId,
@@ -99,8 +102,10 @@ export async function executeAssertions(
       expected: evalResult.expected ?? null,
       actual: evalResult.actual ?? null,
       durationMs: evalResult.durationMs ?? null,
-    });
+    };
   }
+
+  const scoreRows = await Promise.all(assertions.map(runOne));
 
   const metadata: Record<string, unknown> = {};
   return { scoreRows, metadata };

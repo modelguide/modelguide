@@ -9,14 +9,18 @@
 
 import { env } from "@/env";
 import { forOrg } from "@db/rls";
-import { evalSuiteTestCases, evalSuites } from "@db/schema";
+import {
+  evalConfigs,
+  evalSuiteTestCases,
+  evalSuites,
+  evalTestCaseEvaluators,
+} from "@db/schema";
+import type { EvaluatorType } from "@features/evals/evals.types";
 import { getSopById } from "@features/sops/sops.service";
 import { Errors } from "@lib/errors";
 import { getLogger } from "@lib/logger";
 import { taskRunner } from "@lib/task-runner";
-import { and, eq } from "drizzle-orm";
-
-import { createTestCase } from "@features/evals/eval-suites.service";
+import { and, desc, eq } from "drizzle-orm";
 import {
   deriveDimensionsFromSop,
   selectTuples,
@@ -261,17 +265,57 @@ async function executeGenerateTestCases(
           deletedOldCases = true;
         }
 
-        // Insert accepted test case
+        // Insert test case + eval config + override atomically to prevent
+        // orphan eval_configs on partial failure (PR review issue #2)
         const personaId = toneToPersonaId(tuple.tone);
-        await createTestCase(orgId, suiteId, {
-          name: generated.name,
-          description: generated.scenario,
-          source: "auto",
-          input: {
-            message: generated.customer_message,
-            persona: personaId,
-          },
-          mockToolResponses: generated.mock_tool_responses,
+        await forOrg(orgId, async (tx) => {
+          // Determine next test-case order
+          const existing = await tx
+            .select({ order: evalSuiteTestCases.order })
+            .from(evalSuiteTestCases)
+            .where(eq(evalSuiteTestCases.suiteId, suiteId))
+            .orderBy(desc(evalSuiteTestCases.order))
+            .limit(1);
+          const nextOrder = existing.length > 0 ? existing[0].order + 1 : 0;
+
+          const [testCase] = await tx
+            .insert(evalSuiteTestCases)
+            .values({
+              organizationId: orgId,
+              suiteId,
+              name: generated.name,
+              description: generated.scenario,
+              source: "auto",
+              input: {
+                message: generated.customer_message,
+                persona: personaId,
+              },
+              mockToolResponses: generated.mock_tool_responses ?? {},
+              order: nextOrder,
+            })
+            .returning();
+
+          const [evalConfig] = await tx
+            .insert(evalConfigs)
+            .values({
+              organizationId: orgId,
+              name: `Judge: ${generated.name}`,
+              evaluatorType: "llm_judge" as EvaluatorType,
+              config: { criterion: generated.llm_judge_criterion },
+              tags: ["auto-generated"],
+            })
+            .returning();
+
+          await tx.insert(evalTestCaseEvaluators).values({
+            organizationId: orgId,
+            testCaseId: testCase.id,
+            evalConfigId: evalConfig.id,
+            overrideType: "add",
+            name: `Judge: ${generated.name}`,
+            order: 0,
+            required: true,
+            source: "auto",
+          });
         });
 
         accepted++;

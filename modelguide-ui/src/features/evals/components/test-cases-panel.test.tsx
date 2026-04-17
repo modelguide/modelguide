@@ -10,7 +10,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', name: 'Edge Case' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     expect(screen.getByText('Happy Path')).toBeInTheDocument()
     expect(screen.getByText('Edge Case')).toBeInTheDocument()
@@ -22,7 +22,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', source: 'manual' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     expect(screen.getByText('auto')).toBeInTheDocument()
     expect(screen.getByText('manual')).toBeInTheDocument()
@@ -36,7 +36,7 @@ describe('TestCasesPanel', () => {
       }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     fireEvent.click(screen.getByText('Happy Path'))
 
@@ -51,7 +51,7 @@ describe('TestCasesPanel', () => {
       }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     fireEvent.click(screen.getByText('Happy Path'))
 
@@ -67,7 +67,7 @@ describe('TestCasesPanel', () => {
       }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     // Expand
     fireEvent.click(screen.getByText('Happy Path'))
@@ -79,7 +79,7 @@ describe('TestCasesPanel', () => {
   })
 
   it('shows empty state when no test cases', () => {
-    render(<TestCasesPanel testCases={[]} />)
+    render(<TestCasesPanel testCases={[]} suiteId="suite-1" />)
 
     expect(screen.getByText('No test cases yet')).toBeInTheDocument()
   })
@@ -90,7 +90,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', name: 'Manual Test', source: 'manual' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     // Click "Manual" filter
     fireEvent.click(screen.getByText('Manual'))
@@ -105,7 +105,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', name: 'Escalation Edge Case' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     const input = screen.getByPlaceholderText('Search test cases...')
     fireEvent.change(input, { target: { value: 'escalation' } })
@@ -117,7 +117,7 @@ describe('TestCasesPanel', () => {
   it('shows no results message when filters match nothing', () => {
     const testCases = [makeEvalSuiteTestCase({ id: 'tc-1', name: 'Happy Path' })]
 
-    render(<TestCasesPanel testCases={testCases} />)
+    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     const input = screen.getByPlaceholderText('Search test cases...')
     fireEvent.change(input, { target: { value: 'nonexistent' } })

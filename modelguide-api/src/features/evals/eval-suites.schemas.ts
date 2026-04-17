@@ -90,6 +90,13 @@ export const simulateAndRunResponseSchema = z.object({
   status: z.enum(["running"]),
 });
 
+export const createTestCaseEvaluatorSchema = z.object({
+  evalConfigId: z.string().uuid(),
+  overrideType: z.enum(["add", "exclude"]),
+  name: z.string().min(1).max(255).optional(),
+  required: z.boolean().optional(),
+});
+
 // ============================================================================
 // Response schemas
 // ============================================================================
@@ -107,6 +114,17 @@ const evalSuiteEvaluatorResponseSchema = z.object({
   createdAt: z.string(),
 });
 
+const evalTestCaseEvaluatorOverrideResponseSchema = z.object({
+  id: z.string().uuid(),
+  evalConfigId: z.string().uuid(),
+  overrideType: z.enum(["add", "exclude"]),
+  name: z.string(),
+  order: z.number(),
+  required: z.boolean(),
+  source: z.enum(["auto", "manual"]),
+  createdAt: z.string(),
+});
+
 const evalSuiteTestCaseResponseSchema = z.object({
   id: z.string().uuid(),
   suiteId: z.string().uuid(),
@@ -116,6 +134,9 @@ const evalSuiteTestCaseResponseSchema = z.object({
   input: z.record(z.string(), z.unknown()).nullable(),
   expectedBehavior: z.string().nullable(),
   order: z.number(),
+  evaluatorOverrides: z
+    .array(evalTestCaseEvaluatorOverrideResponseSchema)
+    .optional(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
 });

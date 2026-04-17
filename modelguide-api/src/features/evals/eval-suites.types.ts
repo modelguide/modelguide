@@ -53,6 +53,13 @@ export interface CreateEvaluatorInput {
   required?: boolean;
 }
 
+export interface CreateTestCaseEvaluatorInput {
+  evalConfigId: string;
+  overrideType: "add" | "exclude";
+  name?: string;
+  required?: boolean;
+}
+
 /** Expected shape of eval_suite_test_cases.input for simulation. */
 export interface SimulationTestCaseInput {
   message?: string;

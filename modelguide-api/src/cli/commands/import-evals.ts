@@ -15,13 +15,12 @@ import path from "node:path";
 import { forOrg } from "@db/rls";
 import {
   evalConfigs,
-  evalSuiteEvaluators,
   evalSuiteTestCases,
   evalSuites,
+  evalTestCaseEvaluators,
 } from "@db/schema";
 import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
 import {
-  createEvaluator,
   createSuite,
   createTestCase,
 } from "@features/evals/eval-suites.service";
@@ -168,27 +167,6 @@ async function findExistingEvalConfig(
   return rows[0]?.id ?? null;
 }
 
-/** Find existing evaluator on a suite by eval config ID. */
-async function findExistingEvaluator(
-  orgId: string,
-  suiteId: string,
-  evalConfigId: string,
-): Promise<boolean> {
-  const rows = await forOrg(orgId, (tx) =>
-    tx
-      .select({ id: evalSuiteEvaluators.id })
-      .from(evalSuiteEvaluators)
-      .where(
-        and(
-          eq(evalSuiteEvaluators.suiteId, suiteId),
-          eq(evalSuiteEvaluators.evalConfigId, evalConfigId),
-        ),
-      )
-      .limit(1),
-  );
-  return rows.length > 0;
-}
-
 /** Load existing test case external IDs for a suite. */
 async function loadExistingTestCaseIds(
   orgId: string,
@@ -270,13 +248,7 @@ export async function handleImportEvals(
     }
   }
 
-  // 4. Build evaluator name → criterion lookup
-  const evaluatorCriterionMap = new Map<string, string>();
-  for (const evaluator of normalized.evaluators) {
-    evaluatorCriterionMap.set(evaluator.name, evaluator.criterion);
-  }
-
-  // 5. Group test cases by SOP slug
+  // 4. Group test cases by SOP slug
   const groupedBySop = new Map<string, NormalizedTestCase[]>();
   for (const tc of normalized.testCases) {
     const group = groupedBySop.get(tc.sopSlug) ?? [];
@@ -316,33 +288,10 @@ export async function handleImportEvals(
       }
     }
 
-    // 6b. Collect evaluator names referenced by test cases in this group
-    const referencedEvaluators = new Set<string>();
-    for (const tc of testCases) {
-      for (const name of tc.evaluatorNames) {
-        referencedEvaluators.add(name);
-      }
-    }
-
-    // 6c. Add suite-level evaluators (union of all referenced)
-    for (const evalName of referencedEvaluators) {
-      const configId = evalConfigIdMap.get(evalName);
-      if (!configId) continue;
-
-      const exists = await findExistingEvaluator(orgId, suiteId, configId);
-      if (!exists) {
-        await createEvaluator(orgId, suiteId, {
-          evalConfigId: configId,
-          name: evalName,
-          required: true,
-        });
-      }
-    }
-
-    // 6d. Load existing test case IDs for dedup
+    // 6b. Load existing test case IDs for dedup
     const existingIds = await loadExistingTestCaseIds(orgId, suiteId);
 
-    // 6e. Create test cases
+    // 6c. Create test cases with per-case evaluator overrides
     for (const tc of testCases) {
       if (existingIds.has(tc.id)) {
         result.testCasesSkipped++;
@@ -357,15 +306,7 @@ export async function handleImportEvals(
       if (tc.guardrailsTested.length > 0)
         descParts.push(`guardrails: ${tc.guardrailsTested.join(", ")}`);
 
-      // Build expectedBehavior from the test case's specific evaluators
-      const expectedBehavior = tc.evaluatorNames
-        .map((name, i) => {
-          const criterion = evaluatorCriterionMap.get(name) ?? name;
-          return `${i + 1}. ${criterion}`;
-        })
-        .join("\n");
-
-      await createTestCase(orgId, suiteId, {
+      const testCase = await createTestCase(orgId, suiteId, {
         name: tc.id,
         description: descParts.length > 0 ? descParts.join(" | ") : undefined,
         source: "manual",
@@ -375,8 +316,31 @@ export async function handleImportEvals(
           conversationHistory: tc.input.conversationHistory,
           context: tc.input.context,
         },
-        expectedBehavior,
       });
+
+      // Insert per-case evaluator overrides (add type)
+      const overrideValues = tc.evaluatorNames
+        .map((name, i) => {
+          const configId = evalConfigIdMap.get(name);
+          if (!configId) return null;
+          return {
+            organizationId: orgId,
+            testCaseId: testCase.id,
+            evalConfigId: configId,
+            overrideType: "add" as const,
+            name,
+            order: i,
+            required: true,
+            source: "auto" as const,
+          };
+        })
+        .filter((v) => v !== null);
+
+      if (overrideValues.length > 0) {
+        await forOrg(orgId, (tx) =>
+          tx.insert(evalTestCaseEvaluators).values(overrideValues),
+        );
+      }
 
       result.testCasesCreated++;
     }

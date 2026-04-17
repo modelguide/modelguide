@@ -34,6 +34,7 @@ import type {
   evalSuiteEvaluators,
   evalSuiteTestCases,
   evalSuites,
+  evalTestCaseEvaluators,
 } from "./eval-suites";
 
 export type Organization = InferSelectModel<typeof organizations>;
@@ -113,3 +114,6 @@ export type NewAgentKnowledgeBase = InferInsertModel<typeof agentKnowledgeBase>;
 export type EvalSuite = InferSelectModel<typeof evalSuites>;
 export type EvalSuiteTestCase = InferSelectModel<typeof evalSuiteTestCases>;
 export type EvalSuiteEvaluator = InferSelectModel<typeof evalSuiteEvaluators>;
+export type EvalTestCaseEvaluator = InferSelectModel<
+  typeof evalTestCaseEvaluators
+>;

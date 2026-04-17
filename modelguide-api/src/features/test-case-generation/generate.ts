@@ -56,6 +56,11 @@ const generatedTestCaseSchema = z.object({
     .describe(
       "Mock responses as array of { toolSlug, fields } entries. Copy the tool states provided in the prompt.",
     ),
+  llm_judge_criterion: z
+    .string()
+    .describe(
+      "A specific, measurable evaluation criterion (1-2 sentences) for an LLM judge to verify the agent handled this scenario correctly. Describe the expected agent behavior and outcome — not the customer message.",
+    ),
 });
 
 // ============================================================================
@@ -111,6 +116,9 @@ Requirements:
 4. "mock_tool_responses" — array of { toolSlug, fields: [{ key, value }] } entries.
    CRITICAL: toolSlug values MUST exactly match the tool slugs from the SOP steps above. Do not invent new slugs.
    Copy the exact tool states provided above. If no tools, return an empty array [].
+5. "llm_judge_criterion" — 1-2 sentences describing what a correct agent response looks like for this scenario.
+   Focus on the expected outcome (e.g. "The agent looked up the order and informed the customer of its status and estimated delivery date.").
+   Do not describe the customer message — describe what the agent should do and say.
 
 The message should feel like a real customer wrote it, not a template.`;
 
@@ -131,6 +139,7 @@ The message should feel like a real customer wrote it, not a template.`;
     scenario: object.scenario,
     customer_message: object.customer_message,
     mock_tool_responses: mockToolResponses,
+    llm_judge_criterion: object.llm_judge_criterion,
   };
 
   return {

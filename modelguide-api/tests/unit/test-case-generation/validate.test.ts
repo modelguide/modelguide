@@ -71,6 +71,8 @@ const validTestCase: GeneratedTestCase = {
     glowbox_store_get_order: { status: "delivered", tracking: "1Z999" },
     glowbox_store_create_return: { returnId: "RET-001", label: "https://..." },
   },
+  llm_judge_criterion:
+    "The agent looked up the order status and informed the customer of the current status and tracking information.",
 };
 
 // ============================================================================
@@ -137,6 +139,7 @@ describe("validateStructural", () => {
         mock_tool_responses: {
           fake_tool: { data: true },
         },
+        llm_judge_criterion: "The agent handled the request.",
       };
 
       const result = validateStructural(multipleIssues, sopSteps);
@@ -177,6 +180,8 @@ describe("validateStructural", () => {
         customer_message:
           "Hello, I have a question about your products and services.",
         mock_tool_responses: {},
+        llm_judge_criterion:
+          "The agent greeted the customer and provided helpful information.",
       };
 
       const result = validateStructural(noToolCase, sopStepsNoTools);
