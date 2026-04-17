@@ -15,6 +15,7 @@ import { and, eq } from "drizzle-orm";
 import { sign } from "hono/jwt";
 import { getErrorMessage } from "../lib/errors";
 import { log } from "../lib/logger";
+import { fetchAllPages } from "../lib/paginate";
 import { resolveOrgId } from "../lib/resolve-org";
 import {
   type TestCaseResult,
@@ -187,49 +188,39 @@ export async function handleRunEvals(
   ];
 
   // 3. List eval suites and agents (we always need agents to look up
-  //    compiledInstructions for the precheck).
-  const [suitesResp, agentsResp, sopsResp] = await Promise.all([
-    apiFetch(
-      `/api/eval-suites?page=1&pageSize=${PAGE_SIZE}`,
-      token,
-    ) as Promise<{ data: RunEvalsSuiteSummary[] }>,
-    apiFetch(`/api/agents?page=1&pageSize=${PAGE_SIZE}`, token) as Promise<{
-      data: AgentSummary[];
-    }>,
+  //    compiledInstructions for the precheck). Drain every page — an org
+  //    with >PAGE_SIZE suites must still run them all.
+  const listPaginated = <T>(pathWithoutPage: string, label: string) =>
+    fetchAllPages<T>(
+      async (page) => {
+        const sep = pathWithoutPage.includes("?") ? "&" : "?";
+        const resp = (await apiFetch(
+          `${pathWithoutPage}${sep}page=${page}&pageSize=${PAGE_SIZE}`,
+          token,
+        )) as { data: T[]; pagination: { hasNextPage: boolean } };
+        return resp;
+      },
+      { pageSize: PAGE_SIZE, label },
+    );
+
+  const [allSuites, allAgents, allSops] = await Promise.all([
+    listPaginated<RunEvalsSuiteSummary>("/api/eval-suites", "eval suites"),
+    listPaginated<AgentSummary>("/api/agents", "agents"),
     requestedSuiteSlugs.length > 0
-      ? (apiFetch(`/api/sops?page=1&pageSize=${PAGE_SIZE}`, token) as Promise<{
-          data: RunEvalsSopSummary[];
-        }>)
-      : Promise.resolve({ data: [] as RunEvalsSopSummary[] }),
+      ? listPaginated<RunEvalsSopSummary>("/api/sops", "SOPs")
+      : Promise.resolve([] as RunEvalsSopSummary[]),
   ]);
 
-  // Silent truncation is a footgun on larger orgs — surface it loudly.
-  if (suitesResp.data.length === PAGE_SIZE) {
-    log.warn(
-      `Fetched ${PAGE_SIZE} eval suites (pageSize cap). Org may have more — results below cover only this page.`,
-    );
-  }
-  if (agentsResp.data.length === PAGE_SIZE) {
-    log.warn(
-      `Fetched ${PAGE_SIZE} agents (pageSize cap). Org may have more — suite→agent resolution below may be incomplete.`,
-    );
-  }
-  if (requestedSuiteSlugs.length > 0 && sopsResp.data.length === PAGE_SIZE) {
-    log.warn(
-      `Fetched ${PAGE_SIZE} SOPs (pageSize cap). Org may have more — --suite lookup below covers only this page.`,
-    );
-  }
-
-  const agentsById = new Map(agentsResp.data.map((a) => [a.id, a]));
+  const agentsById = new Map(allAgents.map((a) => [a.id, a]));
   const suites = selectRunEvalsSuites({
-    suites: suitesResp.data,
-    agents: agentsResp.data.map(
+    suites: allSuites,
+    agents: allAgents.map(
       (agent): RunEvalsAgentSummary => ({
         id: agent.id,
         slug: agent.slug,
       }),
     ),
-    sops: sopsResp.data,
+    sops: allSops,
     agentSlug,
     suiteSlugs: requestedSuiteSlugs,
   });

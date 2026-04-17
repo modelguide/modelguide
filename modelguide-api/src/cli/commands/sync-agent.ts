@@ -14,24 +14,22 @@ import {
 import type { Command } from "commander";
 import { getErrorMessage } from "../lib/errors";
 import { log } from "../lib/logger";
+import { fetchAllPages } from "../lib/paginate";
 import { resolveOrgId } from "../lib/resolve-org";
 
-const PAGE_LIMIT = 100;
+const PAGE_SIZE = 100;
 
 export async function handleSyncAgent(
   orgId: string,
   options?: { agentSlug?: string },
 ): Promise<{ synced: number; failed: number }> {
-  const { data: allAgents } = await listAgents(orgId, {
-    page: 1,
-    pageSize: PAGE_LIMIT,
-  });
-
-  if (allAgents.length === PAGE_LIMIT) {
-    log.warn(
-      `Fetched ${PAGE_LIMIT} agents (pageSize cap). Org may have more — agents beyond this page will not be synced.`,
-    );
-  }
+  // Drain every page — an org with >PAGE_SIZE agents must still be fully
+  // iterable by --agent slug lookup and the default "sync all ElevenLabs
+  // agents" path.
+  const allAgents = await fetchAllPages(
+    (page) => listAgents(orgId, { page, pageSize: PAGE_SIZE }),
+    { pageSize: PAGE_SIZE, label: "agents" },
+  );
 
   let agentsToSync: typeof allAgents;
   if (options?.agentSlug) {

@@ -139,6 +139,14 @@ async function _syncAgentToElevenLabs(
         conversationConfig: {},
       });
       const createdExternalId = created.agentId;
+      // Defensive: the ElevenLabs SDK types agentId as string but resolves
+      // could theoretically return empty — catch it here with an actionable
+      // message instead of letting downstream calls fail opaquely.
+      if (!createdExternalId) {
+        throw new Error(
+          "ElevenLabs agents.create resolved without an agentId — retry or check the ElevenLabs dashboard",
+        );
+      }
       elevenLabsAgentId = createdExternalId;
       await forOrg(orgId, (tx) =>
         tx
@@ -164,12 +172,6 @@ async function _syncAgentToElevenLabs(
       });
       throw err;
     }
-  }
-
-  if (!elevenLabsAgentId) {
-    throw Errors.invalidInput(
-      "ElevenLabs external ID must be available before syncing",
-    );
   }
 
   // 6. Create/update ElevenLabs secret (ModelGuide API key)
