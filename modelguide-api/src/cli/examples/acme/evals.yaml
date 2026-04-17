@@ -1,5 +1,15 @@
 agentSlug: acme-voice-agent
 
+# Evaluators that should run on every test case in every suite (suite-level).
+# Use for guardrail-style checks that apply regardless of scenario.
+common_evaluators:
+  - does-not-fabricate
+
+# Note: you do NOT need to declare `tool_called` evaluators here. For every
+# SOP step that binds a connector tool (via `tool: { connectorSlug, toolSlug }`
+# in sops.yaml), `mg import-evals` auto-creates a required `tool_called`
+# evaluator at the suite level. Assertions here cover the conversational
+# quality checks only (llm_judge).
 evaluators:
   - name: confirms-order-id
     criterion: Agent confirms the order ID back to the customer

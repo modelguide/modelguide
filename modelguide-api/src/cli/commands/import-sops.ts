@@ -185,7 +185,6 @@ export async function handleImportSops(
             log.warn(
               `Re-forked template SOP: ${existingSop.name} (${item.slug}) — eval_suites linked to this SOP were cascade-deleted, re-run import-evals to restore them`,
             );
-            replaced++;
           } else {
             await replaceInlineSop(orgId, existingSop.id, item, agentIds);
             if (options.registry) {

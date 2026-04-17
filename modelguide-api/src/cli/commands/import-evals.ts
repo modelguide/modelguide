@@ -19,6 +19,7 @@ import {
   evalSuiteTestCases,
   evalSuites,
   evalTestCaseEvaluators,
+  sopSteps,
 } from "@db/schema";
 import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
 import {
@@ -26,7 +27,7 @@ import {
   createTestCase,
 } from "@features/evals/eval-suites.service";
 import type { Command } from "commander";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
@@ -331,7 +332,13 @@ export async function handleImportEvals(
       evalConfigIdMap,
     );
 
-    // 6d. Create or replace test cases with per-case evaluator overrides
+    // 6d. Auto-derive `tool_called` evaluators from the SOP's tool-bound steps.
+    // YAML can't express these directly — the SOP itself declares which step
+    // binds which connector tool, so every run asserts "the agent actually
+    // invoked the tool this step requires". Matches the initSuiteFromSop path.
+    await reconcileAutoToolCalledEvaluators(orgId, suiteId, sop.id, sopSlug);
+
+    // 6e. Create or replace test cases with per-case evaluator overrides
     const suiteEvaluatorSet = new Set(suiteEvaluatorNames);
     for (const tc of testCases) {
       // Build description from metadata
@@ -409,11 +416,15 @@ export async function handleImportEvals(
 }
 
 /**
- * Reconcile suite-level evaluators against a target list of names.
+ * Reconcile suite-level llm_judge evaluators against the yaml's
+ * `common_evaluators` list.
  *
- * Only rows with source="auto" are touched — manual evaluators added from the
- * dashboard survive reimports. Missing names are inserted; stale auto rows not
- * in the target list are removed.
+ * Scope: rows with source="auto" AND sopStepId IS NULL. Tool-called evaluators
+ * (source="auto", sopStepId IS NOT NULL) are reconciled separately by
+ * `reconcileAutoToolCalledEvaluators` — leaving them alone here prevents one
+ * reconcile from clobbering the other.
+ *
+ * Manual (dashboard-added) evaluators are always preserved.
  */
 async function reconcileSuiteEvaluators(
   orgId: string,
@@ -427,13 +438,16 @@ async function reconcileSuiteEvaluators(
         id: evalSuiteEvaluators.id,
         name: evalSuiteEvaluators.name,
         source: evalSuiteEvaluators.source,
+        sopStepId: evalSuiteEvaluators.sopStepId,
       })
       .from(evalSuiteEvaluators)
       .where(eq(evalSuiteEvaluators.suiteId, suiteId));
 
+    // Only manage auto rows without an sopStepId — tool_called evaluators
+    // (which are scoped to a step) are outside this reconcile's remit.
     const existingAuto = new Map(
       existing
-        .filter((r) => r.source === "auto")
+        .filter((r) => r.source === "auto" && r.sopStepId === null)
         .map((r) => [r.name, r.id] as const),
     );
     const target = new Set(targetNames);
@@ -477,6 +491,128 @@ async function reconcileSuiteEvaluators(
           target: [evalSuiteEvaluators.suiteId, evalSuiteEvaluators.name],
         });
     }
+  });
+}
+
+/**
+ * Derive suite-level `tool_called` evaluators from the SOP's steps.
+ *
+ * Every step whose `connectorToolId` is set becomes a required suite evaluator
+ * that asserts the agent actually called that tool during the simulation.
+ * YAML can't declare these directly — they're derived from the SOP binding,
+ * mirroring what `initSuiteFromSop` does for dashboard-initialized suites.
+ *
+ * Scope: rows with source="auto" AND sopStepId IS NOT NULL. Reconciled per
+ * run: insert missing steps, delete evaluators whose step no longer binds a
+ * tool (or was removed from the SOP).
+ */
+async function reconcileAutoToolCalledEvaluators(
+  orgId: string,
+  suiteId: string,
+  sopId: string,
+  sopSlug: string,
+): Promise<{ added: number; removed: number }> {
+  return forOrg(orgId, async (tx) => {
+    const steps = await tx
+      .select({
+        stepId: sopSteps.stepId,
+        order: sopSteps.order,
+        instruction: sopSteps.instruction,
+        required: sopSteps.required,
+        connectorToolId: sopSteps.connectorToolId,
+      })
+      .from(sopSteps)
+      .where(
+        and(eq(sopSteps.sopId, sopId), isNotNull(sopSteps.connectorToolId)),
+      )
+      .orderBy(asc(sopSteps.order));
+
+    const existing = await tx
+      .select({
+        id: evalSuiteEvaluators.id,
+        sopStepId: evalSuiteEvaluators.sopStepId,
+      })
+      .from(evalSuiteEvaluators)
+      .where(
+        and(
+          eq(evalSuiteEvaluators.suiteId, suiteId),
+          eq(evalSuiteEvaluators.source, "auto"),
+          isNotNull(evalSuiteEvaluators.sopStepId),
+        ),
+      );
+    const existingByStep = new Map(
+      existing
+        .filter((r) => r.sopStepId !== null)
+        .map((r) => [r.sopStepId as string, r.id] as const),
+    );
+
+    const targetStepIds = new Set(steps.map((s) => s.stepId));
+
+    const toRemove = [...existingByStep.entries()]
+      .filter(([stepId]) => !targetStepIds.has(stepId))
+      .map(([, id]) => id);
+    if (toRemove.length > 0) {
+      await tx
+        .delete(evalSuiteEvaluators)
+        .where(inArray(evalSuiteEvaluators.id, toRemove));
+    }
+
+    let added = 0;
+    for (const step of steps) {
+      if (existingByStep.has(step.stepId)) continue;
+      if (!step.connectorToolId) continue;
+
+      const configName = `auto:tool_called:${sopSlug}:${step.stepId}`;
+      const toolConfig = { connectorToolId: step.connectorToolId };
+
+      const [existingConfig] = await tx
+        .select({ id: evalConfigs.id })
+        .from(evalConfigs)
+        .where(
+          and(
+            eq(evalConfigs.name, configName),
+            eq(evalConfigs.evaluatorType, "tool_called"),
+          ),
+        );
+      let configId: string;
+      if (existingConfig) {
+        await tx
+          .update(evalConfigs)
+          .set({ config: toolConfig })
+          .where(eq(evalConfigs.id, existingConfig.id));
+        configId = existingConfig.id;
+      } else {
+        const [created] = await tx
+          .insert(evalConfigs)
+          .values({
+            organizationId: orgId,
+            name: configName,
+            description: `Auto-generated from SOP step: ${step.stepId}`,
+            evaluatorType: "tool_called",
+            config: toolConfig,
+          })
+          .returning({ id: evalConfigs.id });
+        configId = created.id;
+      }
+
+      const label = step.instruction
+        ? step.instruction.slice(0, 80)
+        : `step ${step.order}`;
+
+      await tx.insert(evalSuiteEvaluators).values({
+        organizationId: orgId,
+        suiteId,
+        evalConfigId: configId,
+        name: `${label} (tool_called)`,
+        sopStepId: step.stepId,
+        source: "auto",
+        order: step.order,
+        required: step.required,
+      });
+      added++;
+    }
+
+    return { added, removed: toRemove.length };
   });
 }
 
