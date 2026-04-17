@@ -257,7 +257,7 @@ describe("import-sops", () => {
     ).rejects.toThrow("must have at least one step");
   });
 
-  test("--replace deletes and recreates SOP with same slug", async () => {
+  test("--replace upserts inline SOP in place, preserving sop.id", async () => {
     const createResult = await handleImportSops(
       orgId,
       [
@@ -280,7 +280,7 @@ describe("import-sops", () => {
       orgId,
       [
         {
-          name: "Replaceable SOP",
+          name: "Replaceable SOP (renamed)",
           slug: "replaceable-sop",
           status: "active",
           agents: ["sop-test-agent"],
@@ -293,25 +293,31 @@ describe("import-sops", () => {
       { registry, replace: true },
     );
     expect(replaceResult.replaced).toBe(1);
-    expect(replaceResult.created).toBe(1);
+    // Replaced SOPs are not double-counted as "created"
+    expect(replaceResult.created).toBe(0);
     expect(replaceResult.existing).toBe(0);
+    expect(replaceResult.activated).toBe(1);
 
-    const newId = registry.get("sop", "replaceable-sop");
-    expect(newId).not.toBe(originalId);
+    // ID must be stable — this is what lets eval_suites.sop_id FKs survive
+    const idAfter = registry.get("sop", "replaceable-sop");
+    expect(idAfter).toBe(originalId);
 
+    // Steps fully replaced
     const steps = await forApp(async (tx) => {
-      return tx.select().from(sopSteps).where(eq(sopSteps.sopId, newId));
+      return tx.select().from(sopSteps).where(eq(sopSteps.sopId, originalId));
     });
     expect(steps.length).toBe(2);
     expect(steps.map((s) => s.stepId).sort()).toEqual(["new-a", "new-b"]);
 
-    const originalStillExists = await forApp(async (tx) => {
+    // Name picked up
+    const [sop] = await forApp(async (tx) => {
       return tx.select().from(sops).where(eq(sops.id, originalId));
     });
-    expect(originalStillExists.length).toBe(0);
+    expect(sop.name).toBe("Replaceable SOP (renamed)");
 
+    // Agent assignment survives
     const assignments = await forApp(async (tx) => {
-      return tx.select().from(agentSops).where(eq(agentSops.sopId, newId));
+      return tx.select().from(agentSops).where(eq(agentSops.sopId, originalId));
     });
     expect(assignments.length).toBe(1);
   });
