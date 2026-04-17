@@ -21,6 +21,12 @@ import {
   buildMissingAdminUserMessage,
   formatResultsTable,
 } from "./run-evals.helpers";
+import {
+  type RunEvalsAgentSummary,
+  type RunEvalsSopSummary,
+  type RunEvalsSuiteSummary,
+  selectRunEvalsSuites,
+} from "./run-evals.selection";
 
 export {
   buildMissingAdminUserMessage,
@@ -32,6 +38,8 @@ const API_PORT = process.env.PORT ?? "3000";
 const API_BASE = `http://localhost:${API_PORT}`;
 const POLL_INTERVAL_MS = 8_000;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min
+const HEALTH_TIMEOUT_MS = 3_000;
+const PAGE_SIZE = 100;
 
 // ============================================================================
 // Internal: JWT generation
@@ -146,13 +154,23 @@ async function pollUntilDone(
 // Public handler
 // ============================================================================
 
+interface AgentSummary {
+  id: string;
+  slug: string;
+  name: string;
+  compiledInstructions: string | null;
+}
+
 export async function handleRunEvals(
   orgId: string,
   agentSlug?: string,
   orgRef = orgId,
+  suiteSlugs?: string[],
 ): Promise<{ totalPassed: number; totalScored: number; passRate: number }> {
-  // 1. Health check
-  const healthy = await fetch(`${API_BASE}/api/health`)
+  // 1. Health check — bounded so a hung API doesn't make the CLI appear frozen.
+  const healthy = await fetch(`${API_BASE}/api/health`, {
+    signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+  })
     .then((r) => r.ok)
     .catch(() => false);
   if (!healthy) {
@@ -164,32 +182,84 @@ export async function handleRunEvals(
   // 2. Internal JWT (hidden from caller)
   const token = await generateInternalJwt(orgId, orgRef);
 
-  // 3. List eval suites
-  const suitesResp = (await apiFetch(
-    "/api/eval-suites?page=1&pageSize=100",
-    token,
-  )) as { data: Array<{ id: string; name: string; agentId: string }> };
+  const requestedSuiteSlugs = [
+    ...new Set((suiteSlugs ?? []).filter((slug) => slug.length > 0)),
+  ];
 
-  let suites = suitesResp.data;
-  if (agentSlug) {
-    // Filter by agentSlug: fetch agents list and match
-    const agentsResp = (await apiFetch(
-      "/api/agents?page=1&pageSize=100",
+  // 3. List eval suites and agents (we always need agents to look up
+  //    compiledInstructions for the precheck).
+  const [suitesResp, agentsResp, sopsResp] = await Promise.all([
+    apiFetch(
+      `/api/eval-suites?page=1&pageSize=${PAGE_SIZE}`,
       token,
-    )) as { data: Array<{ id: string; slug: string }> };
-    const agent = agentsResp.data.find((a) => a.slug === agentSlug);
-    if (!agent) throw new Error(`Agent "${agentSlug}" not found in org`);
-    suites = suites.filter((s) => s.agentId === agent.id);
+    ) as Promise<{ data: RunEvalsSuiteSummary[] }>,
+    apiFetch(`/api/agents?page=1&pageSize=${PAGE_SIZE}`, token) as Promise<{
+      data: AgentSummary[];
+    }>,
+    requestedSuiteSlugs.length > 0
+      ? (apiFetch(`/api/sops?page=1&pageSize=${PAGE_SIZE}`, token) as Promise<{
+          data: RunEvalsSopSummary[];
+        }>)
+      : Promise.resolve({ data: [] as RunEvalsSopSummary[] }),
+  ]);
+
+  // Silent truncation is a footgun on larger orgs — surface it loudly.
+  if (suitesResp.data.length === PAGE_SIZE) {
+    log.warn(
+      `Fetched ${PAGE_SIZE} eval suites (pageSize cap). Org may have more — results below cover only this page.`,
+    );
   }
+  if (agentsResp.data.length === PAGE_SIZE) {
+    log.warn(
+      `Fetched ${PAGE_SIZE} agents (pageSize cap). Org may have more — suite→agent resolution below may be incomplete.`,
+    );
+  }
+  if (requestedSuiteSlugs.length > 0 && sopsResp.data.length === PAGE_SIZE) {
+    log.warn(
+      `Fetched ${PAGE_SIZE} SOPs (pageSize cap). Org may have more — --suite lookup below covers only this page.`,
+    );
+  }
+
+  const agentsById = new Map(agentsResp.data.map((a) => [a.id, a]));
+  const suites = selectRunEvalsSuites({
+    suites: suitesResp.data,
+    agents: agentsResp.data.map(
+      (agent): RunEvalsAgentSummary => ({
+        id: agent.id,
+        slug: agent.slug,
+      }),
+    ),
+    sops: sopsResp.data,
+    agentSlug,
+    suiteSlugs: requestedSuiteSlugs,
+  });
 
   if (suites.length === 0) {
     log.warn("No eval suites found. Did you run mg import-evals?");
     return { totalPassed: 0, totalScored: 0, passRate: 0 };
   }
 
+  // 4. Precheck: every suite's agent must have a compiled prompt — we hardcode
+  //    promptSource="compiled", so uncompiled agents would only fail inside the
+  //    simulation engine with an opaque message.
+  const uncompiled = new Set<string>();
+  for (const suite of suites) {
+    const agent = agentsById.get(suite.agentId);
+    if (agent && agent.compiledInstructions === null) {
+      uncompiled.add(agent.slug);
+    }
+  }
+  if (uncompiled.size > 0) {
+    const slugs = [...uncompiled].sort();
+    throw new Error(
+      `Agent(s) have no compiled prompt: ${slugs.join(", ")}\n` +
+        `Run 'mg compile-agents --org ${orgRef}' and re-run this command.`,
+    );
+  }
+
   log.info(`Running ${suites.length} eval suite(s)...`);
 
-  // 4. Trigger + poll each suite
+  // 5. Trigger + poll each suite
   let totalPassed = 0;
   let totalScored = 0;
 
@@ -226,6 +296,10 @@ export async function handleRunEvals(
   return { totalPassed, totalScored, passRate };
 }
 
+function collectRepeatedSuites(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 // ============================================================================
 // Commander registration
 // ============================================================================
@@ -236,10 +310,16 @@ export function registerRunEvalsCommand(program: Command): void {
     .description("Run all eval suites for an org through the simulation engine")
     .requiredOption("--org <slug>", "Organization slug")
     .option("--agent <slug>", "Only run suites for this agent")
-    .action(async (opts: { org: string; agent?: string }) => {
+    .option(
+      "--suite <slug>",
+      "Only run suites for this SOP slug (repeatable)",
+      collectRepeatedSuites,
+      [],
+    )
+    .action(async (opts: { org: string; agent?: string; suite: string[] }) => {
       const orgId = await resolveOrgId(opts.org);
       try {
-        await handleRunEvals(orgId, opts.agent, opts.org);
+        await handleRunEvals(orgId, opts.agent, opts.org, opts.suite);
       } catch (err) {
         log.error(`Failed: ${getErrorMessage(err)}`);
         process.exit(1);

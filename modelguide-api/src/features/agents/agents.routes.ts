@@ -37,6 +37,10 @@ import {
 } from "./agents.service";
 import { syncAgentToElevenLabs } from "./agents.sync";
 import {
+  getElevenLabsExternalId,
+  setElevenLabsExternalId,
+} from "./elevenlabs-metadata";
+import {
   type ModelFamily,
   getElevenLabsModelGroups,
 } from "./elevenlabs-models";
@@ -47,13 +51,20 @@ const router = createRouter();
 // Schemas
 // ============================================================================
 
+// Matches the multi-SOP provenance shape persisted by compiler.service.ts
+// (see `compiledFrom` assembly near end of compileAgent). Kept in sync with
+// modelguide-ui/src/schemas/agents.ts:compiledFromSchema.
 const compiledFromSchema = z
   .object({
-    sopId: z.string().uuid(),
-    sopName: z.string(),
+    sops: z.array(
+      z.object({
+        sopId: z.string().uuid(),
+        sopName: z.string(),
+        stepCount: z.number().int().nonnegative(),
+      }),
+    ),
     guardrailIds: z.array(z.string().uuid()),
     toolCount: z.number().int().nonnegative(),
-    stepCount: z.number().int().nonnegative(),
   })
   .nullable();
 
@@ -467,7 +478,7 @@ const createPlatformAgentRoute = createRoute({
   tags: ["Agents"],
   summary: "Create agent on a platform",
   description:
-    "Creates a minimal shell agent on the given platform using the agent name. Returns the platform-assigned agent ID and saves it to metadata.<platform>.agentId. All real configuration is applied via sync. Pass { force: true } in the request body to replace an existing agent ID atomically.",
+    "Creates a minimal shell agent on the given platform using the agent name. Returns the platform-assigned agent ID and saves it to metadata.<platform>.externalId (with metadata.<platform>.agentId preserved as a legacy alias). All real configuration is applied via sync. Pass { force: true } in the request body to replace an existing platform ID atomically.",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,
@@ -520,9 +531,10 @@ router.openapi(createPlatformAgentRoute, async (c) => {
   // Branch per platform — extend here when new platforms are added
   if (platform === "elevenlabs") {
     const elMeta = (meta.elevenlabs ?? {}) as Record<string, unknown>;
+    const savedExternalId = getElevenLabsExternalId(elMeta);
 
     // Guard: agent ID already set — 409 unless force=true
-    if (elMeta.agentId && !force) {
+    if (savedExternalId && !force) {
       throw Errors.conflict(
         "ElevenLabs agent ID already set — pass force: true to replace it",
       );
@@ -549,12 +561,13 @@ router.openapi(createPlatformAgentRoute, async (c) => {
 
     const platformAgentId = created.agentId;
 
-    // Persist agentId to metadata.
+    // Persist the remote platform ID to metadata.
     // When force=true, also clear sync-derived fields that are bound to the
     // old remote agent (webhook, MCP server, last sync state) so the UI does
     // not show stale "already synced" indicators for the new agent.
     const {
       agentId: _old,
+      externalId: _externalId,
       lastSyncedAt: _syncedAt,
       agentName: _agentName,
       webhookId: _webhookId,
@@ -564,7 +577,7 @@ router.openapi(createPlatformAgentRoute, async (c) => {
     await updateAgent(orgId, id, {
       metadata: {
         ...meta,
-        elevenlabs: { ...elMetaCore, agentId: platformAgentId },
+        elevenlabs: setElevenLabsExternalId(elMetaCore, platformAgentId),
       },
     });
 

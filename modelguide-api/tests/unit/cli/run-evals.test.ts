@@ -5,6 +5,7 @@ import {
   computePassRate,
   formatResultsTable,
 } from "../../../src/cli/commands/run-evals.helpers";
+import { selectRunEvalsSuites } from "../../../src/cli/commands/run-evals.selection";
 
 const makeResult = (passed: boolean | null) => ({
   testCaseId: "tc-1",
@@ -90,5 +91,58 @@ describe("buildMissingAdminUserMessage", () => {
     expect(message).toContain('No admin user found for org "glowskin".');
     expect(message).toContain("mg add-users --org glowskin");
     expect(message).toContain("role=admin");
+  });
+});
+
+describe("selectRunEvalsSuites", () => {
+  const agents = [
+    { id: "agent-a", slug: "alpha" },
+    { id: "agent-b", slug: "beta" },
+  ];
+  const sops = [
+    { id: "sop-1", slug: "order_status", name: "Order Status" },
+    { id: "sop-2", slug: "returns", name: "Returns" },
+  ];
+  const suites = [
+    { id: "suite-1", name: "Order Status", agentId: "agent-a", sopId: "sop-1" },
+    { id: "suite-2", name: "Returns", agentId: "agent-a", sopId: "sop-2" },
+    { id: "suite-3", name: "Order Status", agentId: "agent-b", sopId: "sop-1" },
+  ];
+
+  test("filters by agent slug and suite slug together", () => {
+    expect(
+      selectRunEvalsSuites({
+        suites,
+        agents,
+        sops,
+        agentSlug: "alpha",
+        suiteSlugs: ["order_status"],
+      }),
+    ).toEqual([suites[0]]);
+  });
+
+  test("throws when a requested suite slug does not exist", () => {
+    expect(() =>
+      selectRunEvalsSuites({
+        suites,
+        agents,
+        sops,
+        suiteSlugs: ["missing_suite"],
+      }),
+    ).toThrow("SOP slug(s) not found in org: missing_suite");
+  });
+
+  test("throws when the suite exists but not for the selected agent", () => {
+    expect(() =>
+      selectRunEvalsSuites({
+        suites: [suites[2]],
+        agents,
+        sops,
+        agentSlug: "alpha",
+        suiteSlugs: ["order_status"],
+      }),
+    ).toThrow(
+      'No eval suite found for agent "alpha" for SOP slug(s): order_status',
+    );
   });
 });

@@ -18,6 +18,10 @@ import { encryptSecret } from "@lib/crypto";
 import { Errors, getErrorMessage, logAndThrow } from "@lib/errors";
 import { getLogger } from "@lib/logger";
 import { eq } from "drizzle-orm";
+import {
+  getElevenLabsExternalId,
+  setElevenLabsExternalId,
+} from "./elevenlabs-metadata";
 
 /**
  * Thin wrapper around ElevenLabs secrets API.
@@ -98,7 +102,7 @@ async function _syncAgentToElevenLabs(
     );
   }
   const elMeta = (elMetaRaw ?? {}) as Record<string, unknown>;
-  let elevenLabsAgentId = elMeta.agentId as string | undefined;
+  let elevenLabsAgentId = getElevenLabsExternalId(elMeta);
   const slug = agent.slug;
 
   // 2. Guard: LLM model must be configured before any ElevenLabs side effects
@@ -134,14 +138,15 @@ async function _syncAgentToElevenLabs(
         name: agent.name,
         conversationConfig: {},
       });
-      elevenLabsAgentId = created.agentId;
+      const createdExternalId = created.agentId;
+      elevenLabsAgentId = createdExternalId;
       await forOrg(orgId, (tx) =>
         tx
           .update(agents)
           .set({
             metadata: {
               ...meta,
-              elevenlabs: { ...elMeta, agentId: elevenLabsAgentId },
+              elevenlabs: setElevenLabsExternalId(elMeta, createdExternalId),
             },
           })
           .where(eq(agents.id, agentId)),
@@ -159,6 +164,12 @@ async function _syncAgentToElevenLabs(
       });
       throw err;
     }
+  }
+
+  if (!elevenLabsAgentId) {
+    throw Errors.invalidInput(
+      "ElevenLabs external ID must be available before syncing",
+    );
   }
 
   // 6. Create/update ElevenLabs secret (ModelGuide API key)
@@ -427,14 +438,17 @@ async function _syncAgentToElevenLabs(
   const { webhook_hmac_secret: _removed, ...cleanMeta } = meta;
   const updatedMetadata: Record<string, unknown> = {
     ...cleanMeta,
-    elevenlabs: {
-      ...elMeta,
-      secretId,
-      mcpServerId,
-      webhookId,
-      ...(elAgentName ? { agentName: elAgentName } : {}),
-      lastSyncedAt: syncedAt,
-    },
+    elevenlabs: setElevenLabsExternalId(
+      {
+        ...elMeta,
+        secretId,
+        mcpServerId,
+        webhookId,
+        ...(elAgentName ? { agentName: elAgentName } : {}),
+        lastSyncedAt: syncedAt,
+      },
+      elevenLabsAgentId,
+    ),
   };
 
   await forOrg(orgId, async (tx) => {

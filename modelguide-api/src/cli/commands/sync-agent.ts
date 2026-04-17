@@ -27,6 +27,13 @@ export async function handleSyncAgent(
     pageSize: PAGE_LIMIT,
   });
 
+  if (allAgents.length === PAGE_LIMIT) {
+    log.warn(
+      `Fetched ${PAGE_LIMIT} agents (pageSize cap). Org may have more — agents beyond this page will not be synced.`,
+    );
+  }
+
+  let agentsToSync: typeof allAgents;
   if (options?.agentSlug) {
     const agent = allAgents.find((a) => a.slug === options.agentSlug);
     if (!agent) {
@@ -37,11 +44,10 @@ export async function handleSyncAgent(
         `Agent "${options.agentSlug}" uses platform "${agent.agentPlatform}" — sync-agent only supports ElevenLabs agents`,
       );
     }
+    agentsToSync = [agent];
+  } else {
+    agentsToSync = allAgents.filter((a) => a.agentPlatform === "elevenlabs");
   }
-
-  const agentsToSync = options?.agentSlug
-    ? allAgents.filter((a) => a.slug === options.agentSlug)
-    : allAgents.filter((a) => a.agentPlatform === "elevenlabs");
 
   if (agentsToSync.length === 0) {
     log.warn("Nothing to sync — no ElevenLabs agents in org");
