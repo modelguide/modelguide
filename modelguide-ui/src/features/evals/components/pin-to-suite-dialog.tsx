@@ -23,6 +23,13 @@ export function PinToSuiteDialog({ open, onClose, sessionId, agentId }: PinToSui
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
 
+  function resetAndClose() {
+    setSelectedSuiteId('')
+    setName('')
+    setDescription('')
+    onClose()
+  }
+
   const { data: suitesData, isLoading: suitesLoading } = useQuery({
     queryKey: ['eval-suites', { agentId }],
     queryFn: () =>
@@ -45,10 +52,7 @@ export function PinToSuiteDialog({ open, onClose, sessionId, agentId }: PinToSui
         .json<{ id: string; suiteId: string }>(),
     onSuccess: (data) => {
       toast.success('Session pinned as regression test case')
-      onClose()
-      setSelectedSuiteId('')
-      setName('')
-      setDescription('')
+      resetAndClose()
       navigate({ to: '/evals/suites/$suiteId', params: { suiteId: data.suiteId } })
     },
     onError: () => {
@@ -61,7 +65,7 @@ export function PinToSuiteDialog({ open, onClose, sessionId, agentId }: PinToSui
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={resetAndClose}
       title="Pin to Suite"
       description="Pin this session as a regression test case in an eval suite."
     >
@@ -123,7 +127,7 @@ export function PinToSuiteDialog({ open, onClose, sessionId, agentId }: PinToSui
       </div>
 
       <DialogFooter>
-        <Button variant="secondary" onClick={onClose}>
+        <Button variant="secondary" onClick={resetAndClose}>
           Cancel
         </Button>
         <Button

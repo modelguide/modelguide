@@ -904,6 +904,12 @@ export async function runSingleTestCase(
 
     if (!suite) throw Errors.evalSuiteNotFound(suiteId);
 
+    if (suite.status === "archived") {
+      throw Errors.conflict(
+        `Eval suite "${suiteId}" is archived and cannot be run`,
+      );
+    }
+
     // 2. Validate test case belongs to suite
     const [testCase] = await tx
       .select()
@@ -1288,6 +1294,9 @@ export async function deleteTestCase(
       throw Errors.notFound(
         `Test case "${caseId}" not found in suite "${suiteId}"`,
       );
+
+    // Delete standalone eval runs for this test case to avoid orphaned "Unknown" rows
+    await tx.delete(evalRuns).where(eq(evalRuns.testCaseId, caseId));
 
     // Clean up cloned session for recorded test case (AC 38)
     if (testCase.source === "recorded") {
