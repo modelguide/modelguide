@@ -113,8 +113,6 @@ export async function executeAssertions(
     scoreRows.push(...results);
   }
 
-  const scoreRows = await Promise.all(assertions.map(runOne));
-
   const metadata: Record<string, unknown> = {};
   return { scoreRows, metadata };
 }

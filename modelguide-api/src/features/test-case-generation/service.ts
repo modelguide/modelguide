@@ -9,13 +9,7 @@
 
 import { env } from "@/env";
 import { forOrg } from "@db/rls";
-import {
-  evalConfigs,
-  evalSuiteTestCases,
-  evalSuites,
-  evalTestCaseEvaluators,
-} from "@db/schema";
-import type { EvaluatorType } from "@features/evals/evals.types";
+import { evalSuiteTestCases, evalSuites } from "@db/schema";
 import { getSopById } from "@features/sops/sops.service";
 import { Errors } from "@lib/errors";
 import { getLogger } from "@lib/logger";
