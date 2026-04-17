@@ -18,7 +18,15 @@ import type {
 import { isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "../schema";
-import { agentSops, evalConfigs, evalSuites, sopSteps, sops } from "../schema";
+import {
+  agentSops,
+  evalConfigs,
+  evalSuiteEvaluators,
+  evalSuiteTestCases,
+  evalSuites,
+  sopSteps,
+  sops,
+} from "../schema";
 
 type SeedDb = PostgresJsDatabase<typeof schema>;
 
@@ -704,17 +712,90 @@ async function seedGlowbox(db: SeedDb) {
     });
 
     if (!existingSuite) {
-      await db.insert(evalSuites).values({
-        organizationId: org.id,
-        agentId: agentIds[0],
-        sopId: orderLookupSop.id,
-        name: "Order Lookup — WISMO Coverage",
-        description:
-          "End-to-end test suite for the Order Lookup SOP. Validates greeting, identity verification, order lookup tool usage, and status communication.",
-        status: "active",
-        createdBy: admin?.id,
-      });
-      console.log("  Created eval suite: Order Lookup — WISMO Coverage");
+      const [suite] = await db
+        .insert(evalSuites)
+        .values({
+          organizationId: org.id,
+          agentId: agentIds[0],
+          sopId: orderLookupSop.id,
+          name: "Order Lookup — WISMO Coverage",
+          description:
+            "End-to-end test suite for the Order Lookup SOP. Validates greeting, identity verification, order lookup tool usage, and status communication.",
+          status: "active",
+          createdBy: admin?.id,
+        })
+        .returning();
+
+      // Suite-level evaluators (linked to SOP step eval configs)
+      const evalConfigIds = [
+        greetEvalId,
+        verifyEvalId,
+        lookupToolEvalId,
+        communicateStatusEvalId,
+      ];
+      await db.insert(evalSuiteEvaluators).values(
+        evalConfigIds.map((configId, i) => ({
+          organizationId: org.id,
+          suiteId: suite.id,
+          evalConfigId: configId,
+          name: `evaluator-${i}`,
+          source: "auto" as const,
+          order: i,
+          required: true,
+        })),
+      );
+
+      // Seed test cases
+      await db.insert(evalSuiteTestCases).values([
+        {
+          organizationId: org.id,
+          suiteId: suite.id,
+          name: "Happy path — order status inquiry",
+          description:
+            "Customer asks about order #1234. Agent greets, verifies, looks up, and communicates shipped status.",
+          source: "manual" as const,
+          input: {
+            message:
+              "Hi, I placed an order last week, number 1234. Can you tell me where it is?",
+          },
+          expectedBehavior:
+            "Agent greets, confirms order #1234, calls get_order, and reports the current status.",
+          order: 0,
+        },
+        {
+          organizationId: org.id,
+          suiteId: suite.id,
+          name: "Missing order number — identity verification",
+          description:
+            "Customer asks about an order without providing any identifier. Agent should ask for email or order number.",
+          source: "manual" as const,
+          input: {
+            message: "Where's my order? It still hasn't arrived.",
+          },
+          expectedBehavior:
+            "Agent greets and asks the customer for an order number or email before proceeding.",
+          order: 1,
+        },
+        {
+          organizationId: org.id,
+          suiteId: suite.id,
+          name: "Delayed order — empathetic communication",
+          description:
+            "Customer is frustrated about a delayed order. Agent should handle empathetically and communicate delay clearly.",
+          source: "manual" as const,
+          input: {
+            message:
+              "I'm really upset. I ordered 10 days ago with express shipping and order ORD-5678 still shows processing. What's going on?",
+          },
+          expectedBehavior:
+            "Agent acknowledges frustration, looks up order ORD-5678, and explains the delay with an updated estimate.",
+          order: 2,
+        },
+      ]);
+
+      console.log(
+        "  Created eval suite: Order Lookup — WISMO Coverage (4 evaluators, 3 test cases)",
+      );
     } else {
       console.log(
         "  Skipped eval suite: Order Lookup — WISMO Coverage (already exists)",

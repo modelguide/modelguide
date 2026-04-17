@@ -1,7 +1,22 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import type { ReactNode } from 'react'
+import { describe, expect, it, vi } from 'vitest'
 import { makeEvalSuiteTestCase } from '../../../../test/eval-suite-fixtures'
 import { TestCasesPanel } from './test-cases-panel'
+
+// Mock TanStack Router's Link component
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, ...props }: { children: ReactNode }) => <a {...props}>{children}</a>,
+  useNavigate: () => vi.fn(),
+}))
+
+function renderWithProviders(ui: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+}
 
 describe('TestCasesPanel', () => {
   it('renders all test case names', () => {
@@ -10,7 +25,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', name: 'Edge Case' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     expect(screen.getByText('Happy Path')).toBeInTheDocument()
     expect(screen.getByText('Edge Case')).toBeInTheDocument()
@@ -22,7 +37,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', source: 'manual' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     expect(screen.getByText('auto')).toBeInTheDocument()
     expect(screen.getByText('manual')).toBeInTheDocument()
@@ -36,7 +51,7 @@ describe('TestCasesPanel', () => {
       }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     fireEvent.click(screen.getByText('Happy Path'))
 
@@ -51,7 +66,7 @@ describe('TestCasesPanel', () => {
       }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     fireEvent.click(screen.getByText('Happy Path'))
 
@@ -67,7 +82,7 @@ describe('TestCasesPanel', () => {
       }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     // Expand
     fireEvent.click(screen.getByText('Happy Path'))
@@ -79,7 +94,7 @@ describe('TestCasesPanel', () => {
   })
 
   it('shows empty state when no test cases', () => {
-    render(<TestCasesPanel testCases={[]} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={[]} suiteId="suite-1" />)
 
     expect(screen.getByText('No test cases yet')).toBeInTheDocument()
   })
@@ -90,7 +105,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', name: 'Manual Test', source: 'manual' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     // Click "Manual" filter
     fireEvent.click(screen.getByText('Manual'))
@@ -105,7 +120,7 @@ describe('TestCasesPanel', () => {
       makeEvalSuiteTestCase({ id: 'tc-2', name: 'Escalation Edge Case' }),
     ]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     const input = screen.getByPlaceholderText('Search test cases...')
     fireEvent.change(input, { target: { value: 'escalation' } })
@@ -117,7 +132,7 @@ describe('TestCasesPanel', () => {
   it('shows no results message when filters match nothing', () => {
     const testCases = [makeEvalSuiteTestCase({ id: 'tc-1', name: 'Happy Path' })]
 
-    render(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
+    renderWithProviders(<TestCasesPanel testCases={testCases} suiteId="suite-1" />)
 
     const input = screen.getByPlaceholderText('Search test cases...')
     fireEvent.change(input, { target: { value: 'nonexistent' } })

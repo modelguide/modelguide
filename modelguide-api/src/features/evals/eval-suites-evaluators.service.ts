@@ -290,6 +290,21 @@ export async function createEvaluator(
       throw Errors.notFound(`Eval config "${data.evalConfigId}" not found`);
     }
 
+    // Reject duplicate: same evalConfigId already in this suite
+    const [duplicate] = await tx
+      .select({ id: evalSuiteEvaluators.id })
+      .from(evalSuiteEvaluators)
+      .where(
+        and(
+          eq(evalSuiteEvaluators.suiteId, suiteId),
+          eq(evalSuiteEvaluators.evalConfigId, data.evalConfigId),
+        ),
+      );
+
+    if (duplicate) {
+      throw Errors.alreadyExists("Suite evaluator with this eval config");
+    }
+
     // Determine next order
     const existing = await tx
       .select({ order: evalSuiteEvaluators.order })
@@ -486,6 +501,25 @@ export async function createTestCaseEvaluator(
       if (!suiteEval) {
         throw Errors.validationError(
           "Cannot exclude evaluator not present at suite level",
+        );
+      }
+    }
+
+    // Guard: reject `add` when the config is already inherited at suite level
+    if (data.overrideType === "add") {
+      const [suiteEval] = await tx
+        .select({ id: evalSuiteEvaluators.id })
+        .from(evalSuiteEvaluators)
+        .where(
+          and(
+            eq(evalSuiteEvaluators.suiteId, suiteId),
+            eq(evalSuiteEvaluators.evalConfigId, data.evalConfigId),
+          ),
+        );
+
+      if (suiteEval) {
+        throw Errors.validationError(
+          "Evaluator already inherited from suite — exclude it first or choose a different config",
         );
       }
     }

@@ -35,6 +35,7 @@ const EVALUATOR_TYPE_BADGE: Record<string, 'info' | 'success' | 'warning' | 'def
 export interface EvaluatorsPanelProps {
   evaluators: EvalSuiteAssertion[]
   suiteId: string
+  agentId?: string
   isAdmin?: boolean
 }
 
@@ -42,7 +43,12 @@ export interface EvaluatorsPanelProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: EvaluatorsPanelProps) {
+export function EvaluatorsPanel({
+  evaluators,
+  suiteId,
+  agentId,
+  isAdmin = false,
+}: EvaluatorsPanelProps) {
   const queryClient = useQueryClient()
   const [showPicker, setShowPicker] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<EvalSuiteAssertion | null>(null)
@@ -216,6 +222,7 @@ export function EvaluatorsPanel({ evaluators, suiteId, isAdmin = false }: Evalua
       <EvalConfigPickerDialog
         open={showPicker}
         onClose={() => setShowPicker(false)}
+        agentId={agentId}
         onSelect={(config) => {
           addMutation.mutate({ evalConfigId: config.id, name: config.name })
         }}

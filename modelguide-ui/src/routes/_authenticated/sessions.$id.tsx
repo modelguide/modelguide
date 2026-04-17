@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, FlaskConical, Pin } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '~/components/ui/badge'
+import { Button } from '~/components/ui/button'
 import { RatingDialog } from '~/components/ui/rating-dialog'
 import { Spinner } from '~/components/ui/spinner'
+import { PinToSuiteDialog } from '~/features/evals/components/pin-to-suite-dialog'
+import { RunAgainstTestCaseDialog } from '~/features/evals/components/run-against-test-case-dialog'
 import { SessionDetail } from '~/features/sessions/components/session-detail'
 import { api } from '~/lib/api'
 import { useCanMutate } from '~/lib/permissions'
@@ -17,6 +20,10 @@ const statusVariants: Record<SessionStatus, 'active' | 'completed' | 'abandoned'
   abandoned: 'abandoned',
 }
 
+function isTerminal(status: SessionStatus): boolean {
+  return status === 'completed' || status === 'abandoned'
+}
+
 export const Route = createFileRoute('/_authenticated/sessions/$id')({
   component: SessionDetailPage,
 })
@@ -26,6 +33,8 @@ function SessionDetailPage() {
   const canMutate = useCanMutate()
   const queryClient = useQueryClient()
   const [ratingOpen, setRatingOpen] = useState(false)
+  const [pinDialogOpen, setPinDialogOpen] = useState(false)
+  const [runDialogOpen, setRunDialogOpen] = useState(false)
 
   const classifyMutation = useMutation({
     mutationFn: () => api.post(`sessions/${id}/classify`).json(),
@@ -68,6 +77,20 @@ function SessionDetailPage() {
           </div>
           <p className="mt-0.5 font-mono text-xs text-fg-muted">{id}</p>
         </div>
+
+        {/* Eval actions for terminal sessions (AC 23, 26) */}
+        {session && isTerminal(session.status) && canMutate ? (
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setPinDialogOpen(true)}>
+              <Pin className="mr-1.5 h-3.5 w-3.5" />
+              Pin to Suite
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setRunDialogOpen(true)}>
+              <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
+              Run Against Test Case
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -102,6 +125,22 @@ function SessionDetailPage() {
                 : undefined
             }
           />
+          {session.agent.id ? (
+            <>
+              <PinToSuiteDialog
+                open={pinDialogOpen}
+                onClose={() => setPinDialogOpen(false)}
+                sessionId={id}
+                agentId={session.agent.id}
+              />
+              <RunAgainstTestCaseDialog
+                open={runDialogOpen}
+                onClose={() => setRunDialogOpen(false)}
+                sessionId={id}
+                agentId={session.agent.id}
+              />
+            </>
+          ) : null}
         </>
       ) : null}
     </div>

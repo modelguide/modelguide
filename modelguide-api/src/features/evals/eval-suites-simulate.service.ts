@@ -32,6 +32,7 @@ import { compileAgent } from "@features/compiler/compiler.service";
 
 import { runTestCaseEval } from "./eval-suites.service";
 import type {
+  RecordedTestCaseInput,
   RunEvalSuiteOpts,
   SimulateAndRunPayload,
   SimulationTestCaseInput,
@@ -92,6 +93,7 @@ export async function enqueueSimulateAndRun(
         id: evalSuiteTestCases.id,
         name: evalSuiteTestCases.name,
         input: evalSuiteTestCases.input,
+        source: evalSuiteTestCases.source,
       })
       .from(evalSuiteTestCases)
       .where(eq(evalSuiteTestCases.suiteId, suiteId));
@@ -114,6 +116,8 @@ export async function enqueueSimulateAndRun(
     }
 
     for (const tc of testCases) {
+      // Recorded test cases don't need input.message — they use their stored session
+      if (tc.source === "recorded") continue;
       const input = tc.input as SimulationTestCaseInput | null;
       if (!input?.message) {
         throw Errors.validationError(
@@ -298,6 +302,64 @@ async function executeSimulateAndRunInner(
 
   for (let i = 0; i < suiteData.testCases.length; i++) {
     const testCase = suiteData.testCases[i];
+
+    // Recorded test cases: skip simulation, use stored session directly (AC 15-17)
+    if (testCase.source === "recorded") {
+      const recordedInput = testCase.input as RecordedTestCaseInput | null;
+      const recordedSessionId = recordedInput?.sessionId;
+
+      // Update progress
+      const progress = {
+        completed: i,
+        total: suiteData.testCases.length,
+        currentTestCase: testCase.name,
+      };
+      updateProgress(progress);
+      await forOrg(orgId, (tx) =>
+        tx
+          .update(evalSuiteRuns)
+          .set({ metadata: { progress } })
+          .where(eq(evalSuiteRuns.id, suiteRunId)),
+      );
+
+      if (!recordedSessionId) {
+        log.warn(
+          { testCaseId: testCase.id },
+          "recorded test case missing input.sessionId",
+        );
+        results.push(erroredTestCaseResult(testCase));
+        continue;
+      }
+
+      try {
+        const evalResult = await runTestCaseEval(
+          orgId,
+          suiteData.suite,
+          testCase,
+          suiteRunId,
+          recordedSessionId,
+          { triggeredBy },
+        );
+        results.push(evalResult);
+      } catch (err) {
+        log.warn(
+          { err, testCaseId: testCase.id, suiteRunId },
+          "recorded test case eval failed",
+        );
+        results.push(
+          await persistFailedEvalRun(
+            orgId,
+            suiteData.suite.id,
+            suiteRunId,
+            testCase,
+            recordedSessionId,
+            err instanceof Error ? err.message : "Unknown error",
+          ),
+        );
+      }
+      continue;
+    }
+
     const input = testCase.input as SimulationTestCaseInput;
     let inputMessage = input.message!; // validated in enqueueSimulateAndRun
     const personaId = input.persona;

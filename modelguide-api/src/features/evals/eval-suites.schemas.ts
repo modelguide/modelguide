@@ -24,6 +24,16 @@ export const runEvalSuiteSchema = z.object({
   promptSource: z.enum(["compiled", "hand_written", "edited"]),
 });
 
+export const updateSuiteSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().optional(),
+});
+
+export const updateTestCaseSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().optional(),
+});
+
 export const createTestCaseSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
@@ -90,6 +100,31 @@ export const simulateAndRunResponseSchema = z.object({
   status: z.enum(["running"]),
 });
 
+export const pinSessionAsTestCaseSchema = z.object({
+  sessionId: z.string().uuid(),
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().optional(),
+});
+
+export const pinSessionAsTestCaseResponseSchema = z.object({
+  id: z.string().uuid(),
+  suiteId: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  source: z.literal("recorded"),
+  input: z.object({
+    sessionId: z.string().uuid(),
+    originalSessionId: z.string().uuid(),
+  }),
+  order: z.number(),
+  createdAt: z.string(),
+});
+
+export const runTestCaseSchema = z.object({
+  sessionId: z.string().uuid(),
+  promptSource: z.enum(["compiled", "hand_written", "edited"]),
+});
+
 export const createTestCaseEvaluatorSchema = z.object({
   evalConfigId: z.string().uuid(),
   overrideType: z.enum(["add", "exclude"]),
@@ -117,7 +152,7 @@ const evalSuiteEvaluatorResponseSchema = z.object({
   evalConfigId: z.string().uuid(),
   name: z.string(),
   sopStepId: z.string().nullable(),
-  source: z.enum(["auto", "manual"]),
+  source: z.enum(["auto", "manual", "recorded"]),
   order: z.number(),
   required: z.boolean(),
   tags: z.array(z.string()),
@@ -133,7 +168,7 @@ const evalTestCaseEvaluatorOverrideResponseSchema = z.object({
   name: z.string(),
   order: z.number(),
   required: z.boolean(),
-  source: z.enum(["auto", "manual"]),
+  source: z.enum(["auto", "manual", "recorded"]),
   evaluatorType: z.string().nullable().optional(),
   config: z.record(z.string(), z.unknown()).nullable().optional(),
   createdAt: z.string(),
@@ -144,7 +179,7 @@ const evalSuiteTestCaseResponseSchema = z.object({
   suiteId: z.string().uuid(),
   name: z.string(),
   description: z.string().nullable(),
-  source: z.enum(["auto", "manual"]),
+  source: z.enum(["auto", "manual", "recorded"]),
   input: z.record(z.string(), z.unknown()).nullable(),
   expectedBehavior: z.string().nullable(),
   order: z.number(),

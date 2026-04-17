@@ -5,6 +5,7 @@ import {
   ChevronRight,
   FlaskConical,
   Phone,
+  Play,
   Plug,
   Plus,
   ShieldCheck,
@@ -12,6 +13,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -26,6 +28,8 @@ import { OutboundCallDialog } from '~/features/agents/components/outbound-call-d
 import { PlatformCard } from '~/features/agents/components/platform-card'
 import { PromptSection } from '~/features/agents/components/prompt-section'
 import { api } from '~/lib/api'
+import type { PaginatedResponse } from '~/lib/pagination'
+import { formatDate } from '~/lib/utils'
 import type { Agent, AgentConnector, AgentConnectorTool } from '~/schemas/agents'
 import { useAuthStore } from '~/stores/auth'
 
@@ -248,6 +252,104 @@ function LinkedToolsCard({
   )
 }
 
+// ============================================================================
+// Eval Runs Panel (merged header + recent runs)
+// ============================================================================
+
+interface EvalRunEntry {
+  id: string
+  sessionId: string
+  sourceType: string
+  sourceId: string
+  testCaseId: string | null
+  testCaseName: string | null
+  status: string
+  passed: boolean | null
+  createdAt: string
+}
+
+function EvalRunsPanel({ agentId, evalSuiteCount }: { agentId: string; evalSuiteCount: number }) {
+  const queryClient = useQueryClient()
+
+  const { data: runsData } = useQuery({
+    queryKey: ['eval-runs', { agentId, pageSize: 3 }],
+    queryFn: () =>
+      api
+        .get('evals/runs', { searchParams: { agentId, pageSize: '3' } })
+        .json<PaginatedResponse<EvalRunEntry>>(),
+  })
+
+  const rerunMutation = useMutation({
+    mutationFn: (run: EvalRunEntry) =>
+      api
+        .post(`eval-suites/${run.sourceId}/test-cases/${run.testCaseId}/run`, {
+          json: { sessionId: run.sessionId, promptSource: 'compiled' },
+        })
+        .json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-runs', { agentId, pageSize: 3 }] })
+    },
+    onError: () => {
+      toast.error('Eval run failed')
+    },
+  })
+
+  const runs = runsData?.data ?? []
+
+  return (
+    <div className="space-y-2">
+      {/* Eval Suites link */}
+      <Link
+        to="/evals"
+        search={{ agentId }}
+        className="flex items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle px-4 py-3 transition-colors hover:border-brand-500/30 hover:bg-bg-subtle/80"
+      >
+        <FlaskConical className="h-4 w-4 shrink-0 text-cyan-400" />
+        <span className="flex-1 text-sm font-medium text-fg-primary">Eval Suites</span>
+        <Badge variant="default">{evalSuiteCount}</Badge>
+        <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" />
+      </Link>
+
+      {/* Recent eval runs */}
+      {runs.length > 0 ? (
+        <div className="rounded-lg border border-fg-subtle/10 bg-bg-subtle px-3 py-2 space-y-1">
+          <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+            Recent eval runs
+          </span>
+          {runs.map((run) => (
+            <div key={run.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs">
+              <span className="flex-1 truncate text-fg-secondary">
+                {run.testCaseName ?? 'Unknown'}
+              </span>
+              <Badge variant={run.passed ? 'success' : run.passed === false ? 'error' : 'default'}>
+                {run.passed ? 'pass' : run.passed === false ? 'fail' : run.status}
+              </Badge>
+              <span className="text-fg-muted shrink-0">
+                {formatDate(run.createdAt, { format: 'relative' })}
+              </span>
+              {run.testCaseId ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    rerunMutation.mutate(run)
+                  }}
+                  loading={rerunMutation.isPending && rerunMutation.variables?.id === run.id}
+                  disabled={rerunMutation.isPending}
+                >
+                  <Play className="h-3 w-3" />
+                  Re-run
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function AgentDetailPage() {
   const { id } = Route.useParams()
   const queryClient = useQueryClient()
@@ -353,17 +455,8 @@ function AgentDetailPage() {
             </div>
           </div>
 
-          {/* Row 2: Eval Suites */}
-          <Link
-            to="/evals"
-            search={{ agentId: id }}
-            className="flex items-center gap-3 rounded-lg border border-fg-subtle/10 bg-bg-subtle px-4 py-3 transition-colors hover:border-brand-500/30 hover:bg-bg-subtle/80"
-          >
-            <FlaskConical className="h-4 w-4 shrink-0 text-cyan-400" />
-            <span className="flex-1 text-sm font-medium text-fg-primary">Eval Suites</span>
-            <Badge variant="default">{agent.evalSuiteCount}</Badge>
-            <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" />
-          </Link>
+          {/* Row 2: Eval Suites + Recent Runs */}
+          <EvalRunsPanel agentId={id} evalSuiteCount={agent.evalSuiteCount} />
 
           {/* Row 3: Prompt section (full width, tabbed) */}
           <PromptSection agent={agent} canMutate={isAdmin} />

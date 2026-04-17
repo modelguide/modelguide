@@ -15,6 +15,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogFooter } from '~/components/ui/dialog'
+import { InlineEditableText } from '~/components/ui/inline-editable-text'
 import { Spinner } from '~/components/ui/spinner'
 import { EvaluateSessionDialog } from '~/features/evals/components/evaluate-session-dialog'
 import { EvaluatorsPanel } from '~/features/evals/components/evaluators-panel'
@@ -46,6 +47,14 @@ function SuiteDetailPage() {
   const [showReinitDialog, setShowReinitDialog] = useState(false)
   const [showOverflowMenu, setShowOverflowMenu] = useState(false)
   const [generatingRemaining, setGeneratingRemaining] = useState(0)
+
+  const updateSuiteMutation = useMutation({
+    mutationFn: (data: { name?: string; description?: string }) =>
+      api.patch(`eval-suites/${suiteId}`, { json: data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eval-suites', suiteId] })
+    },
+  })
   const overflowRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -125,7 +134,15 @@ function SuiteDetailPage() {
           <div className="flex items-center gap-2">
             {suite ? <FlaskConical className="h-5 w-5 text-fg-secondary" /> : null}
             <h1 className="font-display text-2xl font-bold text-fg-primary">
-              {suite?.name ?? 'Suite Detail'}
+              {suite && isAdmin ? (
+                <InlineEditableText
+                  value={suite.name}
+                  onSave={(name) => updateSuiteMutation.mutate({ name })}
+                  inputClassName="text-2xl font-bold font-display"
+                />
+              ) : (
+                (suite?.name ?? 'Suite Detail')
+              )}
             </h1>
           </div>
           {suite?.description ? (
@@ -284,6 +301,7 @@ function SuiteDetailPage() {
             <TestCasesPanel
               testCases={suite.testCases ?? []}
               suiteId={suiteId}
+              agentId={suite.agentId}
               evaluators={suite.evaluators ?? []}
               pendingCount={generatingRemaining}
               isAdmin={isAdmin}
@@ -292,6 +310,7 @@ function SuiteDetailPage() {
             <EvaluatorsPanel
               evaluators={suite.evaluators ?? []}
               suiteId={suiteId}
+              agentId={suite.agentId}
               isAdmin={isAdmin}
             />
           ) : (

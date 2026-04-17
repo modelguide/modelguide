@@ -51,6 +51,8 @@ export interface EvalConfigPickerDialogProps {
   open: boolean
   onClose: () => void
   onSelect: (config: EvalConfigItem) => void
+  /** Agent ID for fetching available connector tools */
+  agentId?: string
   /** If true, shows an inline creation form */
   allowCreate?: boolean
 }
@@ -59,6 +61,7 @@ export function EvalConfigPickerDialog({
   open,
   onClose,
   onSelect,
+  agentId,
   allowCreate = true,
 }: EvalConfigPickerDialogProps) {
   const queryClient = useQueryClient()
@@ -76,6 +79,7 @@ export function EvalConfigPickerDialog({
     { rowId: newRowId(), key: '', op: 'equals', value: '' },
   ])
 
+  // Fetch existing configs
   const { data: configsData, isLoading } = useQuery({
     queryKey: ['eval-configs', { pageSize: 100 }],
     queryFn: () =>

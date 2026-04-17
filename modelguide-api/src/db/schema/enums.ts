@@ -178,7 +178,7 @@ export const evalSuiteRunStatusEnum = pgEnum("eval_suite_run_status", [
  */
 export const evalSuiteTestCaseSourceEnum = pgEnum(
   "eval_suite_test_case_source",
-  ["auto", "manual"],
+  ["auto", "manual", "recorded"],
 );
 
 // ============================================================================
