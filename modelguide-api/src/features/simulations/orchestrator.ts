@@ -26,6 +26,10 @@ import {
 } from "./llm-client";
 import { personaToIdentifier } from "./personas";
 import type { Persona } from "./personas";
+import {
+  toPersonaLlmHistory,
+  type SimulationHistoryMessage,
+} from "./transcript";
 
 export interface SimulationResult {
   sessionId: string;
@@ -86,8 +90,10 @@ export async function runSimulation(params: {
     resolvedTools,
   );
 
-  // Conversation history for the LLM (not stored in DB — DB messages are the source of truth)
-  const personaHistory: ChatCompletionMessageParam[] = [];
+  // Dialogue history tracked in the app's stored transcript semantics:
+  // `user` = customer, `assistant` = agent. We project this into each model's
+  // POV at the boundary rather than relying on inline role inversions.
+  const dialogueHistory: SimulationHistoryMessage[] = [];
   const agentHistory: ChatCompletionMessageParam[] = [];
 
   let turnCount = 0;
@@ -97,16 +103,9 @@ export async function runSimulation(params: {
   try {
     for (let turn = 0; turn < maxTurns; turn++) {
       // --- Persona turn ---
-      // Invert roles for the persona LLM: persona's own messages become
-      // "assistant" (what the model generates), agent messages become "user"
-      // (the prompt). This lets the model naturally continue as the customer.
-      const personaLlmHistory: ChatCompletionMessageParam[] =
-        personaHistory.map(
-          (m): ChatCompletionMessageParam => ({
-            role: m.role === "user" ? "assistant" : "user",
-            content: typeof m.content === "string" ? m.content : "",
-          }),
-        );
+      // Convert the stored transcript into the customer's POV before asking
+      // the persona model for the next reply.
+      const personaLlmHistory = toPersonaLlmHistory(dialogueHistory);
       const personaResponse = await generatePersonaMessage(
         personaLlmHistory,
         persona.systemPrompt,
@@ -119,7 +118,7 @@ export async function runSimulation(params: {
         occurredAt: new Date(),
       });
 
-      personaHistory.push({ role: "user", content: personaResponse.content });
+      dialogueHistory.push({ role: "user", content: personaResponse.content });
       agentHistory.push({ role: "user", content: personaResponse.content });
 
       // --- Agent turn ---
@@ -211,7 +210,7 @@ export async function runSimulation(params: {
         });
 
         agentHistory.push({ role: "assistant", content: followUp.content });
-        personaHistory.push({ role: "assistant", content: followUp.content });
+        dialogueHistory.push({ role: "assistant", content: followUp.content });
       } else {
         // No tool calls — store the agent's text response directly
         await addMessage(orgId, session.id, agentId, {
@@ -224,7 +223,7 @@ export async function runSimulation(params: {
           role: "assistant",
           content: agentResponse.content,
         });
-        personaHistory.push({
+        dialogueHistory.push({
           role: "assistant",
           content: agentResponse.content,
         });

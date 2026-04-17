@@ -17,6 +17,10 @@ import { getLogger } from "@lib/logger";
 import type { AgentAdapter } from "./adapters/agent-adapter";
 import { generatePersonaMessage } from "./llm-client";
 import type { Persona } from "./personas";
+import {
+  toPersonaLlmHistory,
+  type SimulationHistoryMessage,
+} from "./transcript";
 
 const log = getLogger();
 
@@ -38,7 +42,7 @@ export interface EvalOrchestrationInput {
    * When provided, these are stored in the session as context messages
    * and passed to the adapter so the model sees full conversational history.
    */
-  conversationHistory?: Array<{ role: string; content: string }>;
+  conversationHistory?: SimulationHistoryMessage[];
   /** Timeout in ms (defaults to SIMULATION_TIMEOUT_MS env var). */
   timeoutMs?: number;
   /** Max conversation turns (defaults to SIMULATION_MAX_TURNS env var). */
@@ -143,7 +147,7 @@ async function runConversationLoop(
   if (priorHistory && priorHistory.length > 0) {
     for (const msg of priorHistory) {
       await addMessage(orgId, sessionId, agentId, {
-        role: msg.role as "user" | "assistant",
+        role: msg.role,
         content: msg.content,
         occurredAt: new Date(),
       });
@@ -153,10 +157,7 @@ async function runConversationLoop(
   let currentMessage = inputMessage;
   let turnCount = 0;
   let stopAfterAgentReply = false;
-  const conversationHistory: Array<{
-    role: "user" | "assistant";
-    content: string;
-  }> = [];
+  const conversationHistory: SimulationHistoryMessage[] = [];
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Store user message
@@ -228,18 +229,12 @@ async function runConversationLoop(
       };
     }
 
-    // Generate persona follow-up with full conversation history.
-    // Role flip: from the persona LLM's POV it IS the customer, so the
-    // customer's prior turns are its own ("assistant") and the agent's
-    // turns are incoming ("user"). Without this flip the persona reads
-    // the agent's messages as its own past outputs and echoes them back.
-    const personaHistory = [
+    // Project the stored transcript into the customer's POV before asking
+    // the persona model for the next turn.
+    const personaHistory = toPersonaLlmHistory([
       ...(priorHistory ?? []),
       ...conversationHistory,
-    ].map((msg) => ({
-      role: msg.role === "user" ? ("assistant" as const) : ("user" as const),
-      content: msg.content,
-    }));
+    ]);
     const personaResponse = await generatePersonaMessage(
       personaHistory,
       persona.systemPrompt,

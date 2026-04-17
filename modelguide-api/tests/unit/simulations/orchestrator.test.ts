@@ -100,6 +100,74 @@ describe("runSimulation", () => {
     expect(result.turnCount).toBe(1);
     expect(addMessage).toHaveBeenCalledTimes(2);
   });
+
+  test("projects prior dialogue into the persona's customer POV", async () => {
+    const personaHistories: unknown[] = [];
+
+    mock.module("@features/mcp/mcp.service", () => ({
+      executeTool: async () => ({}),
+      getAgentTools: async () => [],
+      resolveConnectorConfigById: async () => ({}),
+    }));
+
+    mock.module("@features/sessions/sessions.service", () => ({
+      addMessage: async () => ({ id: "mock-message-id" }),
+      createSession: async () => ({ id: "mock-session-id" }),
+      updateSession: async () => ({}),
+    }));
+
+    mock.module("@db/rls", () => ({
+      forOrg: async (_orgId: string, cb: (tx: unknown) => Promise<unknown>) =>
+        cb({
+          update: () => ({
+            set: () => ({
+              where: async () => ({}),
+            }),
+          }),
+        }),
+    }));
+
+    let personaCallCount = 0;
+    mock.module("@features/simulations/llm-client", () => ({
+      generateAgentResponse: async () => ({
+        content: "What's your order number?",
+        toolCalls: [],
+      }),
+      generatePersonaMessage: async (history: unknown) => {
+        personaHistories.push(history);
+        personaCallCount++;
+        return personaCallCount === 1
+          ? { content: "I need help with my order.", done: false }
+          : { content: "Thanks, that's all I needed.", done: true };
+      },
+      toOpenAiTools: () => [],
+    }));
+
+    const { runSimulation } = await import(
+      "@features/simulations/orchestrator"
+    );
+
+    const result = await runSimulation({
+      orgId: "org-1",
+      agentId: "agent-1",
+      agentName: "Test Agent",
+      persona: {
+        id: "test-persona",
+        name: "Test Persona",
+        description: "Test persona",
+        systemPrompt: "You are a customer",
+        traits: ["test"],
+      },
+      maxTurns: 5,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(personaHistories[0]).toEqual([]);
+    expect(personaHistories[1]).toEqual([
+      { role: "assistant", content: "I need help with my order." },
+      { role: "user", content: "What's your order number?" },
+    ]);
+  });
 });
 
 // ============================================================================
