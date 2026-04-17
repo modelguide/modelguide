@@ -145,6 +145,53 @@ describe("evalsYamlFileSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  test("common_evaluators defaults to empty array", () => {
+    const result = evalsYamlFileSchema.safeParse({
+      agentSlug: "test-agent",
+      evaluators: [
+        { name: "checks-order", criterion: "Agent checks the order" },
+        { name: "no-fabrication", criterion: "Agent does not fabricate" },
+      ],
+      test_cases: [
+        {
+          id: "tc-01",
+          sop_slug: "order-lookup",
+          evaluators: ["checks-order", "no-fabrication"],
+          input: { customer_message: "Where is my order?" },
+        },
+      ],
+      // no common_evaluators key
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.common_evaluators).toEqual([]);
+    }
+  });
+
+  test("rejects common_evaluators referencing undefined evaluator name", () => {
+    const result = evalsYamlFileSchema.safeParse({
+      agentSlug: "test-agent",
+      evaluators: [
+        { name: "checks-order", criterion: "Agent checks the order" },
+      ],
+      common_evaluators: ["nonexistent-evaluator"],
+      test_cases: [
+        {
+          id: "tc-01",
+          sop_slug: "order-lookup",
+          evaluators: ["checks-order"],
+          input: { customer_message: "Where is my order?" },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toContain(
+        "undefined evaluators: nonexistent-evaluator",
+      );
+    }
+  });
 });
 
 // ============================================================================
@@ -248,6 +295,33 @@ describe("normalizeYaml", () => {
     const result = normalizeYaml(parsed);
     expect(result.testCases[0].input.message).toBe("Hello");
   });
+
+  test("passes common_evaluators through as commonEvaluatorNames", () => {
+    const parsed = evalsYamlFileSchema.parse({
+      agentSlug: "agent",
+      evaluators: [
+        { name: "guardrail-a", criterion: "Agent does not lie" },
+        { name: "guardrail-b", criterion: "Agent stays on topic" },
+      ],
+      common_evaluators: ["guardrail-a"],
+      test_cases: [
+        {
+          id: "tc-1",
+          sop_slug: "sop",
+          evaluators: ["guardrail-a", "guardrail-b"],
+          input: { customer_message: "Hello" },
+        },
+      ],
+    });
+
+    const result = normalizeYaml(parsed);
+
+    expect(result.commonEvaluatorNames).toEqual(["guardrail-a"]);
+    expect(result.testCases[0].evaluatorNames).toEqual([
+      "guardrail-a",
+      "guardrail-b",
+    ]);
+  });
 });
 
 // ============================================================================
@@ -314,5 +388,19 @@ describe("normalizeJson", () => {
     // Names should be unique
     const names = result.evaluators.map((e) => e.name);
     expect(new Set(names).size).toBe(2);
+  });
+
+  test("normalizeJson always returns empty commonEvaluatorNames", () => {
+    const scenarios = evalScenariosJsonSchema.parse([
+      {
+        id: "s-01",
+        sop_slug: "sop",
+        input: { customer_message: "Hi" },
+        expected_output: { criteria: ["Agent responds politely"] },
+      },
+    ]);
+
+    const result = normalizeJson(scenarios, "agent");
+    expect(result.commonEvaluatorNames).toEqual([]);
   });
 });
