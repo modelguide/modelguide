@@ -115,7 +115,7 @@ railway domain --service lb
 ```
 
 Only Caddy gets a public domain. It routes:
-- `/api/*`, `/docs`, `/docs/*`, `/openapi.json`, `/mcp/*`, `/webhooks/*` → `api.railway.internal:8080`
+- `/api/*`, `/docs`, `/docs/*`, `/openapi.json`, `/mcp/*`, `/webhooks/*`, `/simulations/*` → `api.railway.internal:8080`
 - Everything else → `ui.railway.internal:8080`
 
 The UI uses a relative `/api` prefix — no `VITE_API_URL` needed.

@@ -1,5 +1,5 @@
 :{$PORT:80} {
-	@backend path /api/* /docs /docs/* /openapi.json /mcp/* /webhooks/*
+	@backend path /api/* /docs /docs/* /openapi.json /mcp/* /webhooks/* /simulations/*
 	@demo path /acme-demo /acme-demo/*
 
     handle @demo {
