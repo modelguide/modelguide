@@ -100,7 +100,6 @@ export async function resolveAssertions(
   // Per-case override merge (AC 8)
   let caseAddAssertions: Array<{
     evalConfigId: string;
-    name: string;
     order: number;
     required: boolean;
   }> = [];
@@ -129,7 +128,6 @@ export async function resolveAssertions(
         .filter((o) => o.overrideType === "add")
         .map((o) => ({
           evalConfigId: o.evalConfigId,
-          name: o.name,
           order: o.order,
           required: o.required,
         }));
@@ -189,7 +187,6 @@ export async function resolveAssertions(
   // Helper to resolve a single assertion
   function resolveOne(
     evalConfigId: string,
-    name: string,
     order: number,
     required: boolean,
   ): ResolvedAssertion {
@@ -201,7 +198,7 @@ export async function resolveAssertions(
       );
       return {
         order,
-        name: name || `assertion:${order}:missing_config`,
+        name: `assertion:${order}:missing_config`,
         required,
         evaluator: {
           configId: evalConfigId,
@@ -226,7 +223,7 @@ export async function resolveAssertions(
 
     return {
       order,
-      name: cfg.name || name || `${truncate(cfg.evaluatorType, 40)}`,
+      name: cfg.name || truncate(cfg.evaluatorType, 40),
       required,
       evaluator: {
         configId: cfg.id,
@@ -240,7 +237,7 @@ export async function resolveAssertions(
 
   // Build resolved assertions (canonical ResolvedAssertion shape)
   const result = assertions.map((a) =>
-    resolveOne(a.evalConfigId, a.name, a.order, a.required),
+    resolveOne(a.evalConfigId, a.order, a.required),
   );
 
   // Append case-level add overrides after suite evaluators
@@ -249,12 +246,7 @@ export async function resolveAssertions(
   for (let i = 0; i < caseAddAssertions.length; i++) {
     const add = caseAddAssertions[i];
     result.push(
-      resolveOne(
-        add.evalConfigId,
-        add.name,
-        maxSuiteOrder + 1 + i,
-        add.required,
-      ),
+      resolveOne(add.evalConfigId, maxSuiteOrder + 1 + i, add.required),
     );
   }
 
@@ -306,7 +298,6 @@ export async function createEvaluator(
         organizationId: orgId,
         suiteId,
         evalConfigId: data.evalConfigId,
-        name: data.name,
         source: "manual",
         order: nextOrder,
         required: data.required ?? true,
@@ -463,7 +454,7 @@ export async function createTestCaseEvaluator(
 
     // AC 24: Validate eval config exists
     const [config] = await tx
-      .select({ id: evalConfigs.id, name: evalConfigs.name })
+      .select({ id: evalConfigs.id })
       .from(evalConfigs)
       .where(eq(evalConfigs.id, data.evalConfigId));
 
@@ -517,8 +508,6 @@ export async function createTestCaseEvaluator(
     const nextOrder =
       existingOverrides.length > 0 ? existingOverrides[0].order + 1 : 0;
 
-    const name = data.name ?? config.name;
-
     const [override] = await tx
       .insert(evalTestCaseEvaluators)
       .values({
@@ -526,7 +515,6 @@ export async function createTestCaseEvaluator(
         testCaseId,
         evalConfigId: data.evalConfigId,
         overrideType: data.overrideType,
-        name,
         order: nextOrder,
         required: data.required ?? true,
         source: "manual",
@@ -618,7 +606,7 @@ export async function getTestCaseEffectiveEvaluators(
         effective.push({
           id: excludeRow?.override.id ?? se.id,
           evalConfigId: se.evalConfigId,
-          name: se.configName ?? se.name,
+          name: se.configName ?? se.evalConfigId,
           order: se.order,
           required: se.required,
           source: "inherited",
@@ -630,7 +618,7 @@ export async function getTestCaseEffectiveEvaluators(
         effective.push({
           id: se.id,
           evalConfigId: se.evalConfigId,
-          name: se.configName ?? se.name,
+          name: se.configName ?? se.evalConfigId,
           order: se.order,
           required: se.required,
           source: "inherited",
@@ -648,7 +636,7 @@ export async function getTestCaseEffectiveEvaluators(
       effective.push({
         id: ao.id,
         evalConfigId: ao.evalConfigId,
-        name: configName ?? ao.name,
+        name: configName ?? ao.evalConfigId,
         order: ao.order,
         required: ao.required,
         source: "manual",

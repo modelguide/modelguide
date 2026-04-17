@@ -105,7 +105,6 @@ function formatEvaluator(a: {
   id: string;
   suiteId: string;
   evalConfigId: string;
-  name: string;
   sopStepId?: string | null;
   source: "auto" | "manual";
   order: number;
@@ -120,7 +119,7 @@ function formatEvaluator(a: {
     id: a.id,
     suiteId: a.suiteId,
     evalConfigId: a.evalConfigId,
-    name: a.configName ?? a.name,
+    name: a.configName ?? a.evalConfigId,
     sopStepId: a.sopStepId ?? null,
     source: a.source,
     order: a.order,
@@ -137,7 +136,6 @@ type TestCaseOverrideRow = {
   id: string;
   evalConfigId: string;
   overrideType: "add" | "exclude";
-  name: string;
   order: number;
   required: boolean;
   source: "auto" | "manual";
@@ -173,7 +171,7 @@ function formatTestCase(tc: {
       id: o.id,
       evalConfigId: o.evalConfigId,
       overrideType: o.overrideType,
-      name: o.evalConfigName ?? o.name,
+      name: o.evalConfigName ?? o.evalConfigId,
       order: o.order,
       required: o.required,
       source: o.source,
@@ -949,7 +947,6 @@ const createEvaluatorRoute = createRoute({
             id: z.string().uuid(),
             suiteId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
-            name: z.string(),
             source: z.enum(["auto", "manual"]),
             order: z.number(),
             required: z.boolean(),
@@ -976,7 +973,6 @@ router.openapi(createEvaluatorRoute, async (c) => {
       id: evaluator.id,
       suiteId: evaluator.suiteId,
       evalConfigId: evaluator.evalConfigId,
-      name: evaluator.name,
       source: evaluator.source,
       order: evaluator.order,
       required: evaluator.required,
@@ -1038,7 +1034,6 @@ const createTestCaseEvaluatorRoute = createRoute({
             testCaseId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
             overrideType: z.enum(["add", "exclude"]),
-            name: z.string(),
             order: z.number(),
             required: z.boolean(),
             source: z.enum(["auto", "manual"]),
@@ -1068,7 +1063,6 @@ router.openapi(createTestCaseEvaluatorRoute, async (c) => {
       testCaseId: override.testCaseId,
       evalConfigId: override.evalConfigId,
       overrideType: override.overrideType,
-      name: override.name,
       order: override.order,
       required: override.required,
       source: override.source,
@@ -1160,7 +1154,7 @@ const updateSuiteEvaluatorRoute = createRoute({
   tags: ["Eval Suites"],
   summary: "Update suite evaluator",
   description:
-    "Updates the eval config referenced by a suite-level evaluator. The evaluator type, order and name are preserved.",
+    "Updates the eval config referenced by a suite-level evaluator. The evaluator type, order, and required flag are preserved.",
   security: [{ bearerAuth: [] }],
   request: {
     params: suiteEvaluatorIdParams,
@@ -1179,7 +1173,6 @@ const updateSuiteEvaluatorRoute = createRoute({
             id: z.string().uuid(),
             suiteId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
-            name: z.string(),
             source: z.enum(["auto", "manual"]),
             order: z.number(),
             required: z.boolean(),
@@ -1207,7 +1200,6 @@ router.openapi(updateSuiteEvaluatorRoute, async (c) => {
       id: updated.id,
       suiteId: updated.suiteId,
       evalConfigId: updated.evalConfigId,
-      name: updated.name,
       source: updated.source,
       order: updated.order,
       required: updated.required,
@@ -1224,7 +1216,7 @@ const updateTestCaseEvaluatorRoute = createRoute({
   tags: ["Eval Suites"],
   summary: "Update test case evaluator override",
   description:
-    "Updates the eval config referenced by a per-case evaluator override. The override type, order and name are preserved.",
+    "Updates the eval config referenced by a per-case evaluator override. The override type, order, and required flag are preserved.",
   security: [{ bearerAuth: [] }],
   request: {
     params: testCaseEvaluatorIdParams,
@@ -1244,7 +1236,6 @@ const updateTestCaseEvaluatorRoute = createRoute({
             testCaseId: z.string().uuid(),
             evalConfigId: z.string().uuid(),
             overrideType: z.enum(["add", "exclude"]),
-            name: z.string(),
             order: z.number(),
             required: z.boolean(),
             source: z.enum(["auto", "manual"]),
@@ -1279,7 +1270,6 @@ router.openapi(updateTestCaseEvaluatorRoute, async (c) => {
       testCaseId: updated.testCaseId,
       evalConfigId: updated.evalConfigId,
       overrideType: updated.overrideType,
-      name: updated.name,
       order: updated.order,
       required: updated.required,
       source: updated.source,

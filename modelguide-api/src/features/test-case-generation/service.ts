@@ -289,7 +289,6 @@ async function executeGenerateTestCases(
         await createTestCaseEvaluator(orgId, suiteId, testCase.id, {
           evalConfigId: evalConfig.id,
           overrideType: "add",
-          name: `Judge: ${generated.name}`,
           required: true,
         });
 

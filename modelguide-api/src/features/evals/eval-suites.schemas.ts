@@ -33,7 +33,6 @@ export const createTestCaseSchema = z.object({
 
 export const createEvaluatorSchema = z.object({
   evalConfigId: z.string().uuid(),
-  name: z.string().min(1).max(255),
   required: z.boolean().optional(),
 });
 
@@ -93,7 +92,6 @@ export const simulateAndRunResponseSchema = z.object({
 export const createTestCaseEvaluatorSchema = z.object({
   evalConfigId: z.string().uuid(),
   overrideType: z.enum(["add", "exclude"]),
-  name: z.string().min(1).max(255).optional(),
   required: z.boolean().optional(),
 });
 
