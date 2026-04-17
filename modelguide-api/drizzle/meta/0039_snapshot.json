@@ -1,6 +1,6 @@
 {
-  "id": "851b202d-8e3e-4e80-ae78-58ff2f1856e5",
-  "prevId": "f122be9e-232f-5be4-c56f-2dd86427f17b",
+  "id": "a7dc052a-0ee7-4a7d-b3b5-c115ad192829",
+  "prevId": "743786fa-e253-4e18-9654-93aa06beb474",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3673,6 +3673,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "eval_suite_evaluators_suite_name_uidx": {
+          "name": "eval_suite_evaluators_suite_name_uidx",
+          "columns": [
+            {
+              "expression": "suite_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4591,7 +4612,8 @@
       "schema": "public",
       "values": [
         "auto",
-        "manual"
+        "manual",
+        "recorded"
       ]
     },
     "public.eval_suite_test_case_evaluator_override_type": {

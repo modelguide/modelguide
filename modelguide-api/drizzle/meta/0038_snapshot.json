@@ -1,6 +1,6 @@
 {
-  "id": "851b202d-8e3e-4e80-ae78-58ff2f1856e5",
-  "prevId": "f122be9e-232f-5be4-c56f-2dd86427f17b",
+  "id": "743786fa-e253-4e18-9654-93aa06beb474",
+  "prevId": "851b202d-8e3e-4e80-ae78-58ff2f1856e5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4591,7 +4591,8 @@
       "schema": "public",
       "values": [
         "auto",
-        "manual"
+        "manual",
+        "recorded"
       ]
     },
     "public.eval_suite_test_case_evaluator_override_type": {
