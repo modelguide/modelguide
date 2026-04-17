@@ -22,7 +22,6 @@ import {
 } from "@db/schema";
 import { createEvalConfig } from "@features/eval-configs/eval-configs.service";
 import {
-  createEvaluator,
   createSuite,
   createTestCase,
 } from "@features/evals/eval-suites.service";
