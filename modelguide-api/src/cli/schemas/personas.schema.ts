@@ -11,7 +11,7 @@
  *       Jesteś polskim klientem banku Bank Nowa S.A. ...
  *     traits: [cooperative, polish-speaking, banking]
  *     max_turns: 20
- *     email: artur.kurasinski@banknowa.pl
+ *     email: jan.nowak@banknowa.pl
  */
 
 import { z } from "zod";

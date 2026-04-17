@@ -109,8 +109,8 @@ When the conversation reaches a natural conclusion, end clearly with either a de
     traits: ["cooperative", "polish-speaking", "banking"],
     maxTurns: 20,
     systemPrompt: `Jesteś polskim klientem banku Bank Nowa S.A. Twoje dane osobowe:
-- Imię i nazwisko: Artur Kurasiński
-- PESEL: 76051012345
+- Imię i nazwisko: Jan Nowak
+- PESEL: 85030612345
 - Ostatnie 4 cyfry karty: 2137
 - Numer klienta: 88421
 
@@ -189,7 +189,7 @@ const BUILTIN_PERSONA_IDENTIFIERS: Record<string, string> = {
   "impatient-returner": "mike.chen@modelguide.ai",
   "terse-buyer": "alex.thompson@modelguide.ai",
   "confused-browser": "jamie.rodriguez@modelguide.ai",
-  "bank-nowa-customer": "artur.kurasinski@banknowa.pl",
+  "bank-nowa-customer": "jan.nowak@banknowa.pl",
 };
 
 /**

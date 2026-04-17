@@ -278,7 +278,7 @@ async function executeSimulateAndRunInner(
       const compiled = await compileAgent({
         orgId,
         agentId: suiteData.agent.id,
-        sopId: suiteData.suite.sopId,
+        sopIds: [suiteData.suite.sopId],
         dryRun: true,
       });
       compiledInstructions = compiled.ir.systemPrompt;

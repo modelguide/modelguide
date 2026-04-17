@@ -15,7 +15,7 @@ export async function verifyCustomer(
       success: true,
       customer_id: "CUST-001",
       card_id: "CARD-001",
-      name: "Artur Kurasiński",
+      name: "Jan Nowak",
       address: "ul. Marszałkowska 42/7, 00-024 Warszawa",
     },
   };
@@ -26,11 +26,18 @@ export async function lookupTransaction(
 ): Promise<ToolExecutionResult> {
   const { amount } = ctx.input as { amount?: number | string; date?: string };
 
+  if (amount === undefined || amount === null) {
+    return {
+      success: false,
+      data: { error: "amount is required to look up a transaction" },
+    };
+  }
+
   // Return Żabka fixture for small amounts, DigiShop24 for everything else
   const numAmount =
-    typeof amount === "string" ? Number.parseFloat(amount) : (amount ?? 0);
+    typeof amount === "string" ? Number.parseFloat(amount) : amount;
 
-  if (numAmount <= 100) {
+  if (Number.isNaN(numAmount) || numAmount <= 100) {
     return {
       success: true,
       data: {
