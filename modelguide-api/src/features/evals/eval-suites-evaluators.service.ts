@@ -290,6 +290,21 @@ export async function createEvaluator(
       throw Errors.notFound(`Eval config "${data.evalConfigId}" not found`);
     }
 
+    // Reject duplicate: same evalConfigId already in this suite
+    const [duplicate] = await tx
+      .select({ id: evalSuiteEvaluators.id })
+      .from(evalSuiteEvaluators)
+      .where(
+        and(
+          eq(evalSuiteEvaluators.suiteId, suiteId),
+          eq(evalSuiteEvaluators.evalConfigId, data.evalConfigId),
+        ),
+      );
+
+    if (duplicate) {
+      throw Errors.alreadyExists("Suite evaluator with this eval config");
+    }
+
     // Determine next order
     const existing = await tx
       .select({ order: evalSuiteEvaluators.order })

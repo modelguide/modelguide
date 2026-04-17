@@ -803,14 +803,29 @@ export async function runEvalSuite(
       );
     }
 
-    // Validate suite has evaluators
-    const [{ evaluatorCount }] = await tx
-      .select({ evaluatorCount: count() })
+    // Validate suite has evaluators (suite-level or per-case add overrides)
+    const [{ suiteEvalCount }] = await tx
+      .select({ suiteEvalCount: count() })
       .from(evalSuiteEvaluators)
       .where(eq(evalSuiteEvaluators.suiteId, suiteId));
 
-    if (evaluatorCount === 0) {
-      throw Errors.validationError(`Eval suite "${suiteId}" has no evaluators`);
+    if (suiteEvalCount === 0) {
+      const caseIds = testCases.map((tc) => tc.id);
+      const [{ caseEvalCount }] = await tx
+        .select({ caseEvalCount: count() })
+        .from(evalTestCaseEvaluators)
+        .where(
+          and(
+            inArray(evalTestCaseEvaluators.testCaseId, caseIds),
+            eq(evalTestCaseEvaluators.overrideType, "add"),
+          ),
+        );
+
+      if (caseEvalCount === 0) {
+        throw Errors.validationError(
+          `Eval suite "${suiteId}" has no evaluators`,
+        );
+      }
     }
 
     return { suite, testCases };
