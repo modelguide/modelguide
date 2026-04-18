@@ -84,7 +84,8 @@ async def entrypoint(ctx: agents.JobContext):
             trace_provider.force_flush()
         ctx.add_shutdown_callback(_flush_traces)
 
-    # Parse dispatch metadata (outbound calls include phone_number)
+    # Parse dispatch metadata (outbound calls include phone_number; voice-test
+    # sessions include mode="voice-test" and an optional prompt_override).
     outbound_phone = None
     dispatch_metadata: dict = {}
     if ctx.job.metadata:
@@ -93,6 +94,14 @@ async def entrypoint(ctx: agents.JobContext):
             outbound_phone = dispatch_metadata.get("phone_number")
         except json.JSONDecodeError:
             logger.warning("Invalid JSON in job metadata: %s", ctx.job.metadata[:100])
+
+    is_voice_test = dispatch_metadata.get("mode") == "voice-test"
+    prompt_override = dispatch_metadata.get("prompt_override") if is_voice_test else None
+    if is_voice_test:
+        logger.info(
+            "Voice-test dispatch (prompt_override: %s chars)",
+            len(prompt_override or ""),
+        )
 
     await ctx.connect()
 
@@ -145,7 +154,11 @@ async def entrypoint(ctx: agents.JobContext):
             _init_mcp(),
         )
         user_identifier, _caller_phone, is_sip = _resolve_caller_identity(participant)
-        session_id = None
+        # Voice-test dispatches pre-create a ModelGuide session; reuse it so
+        # transcript, feedback, and evals are linked to the dashboard run.
+        session_id = dispatch_metadata.get("session_id") if is_voice_test else None
+        if is_voice_test:
+            user_identifier = dispatch_metadata.get("user_identifier") or user_identifier
 
     logger.info("Participant joined: %s", participant.identity)
 
@@ -157,8 +170,15 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to create ModelGuide session — running without tracking")
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
-    # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    # Build agent + session. Voice-test dispatches hand us the compiled prompt
+    # verbatim so the dashboard can smoke-test the latest instructions without
+    # redeploying the worker.
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=prompt_override,
+    )
     stt = create_stt()
     tts = create_tts()
 

@@ -124,3 +124,15 @@ export interface OutboundCallResponse {
   roomName: string
   dispatchId: string
 }
+
+export const voiceTestTokenResponseSchema = z.object({
+  livekitUrl: z.string(),
+  roomName: z.string(),
+  token: z.string(),
+  sessionId: z.string().uuid(),
+  dispatchId: z.string(),
+  agentName: z.string(),
+  identity: z.string(),
+})
+
+export type VoiceTestTokenResponse = z.infer<typeof voiceTestTokenResponseSchema>

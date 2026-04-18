@@ -27,6 +27,7 @@ import { IntegrationCard } from '~/features/agents/components/integration-card'
 import { OutboundCallDialog } from '~/features/agents/components/outbound-call-dialog'
 import { PlatformCard } from '~/features/agents/components/platform-card'
 import { PromptSection } from '~/features/agents/components/prompt-section'
+import { VoiceTestPanel } from '~/features/agents/components/voice-test-panel'
 import { api } from '~/lib/api'
 import type { PaginatedResponse } from '~/lib/pagination'
 import { formatDate } from '~/lib/utils'
@@ -460,6 +461,9 @@ function AgentDetailPage() {
 
           {/* Row 3: Prompt section (full width, tabbed) */}
           <PromptSection agent={agent} canMutate={isAdmin} />
+
+          {/* Row 3b: Voice test (LiveKit agents only, rendered by the panel) */}
+          <VoiceTestPanel agent={agent} canMutate={isAdmin} />
 
           {/* Row 4: Integration (full width) */}
           <IntegrationCard agent={agent} isAdmin={isAdmin} onRegenerateSuccess={setNewApiKey} />

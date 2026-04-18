@@ -114,6 +114,24 @@ docker logs -f livekit-agent-livekit-server-1
 | `make livekit-down` | Stop Docker LiveKit server |
 | `make livekit-token` | Generate token + open meet.livekit.io |
 
+## Dashboard voice test (WebRTC POC)
+
+The dashboard's agent detail page ships a **Talk to agent** panel (LiveKit agents only). Clicking it:
+
+1. Calls `POST /api/agents/:id/voice-test-token` on the API.
+2. The API creates a ModelGuide voice session, dispatches **this** worker to a fresh room, and returns a short-lived LiveKit access token plus the room name.
+3. The browser joins the room over WebRTC and publishes its mic.
+4. The worker reads `mode=voice-test` + `prompt_override` from the dispatch metadata and hands the prompt override to `BuildProAgent` as `instructions_override`, so the caller is talking to the dashboard's **compiled** prompt rather than the bundled `prompts/base.py`.
+
+Because the worker already reads from ModelGuide's MCP endpoint, tool calls during a voice test fire against the same connectors and SOPs that a real caller would hit.
+
+**Requirements:**
+- Worker is deployed to LiveKit Cloud (or running locally with `make lk-agent-dev`) and registered with the `AGENT_NAME` that matches the agent's `metadata.livekit.agentName`.
+- The agent has a compiled prompt (click **Compile** in the dashboard first).
+- LiveKit URL, API key, and API secret are saved against the agent (see ADR-011 + the LiveKit card on the agent page).
+
+See [ADR-013](../../../docs/decisions/013-voice-test-webrtc-poc.md) for the architecture rationale.
+
 ## Phone Calls (SIP)
 
 The agent supports phone calls via SIP in addition to browser WebRTC. See [`sip/README.md`](./sip/README.md) for setup and [`DEPLOY.md`](./DEPLOY.md) for deployment.

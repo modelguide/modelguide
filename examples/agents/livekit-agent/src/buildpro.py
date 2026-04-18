@@ -36,13 +36,33 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
+        """Initialize BuildPro agent.
+
+        When ``instructions_override`` is provided (non-empty), it replaces the
+        built-in system prompt. Runtime placeholders (``{{mg_session_id}}``,
+        ``{{userEmail}}``, ``{{channel}}``) are still interpolated so the
+        voice-test flow can feed the dashboard's compiled prompt in verbatim.
+        """
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        if instructions_override and instructions_override.strip():
+            instructions = (
+                instructions_override
+                .replace("{{mg_session_id}}", session_id or "")
+                .replace("{{userEmail}}", user_email)
+                .replace("{{channel}}", "voice")
+            )
+        else:
+            instructions = build_system_prompt(session_id or "", user_email=user_email)
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

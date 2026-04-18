@@ -17,3 +17,4 @@ Historical note: ADR filenames contain duplicate numeric IDs (`002` and `008`) f
 | [009-eval-suites.md](009-eval-suites.md) | Eval Suites | Accepted |
 | [010-cli-onboarding-tool.md](010-cli-onboarding-tool.md) | CLI Onboarding Tool | Accepted |
 | [011-livekit-outbound-calls.md](011-livekit-outbound-calls.md) | LiveKit Outbound Calls | Accepted |
+| [013-voice-test-webrtc-poc.md](013-voice-test-webrtc-poc.md) | Dashboard "Talk to agent" WebRTC voice test | Accepted (POC) |

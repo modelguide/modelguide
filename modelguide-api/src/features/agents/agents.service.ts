@@ -31,7 +31,11 @@ import {
 import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { dispatchAgentToRoom, pingLivekit } from "./livekit";
+import {
+  dispatchAgentToRoom,
+  generateVoiceTestToken,
+  pingLivekit,
+} from "./livekit";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type ModelFamily = (typeof agents.modelFamily.enumValues)[number];
@@ -829,4 +833,117 @@ export async function createOutboundCall(
   }
 
   return { sessionId: session.id, roomName, dispatchId };
+}
+
+// ============================================================================
+// Voice-test (browser WebRTC "Talk to agent" POC)
+//
+// Issues a short-lived LiveKit AccessToken scoped to a new room, creates a
+// ModelGuide session, and dispatches the configured LiveKit agent worker into
+// the room. The agent receives the compiled prompt via dispatch metadata so
+// the browser caller is talking to the latest compiled instructions without
+// any redeploy. See docs/decisions/013-voice-test-webrtc-poc.md.
+// ============================================================================
+
+export interface VoiceTestSession {
+  livekitUrl: string;
+  roomName: string;
+  token: string;
+  sessionId: string;
+  dispatchId: string;
+  agentName: string;
+  identity: string;
+}
+
+export async function createVoiceTestSession(
+  orgId: string,
+  agentId: string,
+  caller: { userId: string; email: string; name: string },
+): Promise<VoiceTestSession> {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Voice test requires a voice agent");
+    }
+    return a;
+  });
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+  const agentName = lkMeta.agentName as string | undefined;
+
+  if (!livekitUrl || !agentName) {
+    throw Errors.invalidInput(
+      "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `voice-test-${nanoid()}`;
+  const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
+
+  // Record a session before we dispatch so we can attribute the call even if
+  // dispatch fails or the caller never connects.
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: caller.email,
+    userMetadata: {
+      voiceTest: true,
+      userId: caller.userId,
+      name: caller.name,
+    },
+  });
+
+  const compiledInstructions = agent.compiledInstructions ?? null;
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      agentName,
+      roomName,
+      {
+        mode: "voice-test",
+        session_id: session.id,
+        user_identifier: caller.email,
+        prompt_override: compiledInstructions,
+      },
+    );
+  } catch (err) {
+    await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    throw err;
+  }
+
+  const token = await generateVoiceTestToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity,
+    name: caller.name,
+  });
+
+  return {
+    livekitUrl,
+    roomName,
+    token,
+    sessionId: session.id,
+    dispatchId,
+    agentName,
+    identity,
+  };
 }
