@@ -8,7 +8,30 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import type { ResolvedTool } from "@features/mcp/mcp.types";
 import { buildMockToolsWithFallbacks } from "@features/simulations/simulation-mcp.routes";
+
+/** Helper to build a minimal ResolvedTool stub for tests. */
+function stubResolvedTool(
+  mcpName: string,
+  description: string,
+  inputSchema: Record<string, unknown> = {
+    type: "object",
+    properties: {},
+  },
+): ResolvedTool {
+  return {
+    mcpName,
+    description,
+    inputSchema,
+    requiresConfirmation: false,
+    connectorId: "conn-test",
+    connectorSlug: "test_conn",
+    catalogSlug: "test",
+    toolSlug: mcpName.replace(/^[^_]+_/, ""),
+    catalogToolName: mcpName,
+  };
+}
 
 describe("buildMockToolsWithFallbacks", () => {
   test("creates tool registrations from mockToolResponses", () => {
@@ -70,8 +93,8 @@ describe("buildMockToolsWithFallbacks", () => {
       wf_store_look_up_order: { order_id: "ORD-123", status: "shipped" },
     };
     const agentTools = [
-      { mcpName: "wf_store_look_up_order", description: "Look up order" },
-      { mcpName: "wf_helpdesk_create_ticket", description: "Create ticket" },
+      stubResolvedTool("wf_store_look_up_order", "Look up order"),
+      stubResolvedTool("wf_helpdesk_create_ticket", "Create ticket"),
     ];
 
     const tools = buildMockToolsWithFallbacks(mockResponses, agentTools);
@@ -100,14 +123,15 @@ describe("buildMockToolsWithFallbacks", () => {
       tool_b: { result: "b" },
     };
     const agentTools = [
-      { mcpName: "tool_a", description: "Tool A" },
-      { mcpName: "tool_b", description: "Tool B" },
+      stubResolvedTool("tool_a", "Tool A"),
+      stubResolvedTool("tool_b", "Tool B"),
     ];
 
     const tools = buildMockToolsWithFallbacks(mockResponses, agentTools);
     expect(tools).toHaveLength(2);
-    // Both should be configured (Mock: prefix), not fallbacks
-    expect(tools[0].description).toBe("Mock: tool_a");
-    expect(tools[1].description).toBe("Mock: tool_b");
+    // Both should be configured — description mirrors the real tool when
+    // available instead of falling back to the "Mock:" prefix.
+    expect(tools[0].description).toBe("Tool A");
+    expect(tools[1].description).toBe("Tool B");
   });
 });

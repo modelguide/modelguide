@@ -18,6 +18,8 @@ import { getAgentTools } from "@features/mcp/mcp.service";
 import { createMcpSession } from "@features/mcp/mcp.shared";
 import type { McpToolRegistration } from "@features/mcp/mcp.shared";
 import { mcpErrorResponse, mcpResponse } from "@features/mcp/mcp.types";
+import type { ResolvedTool } from "@features/mcp/mcp.types";
+import { jsonSchemaToZod } from "@features/mcp/schema-utils";
 import { verifySimulationJWT } from "@lib/jwt";
 import { getLogger } from "@lib/logger";
 import { eq } from "drizzle-orm";
@@ -29,22 +31,41 @@ const log = getLogger();
 /**
  * Build MCP tool registrations from mockToolResponses + agent tool list.
  *
- * - Configured tools (in mockToolResponses) → return the mock fixture
- * - Unconfigured tools (in agentTools but not mockToolResponses) → return
- *   "No mock configured for {toolName}" error
+ * - Configured tools (in mockToolResponses) → return the mock fixture.
+ *   Input shape is derived from the real connector tool's JSON schema when
+ *   available, so the agent sees production-accurate signatures and calls
+ *   tools with realistic args (name/PESEL/card_last4 for verify_customer,
+ *   etc.). Falls back to a permissive passthrough if the tool isn't in
+ *   the agent's connector set (standalone mock).
+ * - Unconfigured agent tools → return "No mock configured for {toolName}" error.
  */
 export function buildMockToolsWithFallbacks(
   mockToolResponses: Record<string, unknown>,
-  agentTools: Array<{ mcpName: string; description: string }> = [],
+  agentTools: ResolvedTool[] = [],
 ): McpToolRegistration[] {
   const tools: McpToolRegistration[] = [];
+  const toolByName = new Map(agentTools.map((t) => [t.mcpName, t]));
+
+  // Permissive fallback: accept any args when no schema is available.
+  const passthroughShape = { session_id: z.string().optional() };
 
   // Configured tools — return fixtures
   for (const [toolName, fixture] of Object.entries(mockToolResponses)) {
+    const realTool = toolByName.get(toolName);
+    const inputShape = realTool
+      ? (() => {
+          const shape = jsonSchemaToZod(realTool.inputSchema);
+          // Every connector tool gets session_id tacked on by production MCP,
+          // mirror that here so the simulation agent's call shape matches prod.
+          shape.session_id = z.string().describe("The current session ID");
+          return shape;
+        })()
+      : passthroughShape;
+
     tools.push({
       name: toolName,
-      description: `Mock: ${toolName}`,
-      inputShape: { session_id: z.string().optional() },
+      description: realTool?.description ?? `Mock: ${toolName}`,
+      inputShape,
       handler: async () => {
         log.debug({ tool: toolName }, "simulation mock tool called");
         return mcpResponse(fixture as Record<string, unknown>);
@@ -52,13 +73,16 @@ export function buildMockToolsWithFallbacks(
     });
   }
 
-  // Unconfigured agent tools — return error
+  // Unconfigured agent tools — return error. Use real schema so the agent
+  // still sees a realistic signature before it learns the mock is absent.
   for (const tool of agentTools) {
     if (!mockToolResponses[tool.mcpName]) {
+      const shape = jsonSchemaToZod(tool.inputSchema);
+      shape.session_id = z.string().describe("The current session ID");
       tools.push({
         name: tool.mcpName,
         description: tool.description,
-        inputShape: { session_id: z.string().optional() },
+        inputShape: shape,
         handler: async () => {
           log.debug({ tool: tool.mcpName }, "unconfigured mock tool called");
           return mcpErrorResponse(
@@ -137,10 +161,7 @@ export async function simulationMcpHandler(
       ? await getAgentTools(session.organizationId, session.agentId)
       : [];
 
-  const mockTools = buildMockToolsWithFallbacks(
-    mockToolResponses,
-    agentTools.map((t) => ({ mcpName: t.mcpName, description: t.description })),
-  );
+  const mockTools = buildMockToolsWithFallbacks(mockToolResponses, agentTools);
 
   if (mockTools.length === 0) {
     log.warn(
