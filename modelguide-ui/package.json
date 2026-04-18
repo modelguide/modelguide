@@ -30,6 +30,7 @@
     "clsx": "^2.1.1",
     "diff": "^8.0.3",
     "ky": "^1.7.4",
+    "@livekit/components-react": "^2.9.20",
     "livekit-client": "^2.18.3",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",

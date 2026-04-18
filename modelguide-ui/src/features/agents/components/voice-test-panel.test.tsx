@@ -24,36 +24,36 @@ vi.mock('~/lib/api', () => ({
   api: {
     post: (url: string) => {
       mockPost(url)
-      return { json: () => Promise.resolve(mockTokenResponse) }
+      return {
+        json: () => Promise.resolve(mockTokenResponse),
+      }
     },
   },
 }))
 
-const mockRoomConnect = vi.fn().mockResolvedValue(undefined)
-const mockRoomDisconnect = vi.fn().mockResolvedValue(undefined)
-const mockPublishTrack = vi.fn().mockResolvedValue(undefined)
+// Mock livekit-client — we only need the enum values used at the call site.
+vi.mock('livekit-client', () => ({
+  ParticipantKind: { AGENT: 'agent' },
+  RoomEvent: { ParticipantConnected: 'participantConnected' },
+}))
 
-vi.mock('livekit-client', () => {
-  class Room {
-    localParticipant = { publishTrack: mockPublishTrack }
-    connect = mockRoomConnect
-    disconnect = mockRoomDisconnect
-    on = vi.fn().mockReturnThis()
-  }
-  return {
-    Room,
-    RoomEvent: {
-      ConnectionStateChanged: 'connectionStateChanged',
-      ParticipantConnected: 'participantConnected',
-      TrackSubscribed: 'trackSubscribed',
-    },
-    ConnectionState: { Disconnected: 'disconnected' },
-    Track: { Kind: { Audio: 'audio' } },
-    createLocalAudioTrack: vi.fn(() =>
-      Promise.resolve({ stop: vi.fn(), mute: vi.fn(), unmute: vi.fn() }),
-    ),
-  }
-})
+// Mock @livekit/components-react. We render the LiveKitRoom's children so the
+// inner RoomController still mounts under a mocked room context. useVoiceAssistant
+// returns a static "listening" state.
+vi.mock('@livekit/components-react', () => ({
+  LiveKitRoom: ({ children }: { children: ReactNode }) => (
+    <div data-testid="lk-room">{children}</div>
+  ),
+  RoomAudioRenderer: () => <div data-testid="lk-audio" />,
+  useRoomContext: () => ({
+    localParticipant: { setMicrophoneEnabled: vi.fn().mockResolvedValue(undefined) },
+    remoteParticipants: new Map([['agent-1', { kind: 'agent', identity: 'agent-1' }]]),
+    on: vi.fn().mockReturnThis(),
+    off: vi.fn().mockReturnThis(),
+    disconnect: vi.fn(),
+  }),
+  useVoiceAssistant: () => ({ state: 'listening', audioTrack: undefined }),
+}))
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -82,17 +82,30 @@ const baseAgent: Agent = {
   updatedAt: '2026-04-01T00:00:00Z',
 }
 
-// `secrets` is tacked on by the API response but not part of the base schema.
-// Cast through unknown to satisfy Agent's shape while still exercising the
-// panel's secrets lookup branch.
-const configuredAgent = {
+const configuredAgent: Agent = {
   ...baseAgent,
   secrets: { livekit_api_key: 'sec-1', livekit_api_secret: 'sec-2' },
-} as unknown as Agent
+}
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+}
+
+function stubMicPermission(grant = true) {
+  const state: PermissionState = grant ? 'granted' : 'denied'
+  const getUserMedia = grant
+    ? vi.fn().mockResolvedValue({
+        getTracks: () => [{ stop: vi.fn() }],
+      })
+    : vi.fn().mockRejectedValue(Object.assign(new Error('denied'), { name: 'NotAllowedError' }))
+  // @ts-expect-error — jsdom does not provide mediaDevices by default
+  navigator.mediaDevices = { getUserMedia }
+  // @ts-expect-error — jsdom does not provide Permissions API by default
+  navigator.permissions = {
+    query: vi.fn().mockResolvedValue({ state }),
+  }
+  return getUserMedia
 }
 
 beforeEach(() => {
@@ -127,11 +140,13 @@ describe('VoiceTestPanel', () => {
   })
 
   it('disables the talk button for viewers (canMutate=false)', () => {
+    stubMicPermission(true)
     render(<VoiceTestPanel agent={configuredAgent} canMutate={false} />, { wrapper })
     expect(screen.getByRole('button', { name: /talk to agent/i })).toBeDisabled()
   })
 
-  it('fetches a token and connects to the LiveKit room when clicked', async () => {
+  it('fetches a token and mounts the LiveKit room on click', async () => {
+    stubMicPermission(true)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
 
     const btn = screen.getByRole('button', { name: /talk to agent/i })
@@ -142,15 +157,27 @@ describe('VoiceTestPanel', () => {
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith('agents/agent-1/voice-test-token')
     })
+    // Once we have a token, <LiveKitRoom> mounts.
     await waitFor(() => {
-      expect(mockRoomConnect).toHaveBeenCalledWith('wss://test.livekit.cloud', 'test-token-123')
+      expect(screen.getByTestId('lk-room')).toBeInTheDocument()
+      expect(screen.getByTestId('lk-audio')).toBeInTheDocument()
     })
+    // Session id appears in the footer for debugging.
     await waitFor(() => {
-      expect(mockPublishTrack).toHaveBeenCalled()
+      expect(screen.getByText(/Session/)).toBeInTheDocument()
     })
-    // Once the mic is published, the UI should expose hang-up controls.
+  })
+
+  it('surfaces a clear error when mic permission is denied', async () => {
+    stubMicPermission(false)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+
+    fireEvent.click(screen.getByRole('button', { name: /talk to agent/i }))
+
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /hang up/i })).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent(/microphone permission denied/i)
     })
+    // Should not have attempted to fetch the token once the mic check failed.
+    expect(mockPost).not.toHaveBeenCalled()
   })
 })

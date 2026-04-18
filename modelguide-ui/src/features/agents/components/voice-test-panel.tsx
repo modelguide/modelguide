@@ -1,30 +1,39 @@
 /**
- * Voice Test panel — WebRTC "Talk to the agent" POC.
+ * Voice Test panel — WebRTC "Talk to the agent" control surface.
  *
- * Inspired by voiceblox-ai/voiceblox: one button kicks off a LiveKit room,
- * the backend dispatches the agent worker with the current compiled prompt as
- * dispatch metadata, and the browser joins the room over WebRTC to talk.
+ * Architecture mirrors the public-site voice demo (modelguide/website
+ * components/voice-demo.tsx) and voiceblox-ai/voiceblox:
  *
- * Uses the existing agent LiveKit config (url + apiKey/apiSecret secrets +
- * agentName). Shows a short status timeline so callers can see what stage the
- * setup is in: token → connecting → agent joined → speaking.
+ *   Dashboard click
+ *     → POST /agents/:id/voice-test-token
+ *         (API creates session, dispatches worker with compiled prompt as
+ *          dispatch metadata, mints a short-lived LiveKit AccessToken)
+ *     → <LiveKitRoom> mounts, connects via WebRTC
+ *     → useVoiceAssistant() surfaces agent state + audio track
+ *     → RoomAudioRenderer plays the agent's audio (handles autoplay resume)
+ *     → on disconnect, worker completes the ModelGuide session in cleanup
+ *
+ * Hardening beyond the initial POC:
+ *   - Pre-flight mic permission probe. Fail-fast before we spend a dispatch.
+ *   - Agent join timeout (15s) — matches the website widget. If no agent
+ *     appears, we disconnect and surface an actionable error instead of
+ *     leaving the operator staring at "connecting".
+ *   - Participant detection by `ParticipantKind.AGENT`, no identity heuristics.
+ *   - Abort generation counter: if the operator hangs up mid-fetch, the
+ *     in-flight connect short-circuits cleanly.
+ *   - Teardown on unmount so navigating away never leaks a room.
  */
 
-import { useMutation } from '@tanstack/react-query'
 import {
-  ConnectionState,
-  type LocalAudioTrack,
-  type RemoteAudioTrack,
-  type RemoteParticipant,
-  type RemoteTrack,
-  type RemoteTrackPublication,
-  Room,
-  RoomEvent,
-  Track,
-  createLocalAudioTrack,
-} from 'livekit-client'
+  LiveKitRoom,
+  RoomAudioRenderer,
+  useRoomContext,
+  useVoiceAssistant,
+} from '@livekit/components-react'
+import { useMutation } from '@tanstack/react-query'
+import { ParticipantKind, RoomEvent } from 'livekit-client'
 import { AlertTriangle, Mic, MicOff, PhoneOff, Radio, Sparkles } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
@@ -36,40 +45,46 @@ interface VoiceTestPanelProps {
   canMutate: boolean
 }
 
-type Phase =
-  | 'idle'
-  | 'requesting_token'
-  | 'connecting'
-  | 'waiting_for_agent'
-  | 'connected'
-  | 'disconnected'
-  | 'error'
+type WidgetState =
+  | 'IDLE'
+  | 'CHECKING_MIC'
+  | 'REQUESTING_TOKEN'
+  | 'CONNECTING'
+  | 'CONNECTED'
+  | 'ENDING'
+  | 'ENDED'
+  | 'ERROR'
 
-const PHASE_LABELS: Record<Phase, string> = {
-  idle: 'Ready',
-  requesting_token: 'Requesting token…',
-  connecting: 'Joining LiveKit room…',
-  waiting_for_agent: 'Waiting for agent…',
-  connected: 'Connected',
-  disconnected: 'Disconnected',
-  error: 'Error',
+// Mirror the public-site timeout — if no worker joins in 15s, give up and
+// surface an actionable error. Covers cold-start + dispatch failure modes.
+const AGENT_TIMEOUT_MS = 15_000
+
+const PHASE_LABEL: Record<WidgetState, string> = {
+  IDLE: 'Ready',
+  CHECKING_MIC: 'Checking microphone…',
+  REQUESTING_TOKEN: 'Requesting token…',
+  CONNECTING: 'Joining LiveKit room…',
+  CONNECTED: 'Connected',
+  ENDING: 'Hanging up…',
+  ENDED: 'Call ended',
+  ERROR: 'Error',
 }
 
 export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
-  const roomRef = useRef<Room | null>(null)
-  const localTrackRef = useRef<LocalAudioTrack | null>(null)
-  const audioElRef = useRef<HTMLAudioElement | null>(null)
-
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [micOn, setMicOn] = useState(true)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [state, setState] = useState<WidgetState>('IDLE')
+  const [token, setToken] = useState<string | null>(null)
+  const [wsUrl, setWsUrl] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const endingRef = useRef(false)
+  const disconnectRef = useRef<(() => void) | null>(null)
 
   const isLivekit = agent.agentPlatform === 'livekit'
   const lkMeta = ((agent.metadata ?? {}) as Record<string, unknown>).livekit as
     | Record<string, unknown>
     | undefined
-  const secretsMap = (agent as unknown as { secrets?: Record<string, string> }).secrets ?? {}
+  const secretsMap = agent.secrets ?? {}
   const livekitConfigured =
     !!lkMeta?.url &&
     !!lkMeta?.agentName &&
@@ -77,112 +92,93 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
     !!secretsMap.livekit_api_secret
   const hasCompiledPrompt = !!agent.compiledInstructions
 
+  const reset = useCallback(() => {
+    endingRef.current = false
+    setToken(null)
+    setWsUrl(null)
+    setSessionId(null)
+    setErrorMsg(null)
+    setState('IDLE')
+  }, [])
+
   const startMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<VoiceTestTokenResponse> => {
       setErrorMsg(null)
-      setPhase('requesting_token')
-      const resp = await api
-        .post(`agents/${agent.id}/voice-test-token`)
-        .json<VoiceTestTokenResponse>()
-      return resp
+      // Pre-flight mic probe. A denied or missing mic is by far the most
+      // common failure — fail-fast with an actionable message instead of
+      // letting the room connect and then hanging.
+      setState('CHECKING_MIC')
+      // Use the Permissions API when available to avoid double-acquiring the
+      // mic — LiveKitRoom will acquire its own stream on connect. Re-probing
+      // via getUserMedia when we already know the permission is granted is
+      // what trips up exclusive-use devices (Bluetooth headsets) and Safari.
+      const permissionState = await queryMicPermission()
+      if (permissionState === 'denied') {
+        throw new Error('Microphone permission denied. Enable mic access and try again.')
+      }
+      if (permissionState !== 'granted') {
+        // Either "prompt" or permissions API unavailable — do a real probe so
+        // we can surface a useful error before spending a dispatch.
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          for (const t of stream.getTracks()) t.stop()
+        } catch (err) {
+          const name = (err as DOMException)?.name
+          if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            throw new Error('Microphone permission denied. Enable mic access and try again.')
+          }
+          if (name === 'NotFoundError') {
+            throw new Error('No microphone detected. Plug in a mic and try again.')
+          }
+          throw err instanceof Error ? err : new Error('Could not access microphone.')
+        }
+      }
+
+      setState('REQUESTING_TOKEN')
+      return api.post(`agents/${agent.id}/voice-test-token`).json<VoiceTestTokenResponse>()
     },
-    onSuccess: async (resp) => {
+    onSuccess: (resp) => {
       setSessionId(resp.sessionId)
-      await connectToRoom(resp)
+      setToken(resp.token)
+      setWsUrl(resp.livekitUrl)
+      setState('CONNECTING')
     },
     onError: (err) => {
-      setPhase('error')
+      setState('ERROR')
       setErrorMsg(err instanceof Error ? err.message : 'Failed to start voice test')
     },
   })
 
-  async function connectToRoom(resp: VoiceTestTokenResponse) {
-    setPhase('connecting')
-
-    const room = new Room({ adaptiveStream: true, dynacast: true })
-    roomRef.current = room
-
-    room.on(RoomEvent.ConnectionStateChanged, (state) => {
-      if (state === ConnectionState.Disconnected) {
-        setPhase('disconnected')
-      }
-    })
-    room.on(RoomEvent.ParticipantConnected, (p) => {
-      // Agent worker joins as a remote participant — once we see them we can
-      // flip the UI from "waiting" to "connected" even before they speak.
-      if (isAgentParticipant(p, resp.agentName)) {
-        setPhase('connected')
-      }
-    })
-    room.on(
-      RoomEvent.TrackSubscribed,
-      (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
-        if (track.kind === Track.Kind.Audio && isAgentParticipant(participant, resp.agentName)) {
-          const audioEl = audioElRef.current
-          if (audioEl) {
-            ;(track as RemoteAudioTrack).attach(audioEl)
-          }
-          setPhase('connected')
-        }
-      },
-    )
-
-    try {
-      await room.connect(resp.livekitUrl, resp.token)
-      const micTrack = await createLocalAudioTrack({
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      })
-      localTrackRef.current = micTrack
-      await room.localParticipant.publishTrack(micTrack)
-      setPhase('waiting_for_agent')
-    } catch (err) {
-      setPhase('error')
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to connect to LiveKit')
-      await hangUp()
-    }
-  }
-
-  async function hangUp() {
-    const room = roomRef.current
-    const track = localTrackRef.current
-    try {
-      track?.stop()
-      await room?.disconnect()
-    } finally {
-      roomRef.current = null
-      localTrackRef.current = null
-      setPhase('idle')
-      setMicOn(true)
-      setSessionId(null)
-    }
-  }
-
-  function toggleMic() {
-    const track = localTrackRef.current
-    if (!track) return
-    if (micOn) {
-      track.mute()
-    } else {
-      track.unmute()
-    }
-    setMicOn(!micOn)
-  }
-
-  // Clean up on unmount so we don't leave rooms open when navigating away.
-  useEffect(() => {
-    return () => {
-      localTrackRef.current?.stop()
-      roomRef.current?.disconnect().catch(() => {})
-    }
+  const handleHangUp = useCallback(() => {
+    endingRef.current = true
+    setState('ENDING')
+    disconnectRef.current?.()
   }, [])
 
-  if (!isLivekit) {
-    return null
-  }
+  const handleDisconnected = useCallback(() => {
+    // Fired by <LiveKitRoom> for every disconnect — ours or the server's. We
+    // don't differentiate beyond ENDING vs ENDED; the worker is responsible
+    // for completing the ModelGuide session on its side when the room closes.
+    setToken(null)
+    setWsUrl(null)
+    setState('ENDED')
+  }, [])
 
-  const inCall = phase === 'connecting' || phase === 'waiting_for_agent' || phase === 'connected'
+  // No parent-level teardown: <LiveKitRoom> disconnects the underlying Room
+  // in its own unmount cleanup (see @livekit/components-react), and children
+  // unmount before parents in React, so disconnectRef is already null here.
+  // The child's RoomController is where we need to hook disconnect-on-unmount.
+
+  if (!isLivekit) return null
+
+  const inCall =
+    state === 'CHECKING_MIC' ||
+    state === 'REQUESTING_TOKEN' ||
+    state === 'CONNECTING' ||
+    state === 'CONNECTED' ||
+    state === 'ENDING'
+
+  const showStartButton = state === 'IDLE' || state === 'ENDED' || state === 'ERROR'
 
   return (
     <Card>
@@ -192,15 +188,12 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
             <Radio className="h-4 w-4" />
             Voice Test
           </CardTitle>
-          <Badge variant={phase === 'connected' ? 'success' : 'default'} dot>
-            {PHASE_LABELS[phase]}
+          <Badge variant={state === 'CONNECTED' ? 'success' : 'default'} dot>
+            {PHASE_LABEL[state]}
           </Badge>
         </div>
       </CardHeader>
       <CardContent>
-        {/* biome-ignore lint/a11y/useMediaCaption: agent audio has no caption track */}
-        <audio ref={audioElRef} autoPlay playsInline />
-
         {!livekitConfigured ? (
           <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-fg-secondary">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -219,28 +212,53 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
           </p>
         )}
 
-        <div className="mt-4 flex items-center gap-2">
-          {!inCall ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {showStartButton ? (
             <Button
-              onClick={() => startMutation.mutate()}
+              onClick={() => {
+                reset()
+                startMutation.mutate()
+              }}
               loading={startMutation.isPending}
               disabled={!canMutate || !livekitConfigured || !hasCompiledPrompt}
             >
               <Mic className="h-4 w-4" />
-              Talk to agent
+              {state === 'ENDED' ? 'Talk again' : 'Talk to agent'}
             </Button>
-          ) : (
-            <>
-              <Button variant="secondary" onClick={toggleMic}>
-                {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-                {micOn ? 'Mute' : 'Unmute'}
-              </Button>
-              <Button variant="danger" onClick={hangUp}>
-                <PhoneOff className="h-4 w-4" />
-                Hang up
-              </Button>
-            </>
-          )}
+          ) : null}
+
+          {token && wsUrl ? (
+            <LiveKitRoom
+              serverUrl={wsUrl}
+              token={token}
+              connect={true}
+              audio={true}
+              video={false}
+              onDisconnected={handleDisconnected}
+              onError={(err) => {
+                // LiveKit can fire onError after onDisconnected on some
+                // transport failures. Once we've moved to ENDED or IDLE the
+                // room is gone — don't bring the UI back to an ERROR state.
+                if (endingRef.current || state === 'ENDED' || state === 'IDLE') return
+                const name = (err as unknown as { name?: string })?.name
+                const msg =
+                  name === 'NotAllowedError'
+                    ? 'Microphone access was revoked.'
+                    : (err?.message ?? 'Connection lost.')
+                setErrorMsg(msg)
+                setState('ERROR')
+              }}
+            >
+              <RoomAudioRenderer />
+              <RoomController
+                state={state}
+                setState={setState}
+                onHangUp={handleHangUp}
+                endingRef={endingRef}
+                disconnectRef={disconnectRef}
+              />
+            </LiveKitRoom>
+          ) : null}
         </div>
 
         {errorMsg ? (
@@ -249,7 +267,7 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
           </p>
         ) : null}
 
-        {sessionId ? (
+        {inCall && sessionId ? (
           <p className="mt-3 font-mono text-[11px] text-fg-muted">Session {sessionId}</p>
         ) : null}
       </CardContent>
@@ -257,10 +275,158 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
   )
 }
 
-function isAgentParticipant(p: RemoteParticipant, agentName: string): boolean {
-  // LiveKit worker dispatches identify themselves via the `agent` prefix or
-  // the configured agent name. Match either so different worker SDKs behave
-  // consistently.
-  const identity = p.identity ?? ''
-  return identity === agentName || identity.startsWith('agent-') || identity.includes(agentName)
+// ---------------------------------------------------------------------------
+// RoomController — runs inside the LiveKitRoom context so it can drive the
+// room directly via useRoomContext + useVoiceAssistant.
+// ---------------------------------------------------------------------------
+
+interface RoomControllerProps {
+  state: WidgetState
+  setState: (s: WidgetState) => void
+  onHangUp: () => void
+  endingRef: React.MutableRefObject<boolean>
+  disconnectRef: React.MutableRefObject<(() => void) | null>
+}
+
+function RoomController({
+  state,
+  setState,
+  onHangUp,
+  endingRef,
+  disconnectRef,
+}: RoomControllerProps) {
+  const room = useRoomContext()
+  const voiceAssistant = useVoiceAssistant()
+  const [muted, setMuted] = useState(false)
+
+  // Expose room.disconnect to the parent so hang-up can close the room
+  // without reaching into internals. This child unmounts before the parent,
+  // so the cleanup branch also does the best-effort disconnect in case
+  // <LiveKitRoom>'s own cleanup is skipped (e.g. during a crash or a
+  // react-beyond-react unmount).
+  useEffect(() => {
+    disconnectRef.current = () => {
+      try {
+        room.disconnect()
+      } catch {
+        // already disconnected
+      }
+    }
+    return () => {
+      try {
+        room.disconnect()
+      } catch {
+        // already disconnected
+      }
+      disconnectRef.current = null
+    }
+  }, [room, disconnectRef])
+
+  // Wait for the agent to actually join — once it does, flip to CONNECTED.
+  // If it doesn't within AGENT_TIMEOUT_MS, disconnect and surface an error.
+  useEffect(() => {
+    if (state !== 'CONNECTING') return
+
+    const hasAgent = () => {
+      for (const p of room.remoteParticipants.values()) {
+        if (p.kind === ParticipantKind.AGENT) return true
+      }
+      return false
+    }
+
+    if (hasAgent()) {
+      setState('CONNECTED')
+      return
+    }
+
+    const onParticipant = () => {
+      if (hasAgent()) setState('CONNECTED')
+    }
+    room.on(RoomEvent.ParticipantConnected, onParticipant)
+
+    const timeout = setTimeout(() => {
+      if (!hasAgent() && !endingRef.current) {
+        endingRef.current = true
+        setState('ERROR')
+        try {
+          room.disconnect()
+        } catch {
+          /* ignore */
+        }
+      }
+    }, AGENT_TIMEOUT_MS)
+
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, onParticipant)
+      clearTimeout(timeout)
+    }
+  }, [state, room, setState, endingRef])
+
+  const toggleMute = useCallback(() => {
+    const next = !muted
+    room.localParticipant.setMicrophoneEnabled(!next).catch(() => {
+      // non-fatal — keep the UI in sync with the user's intent anyway
+    })
+    setMuted(next)
+  }, [room, muted])
+
+  if (state !== 'CONNECTED' && state !== 'ENDING') {
+    return (
+      <span className="text-xs text-fg-muted">
+        {state === 'CONNECTING' ? 'Waking up agent…' : null}
+      </span>
+    )
+  }
+
+  const speaking = voiceAssistant.state === 'speaking'
+  const thinking = voiceAssistant.state === 'thinking'
+
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="flex items-center gap-2 rounded-full border border-fg-muted/20 bg-bg-subtle px-3 py-1.5"
+        aria-live="polite"
+      >
+        <span
+          className={
+            speaking
+              ? 'h-2 w-2 rounded-full bg-success animate-pulse'
+              : thinking
+                ? 'h-2 w-2 rounded-full bg-warning animate-pulse'
+                : 'h-2 w-2 rounded-full bg-fg-muted'
+          }
+          aria-hidden
+        />
+        <span className="text-xs text-fg-secondary">
+          {speaking ? 'Agent speaking' : thinking ? 'Agent thinking' : 'Listening'}
+        </span>
+      </div>
+
+      <Button variant="secondary" onClick={toggleMute} size="sm">
+        {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+        {muted ? 'Unmute' : 'Mute'}
+      </Button>
+      <Button variant="danger" onClick={onHangUp} size="sm">
+        <PhoneOff className="h-4 w-4" />
+        Hang up
+      </Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function queryMicPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
+  const perms = navigator.permissions as Permissions | undefined
+  if (!perms || typeof perms.query !== 'function') return 'unknown'
+  try {
+    // `microphone` is not in every TS lib.dom build yet — cast through
+    // PermissionName to avoid narrowing errors across targets.
+    const status = await perms.query({ name: 'microphone' as PermissionName })
+    return status.state
+  } catch {
+    return 'unknown'
+  }
 }

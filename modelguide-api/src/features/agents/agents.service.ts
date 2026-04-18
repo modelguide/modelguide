@@ -855,6 +855,19 @@ export interface VoiceTestSession {
   identity: string;
 }
 
+// LiveKit dispatch metadata is JSON-stringified and sent over gRPC; the hard
+// cap we've observed is ~64KB of encoded bytes. We enforce two guards:
+//
+//   - A cheap length pre-check on the raw prompt (50K chars) to reject
+//     obviously-oversized prompts before we touch the vault.
+//   - A byte-level check on the actual JSON-encoded metadata payload after
+//     we've assembled it. JSON encoding inflates escapes and UTF-8 multibyte
+//     characters push further past the char count, so char length alone is
+//     not a safe proxy — the byte check is what actually prevents dispatch
+//     from failing downstream.
+const MAX_PROMPT_OVERRIDE_CHARS = 50_000;
+const MAX_DISPATCH_METADATA_BYTES = 48 * 1024; // 48KB leaves headroom under 64KB
+
 export async function createVoiceTestSession(
   orgId: string,
   agentId: string,
@@ -864,6 +877,11 @@ export async function createVoiceTestSession(
     const a = await requireAgent(tx, agentId);
     if (a.modality !== "voice") {
       throw Errors.invalidInput("Voice test requires a voice agent");
+    }
+    if (a.agentPlatform !== "livekit") {
+      throw Errors.invalidInput(
+        "Voice test is only supported for LiveKit agents",
+      );
     }
     return a;
   });
@@ -876,6 +894,22 @@ export async function createVoiceTestSession(
   if (!livekitUrl || !agentName) {
     throw Errors.invalidInput(
       "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  // Validate the compiled prompt before we spend any work. The voice-test
+  // flow exists precisely to smoke-test the compiled prompt, so dispatching
+  // without one is almost certainly a misconfiguration — fail loudly rather
+  // than silently falling back to whatever prompt the worker was shipped with.
+  const compiledInstructions = agent.compiledInstructions?.trim() ?? "";
+  if (!compiledInstructions) {
+    throw Errors.invalidInput(
+      "Agent has no compiled prompt. Compile the prompt before testing.",
+    );
+  }
+  if (compiledInstructions.length > MAX_PROMPT_OVERRIDE_CHARS) {
+    throw Errors.invalidInput(
+      `Compiled prompt exceeds ${MAX_PROMPT_OVERRIDE_CHARS} characters; trim the prompt or split the SOPs.`,
     );
   }
 
@@ -904,10 +938,30 @@ export async function createVoiceTestSession(
       voiceTest: true,
       userId: caller.userId,
       name: caller.name,
+      roomName,
     },
   });
 
-  const compiledInstructions = agent.compiledInstructions ?? null;
+  const dispatchMetadata = {
+    mode: "voice-test" as const,
+    session_id: session.id,
+    user_identifier: caller.email,
+    prompt_override: compiledInstructions,
+  };
+
+  // Byte-level cap on the JSON-encoded payload. JSON escapes and UTF-8
+  // multibyte characters can push well past the raw char count — a 50K-char
+  // prompt with heavy quoting or CJK content can still blow the LiveKit cap.
+  const metadataBytes = Buffer.byteLength(
+    JSON.stringify(dispatchMetadata),
+    "utf8",
+  );
+  if (metadataBytes > MAX_DISPATCH_METADATA_BYTES) {
+    await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    throw Errors.invalidInput(
+      `Dispatch metadata is ${metadataBytes} bytes, exceeding the ${MAX_DISPATCH_METADATA_BYTES} byte limit. Shorten the compiled prompt.`,
+    );
+  }
 
   let dispatchId: string;
   try {
@@ -917,14 +971,12 @@ export async function createVoiceTestSession(
       apiSecret,
       agentName,
       roomName,
-      {
-        mode: "voice-test",
-        session_id: session.id,
-        user_identifier: caller.email,
-        prompt_override: compiledInstructions,
-      },
+      dispatchMetadata,
     );
   } catch (err) {
+    // Roll the session forward so the dashboard doesn't collect orphan
+    // "initiated" rows when LiveKit dispatch fails (bad creds, worker offline,
+    // network blip). updateSession is RLS-scoped so this can't cross orgs.
     await updateSession(orgId, session.id, agentId, { status: "abandoned" });
     throw err;
   }

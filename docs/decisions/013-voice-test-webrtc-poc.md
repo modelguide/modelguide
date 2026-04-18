@@ -1,6 +1,6 @@
 # ADR-013: Dashboard "Talk to agent" WebRTC voice test
 
-**Status:** Accepted (POC)
+**Status:** Accepted
 
 ## Context
 
@@ -53,7 +53,14 @@ Browser ◀── (5) AccessToken + wss URL ────────────
 - `createVoiceTestSession` in `agents.service.ts` — orchestrates session creation, dispatch, and token minting; rolls the session to `abandoned` if dispatch fails.
 - `POST /agents/:id/voice-test-token` — gated by `agents:activate` permission (same as `outbound-call` and `livekit-ping`), returns `400` if LiveKit is not configured and `404` for missing or cross-org agents.
 - Python `buildpro.BuildProAgent(instructions_override=...)` — when truthy, replaces the built-in system prompt and still runs `{{mg_session_id}}`/`{{userEmail}}`/`{{channel}}` interpolation so authors can templatize compiled prompts.
-- `VoiceTestPanel` in the dashboard — one button per LiveKit agent, disabled until both LiveKit config and a compiled prompt exist.
+- `VoiceTestPanel` in the dashboard — one button per LiveKit agent, disabled until both LiveKit config and a compiled prompt exist. Built on `@livekit/components-react` (`<LiveKitRoom>`, `RoomAudioRenderer`, `useVoiceAssistant`) to share the state-machine primitives the public-site voice demo already uses, including an agent-join timeout (15 s) and automatic audio-autoplay recovery.
+
+### Hardening
+
+- Server-side validation rejects voice-test dispatches when the agent is not a LiveKit agent, when the compiled prompt is missing or empty, or when the prompt exceeds 50 000 characters (safely under LiveKit's dispatch-metadata cap). Any of these returns `400` before we mint a token or create a session.
+- If dispatch fails after the session row is created, the session is rolled forward to `abandoned` so the dashboard does not accumulate orphan `initiated` rows.
+- The UI runs a pre-flight `getUserMedia` probe so denied or missing microphones fail fast with an actionable message instead of getting stuck half-connected.
+- The UI uses `ParticipantKind.AGENT` to detect the worker joining, with a 15-second timeout that disconnects and surfaces an error if no worker arrives (cold start gone wrong, crashed worker, bad `AGENT_NAME`).
 
 ### Permission model
 
