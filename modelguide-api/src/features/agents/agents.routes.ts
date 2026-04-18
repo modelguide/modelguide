@@ -1339,7 +1339,7 @@ const voiceTestTokenRoute = createRoute({
       },
     },
     400: errorResponse(
-      "LiveKit not configured, missing credentials, or wrong modality",
+      "Voice test requires a voice + LiveKit agent with LiveKit credentials and a compiled prompt under the dispatch-metadata size cap",
     ),
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
