@@ -166,7 +166,10 @@ export async function executeTool(
     if (mockResponse) {
       return { success: true, data: mockResponse };
     }
-    throw Errors.connectorNotFound(catalogSlug);
+    throw Errors.toolExecutionFailed(
+      catalogToolName,
+      `no manifest registered for "${catalogSlug}" and no mock_response configured on connector_tools`,
+    );
   }
 
   const toolDef = manifest.tools.find(

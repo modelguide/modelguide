@@ -56,13 +56,14 @@ The `connectors_catalog` FK on `connectors` remains NOT NULL. Removing it would 
 This means `catalog/bank-nowa/` can be deleted. The catalog entry it was creating is now created by:
 
 ```bash
-mg add-connectors --org bank-nowa --from bank-nowa.yaml --mock
+mg add-connectors --org bank-nowa --from bank-nowa.yaml
 ```
 
-The `--mock` flag on `add-connectors`:
-- Upserts a `connectors_catalog` row for the slug (creates if absent)
+Each connector in the YAML that has `isMocked: true`:
+- Upserts a `connectors_catalog` row for the slug (creates if absent; `iconUrl` is write-once — first seeder wins)
 - Creates the `connectors` instance
 - Creates `connector_tools` rows with `mock_response` populated from the YAML
+- On re-run, reconciles `mock_response`, `tool_schema`, and `description` for existing tool rows (edits in YAML flow through without a delete-then-reimport)
 
 The YAML format for a mocked connector includes inline tool definitions:
 

@@ -4,10 +4,12 @@
  * Real connectors: delegates to connectors.service.createConnector
  * (auto-materializes tools from catalog).
  *
- * Mocked connectors (--mock or isMocked: true in YAML): upserts a
- * connectors_catalog entry, creates the connector instance, and inserts
- * connector_tools rows with mock_response populated from the YAML.
- * No TypeScript manifest is needed — executeTool() falls back to the DB.
+ * Mocked connectors (isMocked: true in YAML): upserts a connectors_catalog
+ * entry, creates the connector instance, and inserts connector_tools rows
+ * with mock_response populated from the YAML. Re-runs reconcile existing
+ * tool rows so editing mock_response in YAML + re-seed is sufficient to
+ * update. No TypeScript manifest is needed — executeTool() falls back to
+ * the DB.
  */
 
 import { db } from "@db/client";
@@ -20,7 +22,7 @@ import {
 import { createSecret } from "@features/secrets/secrets.service";
 import { toolSlug } from "@lib/slugify";
 import type { Command } from "commander";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
@@ -31,12 +33,15 @@ import { loadYaml } from "../lib/yaml-loader";
 import {
   type ConnectorItemInput,
   type MockedConnectorInput,
+  type MockedToolInput,
   type RealConnectorInput,
   connectorItemSchema,
   connectorsFileSchema,
 } from "../schemas/connectors.schema";
 
 const PAGE_LIMIT = 100;
+
+type ExistingConnector = { id: string; slug: string };
 
 async function resolveCatalog(): Promise<
   Map<string, { id: string; slug: string }>
@@ -53,6 +58,15 @@ async function resolveCatalog(): Promise<
   return map;
 }
 
+/**
+ * Upsert a catalog entry for a mocked connector.
+ *
+ * `connectors_catalog` is a global (unscoped) table, so the same slug may be
+ * reused across orgs. To avoid one org accidentally mutating another org's
+ * catalog presentation, iconUrl is write-once: it's set on INSERT but never
+ * overwritten on subsequent upserts. If the caller specifies a divergent
+ * iconUrl, we warn and keep the existing value.
+ */
 async function upsertMockedCatalogEntry(
   slug: string,
   name: string,
@@ -64,7 +78,16 @@ async function upsertMockedCatalogEntry(
     .where(eq(connectorsCatalog.slug, slug));
 
   if (existing) {
-    if (iconUrl !== undefined && existing.iconUrl !== iconUrl) {
+    if (
+      iconUrl !== undefined &&
+      existing.iconUrl !== null &&
+      existing.iconUrl !== iconUrl
+    ) {
+      log.warn(
+        `Catalog entry "${slug}" already has iconUrl=${existing.iconUrl}; ` +
+          `ignoring new iconUrl=${iconUrl} from YAML (first seeder wins).`,
+      );
+    } else if (iconUrl !== undefined && existing.iconUrl === null) {
       await db
         .update(connectorsCatalog)
         .set({ iconUrl })
@@ -87,22 +110,91 @@ async function upsertMockedCatalogEntry(
   return created.id;
 }
 
+/**
+ * Reconcile the connector_tools rows for a mocked connector against the YAML.
+ * - Existing tool (by slug): UPDATE mock_response, tool_schema, description.
+ * - New tool: INSERT with mock_response populated.
+ * - Tools no longer in YAML: left untouched (conservative — operators can
+ *   delete them manually if they want an exact mirror).
+ */
+async function reconcileMockedTools(
+  orgId: string,
+  connectorId: string,
+  tools: MockedToolInput[],
+): Promise<{ inserted: number; updated: number }> {
+  const existingTools = await forOrg(orgId, (tx) =>
+    tx
+      .select({ id: connectorTools.id, slug: connectorTools.slug })
+      .from(connectorTools)
+      .where(
+        and(
+          eq(connectorTools.connectorId, connectorId),
+          isNull(connectorTools.deletedAt),
+        ),
+      ),
+  );
+  const existingBySlug = new Map(existingTools.map((t) => [t.slug, t.id]));
+
+  let inserted = 0;
+  let updated = 0;
+
+  for (const tool of tools) {
+    const slug = toolSlug(tool.name);
+    const existingId = existingBySlug.get(slug);
+
+    if (existingId) {
+      await forOrg(orgId, (tx) =>
+        tx
+          .update(connectorTools)
+          .set({
+            name: tool.name,
+            description: tool.description ?? null,
+            toolSchema: tool.input_schema,
+            mockResponse: tool.mock_response,
+          })
+          .where(eq(connectorTools.id, existingId)),
+      );
+      updated++;
+    } else {
+      await forOrg(orgId, (tx) =>
+        tx.insert(connectorTools).values({
+          organizationId: orgId,
+          connectorId,
+          name: tool.name,
+          slug,
+          description: tool.description ?? null,
+          toolSchema: tool.input_schema,
+          mockResponse: tool.mock_response,
+          isActive: true,
+        }),
+      );
+      inserted++;
+    }
+  }
+
+  return { inserted, updated };
+}
+
 async function handleMockedConnector(
   orgId: string,
   item: MockedConnectorInput,
+  existingBySlug: Map<string, ExistingConnector>,
   options?: { registry?: IdRegistry },
 ): Promise<"created" | "existing"> {
-  const { data: existingConnectors } = await listConnectors(orgId, {
-    page: 1,
-    pageSize: PAGE_LIMIT,
-  });
-  const existingConn = existingConnectors.find((c) => c.slug === item.slug);
+  const existingConn = existingBySlug.get(item.slug);
 
   if (existingConn) {
     if (options?.registry) {
       options.registry.set("connector", item.slug, existingConn.id);
     }
-    log.info(`Found existing connector: ${item.slug}`);
+    const { inserted, updated } = await reconcileMockedTools(
+      orgId,
+      existingConn.id,
+      item.tools,
+    );
+    log.info(
+      `Reconciled mocked connector: ${item.slug} (${updated} updated, ${inserted} added)`,
+    );
     return "existing";
   }
 
@@ -160,13 +252,10 @@ async function handleRealConnector(
   orgId: string,
   item: RealConnectorInput,
   catalog: Map<string, { id: string; slug: string }>,
+  existingBySlug: Map<string, ExistingConnector>,
   options?: { skipSecrets?: boolean; registry?: IdRegistry },
 ): Promise<"created" | "existing"> {
-  const { data: existingConnectors } = await listConnectors(orgId, {
-    page: 1,
-    pageSize: PAGE_LIMIT,
-  });
-  const existingConn = existingConnectors.find((c) => c.slug === item.slug);
+  const existingConn = existingBySlug.get(item.slug);
 
   if (existingConn) {
     if (options?.registry) {
@@ -232,14 +321,28 @@ export async function handleAddConnectors(
   options?: { skipSecrets?: boolean; registry?: IdRegistry },
 ): Promise<{ created: number; existing: number }> {
   const catalog = await resolveCatalog();
+  const { data: existingConnectors } = await listConnectors(orgId, {
+    page: 1,
+    pageSize: PAGE_LIMIT,
+  });
+  const existingBySlug = new Map<string, ExistingConnector>(
+    existingConnectors.map((c) => [c.slug, { id: c.id, slug: c.slug }]),
+  );
+
   let created = 0;
   let existing = 0;
 
   for (const item of items) {
     const result =
       item.isMocked === true
-        ? await handleMockedConnector(orgId, item, options)
-        : await handleRealConnector(orgId, item, catalog, options);
+        ? await handleMockedConnector(orgId, item, existingBySlug, options)
+        : await handleRealConnector(
+            orgId,
+            item,
+            catalog,
+            existingBySlug,
+            options,
+          );
 
     if (result === "created") created++;
     else existing++;
