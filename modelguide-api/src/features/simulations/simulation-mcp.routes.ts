@@ -12,7 +12,11 @@
 
 import type { AppBindings } from "@/types";
 import { forApp } from "@db/rls";
-import { sessions } from "@db/schema";
+import { connectors, connectorsCatalog, sessions } from "@db/schema";
+import {
+  getConnectorManifest,
+  loadAllManifests,
+} from "@features/connectors/catalog/registry";
 import type { SimulationSessionMetadata } from "@features/evals/eval-suites.types";
 import { getAgentTools } from "@features/mcp/mcp.service";
 import { createMcpSession } from "@features/mcp/mcp.shared";
@@ -22,6 +26,7 @@ import type { ResolvedTool } from "@features/mcp/mcp.types";
 import { jsonSchemaToZod } from "@features/mcp/schema-utils";
 import { verifySimulationJWT } from "@lib/jwt";
 import { getLogger } from "@lib/logger";
+import { toolSlug } from "@lib/slugify";
 import { eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { z } from "zod";
@@ -97,6 +102,79 @@ export function buildMockToolsWithFallbacks(
   return tools;
 }
 
+let manifestsLoaded: Promise<unknown> | null = null;
+async function ensureManifestsLoaded() {
+  manifestsLoaded ??= loadAllManifests();
+  return manifestsLoaded;
+}
+
+/**
+ * Resolve ResolvedTool entries from the in-memory manifest registry for mock
+ * tool names that aren't present in the agent's connector_tools DB rows.
+ *
+ * This handles cases where the connector catalog seed hasn't been applied yet
+ * or where a simulation runs against a connector that exists in the manifest
+ * registry but isn't wired into the agent's tool list.
+ */
+async function resolveToolsFromManifests(
+  orgId: string,
+  toolNames: string[],
+): Promise<ResolvedTool[]> {
+  const rows = await forApp((tx) =>
+    tx
+      .select({
+        instanceId: connectors.id,
+        instanceSlug: connectors.slug,
+        catalogSlug: connectorsCatalog.slug,
+      })
+      .from(connectors)
+      .innerJoin(
+        connectorsCatalog,
+        eq(connectors.connectorCatalogId, connectorsCatalog.id),
+      )
+      .where(eq(connectors.organizationId, orgId)),
+  );
+
+  const slugMap = new Map(
+    rows.map((r) => [
+      r.instanceSlug,
+      { catalogSlug: r.catalogSlug, instanceId: r.instanceId },
+    ]),
+  );
+  await ensureManifestsLoaded();
+
+  const result: ResolvedTool[] = [];
+  for (const mcpName of toolNames) {
+    for (const [instanceSlug, { catalogSlug, instanceId }] of slugMap) {
+      if (!mcpName.startsWith(`${instanceSlug}_`)) continue;
+      const manifest = getConnectorManifest(catalogSlug);
+      if (!manifest) continue;
+      const suffix = mcpName.slice(instanceSlug.length + 1);
+      const manifestTool = manifest.tools.find(
+        (t) => toolSlug(t.catalog.name) === suffix,
+      );
+      if (!manifestTool) continue;
+      result.push({
+        mcpName,
+        description: manifestTool.catalog.description,
+        inputSchema: manifestTool.catalog.inputSchema as Record<
+          string,
+          unknown
+        >,
+        requiresConfirmation:
+          manifestTool.catalog.defaultRequiresConfirmation ?? false,
+        connectorId: instanceId,
+        connectorSlug: instanceSlug,
+        catalogSlug,
+        toolSlug: suffix,
+        catalogToolName: manifestTool.catalog.name,
+      });
+      break;
+    }
+  }
+  return result;
+}
+
 /**
  * Handle simulation MCP requests.
  *
@@ -155,13 +233,27 @@ export async function simulationMcpHandler(
   const metadata = (session.metadata ?? {}) as SimulationSessionMetadata;
   const mockToolResponses = metadata.mockToolResponses ?? {};
 
-  // Load agent tools for fallback registration
+  // Load agent tools for schema resolution
   const agentTools =
     session.agentId && session.organizationId
       ? await getAgentTools(session.organizationId, session.agentId)
       : [];
 
-  const mockTools = buildMockToolsWithFallbacks(mockToolResponses, agentTools);
+  // For mock tools whose schemas aren't in agent_connector_tools (e.g. catalog
+  // seed not applied yet), fall back to the in-memory manifest registry.
+  const resolvedNames = new Set(agentTools.map((t) => t.mcpName));
+  const unmatched = Object.keys(mockToolResponses).filter(
+    (n) => !resolvedNames.has(n),
+  );
+  const fallbackTools =
+    unmatched.length > 0 && session.organizationId
+      ? await resolveToolsFromManifests(session.organizationId, unmatched)
+      : [];
+
+  const mockTools = buildMockToolsWithFallbacks(mockToolResponses, [
+    ...agentTools,
+    ...fallbackTools,
+  ]);
 
   if (mockTools.length === 0) {
     log.warn(
