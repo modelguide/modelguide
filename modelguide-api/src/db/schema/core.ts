@@ -309,6 +309,7 @@ export const connectorTools = pgTable(
       .$type<Record<string, unknown>>()
       .default({}),
     timeoutSeconds: integer("timeout_seconds").notNull().default(30),
+    mockResponse: jsonb("mock_response").$type<Record<string, unknown>>(),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

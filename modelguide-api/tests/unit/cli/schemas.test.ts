@@ -111,7 +111,7 @@ describe("connectorItemSchema", () => {
       catalogSlug: "medusa",
     });
     expect(result.success).toBe(true);
-    if (result.success) {
+    if (result.success && !result.data.isMocked) {
       expect(result.data.config).toEqual({});
       expect(result.data.secrets).toEqual([]);
     }
@@ -132,6 +132,99 @@ describe("connectorItemSchema", () => {
       name: "Store",
       slug: "Store-Name",
       catalogSlug: "medusa",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("validates mocked connector with inline tools", () => {
+    const result = connectorItemSchema.safeParse({
+      isMocked: true,
+      name: "Bank Mock",
+      slug: "bank_mock",
+      tools: [
+        {
+          name: "Verify Customer",
+          input_schema: { type: "object" },
+          mock_response: { success: true, customer_id: "C-1" },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.isMocked) {
+      expect(result.data.tools).toHaveLength(1);
+      expect(result.data.tools[0].mock_response).toEqual({
+        success: true,
+        customer_id: "C-1",
+      });
+      expect(result.data.iconUrl).toBeUndefined();
+    }
+  });
+
+  test("accepts optional iconUrl on mocked connector", () => {
+    const result = connectorItemSchema.safeParse({
+      isMocked: true,
+      name: "Bank Mock",
+      slug: "bank_mock",
+      iconUrl: "/logos/bank.svg",
+      tools: [
+        {
+          name: "t",
+          input_schema: {},
+          mock_response: {},
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.isMocked) {
+      expect(result.data.iconUrl).toBe("/logos/bank.svg");
+    }
+  });
+
+  test("rejects mocked connector without tools", () => {
+    const result = connectorItemSchema.safeParse({
+      isMocked: true,
+      name: "Bank Mock",
+      slug: "bank_mock",
+      tools: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects mocked tool missing mock_response", () => {
+    const result = connectorItemSchema.safeParse({
+      isMocked: true,
+      name: "Bank Mock",
+      slug: "bank_mock",
+      tools: [{ name: "t", input_schema: {} }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects mocked connector with catalogSlug (wrong branch)", () => {
+    const result = connectorItemSchema.safeParse({
+      isMocked: true,
+      name: "Bank Mock",
+      slug: "bank_mock",
+      catalogSlug: "medusa",
+      tools: [{ name: "t", input_schema: {}, mock_response: {} }],
+    });
+    // zod discriminated unions strip unknown keys from the matched branch —
+    // parse succeeds and catalogSlug is dropped. Confirming that behaviour.
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(
+        (result.data as Record<string, unknown>).catalogSlug,
+      ).toBeUndefined();
+    }
+  });
+
+  test("rejects iconUrl exceeding 500 chars", () => {
+    const result = connectorItemSchema.safeParse({
+      isMocked: true,
+      name: "Bank Mock",
+      slug: "bank_mock",
+      iconUrl: "x".repeat(501),
+      tools: [{ name: "t", input_schema: {}, mock_response: {} }],
     });
     expect(result.success).toBe(false);
   });

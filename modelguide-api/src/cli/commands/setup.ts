@@ -127,7 +127,7 @@ function printDryRun(files: SetupFiles): void {
   printSection(
     "Connectors",
     files.connectors?.connectors,
-    (c) => `${c.slug} (${c.catalogSlug})`,
+    (c) => `${c.slug}${c.isMocked ? " (mocked)" : ` (${c.catalogSlug})`}`,
   );
   printSection(
     "Agents",

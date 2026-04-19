@@ -120,3 +120,9 @@ The connector catalog and SOP templates are seeded globally. To add a new connec
 - `modelguide-api/src/db/seed/connectors-catalog.ts`
 - `modelguide-api/src/db/seed/sop-templates.ts`
 - Use the `/mg-connector` skill for adding new connector types
+
+## Mocked connectors (no code path)
+
+For demo or sales connectors where tool responses are static fixtures, skip the catalog/manifest work entirely. Use `isMocked: true` in `connectors.yaml` (see `references/schemas.md#mocked-connector-item`) — the CLI upserts a catalog row, creates the connector, and inserts `connector_tools` rows with `mock_response` populated from YAML. `executeTool()` falls back to this payload at runtime via ADR-013.
+
+Use a real catalog entry when: the backend actually exists; you want response trimming, validation, or any conditional logic. Use a mocked connector when: it's a demo, sales deck, dry-run, or onboarding walkthrough where static JSON per tool is sufficient.

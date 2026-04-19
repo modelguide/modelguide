@@ -281,6 +281,13 @@
       "when": 1776461934883,
       "tag": "0039_add-eval-suite-evaluators-suite-name-unique",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1776583812798,
+      "tag": "0040_add-connector-tool-mock-response",
+      "breakpoints": true
     }
   ]
 }

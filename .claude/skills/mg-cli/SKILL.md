@@ -124,6 +124,7 @@ secrets:
 
 ### connectors.yaml
 ```yaml
+# Real connector — references a registered TypeScript manifest
 connectors:
   - name: "Acme Store"
     slug: "acme_store"          # lowercase + underscores
@@ -134,7 +135,24 @@ connectors:
       - field: "secretApiKey"    # field name in connector config
         name: "Acme Store API Key"
         type: api_key
+
+  # Mocked connector — DB-driven fixtures, no TypeScript handler (ADR-013)
+  - name: "Bank Nowa Banking (Mock)"
+    slug: "banknowa_banking"
+    isMocked: true              # switches schema branch
+    iconUrl: "/logos/bank-nowa.svg"   # optional
+    tools:                       # inline tool defs — each returns `mock_response` verbatim
+      - name: "Verify Customer"
+        description: "Verify identity."
+        input_schema:
+          type: object
+          properties: { name: {type: string} }
+          required: [name]
+        mock_response:
+          success: true
+          customer_id: "CUST-001"
 ```
+Edit `mock_response` in YAML and re-run `mg add-connectors` — existing tool rows are reconciled (no delete-then-reimport needed). See `references/schemas.md` for full field tables.
 
 ### agents.yaml
 ```yaml

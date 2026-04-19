@@ -7,6 +7,18 @@ description: Use when the user asks to add a connector, create a connector, impl
 
 Guide for creating, extending, and maintaining connector modules in the ModelGuide platform. Connectors integrate external services (e-commerce, helpdesk, calendars) into the platform, exposing their capabilities as tools that AI agents invoke via MCP.
 
+## When NOT to use this skill
+
+Before designing a full TypeScript connector module, check whether a **mocked connector** (ADR-013) is enough. Use the mocked path instead when:
+
+- The backend doesn't exist (demo, sales deck, POC, dry-run call).
+- Tool responses can be static fixtures — no conditional logic, no response trimming, no network call.
+- The connector is only meant to drive an agent evaluation / simulation flow with coherent fake data.
+
+In those cases, skip this skill entirely. Go straight to `connectors.yaml` with `isMocked: true` and inline tool definitions (see the `mg-cli` or `build-agent` skills — both have templates). The CLI upserts a `connectors_catalog` entry and inserts `connector_tools` rows with `mock_response` populated; `executeTool()` falls back to those payloads at runtime. No code, no deploy.
+
+Use **this** skill when the connector must call a real backend at runtime.
+
 ## Architecture Overview
 
 ### The 3-File Module Pattern
