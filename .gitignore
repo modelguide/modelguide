@@ -43,6 +43,7 @@ drizzle/meta/
 # Claude Code
 .claude/local/
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 **/.claude/settings.local.json
 
 # Skill eval workspaces (run artifacts, not source)
