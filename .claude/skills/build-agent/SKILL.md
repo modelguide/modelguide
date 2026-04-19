@@ -249,11 +249,18 @@ Options:
 - **A) Medusa** — built-in e-commerce (products, cart, orders)
 - **B) Zendesk** — built-in helpdesk (tickets, knowledge base)
 - **C) None** — conversation only
-- **D) Something else** (e.g. Shopify or a custom REST API)
+- **D) Mocked demo** — the agent needs named tools but no real backend (sales demo, POC, dry-run)
+- **E) Something else** (e.g. Shopify or a custom REST API)
 
-Supported end-to-end provisioning without connector work: **Medusa**, **Zendesk**, **conversation-only**.
+Supported end-to-end provisioning without connector-building work: **Medusa**, **Zendesk**, **conversation-only**, **mocked demo**.
 
-If any other service/API is mentioned:
+**D — Mocked demo (ADR-013):**
+- Use when the business has no real API to integrate with (yet) OR the build is explicitly a demo/sales asset. Tool responses are static fixtures authored directly in `connectors.yaml` with `isMocked: true`.
+- No `mg-connector` dispatch; no background subagent. The `connectors.yaml` + `mg setup` path handles everything.
+- Capture in D-07: `connectorType: mocked`, `catalogSlug: {{orgSlug}}_{{serviceSlug}}` (same as connector slug), `connectorSlug: {{orgSlug}}_{{serviceSlug}}`, plus the tool list and a fixture sketch for each.
+- At Stage [3] YAML generation, emit `isMocked: true` + inline `tools: [{ name, input_schema, mock_response }]`. Edits to `mock_response` flow through on re-seed without delete-then-reimport.
+
+**E — Something else (real custom connector):**
 - Capture the service name, auth model, base URL, and concrete operations in D-07
 - Derive `serviceSlug` and requested org connector slug `{{orgSlug}}_{{serviceSlug}}`
 - Write `.modelguide/CONNECTOR_HANDOFF.md` with `status: requested`, the captured service details, and the requested operations
@@ -275,6 +282,7 @@ Record D-07 with both connector identifiers:
 - Medusa → `connectorType: catalog`, `catalogSlug: medusa`, `connectorSlug: {{orgSlug}}_store`
 - Zendesk → `connectorType: catalog`, `catalogSlug: zendesk`, `connectorSlug: {{orgSlug}}_support`
 - None → `connectorType: none`, `catalogSlug: (none)`, `connectorSlug: (none)`
+- Mocked demo → `connectorType: mocked`, `catalogSlug: {{orgSlug}}_{{serviceSlug}}`, `connectorSlug: {{orgSlug}}_{{serviceSlug}}`
 - Custom → `connectorType: custom`, `catalogSlug: (pending)`, `connectorSlug: {{orgSlug}}_{{serviceSlug}}`
 
 Also record the tool slugs needed by the agent.

@@ -63,17 +63,39 @@ Wrapper key: `secrets` (array, min 1 item).
 
 ## connectors.yaml
 
-Wrapper key: `connectors` (array, min 1 item).
+Wrapper key: `connectors` (array, min 1 item). Each item is either a **real connector** (backed by a TypeScript catalog manifest) or a **mocked connector** (DB-driven fixtures — no code). The two variants are a zod discriminated union on `isMocked`.
 
-### Connector item
+### Real connector item
 
 | Field | Type | Required | Default | Constraint |
 |-------|------|----------|---------|------------|
+| `isMocked` | `false` | no | `false` | may be omitted; absence implies real |
 | `name` | string | yes | — | min 1 char |
-| `slug` | string | yes | — | regex `/^[a-z0-9_]+$/` (lowercase, digits, underscores) |
-| `catalogSlug` | string | yes | — | must match an entry in the connector catalog (see `references/catalog.md`) |
+| `slug` | string | yes | — | regex `/^[a-z0-9_]+$/` |
+| `catalogSlug` | string | yes | — | must match an entry in the catalog (see `references/catalog.md`) |
 | `config` | object | no | `{}` | arbitrary key-value pairs (e.g., `baseUrl`, `subdomain`) |
 | `secrets` | array | no | `[]` | connector-scoped secrets (see below) |
+
+### Mocked connector item (ADR-013)
+
+Use for demo connectors whose tool responses are static fixtures. The CLI upserts a `connectors_catalog` row for you; no TypeScript module is required.
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `isMocked` | `true` | **yes** | — | must be the literal `true` to take this branch |
+| `name` | string | yes | — | min 1 char |
+| `slug` | string | yes | — | regex `/^[a-z0-9_]+$/` — doubles as the catalog slug |
+| `iconUrl` | string | no | — | max 500 chars; e.g., `/logos/your-brand.svg` (write-once — first seeder wins) |
+| `tools` | array | yes | — | min 1; inline tool defs (see below). `catalogSlug`, `config`, `secrets` are NOT permitted |
+
+### Mocked tool item
+
+| Field | Type | Required | Default | Constraint |
+|-------|------|----------|---------|------------|
+| `name` | string | yes | — | human-readable; slug is derived via `toolSlug(name)` |
+| `description` | string | no | — | |
+| `input_schema` | object | no | `{}` | JSON Schema for the tool's input |
+| `mock_response` | object | **yes** | — | JSONB payload returned verbatim on every call |
 
 ### Connector secret
 
@@ -84,7 +106,11 @@ Wrapper key: `connectors` (array, min 1 item).
 | `type` | enum | yes | — | same enum as standalone secrets |
 | `value` | string | no | — | if omitted: prompted or placeholder |
 
-**Behavior:** Checks if connector slug already exists before creating secrets (avoids orphaned secrets). Each connector secret becomes a separate secret entity; the `field → secretId` mapping is passed to `createConnector`.
+**Behavior (real):** Checks if connector slug already exists before creating secrets (avoids orphaned secrets). Each connector secret becomes a separate secret entity; the `field → secretId` mapping is passed to `createConnector`.
+
+**Behavior (mocked):** On first run, upserts a `connectors_catalog` row (iconUrl is write-once), creates the `connectors` instance, and inserts `connector_tools` with `mock_response`. **On re-run, reconciles existing tool rows** — `mock_response`, `tool_schema`, and `description` are updated for matching tool slugs; new tools are inserted. Tools no longer in YAML are left untouched (delete them manually for an exact mirror). This makes YAML the single source of truth — no delete-then-reimport needed to change a mock.
+
+**Runtime:** When the MCP layer executes a tool whose `catalogSlug` has no registered TypeScript manifest, `executeTool()` falls back to `connector_tools.mock_response`. If the row exists but `mock_response` is NULL, a `TOOL_EXECUTION_FAILED` error is raised with a message indicating the missing mock.
 
 **Note on slug format:** Connector slugs use underscores (`acme_store`), not hyphens. This is because connector slugs become part of tool names (`acme_store_get_order`).
 

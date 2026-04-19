@@ -132,6 +132,37 @@ connectors:
       #   type: api_key
 ```
 
+## connectors.yaml — Mocked demo connector (ADR-013)
+
+Use when `connectorType: mocked` was captured in D-07 (demo / sales / dry-run builds where tool responses are static fixtures). No `@mg-connector` dispatch is needed — the YAML below is the entire integration.
+
+```yaml
+connectors:
+  - name: "{{serviceName}} (Mock)"
+    slug: "{{connectorSlug}}"         # e.g. glowskin_demo_crm — doubles as catalog slug
+    isMocked: true
+    iconUrl: "/logos/{{orgSlug}}.svg"  # optional; drop a 24x24 viewBox SVG in modelguide-ui/public/logos/
+    tools:
+      - name: "{{Tool Display Name}}"  # slug is derived from name via toolSlug(name)
+        description: "{{one-line description}}"
+        input_schema:
+          type: object
+          properties:
+            customer_id: { type: string }
+          required: [customer_id]
+        mock_response:
+          # Returned verbatim by executeTool(). Keep small and coherent with
+          # what the persona LLM will read back in simulations.
+          success: true
+          customer_id: "{{sample_id}}"
+```
+
+Notes:
+- `slug` doubles as the catalog slug — use a globally unique value (`{{orgSlug}}_{{serviceSlug}}`), not a generic one.
+- Editing `mock_response` and re-running `mg add-connectors` reconciles existing tool rows in place — no delete-then-reimport.
+- For tools whose output the agent reads back verbatim (e.g. "we found a 450 PLN charge at DigiShop24"), keep the mock coherent with the scenario — the persona LLM reacts to it.
+- `iconUrl` is write-once in the global catalog. If the slug already exists with a different icon, the first seeder's value is kept (warning logged).
+
 ## Unsupported Custom APIs
 
 Do **not** generate `catalogSlug: "custom_rest"` here. ModelGuide does not ship

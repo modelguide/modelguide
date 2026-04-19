@@ -57,7 +57,9 @@ secrets:
 
 ## connectors.yaml
 
-Each connector references a catalog entry and declares its own secrets.
+Two variants in the same file — real connectors reference a catalog entry, mocked connectors (ADR-013) declare tools + fixtures inline.
+
+### Real connectors
 
 ```yaml
 connectors:
@@ -82,6 +84,45 @@ connectors:
       - field: "apiToken"
         name: "Acme Zendesk Token"
         type: api_key
+```
+
+### Mocked connectors (demo / sales / dry-run)
+
+No TypeScript handler needed. Each tool's `mock_response` is returned verbatim by `executeTool()` via the DB-fallback path. Edit the YAML and re-run `mg add-connectors` — existing tool rows are reconciled in place.
+
+```yaml
+connectors:
+  - name: "Bank Nowa Banking (Mock)"
+    slug: banknowa_banking
+    isMocked: true
+    iconUrl: /logos/bank-nowa.svg
+    tools:
+      - name: Verify Customer
+        description: "Verify identity by name, PESEL, and card last 4 digits."
+        input_schema:
+          type: object
+          properties:
+            name: { type: string }
+            pesel: { type: string }
+            card_last4: { type: string }
+          required: [name, pesel, card_last4]
+        mock_response:
+          success: true
+          customer_id: "CUST-001"
+          card_id: "CARD-001"
+          name: "Artur Nowak"
+
+      - name: Block Card
+        description: "Permanently block a card."
+        input_schema:
+          type: object
+          properties:
+            card_id: { type: string }
+          required: [card_id]
+        mock_response:
+          success: true
+          card_id: "CARD-001"
+          blocked_at: "2026-04-19T12:00:00.000Z"
 ```
 
 ## agents.yaml
