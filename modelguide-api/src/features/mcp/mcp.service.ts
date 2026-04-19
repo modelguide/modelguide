@@ -15,7 +15,7 @@ import {
 } from "@features/sessions/sessions.service";
 import { Errors } from "@lib/errors";
 import { getLogger, withTiming } from "@lib/logger";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { ResolvedTool } from "./mcp.types";
 
 /**
@@ -120,8 +120,32 @@ export async function resolveConnectorConfigById(
   return resolved;
 }
 
+async function getMockedToolResponse(
+  orgId: string,
+  connectorId: string,
+  catalogToolName: string,
+): Promise<Record<string, unknown> | null> {
+  const [row] = await forOrg(orgId, (tx) =>
+    tx
+      .select({ mockResponse: connectorTools.mockResponse })
+      .from(connectorTools)
+      .where(
+        and(
+          eq(connectorTools.connectorId, connectorId),
+          eq(connectorTools.name, catalogToolName),
+          isNotNull(connectorTools.mockResponse),
+          isNull(connectorTools.deletedAt),
+        ),
+      )
+      .limit(1),
+  );
+  return row?.mockResponse ?? null;
+}
+
 /**
  * Execute a connector tool via its manifest handler.
+ * Falls back to DB mock_response when no TypeScript manifest is registered
+ * (used for demo connectors seeded with --mock).
  */
 export async function executeTool(
   orgId: string,
@@ -132,7 +156,16 @@ export async function executeTool(
   input: Record<string, unknown>,
 ): Promise<ToolExecutionResult> {
   const manifest = getConnectorManifest(catalogSlug);
+
   if (!manifest) {
+    const mockResponse = await getMockedToolResponse(
+      orgId,
+      connectorId,
+      catalogToolName,
+    );
+    if (mockResponse) {
+      return { success: true, data: mockResponse };
+    }
     throw Errors.connectorNotFound(catalogSlug);
   }
 
