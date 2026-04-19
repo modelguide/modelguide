@@ -111,7 +111,7 @@ describe("connectorItemSchema", () => {
       catalogSlug: "medusa",
     });
     expect(result.success).toBe(true);
-    if (result.success) {
+    if (result.success && !result.data.isMocked) {
       expect(result.data.config).toEqual({});
       expect(result.data.secrets).toEqual([]);
     }

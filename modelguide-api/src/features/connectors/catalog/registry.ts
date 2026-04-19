@@ -24,7 +24,6 @@ export async function loadAllManifests(): Promise<ConnectorManifest[]> {
   const modules = await Promise.all([
     import("./medusa/index"),
     import("./zendesk/index"),
-    import("./bank-nowa/index"),
   ]);
 
   for (const mod of modules) {
