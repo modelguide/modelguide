@@ -1,0 +1,1 @@
+ALTER TABLE "connector_tools" ADD COLUMN "mock_response" jsonb;
