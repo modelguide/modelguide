@@ -118,27 +118,27 @@ export function RoomController({
     )
   }
 
-  const speaking = voiceAssistant.state === 'speaking'
-  const thinking = voiceAssistant.state === 'thinking'
+  // Collapse the LiveKit SDK's voice-assistant state + our widget state into
+  // a single signal the visualizer renders. Keeps animation mapping local.
+  const activity: VoiceActivity =
+    state === 'ENDING'
+      ? 'disconnecting'
+      : voiceAssistant.state === 'speaking'
+        ? 'speaking'
+        : voiceAssistant.state === 'thinking'
+          ? 'thinking'
+          : 'listening'
 
   return (
     <div className="flex items-center gap-2">
       <div
-        className="flex items-center gap-2 rounded-full border border-fg-muted/20 bg-bg-subtle px-3 py-1.5"
+        className="flex h-8 items-center gap-2.5 rounded-full border border-fg-muted/15 bg-bg-subtle/80 pl-3 pr-3.5"
         aria-live="polite"
       >
-        <span
-          className={
-            speaking
-              ? 'h-2 w-2 rounded-full bg-success animate-pulse'
-              : thinking
-                ? 'h-2 w-2 rounded-full bg-warning animate-pulse'
-                : 'h-2 w-2 rounded-full bg-fg-muted'
-          }
-          aria-hidden
-        />
-        <span className="text-xs text-fg-secondary">
-          {speaking ? 'Agent speaking' : thinking ? 'Agent thinking' : 'Listening'}
+        <VoiceVisualizer activity={activity} />
+        <span className="text-xs font-medium text-fg-secondary tracking-wide">
+          <span className="sr-only">Agent </span>
+          {ACTIVITY_LABEL[activity]}
         </span>
       </div>
 
@@ -150,6 +150,68 @@ export function RoomController({
         <PhoneOff className="h-4 w-4" />
         Hang up
       </Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Voice activity visualizer
+// ---------------------------------------------------------------------------
+
+type VoiceActivity = 'speaking' | 'thinking' | 'listening' | 'disconnecting'
+
+const ACTIVITY_LABEL: Record<VoiceActivity, string> = {
+  speaking: 'Speaking',
+  thinking: 'Thinking',
+  listening: 'Listening',
+  disconnecting: 'Disconnecting',
+}
+
+/**
+ * Four-bar equalizer that reads as "audio is happening" at a glance.
+ *
+ * Speaking: ember bars scale-Y bounce with non-uniform delays so motion
+ *   feels organic, not mechanical. This is the loud signal.
+ * Thinking: warning-tinted bars hold at mid-height and ripple via opacity
+ *   L→R — reads as "working, not vocalizing".
+ * Listening / Disconnecting: static, muted, quietly present.
+ *
+ * prefers-reduced-motion drops all animation in app.css; the static bar
+ * heights still communicate the activity band (speaking=tall, thinking=mid,
+ * listening=low) so state stays legible without motion.
+ */
+function VoiceVisualizer({ activity }: { activity: VoiceActivity }) {
+  // Delays chosen to break sync and feel amplitude-like.
+  const bounceDelays = ['0ms', '150ms', '80ms', '220ms']
+  // Even stride produces a L→R sweep.
+  const waveDelays = ['0ms', '120ms', '240ms', '360ms']
+
+  return (
+    <div className="flex h-4 items-center gap-[3px]" aria-hidden>
+      {[0, 1, 2, 3].map((i) => {
+        const styleByActivity =
+          activity === 'speaking'
+            ? 'h-full bg-brand-500 animate-[voice-bar-bounce_600ms_ease-in-out_infinite]'
+            : activity === 'thinking'
+              ? 'h-[55%] bg-warning/80 animate-[voice-bar-wave_1200ms_ease-in-out_infinite]'
+              : activity === 'disconnecting'
+                ? 'h-[25%] bg-fg-muted/40'
+                : 'h-[30%] bg-fg-muted/70'
+        return (
+          <span
+            key={i}
+            className={`w-[3px] rounded-full origin-center transition-colors ${styleByActivity}`}
+            style={{
+              animationDelay:
+                activity === 'speaking'
+                  ? bounceDelays[i]
+                  : activity === 'thinking'
+                    ? waveDelays[i]
+                    : undefined,
+            }}
+          />
+        )
+      })}
     </div>
   )
 }
