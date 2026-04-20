@@ -124,3 +124,11 @@ export interface OutboundCallResponse {
   roomName: string
   dispatchId: string
 }
+
+export interface BrowserCallResponse {
+  token: string
+  url: string
+  roomName: string
+  sessionId: string
+  dispatchId: string
+}

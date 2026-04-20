@@ -21,6 +21,7 @@ import { errorResponse } from "@lib/schemas";
 import {
   assignConnectorToAgent,
   createAgent,
+  createBrowserCall,
   createOutboundCall,
   deleteAgent,
   getAgentById,
@@ -1294,6 +1295,76 @@ router.openapi(outboundCallRoute, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
   const result = await createOutboundCall(orgId, id, body);
+
+  return c.json(result, 201);
+});
+
+// ============================================================================
+// Browser Voice Test Call
+// ============================================================================
+
+router.post(
+  "/:id/browser-call",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const browserCallSchema = z.object({
+  identity: z.string().min(1).max(255).optional().openapi({
+    description: "Stable identity for the browser participant (e.g. email)",
+  }),
+  name: z.string().min(1).max(255).optional().openapi({
+    description: "Display name surfaced to the agent",
+  }),
+});
+
+const browserCallRoute = createRoute({
+  method: "post",
+  path: "/{id}/browser-call",
+  tags: ["Agents"],
+  summary: "Start a browser voice test call",
+  description:
+    "Dispatches a LiveKit voice agent to a fresh room and returns a short-lived access token the browser can use to join the room. Passes the agent's latest compiled instructions as dispatch metadata so the test reflects the current prompt.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": { schema: browserCallSchema },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Call dispatched — token returned",
+      content: {
+        "application/json": {
+          schema: z.object({
+            token: z.string(),
+            url: z.string(),
+            roomName: z.string(),
+            sessionId: z.string().uuid(),
+            dispatchId: z.string(),
+          }),
+        },
+      },
+    },
+    400: errorResponse(
+      "Agent not active, not a voice agent, or LiveKit not configured",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    422: errorResponse("Validation error"),
+  },
+});
+
+router.openapi(browserCallRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+  const result = await createBrowserCall(orgId, id, body);
 
   return c.json(result, 201);
 });

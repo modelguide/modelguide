@@ -31,7 +31,11 @@ import {
 import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { dispatchAgentToRoom, pingLivekit } from "./livekit";
+import {
+  dispatchAgentToRoom,
+  generateBrowserAccessToken,
+  pingLivekit,
+} from "./livekit";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type ModelFamily = (typeof agents.modelFamily.enumValues)[number];
@@ -749,6 +753,108 @@ export async function pingLivekitConfig(orgId: string, agentId: string) {
 // ============================================================================
 // Outbound Calls
 // ============================================================================
+
+// ============================================================================
+// Browser Voice Test Call
+// ============================================================================
+
+/**
+ * Dispatches a LiveKit voice agent to a fresh room and mints a short-lived
+ * access token the browser can use to join the room. The agent is passed
+ * the agent's current `compiledInstructions` as dispatch metadata so the
+ * test reflects the latest prompt without redeploying the worker.
+ */
+export async function createBrowserCall(
+  orgId: string,
+  agentId: string,
+  data: { identity?: string; name?: string },
+) {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (!a.isActive) throw Errors.invalidInput("Agent is not active");
+    if (a.modality !== "voice")
+      throw Errors.invalidInput("Browser test calls require a voice agent");
+    if (a.agentPlatform !== "livekit")
+      throw Errors.invalidInput(
+        "Browser test calls are only supported for LiveKit agents",
+      );
+    return a;
+  });
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+  const agentName = lkMeta.agentName as string | undefined;
+
+  if (!livekitUrl || !agentName) {
+    throw Errors.invalidInput(
+      "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `browser-${nanoid()}`;
+  const userIdentifier = data.identity || `web-${nanoid(10)}`;
+
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier,
+    userMetadata: {
+      source: "browser-test",
+      ...(data.name && { name: data.name }),
+    },
+  });
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      agentName,
+      roomName,
+      {
+        session_id: session.id,
+        user_identifier: userIdentifier,
+        name: data.name,
+        // Pass the latest compiled prompt so the worker can override its
+        // default instructions for this session.
+        instructions: agent.compiledInstructions ?? undefined,
+      },
+    );
+  } catch (err) {
+    await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    throw err;
+  }
+
+  const token = await generateBrowserAccessToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity: userIdentifier,
+    name: data.name,
+  });
+
+  return {
+    token,
+    url: livekitUrl,
+    roomName,
+    sessionId: session.id,
+    dispatchId,
+  };
+}
 
 export async function createOutboundCall(
   orgId: string,

@@ -114,6 +114,30 @@ docker logs -f livekit-agent-livekit-server-1
 | `make livekit-down` | Stop Docker LiveKit server |
 | `make livekit-token` | Generate token + open meet.livekit.io |
 
+## Browser Voice Testing (POC)
+
+Once the agent is deployed to LiveKit Cloud (see [DEPLOY.md](./DEPLOY.md)), admins can test it from the ModelGuide dashboard without making a phone call.
+
+**Flow:**
+
+1. Compile the prompt on the agent detail page (`Compile Prompt` → `Apply`)
+2. Click **Test Voice** (top-right of the agent page — appears when the agent is active, voice, and LiveKit-configured)
+3. Click **Start Call** in the dialog, allow microphone access, and talk to the agent
+
+**What happens under the hood:**
+
+- UI calls `POST /api/agents/:id/browser-call`
+- API mints a short-lived (10 min) LiveKit access token, creates a ModelGuide session, and dispatches the agent to a fresh room
+- The deployed worker receives the dispatch — including the agent's latest `compiledInstructions` in the metadata — and overrides its built-in prompt for this session
+- The browser connects directly to the LiveKit room via WebRTC and talks to the agent in real time
+
+**Prompt iteration without redeploying:** because the latest compiled prompt rides along in dispatch metadata, you can edit your SOPs, recompile, and start a new test call — the deployed worker will use the new prompt. See [ADR-014](../../../docs/decisions/014-browser-voice-testing.md) for the architecture.
+
+**Running the worker:** the browser test flow works against the same worker used by phone calls. Either:
+
+- Run `python src/agent.py start` as a LiveKit Cloud worker (production), OR
+- Run `make lk-agent-dev` locally — the dispatch still works if your LiveKit URL in ModelGuide points at the same LiveKit project
+
 ## Phone Calls (SIP)
 
 The agent supports phone calls via SIP in addition to browser WebRTC. See [`sip/README.md`](./sip/README.md) for setup and [`DEPLOY.md`](./DEPLOY.md) for deployment.

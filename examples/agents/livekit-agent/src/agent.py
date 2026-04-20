@@ -84,7 +84,8 @@ async def entrypoint(ctx: agents.JobContext):
             trace_provider.force_flush()
         ctx.add_shutdown_callback(_flush_traces)
 
-    # Parse dispatch metadata (outbound calls include phone_number)
+    # Parse dispatch metadata (outbound calls include phone_number;
+    # browser-test calls include `instructions` to override the prompt)
     outbound_phone = None
     dispatch_metadata: dict = {}
     if ctx.job.metadata:
@@ -93,6 +94,13 @@ async def entrypoint(ctx: agents.JobContext):
             outbound_phone = dispatch_metadata.get("phone_number")
         except json.JSONDecodeError:
             logger.warning("Invalid JSON in job metadata: %s", ctx.job.metadata[:100])
+
+    instructions_override = dispatch_metadata.get("instructions") or None
+    if instructions_override:
+        logger.info(
+            "Using instructions override from dispatch metadata (%d chars)",
+            len(instructions_override),
+        )
 
     await ctx.connect()
 
@@ -158,7 +166,12 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=instructions_override,
+    )
     stt = create_stt()
     tts = create_tts()
 

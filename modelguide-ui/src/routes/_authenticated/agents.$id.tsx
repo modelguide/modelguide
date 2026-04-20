@@ -8,6 +8,7 @@ import {
   Play,
   Plug,
   Plus,
+  Radio,
   ShieldCheck,
   Trash2,
   Wrench,
@@ -22,6 +23,7 @@ import { Spinner } from '~/components/ui/spinner'
 import { Toggle } from '~/components/ui/toggle'
 import { AddConnectorDialog } from '~/features/agents/components/add-connector-dialog'
 import { ApiKeyModal } from '~/features/agents/components/api-key-modal'
+import { BrowserCallDialog } from '~/features/agents/components/browser-call-dialog'
 import { DetailsCard } from '~/features/agents/components/details-card'
 import { IntegrationCard } from '~/features/agents/components/integration-card'
 import { OutboundCallDialog } from '~/features/agents/components/outbound-call-dialog'
@@ -357,6 +359,7 @@ function AgentDetailPage() {
   const isAdmin = user?.role === 'admin'
 
   const [newApiKey, setNewApiKey] = useState<string | null>(null)
+  const [browserCallOpen, setBrowserCallOpen] = useState(false)
 
   const {
     data: agent,
@@ -407,15 +410,21 @@ function AgentDetailPage() {
         {isAdmin && agent ? (
           <div className="flex items-center gap-2">
             {agent.isActive && agent.modality === 'voice' && agent.agentPlatform === 'livekit' ? (
-              <OutboundCallDialog
-                agentId={agent.id}
-                trigger={
-                  <Button variant="secondary">
-                    <Phone className="h-4 w-4" />
-                    Make Call
-                  </Button>
-                }
-              />
+              <>
+                <Button variant="secondary" onClick={() => setBrowserCallOpen(true)}>
+                  <Radio className="h-4 w-4" />
+                  Test Voice
+                </Button>
+                <OutboundCallDialog
+                  agentId={agent.id}
+                  trigger={
+                    <Button variant="secondary">
+                      <Phone className="h-4 w-4" />
+                      Make Call
+                    </Button>
+                  }
+                />
+              </>
             ) : null}
             {agent.isActive ? (
               <Button
@@ -480,6 +489,15 @@ function AgentDetailPage() {
           onClose={() => setNewApiKey(null)}
           apiKey={newApiKey}
           title="New API Key Generated"
+        />
+      ) : null}
+
+      {agent ? (
+        <BrowserCallDialog
+          open={browserCallOpen}
+          onClose={() => setBrowserCallOpen(false)}
+          agentId={agent.id}
+          agentName={agent.name}
         />
       ) : null}
     </div>
