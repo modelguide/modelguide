@@ -971,7 +971,7 @@ export async function createVoiceTestSession(
       await updateSession(orgId, session.id, agentId, { status: "abandoned" });
     } catch (rollbackErr) {
       getLogger().error(
-        { sessionId: session.id, rollbackErr },
+        { orgId, agentId, sessionId: session.id, rollbackErr },
         "failed to abandon voice-test session after dispatch failure",
       );
     }

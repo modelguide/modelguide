@@ -57,6 +57,19 @@ describe("buildVoiceTestDispatchMetadata", () => {
     );
   });
 
+  test("agentSlug is echoed verbatim — no mutation", () => {
+    // Guard against a well-meaning refactor that lowercases/trims the slug
+    // "to match a worker convention". The worker matches on exact string
+    // equality, so any transform silently breaks routing.
+    const weird = "Weird_Slug-v1";
+    const md = buildVoiceTestDispatchMetadata({
+      agentSlug: weird,
+      sessionId: "s",
+      callerEmail: "c@e.com",
+    });
+    expect(md.agentName).toBe(weird);
+  });
+
   test("round-trips through JSON without dropping fields", () => {
     // The dispatch layer JSON-stringifies this payload. Confirm nothing is
     // a Symbol, function, or other unserializable value.
