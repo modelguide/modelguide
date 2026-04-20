@@ -186,8 +186,12 @@ function VoiceVisualizer({ activity }: { activity: VoiceActivity }) {
   // Even stride produces a L→R sweep.
   const waveDelays = ['0ms', '120ms', '240ms', '360ms']
 
+  // `items-end` + `origin-bottom` anchors the bars to the container's
+  // baseline so they grow upward like every EQ the user has seen (iOS
+  // Siri, Zoom, Slack Huddle, Discord). `origin-center` made the bars
+  // breathe in place — wrong visual vocabulary for audio level.
   return (
-    <div className="flex h-4 items-center gap-[3px]" aria-hidden>
+    <div className="flex h-4 items-end gap-[3px]" aria-hidden>
       {[0, 1, 2, 3].map((i) => {
         const styleByActivity =
           activity === 'speaking'
@@ -200,7 +204,7 @@ function VoiceVisualizer({ activity }: { activity: VoiceActivity }) {
         return (
           <span
             key={i}
-            className={`w-[3px] rounded-full origin-center transition-colors ${styleByActivity}`}
+            className={`w-[3px] rounded-full origin-bottom transition-colors ${styleByActivity}`}
             style={{
               animationDelay:
                 activity === 'speaking'
