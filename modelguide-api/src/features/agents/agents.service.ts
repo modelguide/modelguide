@@ -23,6 +23,7 @@ import {
 import { generateApiKey } from "@lib/crypto";
 import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import {
   type PaginationParams,
   buildPaginationMeta,
@@ -846,6 +847,35 @@ export async function createOutboundCall(
 // this worker" flow, not a prompt-override smoke test.
 // ============================================================================
 
+/**
+ * Build the dispatch-metadata payload for a voice-test session.
+ *
+ * Pure function so the MG-agent-slug ↔ worker-profile-slug coupling is
+ * covered by a unit test. If the field names or shape ever drift, the
+ * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
+ * `agentName = dispatch_metadata.get("agentName")`) stops routing to
+ * the right profile and every dispatched call goes silent.
+ */
+export function buildVoiceTestDispatchMetadata(input: {
+  agentSlug: string;
+  sessionId: string;
+  callerEmail: string;
+}): {
+  mode: "voice-test";
+  agentName: string;
+  session_id: string;
+  user_identifier: string;
+  email: string;
+} {
+  return {
+    mode: "voice-test" as const,
+    agentName: input.agentSlug,
+    session_id: input.sessionId,
+    user_identifier: input.callerEmail,
+    email: input.callerEmail,
+  };
+}
+
 export interface VoiceTestSession {
   livekitUrl: string;
   roomName: string;
@@ -915,17 +945,11 @@ export async function createVoiceTestSession(
     },
   });
 
-  // Dispatch metadata — the worker reads `agentName` to pick the profile
-  // (see demos/bank-nowa/voice-agent/src/agent.py). We pass the MG agent slug
-  // as the profile selector; the worker's config/agents.yaml profile slug
-  // must match for routing to succeed.
-  const dispatchMetadata = {
-    mode: "voice-test" as const,
-    agentName: agent.slug,
-    session_id: session.id,
-    user_identifier: caller.email,
-    email: caller.email,
-  };
+  const dispatchMetadata = buildVoiceTestDispatchMetadata({
+    agentSlug: agent.slug,
+    sessionId: session.id,
+    callerEmail: caller.email,
+  });
 
   let dispatchId: string;
   try {
@@ -941,7 +965,16 @@ export async function createVoiceTestSession(
     // Roll the session forward so the dashboard doesn't collect orphan
     // "initiated" rows when LiveKit dispatch fails (bad creds, worker offline,
     // network blip). updateSession is RLS-scoped so this can't cross orgs.
-    await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    // Nested try so a rollback failure doesn't shadow the real dispatch error
+    // — the caller needs to see the LiveKit failure, not a secondary DB blip.
+    try {
+      await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    } catch (rollbackErr) {
+      getLogger().error(
+        { sessionId: session.id, rollbackErr },
+        "failed to abandon voice-test session after dispatch failure",
+      );
+    }
     throw err;
   }
 
