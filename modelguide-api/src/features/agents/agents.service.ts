@@ -845,6 +845,12 @@ export async function createOutboundCall(
  * this field, a worker that hosts more than one profile can't route and
  * the dispatched call goes silent.
  *
+ * ``user_identifier`` intentionally duplicates ``phone_number`` — downstream
+ * session-attribution joins (transcripts, analytics) use ``user_identifier``
+ * as the stable handle for the caller regardless of the call's modality.
+ * Keeping both fields means callers reading the metadata don't have to know
+ * which one to prefer.
+ *
  * Extracted as a pure function so the contract is unit-tested rather than
  * living only inside ``createOutboundCall``.
  */
