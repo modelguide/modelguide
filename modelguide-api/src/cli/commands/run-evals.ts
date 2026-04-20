@@ -335,7 +335,7 @@ export function registerRunEvalsCommand(program: Command): void {
     )
     .option(
       "--concurrency <n>",
-      "Max concurrent test cases per suite (1–20). Falls back to EVAL_CONCURRENCY env, then API default (5).",
+      "Max concurrent test cases per suite (1–20). Falls back to EVAL_CONCURRENCY env, then API default (5). Effective parallelism is also bounded by the API's Postgres pool (defaults to postgres.js max=10) — tune DATABASE pool size alongside this flag for high values.",
       (v) => {
         const n = Number.parseInt(v, 10);
         if (!Number.isFinite(n) || n < 1 || n > 20) {

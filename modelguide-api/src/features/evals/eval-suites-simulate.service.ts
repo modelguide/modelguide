@@ -146,11 +146,7 @@ export async function enqueueSimulateAndRun(
     return run;
   });
 
-  // Resolve concurrency: explicit opt > env default. Clamp to [1, 20] to protect
-  // LLM providers from runaway parallelism if a caller passes a wild value.
-  const envConcurrency = env.EVAL_CONCURRENCY;
-  const rawConcurrency = opts?.concurrency ?? envConcurrency;
-  const concurrency = Math.max(1, Math.min(20, Math.floor(rawConcurrency)));
+  const concurrency = resolveEvalConcurrency(opts?.concurrency);
 
   // Enqueue — actual simulation + scoring happens asynchronously
   // TODO: migrate to background job (BullMQ) when concurrent load requires it
@@ -185,6 +181,74 @@ export function determineSuiteRunStatus(
   if (totalErrored === results.length) return "failed";
   if (totalErrored > 0) return "completed_with_errors";
   return "completed";
+}
+
+/**
+ * Resolve and clamp per-suite test-case concurrency.
+ *
+ * Precedence: explicit `opt` > `env.EVAL_CONCURRENCY`. Clamped to [1, 20]
+ * so a runaway caller can't DDoS the LLM providers.
+ */
+export function resolveEvalConcurrency(opt?: number): number {
+  const raw = opt ?? env.EVAL_CONCURRENCY;
+  return Math.max(1, Math.min(20, Math.floor(raw)));
+}
+
+/**
+ * Run a bounded worker pool over `total` items.
+ *
+ * Semantics:
+ * - up to `concurrency` workers pull from a shared cursor — effective pool
+ *   size is `min(concurrency, total)`; `total === 0` returns immediately.
+ * - `runOne(index)` is expected to capture its own errors (store a result
+ *   in caller-owned state). Any escape is funnelled through `onError` so
+ *   `Promise.all` always resolves and peer workers keep running.
+ * - `onBeforeRun` fires before each dispatch; instrumentation failures are
+ *   swallowed (logging should never take down a suite).
+ */
+export async function runBoundedPool(
+  total: number,
+  concurrency: number,
+  runOne: (index: number) => Promise<void>,
+  opts?: {
+    onBeforeRun?: (index: number, completed: number) => void | Promise<void>;
+    onError?: (err: unknown, index: number) => void | Promise<void>;
+  },
+): Promise<void> {
+  if (total <= 0) return;
+  const poolSize = Math.min(Math.max(1, concurrency), total);
+  let cursor = 0;
+  let completed = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = cursor++;
+      if (index >= total) return;
+
+      if (opts?.onBeforeRun) {
+        try {
+          await opts.onBeforeRun(index, completed);
+        } catch {
+          // Instrumentation must never take down a worker.
+        }
+      }
+
+      try {
+        await runOne(index);
+      } catch (err) {
+        if (opts?.onError) {
+          try {
+            await opts.onError(err, index);
+          } catch {
+            // onError is a last-resort sink — if it also throws, swallow.
+          }
+        }
+      }
+      completed += 1;
+    }
+  }
+
+  await Promise.all(Array.from({ length: poolSize }, () => worker()));
 }
 
 // ============================================================================
@@ -308,22 +372,15 @@ async function executeSimulateAndRunInner(
     }
   }
 
-  // Resolve and clamp concurrency (defence in depth — also clamped at enqueue).
+  // Defence in depth: also clamped at enqueue.
   const total = suiteData.testCases.length;
-  const poolSize = Math.max(
-    1,
-    Math.min(20, Math.floor(concurrency ?? env.EVAL_CONCURRENCY)),
-  );
-  const effectivePoolSize = Math.min(poolSize, Math.max(1, total));
+  const poolSize = resolveEvalConcurrency(concurrency);
 
-  // Bounded worker pool: each worker pulls the next test case off a shared
-  // cursor. Results are indexed by test-case order so the final ordering
-  // matches the input (dashboards rely on stable order). Progress is a
-  // monotonic "completed count" so mid-run updates don't pretend a specific
-  // test is in flight (impossible to pick meaningfully with N in flight).
+  // Results are indexed by test-case order so the final ordering matches the
+  // input (dashboards rely on stable order). Progress is a monotonic
+  // "completed count" — with N cases in flight we can't meaningfully point at
+  // a single "current" one, so `currentTestCase` stays null mid-run.
   const results: TestCaseEvalResult[] = new Array(total);
-  let cursor = 0;
-  let completed = 0;
 
   async function runOne(index: number): Promise<void> {
     const testCase = suiteData.testCases[index];
@@ -491,19 +548,15 @@ async function executeSimulateAndRunInner(
     }
   }
 
-  async function worker(): Promise<void> {
-    while (true) {
-      const index = cursor++;
-      if (index >= total) return;
+  const effectivePoolSize = Math.min(poolSize, Math.max(1, total));
+  log.info(
+    { suiteRunId, suiteId, total, concurrency: effectivePoolSize },
+    "simulate-and-run dispatching test cases with bounded concurrency",
+  );
 
-      // Opportunistically advertise which case kicked off most recently — this
-      // is best-effort (multiple are in flight), but it gives watchers useful
-      // signal about *what* is being processed.
-      const progress = {
-        completed,
-        total,
-        currentTestCase: suiteData.testCases[index].name,
-      };
+  await runBoundedPool(total, poolSize, runOne, {
+    onBeforeRun: async (_index, completed) => {
+      const progress = { completed, total, currentTestCase: null };
       updateProgress(progress);
       try {
         await forOrg(orgId, (tx) =>
@@ -513,30 +566,20 @@ async function executeSimulateAndRunInner(
             .where(eq(evalSuiteRuns.id, suiteRunId)),
         );
       } catch (err) {
-        log.warn(
-          { err, suiteRunId, testCaseId: suiteData.testCases[index].id },
-          "progress update failed — continuing",
-        );
+        log.warn({ err, suiteRunId }, "progress update failed — continuing");
       }
-
-      // One stuck test case must not hang the whole suite — runOne's own
-      // try/catch ensures a failure is captured as an errored result row.
-      await runOne(index);
-      completed += 1;
-    }
-  }
-
-  log.info(
-    {
-      suiteRunId,
-      suiteId,
-      total,
-      concurrency: effectivePoolSize,
     },
-    "simulate-and-run dispatching test cases with bounded concurrency",
-  );
-
-  await Promise.all(Array.from({ length: effectivePoolSize }, () => worker()));
+    // Defence in depth: runOne is designed never to throw, but if it ever
+    // escapes (e.g., persistFailedEvalRun itself fails), capture the index as
+    // errored so peer workers keep running and the suite run stays coherent.
+    onError: (err, index) => {
+      log.error(
+        { err, suiteRunId, testCaseId: suiteData.testCases[index].id },
+        "unexpected escape from runOne — storing errored result",
+      );
+      results[index] = erroredTestCaseResult(suiteData.testCases[index]);
+    },
+  });
 
   // Determine suite run status
   const durationMs = elapsedMs(startTime);
