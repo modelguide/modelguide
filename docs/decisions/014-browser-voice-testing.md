@@ -24,14 +24,14 @@ The browser side (`VoiceTestPanel` in `modelguide-ui`) runs a mic pre-flight pro
 
 ### Multi-profile dispatch contract
 
-The dispatch metadata carries `agentName: agent.slug` — **not** the LiveKit worker-level `agent_name`. This is the coupling that makes multi-profile workers (see `demos/bank-nowa/voice-agent`) route correctly:
+The dispatch metadata carries `agentName: agent.slug` — **not** the LiveKit worker-level `agent_name`. This is the coupling that makes multi-profile workers route correctly:
 
 - `metadata.livekit.agentName` on the MG agent record → LiveKit worker identity (WHICH worker process to dispatch into)
 - `agent.slug` → profile identity inside that worker (WHICH profile to instantiate)
 
-The worker's entrypoint reads `dispatch_metadata.get("agentName")` and looks it up in its in-memory `_clients` registry. If the slugs don't match, the worker logs `"Invalid or missing agentName"` and the room stays empty until the 15s client-side timeout fires.
+A multi-profile worker's entrypoint reads `dispatch_metadata.get("agentName")` and looks it up in its in-memory profile registry. If the slugs don't match, the worker ignores the dispatch and the room stays empty until the client-side 15s timeout fires.
 
-This contract is locked behind a pure-function unit test (`buildVoiceTestDispatchMetadata` in `agents.service.ts` + `tests/unit/agents/voice-test-dispatch.test.ts`) because there's no type system connecting the MG TypeScript to the worker's Python.
+This contract is locked behind a pure-function unit test (`buildVoiceTestDispatchMetadata` in `agents.service.ts` + `tests/unit/agents/voice-test-dispatch.test.ts`) because there's no type system connecting the MG TypeScript to the worker implementation.
 
 ### What this deliberately does NOT do
 
@@ -76,14 +76,28 @@ Error taxonomy:
 ## Consequences
 
 - One-click voice test from the dashboard. Round-trip time from click to audio is ~2s (token + dispatch + WebRTC connect + agent boot).
-- The MG-agent-slug ↔ worker-profile-slug contract is now load-bearing. If someone renames an MG agent's slug without touching the worker's `config/agents.yaml`, voice-test silently fails — 15s timeout, "Waking up agent..." spinner, no clear error. Mitigation: the slug-name convention is documented in `demos/bank-nowa/voice-agent/README.md`; future hardening opportunity is to validate the slug matches a known profile at agent-LiveKit-config time.
+- The MG-agent-slug ↔ worker-profile-slug contract is now load-bearing. If someone renames an MG agent's slug without touching the worker's profile configuration, voice-test silently fails — 15s timeout, "Waking up agent..." spinner, no clear error. Mitigation: future hardening opportunity is to validate the slug matches a known profile at agent-LiveKit-config time (e.g. by adding a `GET /livekit/profiles` diagnostic on the worker that the MG API can poll).
 - The feature requires `agentPlatform === "livekit"` with valid `metadata.livekit.url + agentName` and both LiveKit secrets. If the admin hasn't provisioned those, the UI disables the "Talk to agent" button and shows a warning. No silent failure mode.
 - Outbound calls (ADR-011) are unaffected — both features share `dispatchAgentToRoom` but no other state. The dispatch metadata shape differs (outbound carries `phone_number`; voice-test carries `agentName`) and that's intentional.
+
+## Known test gap
+
+The happy path (dispatch + token mint + 201 response) has no end-to-end integration test because:
+
+- Dispatching against a real LiveKit server is out of scope for CI.
+- Mocking `livekit-server-sdk` after `agents.service.ts` has already imported it (as the route path requires) doesn't propagate reliably via Bun's `mock.module` — the binding is captured at module load.
+- The alternative (extensive drizzle-internals mocking to call `createVoiceTestSession` directly from a unit test) would test the mock harness more than the code.
+
+What's covered instead:
+
+- Contract-shape of dispatch metadata via `buildVoiceTestDispatchMetadata` (pure helper, 5 unit tests).
+- All seven error paths as integration tests: not configured (400), unauthenticated (401), cross-org (404), unknown agent (404), inactive (400), non-voice modality (400), non-livekit platform (400), wrong role (403).
+
+Net risk: a refactor that reorders the orchestration in `createVoiceTestSession` (e.g. minting the token before the dispatch, or dispatching before the session row exists) would pass CI. Follow-up: if this feature becomes load-bearing in production, harden by either introducing a thin dependency-injection layer on `createVoiceTestSession` or spinning up a LiveKit test server in CI.
 
 ## Related
 
 - ADR-011: LiveKit Outbound Calls — the existing dispatch + token pattern this extends.
-- ADR-013: Mocked Connectors (cross-reference only — unrelated feature that happens to use the same ADR-numbering space).
+- ADR-013: Mocked Connectors — unrelated feature, different number space.
 - PR #240: initial implementation.
 - PR #242 (stacked): voice-activity equalizer UI polish.
-- Worker-side contract: `demos/bank-nowa/voice-agent/src/agent.py` (entrypoint reading `agentName` from dispatch metadata).
