@@ -62,6 +62,8 @@ export const evalSuiteRunsQuerySchema = z.object({
 export const simulateAndRunSchema = z.object({
   promptSource: z.enum(["compiled", "hand_written", "edited"]),
   testCaseIds: z.array(z.string().uuid()).optional(),
+  /** Optional override for per-suite test-case concurrency. Falls back to EVAL_CONCURRENCY env (default 5). */
+  concurrency: z.coerce.number().int().min(1).max(20).optional(),
 });
 
 export const generateTestCasesSchema = z.object({

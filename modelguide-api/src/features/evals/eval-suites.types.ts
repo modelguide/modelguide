@@ -35,6 +35,8 @@ export interface ListEvalSuitesParams extends PaginationParams {
 
 export interface RunEvalSuiteOpts {
   triggeredBy?: string;
+  /** Max concurrent test cases during simulate-and-run. Defaults to EVAL_CONCURRENCY env (5). */
+  concurrency?: number;
 }
 
 export interface CreateTestCaseInput {
@@ -90,6 +92,8 @@ export interface SimulateAndRunPayload {
   promptSource: string;
   triggeredBy?: string;
   testCaseIds?: string[];
+  /** Resolved test-case concurrency for this run (already clamped 1..20). */
+  concurrency?: number;
 }
 
 export interface SimulateAndRunProgress {
