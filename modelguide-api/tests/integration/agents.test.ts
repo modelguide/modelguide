@@ -915,6 +915,100 @@ describe("POST /api/agents/:id/voice-test-token", () => {
 
     expect(response.status).toBe(404);
   });
+
+  test("rejects inactive agents (400)", async () => {
+    // Create an inactive voice agent so we can hit the isActive guard.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Inactive Voice Test Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    // The seed creates agents as isActive: false by default, which is exactly
+    // what we want here — no activation step needed.
+    const response = await request(`/api/agents/${agentId}/voice-test-token`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/not active/i);
+  });
+
+  test("rejects non-voice modality (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Text Modality Voice Test Agent",
+        modality: "text",
+      }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    // Activate + configure LiveKit so the modality check is the one that trips.
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          agentPlatform: "livekit",
+          metadata: {
+            livekit: { url: "wss://test.livekit.cloud", agentName: "w" },
+          },
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(`/api/agents/${agentId}/voice-test-token`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/voice agent/i);
+  });
+
+  test("rejects non-livekit platform (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Custom Platform Voice Test Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    // Activate but keep agentPlatform as the default `custom`.
+    await forApp((tx) =>
+      tx.update(agents).set({ isActive: true }).where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(`/api/agents/${agentId}/voice-test-token`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/LiveKit/i);
+  });
+
+  test("rejects support role (403) — agents:activate is admin-only", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-token`,
+      {
+        method: "POST",
+        headers: orgASupportHeaders,
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
 });
 
 describe("Agent slug uniqueness", () => {

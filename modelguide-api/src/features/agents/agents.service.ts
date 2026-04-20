@@ -894,6 +894,9 @@ export async function createVoiceTestSession(
 ): Promise<VoiceTestSession> {
   const agent = await forOrg(orgId, async (tx) => {
     const a = await requireAgent(tx, agentId);
+    if (!a.isActive) {
+      throw Errors.invalidInput("Agent is not active");
+    }
     if (a.modality !== "voice") {
       throw Errors.invalidInput("Voice test requires a voice agent");
     }
