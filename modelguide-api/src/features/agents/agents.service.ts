@@ -820,13 +820,13 @@ export async function createOutboundCall(
       apiSecret,
       agentName,
       roomName,
-      {
-        phone_number: data.phoneNumber,
+      buildOutboundDispatchMetadata({
+        agentSlug: agent.slug,
+        sessionId: session.id,
+        phoneNumber: data.phoneNumber,
         email: data.email,
         name: data.name,
-        session_id: session.id,
-        user_identifier: data.phoneNumber,
-      },
+      }),
     );
   } catch (err) {
     await updateSession(orgId, session.id, agentId, { status: "abandoned" });
@@ -834,6 +834,44 @@ export async function createOutboundCall(
   }
 
   return { sessionId: session.id, roomName, dispatchId };
+}
+
+/**
+ * Build the dispatch-metadata payload for an outbound call.
+ *
+ * Mirrors ``buildVoiceTestDispatchMetadata`` — ``agentName`` is the
+ * MG agent slug, which a multi-profile worker reads to pick the matching
+ * profile (``dispatch_metadata.get("agentName")`` in the worker). Without
+ * this field, a worker that hosts more than one profile can't route and
+ * the dispatched call goes silent.
+ *
+ * Extracted as a pure function so the contract is unit-tested rather than
+ * living only inside ``createOutboundCall``.
+ */
+export function buildOutboundDispatchMetadata(input: {
+  agentSlug: string;
+  sessionId: string;
+  phoneNumber: string;
+  email?: string;
+  name?: string;
+}): {
+  mode: "outbound";
+  agentName: string;
+  session_id: string;
+  user_identifier: string;
+  phone_number: string;
+  email?: string;
+  name?: string;
+} {
+  return {
+    mode: "outbound" as const,
+    agentName: input.agentSlug,
+    session_id: input.sessionId,
+    user_identifier: input.phoneNumber,
+    phone_number: input.phoneNumber,
+    ...(input.email !== undefined && { email: input.email }),
+    ...(input.name !== undefined && { name: input.name }),
+  };
 }
 
 // ============================================================================
