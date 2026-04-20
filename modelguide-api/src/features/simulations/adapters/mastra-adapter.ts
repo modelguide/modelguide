@@ -109,14 +109,31 @@ export class MastraAdapter implements AgentAdapter {
             generateOpts,
           )
         : await this.agent.generate(message, generateOpts);
-    // Extract tool calls from the generation steps
+    // Extract tool calls from the generation steps.
+    //
+    // Mastra splits each step into two parallel collections — `toolCalls`
+    // (invocations: name + args + id) and `toolResults` (outputs: keyed by
+    // the same toolCallId). `tc.payload.output` on the calls side is
+    // typically undefined; the actual result lives on the matching
+    // `toolResult.payload.result`. Previously we only read the calls side
+    // and stored `{}` for every tool output, which made evaluators think
+    // mock_tool_responses returned nothing.
     const toolCalls: AgentAdapterResponse["toolCalls"] = [];
     for (const step of result.steps ?? []) {
+      const resultsById = new Map<string, unknown>();
+      for (const tr of (step as { toolResults?: unknown[] }).toolResults ??
+        []) {
+        const p = (tr as { payload?: Record<string, unknown> })?.payload ?? {};
+        const id = p.toolCallId as string | undefined;
+        if (id) resultsById.set(id, p.result ?? p.output);
+      }
       for (const tc of step.toolCalls ?? []) {
+        const id = tc.payload.toolCallId as string | undefined;
+        const matched = id ? resultsById.get(id) : undefined;
         toolCalls.push({
           name: tc.payload.toolName,
           arguments: (tc.payload.args as Record<string, unknown>) ?? {},
-          result: tc.payload.output,
+          result: matched ?? tc.payload.output,
         });
       }
     }
