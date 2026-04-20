@@ -22,6 +22,7 @@ import {
   assignConnectorToAgent,
   createAgent,
   createOutboundCall,
+  createVoiceTestSession,
   deleteAgent,
   getAgentById,
   listAgentConnectors,
@@ -1294,6 +1295,69 @@ router.openapi(outboundCallRoute, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
   const result = await createOutboundCall(orgId, id, body);
+
+  return c.json(result, 201);
+});
+
+// ============================================================================
+// Voice Test (browser WebRTC)
+// ============================================================================
+
+router.post(
+  "/:id/voice-test-token",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const voiceTestTokenResponseSchema = z.object({
+  livekitUrl: z.string(),
+  roomName: z.string(),
+  token: z.string(),
+  sessionId: z.string().uuid(),
+  dispatchId: z.string(),
+  agentName: z.string(),
+  profileName: z.string(),
+  identity: z.string(),
+});
+
+const voiceTestTokenRoute = createRoute({
+  method: "post",
+  path: "/{id}/voice-test-token",
+  tags: ["Agents"],
+  summary: "Issue a LiveKit voice-test token",
+  description:
+    "Creates a ModelGuide session, dispatches the configured LiveKit worker into a fresh room with the agent's slug as `agentName` in metadata (so a multi-profile worker picks the correct profile), and returns a short-lived LiveKit AccessToken so the browser can join via WebRTC and talk to the agent.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    201: {
+      description: "Voice test session created",
+      content: {
+        "application/json": { schema: voiceTestTokenResponseSchema },
+      },
+    },
+    400: errorResponse(
+      "LiveKit not configured, missing credentials, or wrong modality",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(voiceTestTokenRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const user = getCurrentUser(c);
+  const { id } = c.req.valid("param");
+
+  const result = await createVoiceTestSession(orgId, id, {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+  });
 
   return c.json(result, 201);
 });

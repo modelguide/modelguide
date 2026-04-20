@@ -23,6 +23,7 @@ import {
 import { generateApiKey } from "@lib/crypto";
 import { encryptSecret } from "@lib/crypto";
 import { Errors } from "@lib/errors";
+import { getLogger } from "@lib/logger";
 import {
   type PaginationParams,
   buildPaginationMeta,
@@ -31,7 +32,11 @@ import {
 import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { dispatchAgentToRoom, pingLivekit } from "./livekit";
+import {
+  dispatchAgentToRoom,
+  generateVoiceTestToken,
+  pingLivekit,
+} from "./livekit";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type ModelFamily = (typeof agents.modelFamily.enumValues)[number];
@@ -829,4 +834,185 @@ export async function createOutboundCall(
   }
 
   return { sessionId: session.id, roomName, dispatchId };
+}
+
+// ============================================================================
+// Voice-test (browser WebRTC "Talk to agent")
+//
+// Issues a short-lived LiveKit AccessToken scoped to a new room, creates a
+// ModelGuide session, and dispatches the configured LiveKit worker into the
+// room. The worker reads `agentName` from dispatch metadata and routes to
+// the matching profile (prompt + tools baked into the worker image — we do
+// NOT inject a prompt from here). This is the "talk to the live agent on
+// this worker" flow, not a prompt-override smoke test.
+// ============================================================================
+
+/**
+ * Build the dispatch-metadata payload for a voice-test session.
+ *
+ * Pure function so the MG-agent-slug ↔ worker-profile-slug coupling is
+ * covered by a unit test. If the field names or shape ever drift, the
+ * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
+ * `agentName = dispatch_metadata.get("agentName")`) stops routing to
+ * the right profile and every dispatched call goes silent.
+ */
+export function buildVoiceTestDispatchMetadata(input: {
+  agentSlug: string;
+  sessionId: string;
+  callerEmail: string;
+}): {
+  mode: "voice-test";
+  agentName: string;
+  session_id: string;
+  user_identifier: string;
+  email: string;
+} {
+  return {
+    mode: "voice-test" as const,
+    agentName: input.agentSlug,
+    session_id: input.sessionId,
+    user_identifier: input.callerEmail,
+    email: input.callerEmail,
+  };
+}
+
+export interface VoiceTestSession {
+  livekitUrl: string;
+  roomName: string;
+  token: string;
+  sessionId: string;
+  dispatchId: string;
+  agentName: string; // LiveKit worker name (which worker to dispatch into)
+  profileName: string; // worker-internal profile slug (which agent inside)
+  identity: string;
+}
+
+export async function createVoiceTestSession(
+  orgId: string,
+  agentId: string,
+  caller: { userId: string; email: string; name: string },
+): Promise<VoiceTestSession> {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (!a.isActive) {
+      throw Errors.invalidInput("Agent is not active");
+    }
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Voice test requires a voice agent");
+    }
+    if (a.agentPlatform !== "livekit") {
+      throw Errors.invalidInput(
+        "Voice test is only supported for LiveKit agents",
+      );
+    }
+    return a;
+  });
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+  const agentName = lkMeta.agentName as string | undefined;
+
+  if (!livekitUrl || !agentName) {
+    throw Errors.invalidInput(
+      "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `voice-test-${nanoid()}`;
+  const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
+
+  // Record a session before we dispatch so we can attribute the call even if
+  // dispatch fails or the caller never connects.
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: caller.email,
+    userMetadata: {
+      voiceTest: true,
+      userId: caller.userId,
+      name: caller.name,
+      roomName,
+    },
+  });
+
+  const dispatchMetadata = buildVoiceTestDispatchMetadata({
+    agentSlug: agent.slug,
+    sessionId: session.id,
+    callerEmail: caller.email,
+  });
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      agentName,
+      roomName,
+      dispatchMetadata,
+    );
+  } catch (err) {
+    // Roll the session forward so the dashboard doesn't collect orphan
+    // "initiated" rows when LiveKit dispatch fails (bad creds, worker offline,
+    // network blip). updateSession is RLS-scoped so this can't cross orgs.
+    // Nested try so a rollback failure doesn't shadow the real dispatch error
+    // — the caller needs to see the LiveKit failure, not a secondary DB blip.
+    try {
+      await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    } catch (rollbackErr) {
+      getLogger().error(
+        { orgId, agentId, sessionId: session.id, rollbackErr },
+        "failed to abandon voice-test session after dispatch failure",
+      );
+    }
+    throw err;
+  }
+
+  const token = await generateVoiceTestToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity,
+    name: caller.name,
+  });
+
+  // Correlation breadcrumb. Pairs with the worker-side "Client ready for
+  // agent …" log so triaging a failed "Talk to agent" click is one grep
+  // across roomName / dispatchId.
+  getLogger().info(
+    {
+      orgId,
+      agentId,
+      sessionId: session.id,
+      dispatchId,
+      roomName,
+      agentName,
+      profileName: agent.slug,
+    },
+    "voice-test dispatched",
+  );
+
+  return {
+    livekitUrl,
+    roomName,
+    token,
+    sessionId: session.id,
+    dispatchId,
+    agentName,
+    profileName: agent.slug,
+    identity,
+  };
 }
