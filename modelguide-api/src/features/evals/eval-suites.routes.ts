@@ -822,6 +822,7 @@ router.openapi(simulateAndRunRoute, async (c) => {
     {
       triggeredBy,
       testCaseIds: body.testCaseIds,
+      concurrency: body.concurrency,
     },
   );
 

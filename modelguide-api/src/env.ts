@@ -76,6 +76,11 @@ const envSchema = z
     EVAL_LLM_API_KEY: z.string().optional(),
     EVAL_LLM_BASE_URL: z.string().url().optional(),
     EVAL_LLM_MODEL: z.string().max(100).optional(),
+    // Default per-suite concurrency for simulate-and-run. Each test case spins
+    // up its own session + LLM calls; too high can DDoS the LLM APIs. Callers
+    // (CLI flag, route body) can override. Clamped 1..20 by schema validation
+    // downstream to protect against runaway values.
+    EVAL_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(5),
 
     // Test case generation — LLM API key for generateObject() calls (Anthropic or OpenAI)
     GENERATION_LLM_API_KEY: z.string().optional(),

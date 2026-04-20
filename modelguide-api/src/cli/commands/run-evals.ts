@@ -167,6 +167,7 @@ export async function handleRunEvals(
   agentSlug?: string,
   orgRef = orgId,
   suiteSlugs?: string[],
+  concurrency?: number,
 ): Promise<{ totalPassed: number; totalScored: number; passRate: number }> {
   // 1. Health check — bounded so a hung API doesn't make the CLI appear frozen.
   const healthy = await fetch(`${API_BASE}/api/health`, {
@@ -248,37 +249,62 @@ export async function handleRunEvals(
     );
   }
 
-  log.info(`Running ${suites.length} eval suite(s)...`);
+  // Suite-level parallelism: run up to SUITE_PARALLELISM suites simultaneously.
+  // The API task runner is fire-and-forget, so each suite runs in its own task
+  // with its own bounded test-case pool. Total worst-case LLM concurrency is
+  // SUITE_PARALLELISM × testCaseConcurrency — keep suite parallelism modest
+  // so we don't overshoot provider rate limits.
+  const SUITE_PARALLELISM = 3;
+  const suitePoolSize = Math.min(SUITE_PARALLELISM, suites.length);
 
-  // 5. Trigger + poll each suite
+  const concurrencyNote =
+    concurrency !== undefined ? ` (test-case concurrency ${concurrency})` : "";
+  log.info(
+    `Running ${suites.length} eval suite(s) with ${suitePoolSize} suite(s) in parallel${concurrencyNote}`,
+  );
+
+  // 5. Trigger + poll each suite (up to suitePoolSize in flight at once).
+  //    Per-suite outputs are printed as a single block once the suite finishes
+  //    so interleaved runs don't scramble the reader's view.
   let totalPassed = 0;
   let totalScored = 0;
 
-  for (const suite of suites) {
-    log.info(`\nSuite: ${suite.name}`);
+  let suiteCursor = 0;
+  async function suiteWorker(): Promise<void> {
+    while (true) {
+      const idx = suiteCursor++;
+      if (idx >= suites.length) return;
+      const suite = suites[idx];
 
-    const runResp = (await apiFetch(
-      `/api/eval-suites/${suite.id}/simulate-and-run`,
-      token,
-      {
-        method: "POST",
-        body: JSON.stringify({ promptSource: "compiled" }),
-      },
-    )) as { suiteRunId: string };
+      const runResp = (await apiFetch(
+        `/api/eval-suites/${suite.id}/simulate-and-run`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            promptSource: "compiled",
+            ...(concurrency !== undefined ? { concurrency } : {}),
+          }),
+        },
+      )) as { suiteRunId: string };
 
-    const result = await pollUntilDone(suite.id, runResp.suiteRunId, token);
-    const resultTable = formatResultsTable(result.testCaseResults);
-    log.info(resultTable);
+      const result = await pollUntilDone(suite.id, runResp.suiteRunId, token);
+      const resultTable = formatResultsTable(result.testCaseResults);
+      // Print the suite header + table as a contiguous block.
+      log.info(`\nSuite: ${suite.name}\n${resultTable}`);
 
-    const scored = result.testCaseResults.filter(
-      (r) => r.passed !== null,
-    ).length;
-    const passed = result.testCaseResults.filter(
-      (r) => r.passed === true,
-    ).length;
-    totalPassed += passed;
-    totalScored += scored;
+      const scored = result.testCaseResults.filter(
+        (r) => r.passed !== null,
+      ).length;
+      const passed = result.testCaseResults.filter(
+        (r) => r.passed === true,
+      ).length;
+      totalPassed += passed;
+      totalScored += scored;
+    }
   }
+
+  await Promise.all(Array.from({ length: suitePoolSize }, () => suiteWorker()));
 
   const passRate =
     totalScored > 0 ? Math.round((totalPassed / totalScored) * 100) : 0;
@@ -307,13 +333,49 @@ export function registerRunEvalsCommand(program: Command): void {
       collectRepeatedSuites,
       [],
     )
-    .action(async (opts: { org: string; agent?: string; suite: string[] }) => {
-      const orgId = await resolveOrgId(opts.org);
-      try {
-        await handleRunEvals(orgId, opts.agent, opts.org, opts.suite);
-      } catch (err) {
-        log.error(`Failed: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
+    .option(
+      "--concurrency <n>",
+      "Max concurrent test cases per suite (1–20). Falls back to EVAL_CONCURRENCY env, then API default (5).",
+      (v) => {
+        const n = Number.parseInt(v, 10);
+        if (!Number.isFinite(n) || n < 1 || n > 20) {
+          throw new Error("--concurrency must be an integer between 1 and 20");
+        }
+        return n;
+      },
+    )
+    .action(
+      async (opts: {
+        org: string;
+        agent?: string;
+        suite: string[];
+        concurrency?: number;
+      }) => {
+        const orgId = await resolveOrgId(opts.org);
+        // Env fallback when the flag is not passed. CLI flag still wins.
+        let concurrency = opts.concurrency;
+        if (concurrency === undefined && process.env.EVAL_CONCURRENCY) {
+          const parsed = Number.parseInt(process.env.EVAL_CONCURRENCY, 10);
+          if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 20) {
+            concurrency = parsed;
+          } else {
+            log.warn(
+              `Ignoring invalid EVAL_CONCURRENCY="${process.env.EVAL_CONCURRENCY}" (expected integer 1–20)`,
+            );
+          }
+        }
+        try {
+          await handleRunEvals(
+            orgId,
+            opts.agent,
+            opts.org,
+            opts.suite,
+            concurrency,
+          );
+        } catch (err) {
+          log.error(`Failed: ${getErrorMessage(err)}`);
+          process.exit(1);
+        }
+      },
+    );
 }

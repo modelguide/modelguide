@@ -146,6 +146,12 @@ export async function enqueueSimulateAndRun(
     return run;
   });
 
+  // Resolve concurrency: explicit opt > env default. Clamp to [1, 20] to protect
+  // LLM providers from runaway parallelism if a caller passes a wild value.
+  const envConcurrency = env.EVAL_CONCURRENCY;
+  const rawConcurrency = opts?.concurrency ?? envConcurrency;
+  const concurrency = Math.max(1, Math.min(20, Math.floor(rawConcurrency)));
+
   // Enqueue — actual simulation + scoring happens asynchronously
   // TODO: migrate to background job (BullMQ) when concurrent load requires it
   taskRunner.enqueue(
@@ -157,6 +163,7 @@ export async function enqueueSimulateAndRun(
       promptSource,
       triggeredBy: opts?.triggeredBy,
       testCaseIds: opts?.testCaseIds,
+      concurrency,
     },
     executeSimulateAndRun,
   );
@@ -192,7 +199,8 @@ async function executeSimulateAndRun(
     currentTestCase: string | null;
   }) => void,
 ): Promise<void> {
-  const { orgId, suiteId, suiteRunId, triggeredBy, testCaseIds } = payload;
+  const { orgId, suiteId, suiteRunId, triggeredBy, testCaseIds, concurrency } =
+    payload;
   const startTime = performance.now();
 
   try {
@@ -204,6 +212,7 @@ async function executeSimulateAndRun(
       startTime,
       updateProgress,
       testCaseIds,
+      concurrency,
     );
   } catch (err) {
     log.error({ err, suiteRunId, suiteId }, "simulate-and-run task failed");
@@ -243,6 +252,7 @@ async function executeSimulateAndRunInner(
     currentTestCase: string | null;
   }) => void,
   testCaseIds?: string[],
+  concurrency?: number,
 ): Promise<void> {
   const suiteData = await forOrg(orgId, async (tx) => {
     const [suite] = await tx
@@ -298,41 +308,41 @@ async function executeSimulateAndRunInner(
     }
   }
 
-  const results: TestCaseEvalResult[] = [];
+  // Resolve and clamp concurrency (defence in depth — also clamped at enqueue).
+  const total = suiteData.testCases.length;
+  const poolSize = Math.max(
+    1,
+    Math.min(20, Math.floor(concurrency ?? env.EVAL_CONCURRENCY)),
+  );
+  const effectivePoolSize = Math.min(poolSize, Math.max(1, total));
 
-  for (let i = 0; i < suiteData.testCases.length; i++) {
-    const testCase = suiteData.testCases[i];
+  // Bounded worker pool: each worker pulls the next test case off a shared
+  // cursor. Results are indexed by test-case order so the final ordering
+  // matches the input (dashboards rely on stable order). Progress is a
+  // monotonic "completed count" so mid-run updates don't pretend a specific
+  // test is in flight (impossible to pick meaningfully with N in flight).
+  const results: TestCaseEvalResult[] = new Array(total);
+  let cursor = 0;
+  let completed = 0;
 
-    // Recorded test cases: skip simulation, use stored session directly (AC 15-17)
+  async function runOne(index: number): Promise<void> {
+    const testCase = suiteData.testCases[index];
+
     if (testCase.source === "recorded") {
       const recordedInput = testCase.input as RecordedTestCaseInput | null;
       const recordedSessionId = recordedInput?.sessionId;
-
-      // Update progress
-      const progress = {
-        completed: i,
-        total: suiteData.testCases.length,
-        currentTestCase: testCase.name,
-      };
-      updateProgress(progress);
-      await forOrg(orgId, (tx) =>
-        tx
-          .update(evalSuiteRuns)
-          .set({ metadata: { progress } })
-          .where(eq(evalSuiteRuns.id, suiteRunId)),
-      );
 
       if (!recordedSessionId) {
         log.warn(
           { testCaseId: testCase.id },
           "recorded test case missing input.sessionId",
         );
-        results.push(erroredTestCaseResult(testCase));
-        continue;
+        results[index] = erroredTestCaseResult(testCase);
+        return;
       }
 
       try {
-        const evalResult = await runTestCaseEval(
+        results[index] = await runTestCaseEval(
           orgId,
           suiteData.suite,
           testCase,
@@ -340,24 +350,21 @@ async function executeSimulateAndRunInner(
           recordedSessionId,
           { triggeredBy },
         );
-        results.push(evalResult);
       } catch (err) {
         log.warn(
           { err, testCaseId: testCase.id, suiteRunId },
           "recorded test case eval failed",
         );
-        results.push(
-          await persistFailedEvalRun(
-            orgId,
-            suiteData.suite.id,
-            suiteRunId,
-            testCase,
-            recordedSessionId,
-            err instanceof Error ? err.message : "Unknown error",
-          ),
+        results[index] = await persistFailedEvalRun(
+          orgId,
+          suiteData.suite.id,
+          suiteRunId,
+          testCase,
+          recordedSessionId,
+          err instanceof Error ? err.message : "Unknown error",
         );
       }
-      continue;
+      return;
     }
 
     const input = testCase.input as SimulationTestCaseInput;
@@ -366,21 +373,6 @@ async function executeSimulateAndRunInner(
     const conversationHistory = input.conversationHistory;
     const mockToolResponses =
       (testCase.mockToolResponses as Record<string, unknown>) ?? {};
-
-    // Update progress
-    const progress = {
-      completed: i,
-      total: suiteData.testCases.length,
-      currentTestCase: testCase.name,
-    };
-    updateProgress(progress);
-
-    await forOrg(orgId, (tx) =>
-      tx
-        .update(evalSuiteRuns)
-        .set({ metadata: { progress } })
-        .where(eq(evalSuiteRuns.id, suiteRunId)),
-    );
 
     // 0. Resolve persona for personalization + multi-turn follow-ups
     const persona = personaId ? await getPersona(personaId, orgId) : undefined;
@@ -453,21 +445,19 @@ async function executeSimulateAndRunInner(
           { testCaseId: testCase.id, suiteRunId, error: simResult.error },
           "test case simulation failed",
         );
-        results.push(
-          await persistFailedEvalRun(
-            orgId,
-            suiteData.suite.id,
-            suiteRunId,
-            testCase,
-            sessionId,
-            simResult.error,
-          ),
+        results[index] = await persistFailedEvalRun(
+          orgId,
+          suiteData.suite.id,
+          suiteRunId,
+          testCase,
+          sessionId,
+          simResult.error,
         );
-        continue;
+        return;
       }
 
       // 4. Score the session against test case evaluators
-      const evalResult = await runTestCaseEval(
+      results[index] = await runTestCaseEval(
         orgId,
         suiteData.suite,
         testCase,
@@ -475,35 +465,78 @@ async function executeSimulateAndRunInner(
         simResult.sessionId,
         { triggeredBy },
       );
-
-      results.push(evalResult);
     } catch (err) {
       log.warn(
         { err, testCaseId: testCase.id, suiteRunId },
         "test case simulation+eval failed",
       );
       if (sessionId) {
-        results.push(
-          await persistFailedEvalRun(
-            orgId,
-            suiteData.suite.id,
-            suiteRunId,
-            testCase,
-            sessionId,
-            err instanceof Error ? err.message : "Unknown error",
-          ),
+        results[index] = await persistFailedEvalRun(
+          orgId,
+          suiteData.suite.id,
+          suiteRunId,
+          testCase,
+          sessionId,
+          err instanceof Error ? err.message : "Unknown error",
         );
       } else {
         log.error(
           { testCaseId: testCase.id, suiteRunId },
           "test case failed before session creation — result will not be persisted",
         );
-        results.push(erroredTestCaseResult(testCase));
+        results[index] = erroredTestCaseResult(testCase);
       }
     } finally {
       await adapter?.disconnect();
     }
   }
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = cursor++;
+      if (index >= total) return;
+
+      // Opportunistically advertise which case kicked off most recently — this
+      // is best-effort (multiple are in flight), but it gives watchers useful
+      // signal about *what* is being processed.
+      const progress = {
+        completed,
+        total,
+        currentTestCase: suiteData.testCases[index].name,
+      };
+      updateProgress(progress);
+      try {
+        await forOrg(orgId, (tx) =>
+          tx
+            .update(evalSuiteRuns)
+            .set({ metadata: { progress } })
+            .where(eq(evalSuiteRuns.id, suiteRunId)),
+        );
+      } catch (err) {
+        log.warn(
+          { err, suiteRunId, testCaseId: suiteData.testCases[index].id },
+          "progress update failed — continuing",
+        );
+      }
+
+      // One stuck test case must not hang the whole suite — runOne's own
+      // try/catch ensures a failure is captured as an errored result row.
+      await runOne(index);
+      completed += 1;
+    }
+  }
+
+  log.info(
+    {
+      suiteRunId,
+      suiteId,
+      total,
+      concurrency: effectivePoolSize,
+    },
+    "simulate-and-run dispatching test cases with bounded concurrency",
+  );
+
+  await Promise.all(Array.from({ length: effectivePoolSize }, () => worker()));
 
   // Determine suite run status
   const durationMs = elapsedMs(startTime);
