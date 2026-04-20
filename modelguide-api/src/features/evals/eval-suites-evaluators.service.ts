@@ -196,7 +196,7 @@ export async function resolveAssertions(
     const cfg = configMap.get(evalConfigId);
     if (!cfg) {
       log.error(
-        { evalConfigId, suiteId },
+        { evalConfigId, suiteId, name },
         "evaluator references missing eval config — data integrity issue",
       );
       return {
@@ -206,12 +206,10 @@ export async function resolveAssertions(
         evaluator: {
           configId: evalConfigId,
           evaluatorType: "llm_judge" as const,
-          config: {
-            criterion:
-              "ERROR: This evaluator references a deleted eval config. Result should be treated as 'error', not 'pass'.",
-          },
+          config: {},
         },
         toolNameMap: {},
+        orphaned: true,
       };
     }
 

@@ -93,6 +93,12 @@ export interface ResolvedAssertion {
   evaluator: ResolvedEvaluator;
   /** Connector tool ID -> runtime tool name for this assertion. */
   toolNameMap: Record<string, string>;
+  /**
+   * True when the underlying eval_config was not found (orphaned reference).
+   * Runner short-circuits to `result: "error"` without invoking any evaluator —
+   * prevents the LLM judge from seeing a fabricated criterion.
+   */
+  orphaned?: boolean;
 }
 
 // ============================================================================

@@ -27,7 +27,7 @@ import {
   createTestCase,
 } from "@features/evals/eval-suites.service";
 import type { Command } from "commander";
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { getErrorMessage } from "../lib/errors";
 import type { IdRegistry } from "../lib/id-registry";
 import { log } from "../lib/logger";
@@ -484,11 +484,20 @@ async function reconcileSuiteEvaluators(
       .filter((v): v is NonNullable<typeof v> => v !== null);
 
     if (toInsert.length > 0) {
+      // Upsert: on conflict, re-wire evalConfigId. This self-heals rows left
+      // pointing at a config in a different org (e.g. after a cross-org
+      // import bug moves SOPs between orgs but leaves eval_configs behind —
+      // RLS then hides the config and the suite_evaluator reads as orphaned).
       await tx
         .insert(evalSuiteEvaluators)
         .values(toInsert)
-        .onConflictDoNothing({
+        .onConflictDoUpdate({
           target: [evalSuiteEvaluators.suiteId, evalSuiteEvaluators.name],
+          set: {
+            evalConfigId: sql`EXCLUDED.eval_config_id`,
+            order: sql`EXCLUDED.order`,
+            required: sql`EXCLUDED.required`,
+          },
         });
     }
   });
@@ -513,6 +522,10 @@ async function reconcileAutoToolCalledEvaluators(
   sopSlug: string,
 ): Promise<{ added: number; removed: number }> {
   return forOrg(orgId, async (tx) => {
+    // Auto-generate tool_called checks only for REQUIRED steps — non-required
+    // steps are optional flows (e.g. upsells, proactive messaging) and
+    // shouldn't count as hard failures. This keeps each suite to ~3-5 auto
+    // evaluators instead of exploding with every step.
     const steps = await tx
       .select({
         stepId: sopSteps.stepId,
@@ -523,7 +536,11 @@ async function reconcileAutoToolCalledEvaluators(
       })
       .from(sopSteps)
       .where(
-        and(eq(sopSteps.sopId, sopId), isNotNull(sopSteps.connectorToolId)),
+        and(
+          eq(sopSteps.sopId, sopId),
+          isNotNull(sopSteps.connectorToolId),
+          eq(sopSteps.required, true),
+        ),
       )
       .orderBy(asc(sopSteps.order));
 
@@ -531,6 +548,7 @@ async function reconcileAutoToolCalledEvaluators(
       .select({
         id: evalSuiteEvaluators.id,
         sopStepId: evalSuiteEvaluators.sopStepId,
+        evalConfigId: evalSuiteEvaluators.evalConfigId,
       })
       .from(evalSuiteEvaluators)
       .where(
@@ -543,14 +561,20 @@ async function reconcileAutoToolCalledEvaluators(
     const existingByStep = new Map(
       existing
         .filter((r) => r.sopStepId !== null)
-        .map((r) => [r.sopStepId as string, r.id] as const),
+        .map(
+          (r) =>
+            [
+              r.sopStepId as string,
+              { id: r.id, evalConfigId: r.evalConfigId },
+            ] as const,
+        ),
     );
 
     const targetStepIds = new Set(steps.map((s) => s.stepId));
 
     const toRemove = [...existingByStep.entries()]
       .filter(([stepId]) => !targetStepIds.has(stepId))
-      .map(([, id]) => id);
+      .map(([, v]) => v.id);
     if (toRemove.length > 0) {
       await tx
         .delete(evalSuiteEvaluators)
@@ -559,7 +583,6 @@ async function reconcileAutoToolCalledEvaluators(
 
     let added = 0;
     for (const step of steps) {
-      if (existingByStep.has(step.stepId)) continue;
       if (!step.connectorToolId) continue;
 
       const configName = `auto:tool_called:${sopSlug}:${step.stepId}`;
@@ -598,6 +621,23 @@ async function reconcileAutoToolCalledEvaluators(
       const label = step.instruction
         ? step.instruction.slice(0, 80)
         : `step ${step.order}`;
+
+      const existingForStep = existingByStep.get(step.stepId);
+      if (existingForStep) {
+        // Row exists — re-wire evalConfigId in case it points to a stale
+        // (cross-org or deleted) config, and refresh order/required.
+        if (existingForStep.evalConfigId !== configId) {
+          await tx
+            .update(evalSuiteEvaluators)
+            .set({
+              evalConfigId: configId,
+              order: step.order,
+              required: step.required,
+            })
+            .where(eq(evalSuiteEvaluators.id, existingForStep.id));
+        }
+        continue;
+      }
 
       await tx.insert(evalSuiteEvaluators).values({
         organizationId: orgId,

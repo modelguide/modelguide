@@ -56,6 +56,21 @@ export async function executeAssertions(
   const toolMsgs = messages.filter((m) => m.role === "tool");
 
   async function runOne(assertion: ResolvedAssertion): Promise<ScoreInsert> {
+    if (assertion.orphaned) {
+      return {
+        evalRunId,
+        organizationId: orgId,
+        evalConfigId: assertion.evaluator.configId,
+        name: assertion.name,
+        scoreOrder: assertion.order,
+        required: assertion.required,
+        evaluatorType: assertion.evaluator.evaluatorType,
+        result: "error" as EvalScoreResult,
+        reasoning:
+          "Evaluator config is missing (orphaned reference). Re-run `mg compile-agent` and `mg import-evals --replace` to refresh the suite.",
+      };
+    }
+
     const resolvedToolNames = new Map(Object.entries(assertion.toolNameMap));
     const ctx: EvalContext = {
       messages,
