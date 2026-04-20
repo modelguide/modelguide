@@ -65,15 +65,46 @@ agents:
     platform: livekit
     active: true
     config:
+      # ONLY url + agentName are allowed here. llmModel is rejected by the
+      # schema for livekit agents (it's baked into the worker image). See
+      # modelguide-api/src/cli/schemas/agents.schema.ts livekitConfigSchema.
       url: "ws://localhost:7880"
-      agentName: "{{agentSlug}}"
+      agentName: "{{agentSlug}}"                       # MUST match the profile key in the worker's config/agents.yaml
     # Conversation-only agents: omit the `tools:` block entirely.
     tools:
       - connectorSlug: "{{connectorSlug}}"
+    # LiveKit requires creds to dispatch the worker into a room. Declaring
+    # the secrets WITHOUT `value:` lets `mg setup` prompt interactively for
+    # them (via add-agents.ts → promptSecret). The API stores only the
+    # encrypted secret ID — `livekit_api_key` / `livekit_api_secret` are the
+    # canonical field names read by agents.service.ts:getAgentSecretByType.
+    secrets:
+      - field: livekit_api_key
+        name: "LiveKit API Key"
+        type: api_key
+      - field: livekit_api_secret
+        name: "LiveKit API Secret"
+        type: api_key
 ```
 
 Conversation-only render: omit the entire `tools:` block. The final
 `agents.yaml` must not contain `connectorSlug`.
+
+### A/B variants on the same worker (bank-nowa2 pattern)
+
+When shipping two prompt variants (e.g. v1 without a proactive nudge, v2 with
+it) on a single LiveKit worker, keep the delta isolated:
+
+- **Python side**: put `SCOPE`, `SCENARIOS`, `CLOSING` in a shared
+  `prompt.py` and expose a `build(*, include_nudge: bool) -> str` helper.
+  Each variant becomes a 3-line wrapper. Lock the invariant with a
+  byte-for-byte test: `assert v2.replace(NUDGE, "") == v1`. This is what
+  makes the A/B eval signal meaningful — any drift on a non-nudge axis
+  pollutes the result.
+- **Seed side**: each variant is its OWN agent slug and OWN LiveKit profile
+  key (e.g. `banknowa2_v1` / `banknowa2_v2`). Shared SOPs attach to both;
+  variant-specific SOPs (the one that contains the nudge step) attach only
+  to the matching agent.
 
 ## connectors.yaml — Medusa (catalog)
 
@@ -414,3 +445,48 @@ To reference a persona in a test case, add `persona: "{{orgSlug}}-customer"` to 
       persona: "{{orgSlug}}-customer"
       conversation_history: [...]
 ```
+
+## sessions.yaml
+
+Seed a handful of historical sessions so the dashboard renders non-empty
+CSAT and feedback coverage the moment `mg setup` finishes. Without this,
+a freshly-imported demo org looks dead — no trend chart, no CSAT, no
+session list — which kills the "it works!" moment.
+
+Aim for **10–15 sessions** with a distribution that tells a story:
+
+- **Balanced across agents** — if two variants exist (v1/v2), split roughly 50/50 so A/B dashboards render both columns.
+- **Realistic abandonment rate** — ~15–20% `status: abandoned` (no feedback block).
+- **CSAT mix** — ~75% `verdict: good`, the rest `bad` with a concrete `comment` pointing at a real failure mode (guardrail violation, wrong step order, missed acknowledgement). Bad cases with specific comments teach more than generic "it was great".
+- **Cover every SOP branch** — if a SOP has a decision point (e.g. "customer recognizes vs doesn't"), seed at least one session on each branch.
+- **Mix `source: customer` and `source: support`** — customer CSAT and support eval coverage look different on the dashboard; both should be non-empty.
+
+```yaml
+sessions:
+  - agentSlug: "{{agentSlug}}"
+    externalId: "seed-{{variant}}-{{scenario}}"   # stable key so re-imports are idempotent
+    channel: voice                        # voice | web | api | slack | widget | sms | whatsapp | email
+    status: completed                     # active | completed | abandoned (default: completed)
+    userIdentifier: "{{phone-or-email}}"
+    hoursAgo: 36                           # timestamps messages N hours in the past
+    messages:
+      - role: assistant
+        content: "{{greeting}}"
+      - role: user
+        content: "{{opening intent}}"
+      - role: tool                         # tool-role message = JSON stringified tool result
+        content: '{"success":true,"customer_id":"CUST-001","card_id":"CARD-001"}'
+      - role: assistant
+        content: "{{next turn}}"
+      # … continue until a closing sign-off
+    feedback:                              # omit for abandoned sessions
+      verdict: good                        # good | bad
+      comment: "{{specific observation — why it was good/bad}}"
+      source: customer                     # customer | support | system
+    links: []                              # optional
+```
+
+**Pitfalls**:
+- Tool-role messages must be JSON strings, not YAML objects. Schema accepts any string but tests/analyzers expect stringified JSON.
+- Every `agentSlug` referenced must exist in `agents.yaml` — unknown slugs fail the import.
+- For tool-calling SOPs, put a tool-role message BEFORE the assistant's natural-language response that uses the result. Readers skim the transcript top-to-bottom and the tool-before-reply ordering is what teaches the SOP flow.

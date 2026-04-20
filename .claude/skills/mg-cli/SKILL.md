@@ -161,11 +161,37 @@ agents:
     slug: "acme-voice-agent"
     description: "Handles phone orders"
     modality: voice             # voice | text (default: voice)
-    platform: custom            # custom | elevenlabs (default: custom)
+    platform: custom            # custom | elevenlabs | livekit (default: custom)
     tools:
       - connectorSlug: "acme_store"           # all tools from this connector
       - connectorSlug: "acme_support"
         toolSlugs: [create_ticket, get_ticket] # specific tools only
+```
+
+**For `platform: livekit`** (voice-test + outbound dispatch require this):
+```yaml
+agents:
+  - name: "Acme Voice Agent"
+    slug: "acme-voice-agent"
+    modality: voice
+    platform: livekit
+    config:
+      # Only url + agentName are valid for livekit. llmModel is rejected
+      # (baked into the worker image).
+      url: "wss://your-project.livekit.cloud"
+      agentName: "acme_voice_agent"   # must match the profile key in the worker's config/agents.yaml
+    tools:
+      - connectorSlug: "acme_store"
+    secrets:
+      # No `value:` → `mg setup` prompts once per field. These exact field
+      # names are read by agents.service.ts:getAgentSecretByType when
+      # dispatching the worker.
+      - field: livekit_api_key
+        name: "LiveKit API Key"
+        type: api_key
+      - field: livekit_api_secret
+        name: "LiveKit API Secret"
+        type: api_key
 ```
 
 ### sops.yaml — two modes

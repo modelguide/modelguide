@@ -549,8 +549,32 @@ Always generate:
 - `guardrails.yaml` — from D-08, always include no-fabrication baseline
 - `evals.yaml` — 5-10 test cases per SOP across three shapes: full-flow (happy path + all SOP tool mocks + persona), replay (specific conversational moment via `conversation_history`), and single-turn (guardrail refusals, escalations). See `references/yaml-templates.md` for the structure + `common_evaluators:` pattern. Do NOT hand-write `tool_called` evaluators — the importer auto-derives them from each SOP step's tool binding.
 - `personas.yaml` — start with 1 baseline persona, and add a **variant per branching scenario** your SOPs contain. For example: if a SOP offers "standard vs express card", emit one persona that picks standard and a `-express` variant that picks express. If a SOP handles "recognized vs suspicious transaction", emit one persona that recognizes and another that doesn't. A single catch-all persona can't reliably drive both branches under LLM non-determinism. See `references/yaml-templates.md` for format. Reference in test cases via `persona: <id>`; missing persona ID causes silent fallback to raw message.
+- `sessions.yaml` — 10–15 seeded historical sessions so CSAT / feedback / trend charts render non-empty the moment the import completes. Without this the demo org looks dead on first login. Mix completed + abandoned (~15–20% abandoned), customer + support feedback sources, and cover every SOP branch. See `references/yaml-templates.md` for the distribution rules.
 
 **`agents.yaml`** — see `references/yaml-templates.md` for ElevenLabs and LiveKit formats.
+
+**LiveKit seed pitfalls** (easy to get wrong, caught by the CLI schema):
+- `config:` accepts ONLY `url` + `agentName`. `llmModel` is rejected for livekit
+  agents (it's baked into the worker image).
+- `agentName` in `config` must match the profile key in the worker's
+  `config/agents.yaml` exactly — the worker reads this from dispatch
+  metadata to pick the profile.
+- You MUST declare `livekit_api_key` + `livekit_api_secret` secrets on
+  each livekit agent, with no inline `value:`. That makes `mg setup`
+  prompt interactively at import time. Without them, voice-test and
+  outbound dispatch throw `LiveKit credentials not found` at runtime.
+
+**A/B variants on one worker** — when two agents share a worker but differ in
+one intentional way (e.g. a prompt nudge, a different tool-set):
+- Keep the delta **mechanically isolated**. For Python prompts, put the
+  common parts in a shared module and expose a `build(*, include_X: bool)`
+  helper. Each variant becomes a 3-line wrapper.
+- Lock the invariant with a **byte-for-byte contract test** (e.g.
+  `assert v2.replace(DELTA_BLOCK, "") == v1`). Without this the A/B eval
+  signal drifts silently as prompts get edited.
+- In the seed, each variant is its OWN agent slug and each SOP/guardrail
+  attaches to the agent(s) it actually applies to — shared SOPs to both,
+  delta-specific SOPs to only the matching variant.
 
 Connector handling (same for both platforms):
 - If `connectorStatus: done` (or no custom connector): generate `connectors.yaml` now
