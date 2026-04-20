@@ -161,6 +161,43 @@
   }
 }
 
+/* Voice activity indicator — used in the Voice Test panel. */
+
+@keyframes voice-bar-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  30% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.45);
+  }
+  70% {
+    transform: scaleY(0.85);
+  }
+}
+
+@keyframes voice-bar-wave {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scaleY(0.55);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-[voice-bar-"] {
+    animation: none !important;
+    opacity: 0.7;
+  }
+}
+
 /* Utility classes */
 @layer utilities {
   .animate-fade-up {
