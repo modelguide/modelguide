@@ -863,6 +863,60 @@ describe("Strict PATCH schema", () => {
   });
 });
 
+// ============================================================================
+// POST /api/agents/:id/voice-test-token — WebRTC voice-test POC
+// ============================================================================
+
+describe("POST /api/agents/:id/voice-test-token", () => {
+  test("returns 400 when LiveKit is not configured", async () => {
+    // Seeded orgA voice agent has no LiveKit config by default.
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-token`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+      },
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/LiveKit/i);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-token`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  test("org B cannot voice-test an org A agent (404)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-token`,
+      {
+        method: "POST",
+        headers: orgBAdminHeaders,
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 for unknown agent", async () => {
+    const response = await request(
+      "/api/agents/00000000-0000-0000-0000-000000000000/voice-test-token",
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+});
+
 describe("Agent slug uniqueness", () => {
   test("creating agent with duplicate name (same slug) returns 409", async () => {
     const res1 = await request("/api/agents", {

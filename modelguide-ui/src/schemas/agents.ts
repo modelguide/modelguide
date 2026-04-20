@@ -44,6 +44,11 @@ export const agentSchema = z.object({
   evalSuiteCount: z.number().int().nonnegative().optional().default(0),
   promptConfig: promptConfigSchema.optional().default({}),
   metadata: z.record(z.unknown()).optional(),
+  // Map of `fieldName -> secretId`, e.g. `{ livekit_api_key: "<uuid>" }`.
+  // The API never returns decrypted values; this map is what the UI uses to
+  // decide whether a secret is configured (without decrypting it). Optional
+  // so fixtures and test doubles don't need to spell out an empty object.
+  secrets: z.record(z.string()).optional(),
   hasElevenLabsKey: z.boolean(),
   hasWebhookSecret: z.boolean().optional(),
   keyPrefix: z.string().nullable().optional(),
@@ -124,3 +129,16 @@ export interface OutboundCallResponse {
   roomName: string
   dispatchId: string
 }
+
+export const voiceTestTokenResponseSchema = z.object({
+  livekitUrl: z.string(),
+  roomName: z.string(),
+  token: z.string(),
+  sessionId: z.string().uuid(),
+  dispatchId: z.string(),
+  agentName: z.string(),
+  profileName: z.string(),
+  identity: z.string(),
+})
+
+export type VoiceTestTokenResponse = z.infer<typeof voiceTestTokenResponseSchema>

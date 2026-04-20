@@ -31,7 +31,11 @@ import {
 import { slugify } from "@lib/slugify";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { dispatchAgentToRoom, pingLivekit } from "./livekit";
+import {
+  dispatchAgentToRoom,
+  generateVoiceTestToken,
+  pingLivekit,
+} from "./livekit";
 
 type Modality = (typeof agents.modality.enumValues)[number];
 type ModelFamily = (typeof agents.modelFamily.enumValues)[number];
@@ -829,4 +833,134 @@ export async function createOutboundCall(
   }
 
   return { sessionId: session.id, roomName, dispatchId };
+}
+
+// ============================================================================
+// Voice-test (browser WebRTC "Talk to agent")
+//
+// Issues a short-lived LiveKit AccessToken scoped to a new room, creates a
+// ModelGuide session, and dispatches the configured LiveKit worker into the
+// room. The worker reads `agentName` from dispatch metadata and routes to
+// the matching profile (prompt + tools baked into the worker image — we do
+// NOT inject a prompt from here). This is the "talk to the live agent on
+// this worker" flow, not a prompt-override smoke test.
+// ============================================================================
+
+export interface VoiceTestSession {
+  livekitUrl: string;
+  roomName: string;
+  token: string;
+  sessionId: string;
+  dispatchId: string;
+  agentName: string; // LiveKit worker name (which worker to dispatch into)
+  profileName: string; // worker-internal profile slug (which agent inside)
+  identity: string;
+}
+
+export async function createVoiceTestSession(
+  orgId: string,
+  agentId: string,
+  caller: { userId: string; email: string; name: string },
+): Promise<VoiceTestSession> {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Voice test requires a voice agent");
+    }
+    if (a.agentPlatform !== "livekit") {
+      throw Errors.invalidInput(
+        "Voice test is only supported for LiveKit agents",
+      );
+    }
+    return a;
+  });
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+  const agentName = lkMeta.agentName as string | undefined;
+
+  if (!livekitUrl || !agentName) {
+    throw Errors.invalidInput(
+      "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `voice-test-${nanoid()}`;
+  const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
+
+  // Record a session before we dispatch so we can attribute the call even if
+  // dispatch fails or the caller never connects.
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: caller.email,
+    userMetadata: {
+      voiceTest: true,
+      userId: caller.userId,
+      name: caller.name,
+      roomName,
+    },
+  });
+
+  // Dispatch metadata — the worker reads `agentName` to pick the profile
+  // (see demos/bank-nowa/voice-agent/src/agent.py). We pass the MG agent slug
+  // as the profile selector; the worker's config/agents.yaml profile slug
+  // must match for routing to succeed.
+  const dispatchMetadata = {
+    mode: "voice-test" as const,
+    agentName: agent.slug,
+    session_id: session.id,
+    user_identifier: caller.email,
+    email: caller.email,
+  };
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      agentName,
+      roomName,
+      dispatchMetadata,
+    );
+  } catch (err) {
+    // Roll the session forward so the dashboard doesn't collect orphan
+    // "initiated" rows when LiveKit dispatch fails (bad creds, worker offline,
+    // network blip). updateSession is RLS-scoped so this can't cross orgs.
+    await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    throw err;
+  }
+
+  const token = await generateVoiceTestToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity,
+    name: caller.name,
+  });
+
+  return {
+    livekitUrl,
+    roomName,
+    token,
+    sessionId: session.id,
+    dispatchId,
+    agentName,
+    profileName: agent.slug,
+    identity,
+  };
 }
