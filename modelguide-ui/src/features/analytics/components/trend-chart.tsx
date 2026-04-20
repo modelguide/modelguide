@@ -143,8 +143,10 @@ export function TrendChart({ sessions, resolutions, isLoading }: TrendChartProps
                 formatter={(value, name) => {
                   // recharts' Formatter now types value as ValueType (number | string)
                   // and name similarly. Coerce defensively — our payloads always
-                  // feed numbers, but the type is broader.
-                  const numeric = typeof value === 'number' ? value : Number(value ?? 0)
+                  // feed numbers, but the type is broader. Guard against NaN so
+                  // tooltips never render "NaN%" on a bad/missing datapoint.
+                  const raw = typeof value === 'number' ? value : Number(value ?? 0)
+                  const numeric = Number.isFinite(raw) ? raw : 0
                   const label = typeof name === 'string' ? name : String(name ?? '')
                   return label === 'Sessions' ? [numeric, label] : [`${numeric}%`, label]
                 }}

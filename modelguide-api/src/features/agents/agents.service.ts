@@ -986,6 +986,22 @@ export async function createVoiceTestSession(
     name: caller.name,
   });
 
+  // Correlation breadcrumb. Pairs with the worker-side "Client ready for
+  // agent …" log so triaging a failed "Talk to agent" click is one grep
+  // across roomName / dispatchId.
+  getLogger().info(
+    {
+      orgId,
+      agentId,
+      sessionId: session.id,
+      dispatchId,
+      roomName,
+      agentName,
+      profileName: agent.slug,
+    },
+    "voice-test dispatched",
+  );
+
   return {
     livekitUrl,
     roomName,
