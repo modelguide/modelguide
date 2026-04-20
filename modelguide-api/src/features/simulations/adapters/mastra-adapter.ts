@@ -109,34 +109,7 @@ export class MastraAdapter implements AgentAdapter {
             generateOpts,
           )
         : await this.agent.generate(message, generateOpts);
-    // Extract tool calls from the generation steps.
-    //
-    // Mastra splits each step into two parallel collections — `toolCalls`
-    // (invocations: name + args + id) and `toolResults` (outputs: keyed by
-    // the same toolCallId). `tc.payload.output` on the calls side is
-    // typically undefined; the actual result lives on the matching
-    // `toolResult.payload.result`. Previously we only read the calls side
-    // and stored `{}` for every tool output, which made evaluators think
-    // mock_tool_responses returned nothing.
-    const toolCalls: AgentAdapterResponse["toolCalls"] = [];
-    for (const step of result.steps ?? []) {
-      const resultsById = new Map<string, unknown>();
-      for (const tr of (step as { toolResults?: unknown[] }).toolResults ??
-        []) {
-        const p = (tr as { payload?: Record<string, unknown> })?.payload ?? {};
-        const id = p.toolCallId as string | undefined;
-        if (id) resultsById.set(id, p.result ?? p.output);
-      }
-      for (const tc of step.toolCalls ?? []) {
-        const id = tc.payload.toolCallId as string | undefined;
-        const matched = id ? resultsById.get(id) : undefined;
-        toolCalls.push({
-          name: tc.payload.toolName,
-          arguments: (tc.payload.args as Record<string, unknown>) ?? {},
-          result: matched ?? tc.payload.output,
-        });
-      }
-    }
+    const toolCalls = extractToolCalls(result.steps ?? []);
 
     // Extract the final response text, avoiding Mastra's concatenation.
     // result.text concatenates text from ALL steps, so when the agent
@@ -195,4 +168,80 @@ function extractResponseText(
     if (text) return text;
   }
   return fullText.trim();
+}
+
+/**
+ * Shape of a single Mastra generation step we care about. Mastra's types
+ * aren't fully exported, so we define the narrow subset this adapter reads.
+ *
+ * Each step has two parallel collections:
+ *  - `toolCalls`     — the invocation side: toolCallId, toolName, args.
+ *  - `toolResults`   — the output side: same toolCallId, plus the result.
+ *
+ * `toolCalls[i].payload.output` is typically undefined; the real result
+ * lives on the matching `toolResults[j].payload.result`. Previously the
+ * adapter only read the calls side, so every stored tool output was `{}`
+ * and LLM-judge evaluators saw no tool data to verify against.
+ */
+interface MastraToolCallPayload {
+  toolCallId?: string;
+  toolName: string;
+  args?: unknown;
+  output?: unknown;
+}
+
+interface MastraToolResultPayload {
+  toolCallId?: string;
+  result?: unknown;
+}
+
+export interface MastraGenerationStep {
+  toolCalls?: Array<{ payload: MastraToolCallPayload }>;
+  toolResults?: Array<{ payload: MastraToolResultPayload }>;
+}
+
+/**
+ * Extract tool calls from Mastra generation steps, merging each call with
+ * its matching result by `toolCallId`.
+ *
+ * Falls back to `payload.output` on the calls side if no matching result
+ * is found — some SDK versions populate that field instead of emitting a
+ * separate `toolResults` entry.
+ */
+export function extractToolCalls(
+  steps: MastraGenerationStep[],
+): AgentAdapterResponse["toolCalls"] {
+  const toolCalls: AgentAdapterResponse["toolCalls"] = [];
+
+  for (const step of steps) {
+    const resultByCallId = indexResultsByCallId(step.toolResults ?? []);
+
+    for (const call of step.toolCalls ?? []) {
+      const { toolCallId, toolName, args, output } = call.payload;
+      const resolvedResult = toolCallId
+        ? (resultByCallId.get(toolCallId) ?? output)
+        : output;
+
+      toolCalls.push({
+        name: toolName,
+        arguments: (args as Record<string, unknown>) ?? {},
+        result: resolvedResult,
+      });
+    }
+  }
+
+  return toolCalls;
+}
+
+function indexResultsByCallId(
+  toolResults: Array<{ payload: MastraToolResultPayload }>,
+): Map<string, unknown> {
+  const index = new Map<string, unknown>();
+  for (const toolResult of toolResults) {
+    const { toolCallId, result } = toolResult.payload;
+    if (toolCallId !== undefined) {
+      index.set(toolCallId, result);
+    }
+  }
+  return index;
 }
