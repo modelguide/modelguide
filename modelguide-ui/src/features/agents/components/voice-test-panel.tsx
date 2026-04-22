@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FlaskConical, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -74,6 +74,21 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
     setState('IDLE')
   }, [])
 
+  const hasCompiledPrompt = !!agent.compiledInstructions
+
+  // Shared success/error transitions — both mutations land in the same
+  // UI state machine; only the endpoint path differs (ADR-015).
+  const onTokenSuccess = (resp: VoiceTestTokenResponse) => {
+    setSessionId(resp.sessionId)
+    setToken(resp.token)
+    setWsUrl(resp.livekitUrl)
+    setState('CONNECTING')
+  }
+  const onTokenError = (err: unknown) => {
+    setState('ERROR')
+    setErrorMsg(err instanceof Error ? err.message : 'Failed to start voice test')
+  }
+
   const startMutation = useMutation({
     mutationFn: async (): Promise<VoiceTestTokenResponse> => {
       setErrorMsg(null)
@@ -82,16 +97,24 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       setState('REQUESTING_TOKEN')
       return api.post(`agents/${agent.id}/voice-test-token`).json<VoiceTestTokenResponse>()
     },
-    onSuccess: (resp) => {
-      setSessionId(resp.sessionId)
-      setToken(resp.token)
-      setWsUrl(resp.livekitUrl)
-      setState('CONNECTING')
+    onSuccess: onTokenSuccess,
+    onError: onTokenError,
+  })
+
+  // Sync & Test (POC, ADR-015): dispatches the worker with the currently
+  // compiled prompt in metadata so we're testing the latest prompt without
+  // redeploying the worker image. Requires `compiledInstructions` — the
+  // button disables and shows a hint otherwise.
+  const syncAndTestMutation = useMutation({
+    mutationFn: async (): Promise<VoiceTestTokenResponse> => {
+      setErrorMsg(null)
+      setState('CHECKING_MIC')
+      await ensureMicPermission()
+      setState('REQUESTING_TOKEN')
+      return api.post(`agents/${agent.id}/voice-test-poc-token`).json<VoiceTestTokenResponse>()
     },
-    onError: (err) => {
-      setState('ERROR')
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to start voice test')
-    },
+    onSuccess: onTokenSuccess,
+    onError: onTokenError,
   })
 
   const handleHangUp = useCallback(() => {
@@ -152,11 +175,18 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       </CardHeader>
       <CardContent>
         {livekitConfigured ? (
-          <p className="text-sm text-fg-muted">
-            Dispatches the configured LiveKit worker with this agent's slug as{' '}
-            <code>agentName</code> metadata, then joins the room from your browser so you can talk
-            to the agent end-to-end.
-          </p>
+          <div className="space-y-2 text-sm text-fg-muted">
+            <p>
+              <strong>Talk to agent</strong> dispatches the deployed worker with this agent's slug
+              as <code>agentName</code> metadata and joins from your browser — you'll hear whatever
+              prompt was baked into the worker image.
+            </p>
+            <p>
+              <strong>Sync &amp; Test</strong> does the same but carries the currently{' '}
+              <em>compiled</em> prompt in dispatch metadata so the worker runs with it directly. Use
+              this to iterate on prompts without redeploying. Requires a compiled prompt (ADR-015).
+            </p>
+          </div>
         ) : (
           <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-fg-secondary">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -166,17 +196,36 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
-            <Button
-              onClick={() => {
-                reset()
-                startMutation.mutate()
-              }}
-              loading={startMutation.isPending}
-              disabled={!canMutate || !livekitConfigured}
-            >
-              <Mic className="h-4 w-4" />
-              {state === 'ENDED' ? 'Talk again' : 'Talk to agent'}
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  reset()
+                  startMutation.mutate()
+                }}
+                loading={startMutation.isPending}
+                disabled={!canMutate || !livekitConfigured}
+              >
+                <Mic className="h-4 w-4" />
+                {state === 'ENDED' ? 'Talk again' : 'Talk to agent'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  reset()
+                  syncAndTestMutation.mutate()
+                }}
+                loading={syncAndTestMutation.isPending}
+                disabled={!canMutate || !livekitConfigured || !hasCompiledPrompt}
+                title={
+                  !hasCompiledPrompt
+                    ? 'Compile the prompt first, then Sync & Test'
+                    : 'Dispatch the worker with the currently compiled prompt (ADR-015)'
+                }
+              >
+                <FlaskConical className="h-4 w-4" />
+                Sync &amp; Test
+              </Button>
+            </>
           ) : null}
 
           {token && wsUrl ? (

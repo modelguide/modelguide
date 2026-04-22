@@ -22,6 +22,7 @@ import {
   assignConnectorToAgent,
   createAgent,
   createOutboundCall,
+  createVoiceTestPocSession,
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
@@ -1354,6 +1355,64 @@ router.openapi(voiceTestTokenRoute, async (c) => {
   const { id } = c.req.valid("param");
 
   const result = await createVoiceTestSession(orgId, id, {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+  });
+
+  return c.json(result, 201);
+});
+
+// ============================================================================
+// Voice Test POC (prompt-injection variant — see ADR-015)
+//
+// Same surface as /voice-test-token but dispatches with the agent's compiled
+// prompt in metadata so the worker uses it instead of the baked-in profile
+// default. Exists alongside the prod route so the prod voice-test path stays
+// untouched — the two paths never share dispatch code.
+// ============================================================================
+
+router.post(
+  "/:id/voice-test-poc-token",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const voiceTestPocTokenRoute = createRoute({
+  method: "post",
+  path: "/{id}/voice-test-poc-token",
+  tags: ["Agents"],
+  summary:
+    "Issue a LiveKit voice-test token with compiled-prompt override (POC)",
+  description:
+    "Same flow as /voice-test-token but carries the agent's currently compiled prompt in dispatch metadata under `mode: voice-test-poc`. The LiveKit worker must support the POC mode; if it doesn't, it falls back to its baked-in prompt (ADR-015). Requires the agent to have been compiled at least once.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    201: {
+      description: "Voice test POC session created",
+      content: {
+        "application/json": { schema: voiceTestTokenResponseSchema },
+      },
+    },
+    400: errorResponse(
+      "No compiled prompt, LiveKit not configured, or prompt exceeds metadata size cap",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(voiceTestPocTokenRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const user = getCurrentUser(c);
+  const { id } = c.req.valid("param");
+
+  const result = await createVoiceTestPocSession(orgId, id, {
     userId: user.id,
     email: user.email,
     name: user.name,

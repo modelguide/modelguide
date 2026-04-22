@@ -135,6 +135,66 @@ lk sip participant create \
   --identity callee
 ```
 
+## Voice-Test POC — "Sync & Test" (ADR-015)
+
+The dashboard has two voice-test buttons against this worker:
+
+| Button | Endpoint | Dispatch metadata | Prompt used |
+|---|---|---|---|
+| **Talk to agent** | `POST /agents/:id/voice-test-token` | `mode: "voice-test"` | Baked-in (this worker's `prompts/` module) |
+| **Sync & Test** | `POST /agents/:id/voice-test-poc-token` | `mode: "voice-test-poc"` + `compiled_instructions` | The freshly-compiled prompt from the dashboard |
+
+"Sync & Test" is the admin iteration loop: edit SOPs → Compile → click Sync
+& Test → hear the new prompt without rebuilding the Docker image. See
+[ADR-015](../../../docs/decisions/015-voice-test-prompt-injection-poc.md)
+for the full rationale, tradeoffs, and guards.
+
+### Worker contract
+
+`src/voice_test_poc.py` exposes `resolve_instructions(metadata, default)`.
+At dispatch time, `agent.py` calls:
+
+```python
+resolved = resolve_instructions(dispatch_metadata, default=built_system_prompt)
+```
+
+- If the dispatch carries `mode: "voice-test-poc"` with a non-empty
+  `compiled_instructions` string → the worker runs with the override.
+- **Every** other case (prod voice-test, outbound SIP, no mode at all,
+  blank/wrong-type override) → the worker runs with its baked prompt.
+  The silent-fallback failure mode is "admin thinks they're testing
+  prompt X but worker is running Y"; the tests in
+  `tests/test_voice_test_poc.py` lock down every route back to the
+  baked default so no silent mismatch can happen.
+
+### Size cap
+
+The API enforces a 32 KB UTF-8 byte cap on the injected prompt (LiveKit
+dispatch metadata ceiling is ~48 KB total; 32 KB leaves headroom for
+the rest of the JSON envelope). If you compile a prompt that exceeds
+this, the API returns 400 *before* dispatching — you never end up in
+a "dispatch ran but the prompt was truncated mid-sentence" state.
+
+### When NOT to use this
+
+- **Final validation of what prod will run.** Use "Talk to agent"
+  instead — it hits the *deployed* worker image with whatever prompt
+  is baked in. That's what prod phone traffic will use.
+- **Multi-profile workers.** The `agentName` routing contract still
+  applies; if your worker has multiple profiles, "Sync & Test" still
+  dispatches to the profile matching `agent.slug`, and only overrides
+  *that profile's* prompt.
+
+### Running the worker-side tests
+
+```bash
+cd examples/agents/livekit-agent
+pytest tests/test_voice_test_poc.py -v
+```
+
+The tests import `voice_test_poc` directly (no LiveKit dependencies),
+so they run in any Python 3.11+ environment.
+
 ## How it works
 
 ```

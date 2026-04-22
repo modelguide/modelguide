@@ -135,9 +135,35 @@ describe('VoiceTestPanel', () => {
     const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
     stubMicPermission(true)
     render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
-    // Button enabled — the worker's profile owns the prompt; the voice-test
-    // flow doesn't inject one.
+    // "Talk to agent" enabled — the worker's profile owns the prompt; the
+    // prod voice-test flow doesn't inject one.
     expect(screen.getByRole('button', { name: /talk to agent/i })).not.toBeDisabled()
+    // But "Sync & Test" (POC) requires a compiled prompt — disabled here.
+    expect(screen.getByRole('button', { name: /sync.*test/i })).toBeDisabled()
+  })
+
+  it('enables "Sync & Test" when a compiled prompt is present', () => {
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    expect(screen.getByRole('button', { name: /sync.*test/i })).not.toBeDisabled()
+  })
+
+  it('"Sync & Test" hits the POC endpoint and mounts the LiveKit room', async () => {
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+
+    const btn = screen.getByRole('button', { name: /sync.*test/i })
+    expect(btn).not.toBeDisabled()
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      // Critical: the POC button must go to the POC endpoint, NOT the prod
+      // one — the two have different dispatch metadata shapes (ADR-015).
+      expect(mockPost).toHaveBeenCalledWith('agents/agent-1/voice-test-poc-token')
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('lk-room')).toBeInTheDocument()
+    })
   })
 
   it('disables the talk button for viewers (canMutate=false)', () => {
