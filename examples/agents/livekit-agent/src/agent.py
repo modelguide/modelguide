@@ -23,9 +23,10 @@ import config
 import mg_client
 from buildpro import BuildProAgent
 from hangup import HangupAction, HangupStateMachine
-from prompts import GREETING
+from prompts import GREETING, build_system_prompt
 from providers import create_stt, create_tts
 from tracing import setup_langfuse
+from voice_test_poc import resolve_instructions
 
 VERSION = "0.4.0"
 
@@ -157,8 +158,21 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to create ModelGuide session — running without tracking")
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
+    # Voice-test POC (ADR-015): if the API dispatched us in `voice-test-poc`
+    # mode with a `compiled_instructions` override, run with that prompt
+    # instead of the baked-in default. Any other mode (prod voice-test,
+    # outbound SIP, legacy) → `resolve_instructions` returns the default.
+    default_prompt = build_system_prompt(session_id or "", user_email=user_identifier)
+    resolved_prompt = resolve_instructions(dispatch_metadata, default=default_prompt)
+    instructions_override = resolved_prompt if resolved_prompt is not default_prompt else None
+
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=instructions_override,
+    )
     stt = create_stt()
     tts = create_tts()
 

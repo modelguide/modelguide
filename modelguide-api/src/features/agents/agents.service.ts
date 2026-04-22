@@ -931,6 +931,74 @@ export interface VoiceTestSession {
   identity: string;
 }
 
+// ============================================================================
+// Voice-test POC (prompt-injection variant — see ADR-015)
+//
+// In the prod voice-test path (above) the worker's profile owns the prompt —
+// we dispatch and let the baked-in instructions run. That has one ergonomic
+// gap: "I just edited the prompt in the dashboard, clicked Compile, and I
+// want to hear how it sounds *right now* without cutting a new worker image."
+//
+// This path closes that gap for admin iteration by carrying the freshly
+// compiled prompt in dispatch metadata under a distinct `voice-test-poc`
+// mode marker. The worker's entrypoint switches on `mode` and, if it sees
+// `voice-test-poc` with `compiled_instructions`, uses those as the system
+// prompt instead of the baked-in profile default.
+//
+// Guards, because the only reason ADR-014 rejected this pattern in prod:
+//   - Hard UTF-8 byte cap (32KB) on the injected prompt so we stay well
+//     under LiveKit's ~48KB dispatch-metadata ceiling.
+//   - Empty / whitespace-only prompts are rejected — otherwise the worker
+//     would silently fall back to its baked prompt and the admin would be
+//     testing the wrong thing without knowing.
+//   - Distinct `mode` marker means the prod dispatch path can never
+//     accidentally land in POC code (and vice versa).
+// ============================================================================
+
+/** LiveKit dispatch metadata is capped at ~48KB total; 32KB leaves headroom
+ * for the rest of the JSON envelope plus LiveKit's framing. */
+export const VOICE_TEST_POC_MAX_PROMPT_BYTES = 32 * 1024;
+
+/**
+ * Build the dispatch-metadata payload for a POC (prompt-override) voice-test
+ * session. Pure function so the worker-side contract is covered by a unit
+ * test — see tests/unit/agents/voice-test-poc-dispatch.test.ts.
+ */
+export function buildVoiceTestPocDispatchMetadata(input: {
+  agentSlug: string;
+  sessionId: string;
+  callerEmail: string;
+  compiledInstructions: string;
+}): {
+  mode: "voice-test-poc";
+  agentName: string;
+  session_id: string;
+  user_identifier: string;
+  email: string;
+  compiled_instructions: string;
+} {
+  const prompt = input.compiledInstructions;
+  if (!prompt || prompt.trim().length === 0) {
+    throw Errors.invalidInput(
+      "Voice-test POC requires a non-empty compiled prompt",
+    );
+  }
+  const bytes = Buffer.byteLength(prompt, "utf8");
+  if (bytes > VOICE_TEST_POC_MAX_PROMPT_BYTES) {
+    throw Errors.invalidInput(
+      `Compiled prompt is too large for dispatch metadata (${bytes} bytes, max ${VOICE_TEST_POC_MAX_PROMPT_BYTES}). Tighten the prompt or split into tool instructions.`,
+    );
+  }
+  return {
+    mode: "voice-test-poc" as const,
+    agentName: input.agentSlug,
+    session_id: input.sessionId,
+    user_identifier: input.callerEmail,
+    email: input.callerEmail,
+    compiled_instructions: prompt,
+  };
+}
+
 export async function createVoiceTestSession(
   orgId: string,
   agentId: string,
@@ -1047,6 +1115,162 @@ export async function createVoiceTestSession(
       profileName: agent.slug,
     },
     "voice-test dispatched",
+  );
+
+  return {
+    livekitUrl,
+    roomName,
+    token,
+    sessionId: session.id,
+    dispatchId,
+    agentName,
+    profileName: agent.slug,
+    identity,
+  };
+}
+
+/**
+ * POC voice-test: same flow as {@link createVoiceTestSession} but carries
+ * `agent.compiledInstructions` in dispatch metadata so the worker can use
+ * the freshly compiled prompt instead of its baked-in profile default.
+ *
+ * Orchestration order matches the prod path so transcript / feedback /
+ * analytics keep working: agent lookup → createSession → dispatch → token.
+ * If dispatch fails we roll the session to `abandoned` and rethrow.
+ *
+ * See ADR-015.
+ */
+export async function createVoiceTestPocSession(
+  orgId: string,
+  agentId: string,
+  caller: { userId: string; email: string; name: string },
+): Promise<VoiceTestSession> {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (!a.isActive) {
+      throw Errors.invalidInput("Agent is not active");
+    }
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Voice test requires a voice agent");
+    }
+    if (a.agentPlatform !== "livekit") {
+      throw Errors.invalidInput(
+        "Voice test is only supported for LiveKit agents",
+      );
+    }
+    return a;
+  });
+
+  if (!agent.compiledInstructions || agent.compiledInstructions.length === 0) {
+    throw Errors.invalidInput(
+      "Agent has no compiled prompt yet. Click Compile first, then Sync & Test.",
+    );
+  }
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+  const agentName = lkMeta.agentName as string | undefined;
+
+  if (!livekitUrl || !agentName) {
+    throw Errors.invalidInput(
+      "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `voice-test-poc-${nanoid()}`;
+  const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
+
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: caller.email,
+    userMetadata: {
+      voiceTest: true,
+      voiceTestPoc: true,
+      userId: caller.userId,
+      name: caller.name,
+      roomName,
+    },
+  });
+
+  // Build (and size-check) before we dispatch. If the prompt is too big the
+  // builder throws and we never hit LiveKit — the session still rolls to
+  // abandoned via the try/catch below.
+  let dispatchMetadata: ReturnType<typeof buildVoiceTestPocDispatchMetadata>;
+  try {
+    dispatchMetadata = buildVoiceTestPocDispatchMetadata({
+      agentSlug: agent.slug,
+      sessionId: session.id,
+      callerEmail: caller.email,
+      compiledInstructions: agent.compiledInstructions,
+    });
+  } catch (err) {
+    try {
+      await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    } catch (rollbackErr) {
+      getLogger().error(
+        { orgId, agentId, sessionId: session.id, rollbackErr },
+        "failed to abandon voice-test-poc session after metadata build failure",
+      );
+    }
+    throw err;
+  }
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      agentName,
+      roomName,
+      dispatchMetadata,
+    );
+  } catch (err) {
+    try {
+      await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    } catch (rollbackErr) {
+      getLogger().error(
+        { orgId, agentId, sessionId: session.id, rollbackErr },
+        "failed to abandon voice-test-poc session after dispatch failure",
+      );
+    }
+    throw err;
+  }
+
+  const token = await generateVoiceTestToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity,
+    name: caller.name,
+  });
+
+  getLogger().info(
+    {
+      orgId,
+      agentId,
+      sessionId: session.id,
+      dispatchId,
+      roomName,
+      agentName,
+      profileName: agent.slug,
+      promptBytes: Buffer.byteLength(agent.compiledInstructions, "utf8"),
+    },
+    "voice-test-poc dispatched (with prompt override)",
   );
 
   return {
