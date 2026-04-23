@@ -146,12 +146,27 @@ Optional:
 - `SIMULATION_LLM_API_KEY` — OpenAI (or compatible) API key for persona simulation
 - `SIMULATION_LLM_BASE_URL` — custom base URL for OpenAI-compatible endpoint (defaults to OpenAI). For Claude, set to `https://api.anthropic.com/v1/`
 - `SIMULATION_LLM_MODEL` — model to use for simulation (defaults to `gpt-5-mini`). For Claude, use e.g. `claude-sonnet-4-6`
+- `SIMULATION_AGENT_MODEL` — LLM the **agent-under-test** runs on during `simulate-and-run` (format: `provider/model`, defaults to `anthropic/claude-haiku-4-5-20251001`). Distinct from `SIMULATION_LLM_MODEL` which drives the persona.
 - `EVAL_LLM_API_KEY` — OpenAI (or compatible) API key for eval LLM judge. Falls back to `SIMULATION_LLM_API_KEY`
 - `EVAL_LLM_BASE_URL` — custom base URL for eval LLM endpoint. Falls back to `SIMULATION_LLM_BASE_URL`
 - `EVAL_LLM_MODEL` — model for eval scoring. Falls back to `SIMULATION_LLM_MODEL`
 - `GENERATION_LLM_API_KEY` — API key for synthetic test case generation (Anthropic or OpenAI)
 - `GENERATION_DIMENSION_MODEL` — model for dimension derivation (format: `provider/model`, defaults to `openai/gpt-5.4-mini`)
 - `GENERATION_CASE_MODEL` — model for per-case generation + validation (format: `provider/model`, defaults to `openai/gpt-5.4-mini`)
+
+### Provider-level API keys (gotcha)
+
+`SIMULATION_AGENT_MODEL` is resolved by Mastra's `Agent`, which reads the **provider's standard env var** directly — `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. It does **not** reuse `SIMULATION_LLM_API_KEY` / `EVAL_LLM_API_KEY`. Set whichever of these matches the provider prefix in `SIMULATION_AGENT_MODEL`:
+
+```bash
+# If SIMULATION_AGENT_MODEL starts with "openai/":
+railway variables --set 'OPENAI_API_KEY=${{api.SIMULATION_LLM_API_KEY}}' --service api
+
+# If SIMULATION_AGENT_MODEL starts with "anthropic/":
+railway variables --set "ANTHROPIC_API_KEY=sk-ant-..." --service api
+```
+
+Symptoms if missing: `simulate-and-run` marks runs "failed" in ~1s, sessions are marked `abandoned`, and API logs show `Could not find API key process.env.OPENAI_API_KEY for model id openai/...`.
 
 ## 9. Verify
 
