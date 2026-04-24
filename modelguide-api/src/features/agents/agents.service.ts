@@ -900,24 +900,79 @@ export function buildOutboundDispatchMetadata(input: {
  * `agentName = dispatch_metadata.get("agentName")`) stops routing to
  * the right profile and every dispatched call goes silent.
  */
+/**
+ * ADR-015 preview-mode cap. 48 KB is a comfortable margin under LiveKit's
+ * effective dispatch-metadata size ceiling (observed ~64 KB before workers
+ * start complaining) and well above the compiler's `voice=2500 tokens`
+ * budget (~10 KB text). A prompt above this almost always means the compiler
+ * leaked something it shouldn't have (whole knowledge-base, tool catalog)
+ * and we'd rather surface that as a 400 than silently truncate.
+ */
+export const VOICE_TEST_PREVIEW_MAX_BYTES = 48 * 1024;
+
+/** Result of validating a compiled prompt for preview-mode dispatch. */
+export type PreviewPromptValidation =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+/**
+ * Gate an agent's compiled prompt before we ship it as dispatch metadata.
+ * Kept pure (no IO) so the policy lives in one testable place and so route
+ * handlers can surface the exact reason string as the 400 body.
+ */
+export function validateCompiledPromptForPreview(
+  prompt: string | null | undefined,
+): PreviewPromptValidation {
+  if (prompt == null || prompt.trim().length === 0) {
+    return {
+      ok: false,
+      reason:
+        "No compiled prompt available. Compile the agent first, then retry preview.",
+    };
+  }
+  const byteLength = Buffer.byteLength(prompt, "utf8");
+  if (byteLength > VOICE_TEST_PREVIEW_MAX_BYTES) {
+    return {
+      ok: false,
+      reason: `Compiled prompt is ${byteLength} bytes, over the 48 KB preview cap. Trim the SOP or use a smaller guardrail set.`,
+    };
+  }
+  return { ok: true };
+}
+
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  /**
+   * ADR-015 preview mode. When provided (non-empty), the worker uses this
+   * string as the Agent's instructions instead of the baked-in profile
+   * prompt. Field is namespaced `compiled_prompt` on the Python side — do
+   * not rename without updating `examples/agents/livekit-agent/src/agent.py`.
+   */
+  compiledPrompt?: string;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  compiled_prompt?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
   };
+  // Empty string means "no compiled prompt exists" — leave the field off
+  // entirely so the worker takes the default (baked-in) branch rather than
+  // overriding with "" and going silent.
+  if (input.compiledPrompt && input.compiledPrompt.length > 0) {
+    return { ...base, compiled_prompt: input.compiledPrompt };
+  }
+  return base;
 }
 
 export interface VoiceTestSession {
@@ -929,13 +984,17 @@ export interface VoiceTestSession {
   agentName: string; // LiveKit worker name (which worker to dispatch into)
   profileName: string; // worker-internal profile slug (which agent inside)
   identity: string;
+  /** "profile" = ADR-014 default (worker prompt is authoritative). "preview" = ADR-015 override via dispatch metadata. */
+  mode: "profile" | "preview";
 }
 
 export async function createVoiceTestSession(
   orgId: string,
   agentId: string,
   caller: { userId: string; email: string; name: string },
+  options: { mode?: "profile" | "preview" } = {},
 ): Promise<VoiceTestSession> {
+  const mode = options.mode ?? "profile";
   const agent = await forOrg(orgId, async (tx) => {
     const a = await requireAgent(tx, agentId);
     if (!a.isActive) {
@@ -976,6 +1035,18 @@ export async function createVoiceTestSession(
     );
   }
 
+  // ADR-015: when the caller asks for preview mode, gate on the compiled
+  // prompt *before* we create a session row. Failing here keeps the DB clean
+  // when someone clicks "Talk with draft prompt" without having compiled one.
+  let previewPrompt: string | undefined;
+  if (mode === "preview") {
+    const check = validateCompiledPromptForPreview(agent.compiledInstructions);
+    if (!check.ok) {
+      throw Errors.invalidInput(check.reason);
+    }
+    previewPrompt = agent.compiledInstructions ?? undefined;
+  }
+
   const roomName = `voice-test-${nanoid()}`;
   const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
 
@@ -996,6 +1067,7 @@ export async function createVoiceTestSession(
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    compiledPrompt: previewPrompt,
   });
 
   let dispatchId: string;
@@ -1045,6 +1117,8 @@ export async function createVoiceTestSession(
       roomName,
       agentName,
       profileName: agent.slug,
+      mode,
+      promptBytes: previewPrompt ? Buffer.byteLength(previewPrompt, "utf8") : 0,
     },
     "voice-test dispatched",
   );
@@ -1058,5 +1132,6 @@ export async function createVoiceTestSession(
     agentName,
     profileName: agent.slug,
     identity,
+    mode,
   };
 }

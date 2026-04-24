@@ -283,6 +283,30 @@ Some tools return fake success responses because their MCP backend doesn't exist
 
 No code changes needed. The tool's `@function_tool` definition and MCP name mapping already exist.
 
+## Preview mode — testing a draft prompt without redeploying
+
+ADR-015 lets an admin dispatch the worker with a freshly-compiled prompt instead of the profile's baked-in one. The flow is:
+
+1. Edit an agent's SOPs / guardrails in the dashboard.
+2. Click **Compile Prompt** — this saves `agent.compiledInstructions` server-side.
+3. Click **Talk with draft prompt** on the Voice Test panel. The browser hits `POST /api/agents/:id/voice-test-token?mode=preview`, which:
+   - Validates the prompt is present and ≤ 48 KB.
+   - Dispatches this worker with `{ mode: "voice-test", compiled_prompt: "<string>", ... }` as the job metadata.
+4. The entrypoint (`src/agent.py`) calls `parse_compiled_prompt_from_metadata(ctx.job.metadata)` and, when a string is returned, passes it as `instructions_override` to `BuildProAgent`. The baked-in `build_system_prompt(...)` is skipped for that call only.
+
+The worker's tool registry, STT/TTS providers, VAD, and MCP wiring are unchanged — preview mode only substitutes the system prompt string. The default (no `compiled_prompt` in metadata) path is exactly what ADR-014 shipped; none of that behavior changes.
+
+Locally you can exercise the same path with the `lk` CLI:
+
+```bash
+lk dispatch create \
+  --agent-name buildpro-sam \
+  --room preview-test-1 \
+  --metadata '{"mode":"voice-test","agentName":"buildpro-sam","session_id":"sess_x","user_identifier":"me@example.com","email":"me@example.com","compiled_prompt":"You are a concise assistant. Be brief."}'
+```
+
+Then join the room with `make livekit-token` and confirm the agent behaves according to the injected prompt.
+
 ## Known Issues
 
 **Never set `debug=True` on the Langfuse SDK.** Confirmed via A/B testing on LiveKit Cloud: `debug=True` adds ~2-3s latency per voice turn. The debug flag enables synchronous console logging on every span export, which compounds the already-blocking `OTLPSpanExporter` and LiveKit Cloud's own `BatchSpanProcessor`. With `debug=False` (the default), Langfuse tracing adds negligible overhead. Tracing is opt-in (set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`).

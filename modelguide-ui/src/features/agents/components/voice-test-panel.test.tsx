@@ -10,22 +10,25 @@ import { VoiceTestPanel } from './voice-test-panel'
 // ---------------------------------------------------------------------------
 
 const mockPost = vi.fn()
-const mockTokenResponse = {
+const baseTokenResponse = {
   livekitUrl: 'wss://test.livekit.cloud',
   roomName: 'voice-test-abc',
   token: 'test-token-123',
   sessionId: '00000000-0000-0000-0000-000000000001',
   dispatchId: 'disp_abc',
   agentName: 'test-agent',
+  profileName: 'test-agent',
   identity: 'user-xyz',
+  mode: 'profile' as const,
 }
 
 vi.mock('~/lib/api', () => ({
   api: {
-    post: (url: string) => {
-      mockPost(url)
+    post: (url: string, options?: { searchParams?: Record<string, string> }) => {
+      mockPost(url, options)
+      const requestedMode = options?.searchParams?.mode ?? 'profile'
       return {
-        json: () => Promise.resolve(mockTokenResponse),
+        json: () => Promise.resolve({ ...baseTokenResponse, mode: requestedMode }),
       }
     },
   },
@@ -150,13 +153,16 @@ describe('VoiceTestPanel', () => {
     stubMicPermission(true)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
 
-    const btn = screen.getByRole('button', { name: /talk to agent/i })
+    const btn = screen.getByRole('button', { name: /^talk to agent$/i })
     expect(btn).not.toBeDisabled()
 
     fireEvent.click(btn)
 
     await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('agents/agent-1/voice-test-token')
+      expect(mockPost).toHaveBeenCalledWith(
+        'agents/agent-1/voice-test-token',
+        expect.objectContaining({ searchParams: { mode: 'profile' } }),
+      )
     })
     // Once we have a token, <LiveKitRoom> mounts.
     await waitFor(() => {
@@ -166,6 +172,41 @@ describe('VoiceTestPanel', () => {
     // Session id appears in the footer for debugging.
     await waitFor(() => {
       expect(screen.getByText(/Session/)).toBeInTheDocument()
+    })
+  })
+
+  // ADR-015 — preview mode: a second button ships the compiled prompt to
+  // the worker via dispatch metadata so the user can hear a draft prompt.
+  it('shows "Talk with draft prompt" only when a compiled prompt exists', () => {
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    expect(screen.getByRole('button', { name: /talk with draft prompt/i })).toBeInTheDocument()
+  })
+
+  it('hides "Talk with draft prompt" when the agent has no compiled prompt', () => {
+    stubMicPermission(true)
+    const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    expect(
+      screen.queryByRole('button', { name: /talk with draft prompt/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('requests ?mode=preview when the draft-prompt button is clicked', async () => {
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+
+    fireEvent.click(screen.getByRole('button', { name: /talk with draft prompt/i }))
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        'agents/agent-1/voice-test-token',
+        expect.objectContaining({ searchParams: { mode: 'preview' } }),
+      )
+    })
+    // Badge surfaces the mode so the user knows they're testing a draft.
+    await waitFor(() => {
+      expect(screen.getByText(/draft prompt/i)).toBeInTheDocument()
     })
   })
 

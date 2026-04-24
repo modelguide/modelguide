@@ -36,13 +36,31 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
+        """
+        ``instructions_override`` (ADR-015 preview mode): when provided and
+        non-empty, this string is used verbatim as the Agent's instructions
+        instead of rendering ``build_system_prompt(...)``. The ModelGuide
+        backend injects the agent's ``compiledInstructions`` into dispatch
+        metadata under ``compiled_prompt`` when the dashboard requests
+        ``POST /agents/:id/voice-test-token?mode=preview``. Empty string
+        falls through to the baked-in default — mirrors the backend's
+        "omit field when empty" contract.
+        """
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        if instructions_override:
+            instructions = instructions_override
+        else:
+            instructions = build_system_prompt(session_id or "", user_email=user_email)
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

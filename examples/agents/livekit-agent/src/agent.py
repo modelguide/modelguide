@@ -38,6 +38,31 @@ logger = logging.getLogger("agent")
 # ---------------------------------------------------------------------------
 
 
+def parse_compiled_prompt_from_metadata(raw: str | None) -> str | None:
+    """Extract the ADR-015 ``compiled_prompt`` override from dispatch metadata.
+
+    Returns ``None`` when the field is absent, empty, or the metadata isn't
+    valid JSON — the entrypoint then falls back to the baked-in profile
+    prompt. A worker must never crash on malformed metadata; the only outcome
+    of bad input is "no override applied."
+
+    The contract is pinned by ``tests/test_compiled_prompt_override.py`` and
+    by the TypeScript unit tests for ``buildVoiceTestDispatchMetadata``.
+    """
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    value = parsed.get("compiled_prompt")
+    if not isinstance(value, str) or not value:
+        return None
+    return value
+
+
 def _resolve_caller_identity(participant: rtc.RemoteParticipant) -> tuple[str, str | None, bool]:
     """Determine caller identity from participant attributes.
 
@@ -158,7 +183,22 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    # ADR-015: preview mode passes a pre-compiled prompt in dispatch metadata.
+    # When present we use it verbatim; otherwise the worker's baked-in profile
+    # prompt wins. Non-preview dispatches (ADR-014 default) have no
+    # compiled_prompt field and fall through to the default branch.
+    compiled_prompt_override = parse_compiled_prompt_from_metadata(ctx.job.metadata)
+    if compiled_prompt_override:
+        logger.info(
+            "Using compiled_prompt from dispatch metadata (%d chars)",
+            len(compiled_prompt_override),
+        )
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=compiled_prompt_override,
+    )
     stt = create_stt()
     tts = create_tts()
 
