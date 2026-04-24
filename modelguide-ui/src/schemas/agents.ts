@@ -139,6 +139,9 @@ export const voiceTestTokenResponseSchema = z.object({
   agentName: z.string(),
   profileName: z.string(),
   identity: z.string(),
+  mode: z.enum(['profile', 'preview']),
 })
 
 export type VoiceTestTokenResponse = z.infer<typeof voiceTestTokenResponseSchema>
+
+export type VoiceTestMode = 'profile' | 'preview'

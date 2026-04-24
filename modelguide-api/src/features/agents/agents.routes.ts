@@ -1319,6 +1319,14 @@ const voiceTestTokenResponseSchema = z.object({
   agentName: z.string(),
   profileName: z.string(),
   identity: z.string(),
+  mode: z.enum(["profile", "preview"]),
+});
+
+const voiceTestTokenQuerySchema = z.object({
+  mode: z.enum(["profile", "preview"]).optional().openapi({
+    description:
+      "`profile` (default) dispatches with the deployed worker profile's baked-in prompt. `preview` (ADR-015) injects the agent's current `compiledInstructions` as dispatch metadata so you can hear how a draft prompt sounds without redeploying.",
+  }),
 });
 
 const voiceTestTokenRoute = createRoute({
@@ -1327,10 +1335,11 @@ const voiceTestTokenRoute = createRoute({
   tags: ["Agents"],
   summary: "Issue a LiveKit voice-test token",
   description:
-    "Creates a ModelGuide session, dispatches the configured LiveKit worker into a fresh room with the agent's slug as `agentName` in metadata (so a multi-profile worker picks the correct profile), and returns a short-lived LiveKit AccessToken so the browser can join via WebRTC and talk to the agent.",
+    "Creates a ModelGuide session, dispatches the configured LiveKit worker into a fresh room with the agent's slug as `agentName` in metadata (so a multi-profile worker picks the correct profile), and returns a short-lived LiveKit AccessToken so the browser can join via WebRTC and talk to the agent. Pass `?mode=preview` (ADR-015) to override the worker's prompt with the agent's latest `compiledInstructions` for the duration of the call.",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,
+    query: voiceTestTokenQuerySchema,
   },
   responses: {
     201: {
@@ -1340,7 +1349,7 @@ const voiceTestTokenRoute = createRoute({
       },
     },
     400: errorResponse(
-      "LiveKit not configured, missing credentials, or wrong modality",
+      "LiveKit not configured, missing credentials, wrong modality, or preview requested without a compiled prompt / above 48 KB cap",
     ),
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
@@ -1352,12 +1361,18 @@ router.openapi(voiceTestTokenRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const user = getCurrentUser(c);
   const { id } = c.req.valid("param");
+  const { mode } = c.req.valid("query");
 
-  const result = await createVoiceTestSession(orgId, id, {
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-  });
+  const result = await createVoiceTestSession(
+    orgId,
+    id,
+    {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+    },
+    { mode },
+  );
 
   return c.json(result, 201);
 });

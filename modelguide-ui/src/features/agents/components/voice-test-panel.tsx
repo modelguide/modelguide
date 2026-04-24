@@ -23,13 +23,13 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { api } from '~/lib/api'
-import type { Agent, VoiceTestTokenResponse } from '~/schemas/agents'
+import type { Agent, VoiceTestMode, VoiceTestTokenResponse } from '~/schemas/agents'
 
 import { ensureMicPermission } from './voice-test/mic-permission'
 import { RoomController } from './voice-test/room-controller'
@@ -46,6 +46,10 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
   const [wsUrl, setWsUrl] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // ADR-015: which prompt source the worker should use for this call.
+  // 'profile' = ADR-014 default (baked-in worker profile prompt);
+  // 'preview' = inject the agent's compiledInstructions via dispatch metadata.
+  const [mode, setMode] = useState<VoiceTestMode>('profile')
 
   // Hang-up generation counter: once the operator hangs up, the in-flight
   // token fetch's onSuccess must not drag the UI back into a CONNECTING
@@ -75,12 +79,16 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
   }, [])
 
   const startMutation = useMutation({
-    mutationFn: async (): Promise<VoiceTestTokenResponse> => {
+    mutationFn: async (requestedMode: VoiceTestMode): Promise<VoiceTestTokenResponse> => {
       setErrorMsg(null)
       setState('CHECKING_MIC')
       await ensureMicPermission()
       setState('REQUESTING_TOKEN')
-      return api.post(`agents/${agent.id}/voice-test-token`).json<VoiceTestTokenResponse>()
+      return api
+        .post(`agents/${agent.id}/voice-test-token`, {
+          searchParams: { mode: requestedMode },
+        })
+        .json<VoiceTestTokenResponse>()
     },
     onSuccess: (resp) => {
       setSessionId(resp.sessionId)
@@ -93,6 +101,15 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to start voice test')
     },
   })
+
+  const startCall = useCallback(
+    (requestedMode: VoiceTestMode) => {
+      reset()
+      setMode(requestedMode)
+      startMutation.mutate(requestedMode)
+    },
+    [reset, startMutation],
+  )
 
   const handleHangUp = useCallback(() => {
     endingRef.current = true
@@ -137,6 +154,9 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
 
   const showStartButton = state === 'IDLE' || state === 'ENDED' || state === 'ERROR'
 
+  const hasCompiledPrompt = !!agent.compiledInstructions
+  const inPreviewMode = mode === 'preview' && inCall
+
   return (
     <Card>
       <CardHeader>
@@ -145,9 +165,16 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
             <Radio className="h-4 w-4" />
             Voice Test
           </CardTitle>
-          <Badge variant={state === 'CONNECTED' ? 'success' : 'default'} dot>
-            {PHASE_LABEL[state]}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {inPreviewMode ? (
+              <Badge variant="warning" dot>
+                Draft prompt
+              </Badge>
+            ) : null}
+            <Badge variant={state === 'CONNECTED' ? 'success' : 'default'} dot>
+              {PHASE_LABEL[state]}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -166,17 +193,31 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
-            <Button
-              onClick={() => {
-                reset()
-                startMutation.mutate()
-              }}
-              loading={startMutation.isPending}
-              disabled={!canMutate || !livekitConfigured}
-            >
-              <Mic className="h-4 w-4" />
-              {state === 'ENDED' ? 'Talk again' : 'Talk to agent'}
-            </Button>
+            <>
+              <Button
+                onClick={() => startCall('profile')}
+                loading={startMutation.isPending && mode === 'profile'}
+                disabled={!canMutate || !livekitConfigured || startMutation.isPending}
+              >
+                <Mic className="h-4 w-4" />
+                {state === 'ENDED' ? 'Talk again' : 'Talk to agent'}
+              </Button>
+              {hasCompiledPrompt ? (
+                // ADR-015 preview mode — dispatches the worker with the agent's
+                // current compiledInstructions in metadata so you can hear how
+                // a draft prompt sounds without redeploying the worker profile.
+                <Button
+                  variant="secondary"
+                  onClick={() => startCall('preview')}
+                  loading={startMutation.isPending && mode === 'preview'}
+                  disabled={!canMutate || !livekitConfigured || startMutation.isPending}
+                  title="Inject the latest compiled prompt via dispatch metadata (ADR-015)"
+                >
+                  <FileCode className="h-4 w-4" />
+                  Talk with draft prompt
+                </Button>
+              ) : null}
+            </>
           ) : null}
 
           {token && wsUrl ? (
