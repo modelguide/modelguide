@@ -157,8 +157,39 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to create ModelGuide session — running without tracking")
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
+    # Pull the latest compiled prompt from ModelGuide so dashboard "Recompile +
+    # Talk to agent" hits a fresh prompt without redeploying the worker. Falls
+    # back to the locally-built prompt if the fetch fails or the agent has not
+    # been compiled yet — the dashboard surfaces the compile state separately.
+    instructions_override: str | None = None
+    try:
+        runtime = await mg_client.fetch_runtime()
+        compiled = runtime.get("compiledInstructions")
+        if compiled:
+            instructions_override = compiled
+            logger.info(
+                "Runtime fetched: agent=%s slug=%s prompt_len=%d compiled_at=%s",
+                runtime.get("name"),
+                runtime.get("slug"),
+                len(compiled),
+                runtime.get("compiledAt"),
+            )
+        else:
+            logger.info(
+                "Runtime fetched but agent has no compiled prompt — using local fallback",
+            )
+    except Exception:
+        logger.exception(
+            "Failed to fetch runtime config — falling back to local prompt",
+        )
+
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=instructions_override,
+    )
     stt = create_stt()
     tts = create_tts()
 

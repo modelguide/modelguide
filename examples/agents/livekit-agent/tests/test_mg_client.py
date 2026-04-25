@@ -64,6 +64,40 @@ class TestCreateSession:
                 await mg_client.create_session()
 
 
+class TestFetchRuntime:
+    @pytest.mark.asyncio
+    async def test_returns_runtime_payload(self):
+        payload = {
+            "id": "agent_uuid",
+            "slug": "buildpro-sam",
+            "name": "Sam",
+            "compiledInstructions": "You are Sam.",
+            "compiledAt": "2026-01-01T00:00:00Z",
+            "promptConfig": {"persona": "Sam", "language": "en"},
+            "modality": "voice",
+            "agentPlatform": "livekit",
+        }
+        client = _mock_client("get", _mock_response(200, payload))
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            result = await mg_client.fetch_runtime()
+
+        assert result == payload
+        # Sanity-check the request: it must be GET against /api/agents/me/runtime
+        # (no agentId in path — the API key identifies the caller).
+        call_args = client.get.call_args
+        assert call_args[0][0] == "/api/agents/me/runtime"
+
+    @pytest.mark.asyncio
+    async def test_raises_on_404(self):
+        # API-key auth without an active agent returns 401/404. Surface to caller
+        # so agent.py can fall back to the local prompt instead of running with
+        # an empty instructions string.
+        client = _mock_client("get", _mock_response(404, text="Not Found"))
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            with pytest.raises(httpx.HTTPStatusError):
+                await mg_client.fetch_runtime()
+
+
 class TestAddMessages:
     @pytest.mark.asyncio
     async def test_posts_each_message(self):

@@ -148,6 +148,51 @@ export async function getAgentById(orgId: string, agentId: string) {
   });
 }
 
+/**
+ * Compact "runtime" view of an agent that a deployed worker pulls at session
+ * start. Intentionally narrow — only what the worker needs to bring up an LLM
+ * loop against the latest compiled prompt without baking config into its
+ * Docker image. The worker authenticates with its own `mgk_` API key, so the
+ * caller's identity is the agent itself; we never accept an agentId argument
+ * from the network here.
+ */
+export async function getAgentRuntime(orgId: string, agentId: string) {
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select({
+        id: agents.id,
+        organizationId: agents.organizationId,
+        name: agents.name,
+        slug: agents.slug,
+        modality: agents.modality,
+        modelFamily: agents.modelFamily,
+        agentPlatform: agents.agentPlatform,
+        promptConfig: agents.promptConfig,
+        compiledInstructions: agents.compiledInstructions,
+        compiledAt: agents.compiledAt,
+      })
+      .from(agents)
+      .where(eq(agents.id, agentId));
+
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
+
+    return {
+      id: agent.id,
+      organizationId: agent.organizationId,
+      name: agent.name,
+      slug: agent.slug,
+      modality: agent.modality,
+      modelFamily: agent.modelFamily,
+      agentPlatform: agent.agentPlatform,
+      promptConfig: (agent.promptConfig ?? {}) as PromptConfig,
+      compiledInstructions: agent.compiledInstructions,
+      compiledAt: agent.compiledAt?.toISOString() ?? null,
+    };
+  });
+}
+
 export async function createAgent(
   orgId: string,
   data: {

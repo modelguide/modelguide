@@ -73,6 +73,23 @@ async def create_session(user_identifier: str | None = None) -> str:
     return session_id
 
 
+async def fetch_runtime() -> dict:
+    """Fetch this agent's runtime config from ModelGuide.
+
+    Returns the agent's compiled system prompt (``compiledInstructions``),
+    plus identity fields (``id``, ``slug``, ``name``, ``promptConfig``,
+    ``modality``, ``agentPlatform``). The API key already identifies the
+    agent, so no agent ID is needed in the request.
+
+    Raises ``httpx.HTTPStatusError`` on non-2xx responses so the caller can
+    decide whether to fall back to a locally-built prompt.
+    """
+    client = _get_http_client()
+    res = await client.get("/api/agents/me/runtime")
+    res.raise_for_status()
+    return res.json()
+
+
 async def add_messages(session_id: str, messages: list[dict]) -> None:
     """Post messages to a session. Errors are logged, not raised."""
     client = _get_http_client()

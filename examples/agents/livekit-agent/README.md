@@ -155,10 +155,12 @@ ModelGuide API
 ```
 
 **Session lifecycle:**
-- On connect: Creates a ModelGuide session via `POST /api/sessions`
+- On connect: Creates a ModelGuide session via `POST /api/sessions` and **fetches the latest compiled prompt** via `GET /api/agents/me/runtime` (so the dashboard's "Compile + Talk to agent" loop tests the freshest prompt without a redeploy — see [ADR-015](../../../docs/decisions/015-livekit-runtime-prompt-fetch.md))
 - During call: LLM tool calls execute via ModelGuide's MCP endpoint (`POST /mcp/:agentId`)
 - On goodbye: Agent signs off → user confirms → agent replies once → auto-disconnect after 3s
 - On close: Posts the full transcript to ModelGuide, then marks the session as completed
+
+**Runtime prompt fetch:** `mg_client.fetch_runtime()` returns the agent's `compiledInstructions`, `name`, `slug`, and `promptConfig`. If the fetch fails or the agent has not been compiled yet, the worker falls back to the local `prompts/` package — the dashboard surfaces the compile state separately, so the worker does not block the call.
 
 **Tool mapping:** The LLM uses short tool names (`list_products`, `add_to_cart`). These are mapped to connector-prefixed MCP names (`glowbox_store_list_products`, `glowbox_store_add_to_cart`) in the `BuildProAgent._call_mcp_tool()` method.
 
