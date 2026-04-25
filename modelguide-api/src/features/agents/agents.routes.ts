@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntime,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -459,6 +462,57 @@ router.openapi(platformModelsRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// Agent Self-Lookup (worker runtime config)
+// ============================================================================
+
+// GET /me/runtime — fetched by deployed workers (e.g. the LiveKit agent in
+// examples/agents/livekit-agent) so they don't have to bake the compiled
+// prompt into their image. Auth is the agent's own mgk_ API key, which
+// already identifies the agent. Registered before the /:id catch-all so
+// "me" never gets parsed as a UUID.
+
+const agentRuntimeResponseSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  promptConfig: promptConfigSchema,
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+});
+
+router.get("/me/runtime", requireAgent());
+
+const getAgentRuntimeRoute = createRoute({
+  method: "get",
+  path: "/me/runtime",
+  tags: ["Agents"],
+  summary: "Get the calling agent's runtime config",
+  description:
+    "Returns the compiled system prompt and identity for the agent identified by the bearer API key. Designed to be polled by deployed workers (e.g. the LiveKit voice agent) at session start so they always run against the latest compiled prompt without redeploying.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Agent runtime config",
+      content: {
+        "application/json": { schema: agentRuntimeResponseSchema },
+      },
+    },
+    401: errorResponse("Agent authentication required"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(getAgentRuntimeRoute, async (c) => {
+  const agent = getCurrentAgent(c);
+  const runtime = await getAgentRuntime(agent.organizationId, agent.id);
+  return c.json(runtime, 200);
 });
 
 // ============================================================================

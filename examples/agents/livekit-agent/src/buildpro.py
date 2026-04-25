@@ -26,6 +26,19 @@ logger = logging.getLogger("buildpro")
 _CART_TOOLS = {"add_to_cart", "get_cart", "set_delivery_address", "complete_cart"}
 
 
+def interpolate_runtime_prompt(prompt: str, session_id: str | None, user_email: str) -> str:
+    """Interpolate runtime placeholders into a compiled prompt fetched from
+    ModelGuide. Mirrors the placeholders supported by the local
+    ``prompts.build_system_prompt`` template so SOP authors can use them
+    interchangeably whether the prompt is local or compiled."""
+    return (
+        prompt
+        .replace("{{mg_session_id}}", session_id or "")
+        .replace("{{userEmail}}", user_email)
+        .replace("{{channel}}", "voice")
+    )
+
+
 class BuildProAgent(MCPAgent):
     """BuildPro contractor supply agent with e-commerce tools."""
 
@@ -36,13 +49,23 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        if instructions_override:
+            instructions = interpolate_runtime_prompt(
+                instructions_override, session_id, user_email
+            )
+        else:
+            instructions = build_system_prompt(session_id or "", user_email=user_email)
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------
