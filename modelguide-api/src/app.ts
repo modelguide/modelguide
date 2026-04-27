@@ -123,8 +123,11 @@ app.route("/webhooks/elevenlabs", elevenlabsWebhooks);
 // Agent ID in path for explicit routing; API key in header for auth verification.
 app.on(["POST", "GET", "DELETE"], "/mcp/:agentId", mcpHandler);
 
-// Simulation MCP endpoint — internal only, serves mock tools per simulation session.
-// No auth required — called by in-process Mastra agents during simulation runs.
+// Simulation MCP endpoint — serves mock tools per simulation session.
+// Publicly reachable via the LB today (simulation agent dials out via
+// API_EXTERNAL_ADDRESS) but authenticated: handler requires a short-lived
+// (5 min) simulation JWT whose sub matches :simulationId, and rejects
+// sessions not in mode "simulation". See simulation-mcp.routes.ts.
 app.on(
   ["POST", "GET", "DELETE"],
   "/simulations/:simulationId/mcp",
