@@ -1011,6 +1011,163 @@ describe("POST /api/agents/:id/voice-test-token", () => {
   });
 });
 
+// ============================================================================
+// POST /api/agents/:id/prototype-voice-test-token — ADR-015 prototype flow
+// ============================================================================
+
+describe("POST /api/agents/:id/prototype-voice-test-token", () => {
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/prototype-voice-test-token`,
+      { method: "POST" },
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects support role (403) — agents:activate is admin-only", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgASupportHeaders },
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("org B cannot prototype-test an org A agent (404)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgBAdminHeaders },
+    );
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 for unknown agent", async () => {
+    const response = await request(
+      "/api/agents/00000000-0000-0000-0000-000000000000/prototype-voice-test-token",
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+    expect(response.status).toBe(404);
+  });
+
+  test("rejects inactive agents (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Inactive Prototype Voice Test Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    const response = await request(
+      `/api/agents/${agentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/not active/i);
+  });
+
+  test("rejects when compiled instructions are missing (400)", async () => {
+    // Activate + LiveKit-config a voice agent but leave compiledInstructions null.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Uncompiled Prototype Voice Test Agent",
+      }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          agentPlatform: "livekit",
+          metadata: {
+            livekit: { url: "wss://test.livekit.cloud", agentName: "w" },
+          },
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(
+      `/api/agents/${agentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/compile/i);
+  });
+
+  test("rejects non-livekit platform (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Custom Prototype Voice Test Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          compiledInstructions: "test prompt",
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(
+      `/api/agents/${agentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/LiveKit/i);
+  });
+
+  test("rejects non-voice modality (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Text Modality Prototype Voice Test Agent",
+        modality: "text",
+      }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          agentPlatform: "livekit",
+          compiledInstructions: "test prompt",
+          metadata: {
+            livekit: { url: "wss://test.livekit.cloud", agentName: "w" },
+          },
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(
+      `/api/agents/${agentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/voice agent/i);
+  });
+});
+
 describe("Agent slug uniqueness", () => {
   test("creating agent with duplicate name (same slug) returns 409", async () => {
     const res1 = await request("/api/agents", {
