@@ -371,10 +371,52 @@ async function _syncAgentToElevenLabs(
         }
       : {};
 
+    // Build session-init webhook tool (only when secretId exists)
+    const sessionInitTool = secretId
+      ? [
+          {
+            type: "webhook" as const,
+            name: "session_init",
+            description:
+              "Create a new session in ModelGuide. Call this once at the very start of every conversation to get a session_id. Pass the returned session_id to all subsequent tool calls.",
+            apiSchema: {
+              url: `${baseUrl}/api/sessions`,
+              method: "POST" as const,
+              requestHeaders: {
+                "x-mg-api-key": { secretId },
+              },
+              requestBodySchema: {
+                type: "object" as const,
+                properties: {
+                  channelType: {
+                    type: "string" as const,
+                    constantValue: "voice",
+                  },
+                  userIdentifier: {
+                    type: "string" as const,
+                    description:
+                      "Customer identifier (phone number, email, PESEL, etc.)",
+                  },
+                },
+                required: ["channelType", "userIdentifier"],
+              },
+            },
+            assignments: [
+              {
+                source: "response" as const,
+                dynamicVariable: "mg_session_id",
+                valuePath: "id",
+              },
+            ],
+          },
+        ]
+      : [];
+
     // Build prompt payload — llmModel is guaranteed set (guarded above)
     const promptPayload: Record<string, unknown> = {
       mcpServerIds: mergedMcpIds,
       llm: llmModel,
+      tools: sessionInitTool,
     };
     if (compiledPrompt) {
       promptPayload.prompt = compiledPrompt;
@@ -404,9 +446,14 @@ async function _syncAgentToElevenLabs(
     steps.push({
       step: "Agent configuration",
       status: "success",
-      message: compiledPrompt
-        ? `Applied compiled prompt + LLM model (${llmModel})`
-        : `Applied LLM model (${llmModel}) — no compiled prompt`,
+      message: [
+        compiledPrompt
+          ? `Applied compiled prompt + LLM model (${llmModel})`
+          : `Applied LLM model (${llmModel}) — no compiled prompt`,
+        sessionInitTool.length > 0 ? "+ session_init tool" : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
     });
   } catch (err) {
     steps.push({

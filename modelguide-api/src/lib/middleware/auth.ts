@@ -107,7 +107,8 @@ export function authMiddleware(): MiddlewareHandler<AppBindings> {
     let authContext: AuthContext = { type: "none" };
     let organizationId: string | null = null;
 
-    const token = extractBearerToken(authHeader);
+    const token =
+      extractBearerToken(authHeader) ?? c.req.header("x-mg-api-key") ?? null;
 
     if (token) {
       if (isApiKey(token)) {
