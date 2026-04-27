@@ -142,3 +142,10 @@ export const voiceTestTokenResponseSchema = z.object({
 })
 
 export type VoiceTestTokenResponse = z.infer<typeof voiceTestTokenResponseSchema>
+
+export const prototypeVoiceTestTokenResponseSchema = voiceTestTokenResponseSchema.extend({
+  instructionsHash: z.string(),
+  instructionsLength: z.number(),
+})
+
+export type PrototypeVoiceTestTokenResponse = z.infer<typeof prototypeVoiceTestTokenResponseSchema>
