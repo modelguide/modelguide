@@ -23,12 +23,13 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { api } from '~/lib/api'
+import { formatDate } from '~/lib/utils'
 import type { Agent, VoiceTestTokenResponse } from '~/schemas/agents'
 
 import { ensureMicPermission } from './voice-test/mic-permission'
@@ -152,11 +153,14 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       </CardHeader>
       <CardContent>
         {livekitConfigured ? (
-          <p className="text-sm text-fg-muted">
-            Dispatches the configured LiveKit worker with this agent's slug as{' '}
-            <code>agentName</code> metadata, then joins the room from your browser so you can talk
-            to the agent end-to-end.
-          </p>
+          <>
+            <p className="text-sm text-fg-muted">
+              Dispatches the configured LiveKit worker with this agent's slug as{' '}
+              <code>agentName</code> metadata, then joins the room from your browser so you can talk
+              to the agent end-to-end.
+            </p>
+            <PromptSourceHint agent={agent} />
+          </>
         ) : (
           <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-fg-secondary">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -212,5 +216,51 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
         ) : null}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Discloses which system prompt the worker will use for this voice test.
+ *
+ * - With a compiled prompt: ModelGuide ships it via dispatch metadata
+ *   (ADR-015), so the worker uses the freshly compiled version and the
+ *   operator gets a true "compile → click → talk" loop.
+ * - Without a compiled prompt: the field is omitted from metadata and
+ *   the worker falls back to its baked profile prompt — which may be
+ *   a different version than what the dashboard shows under "Compiled".
+ *
+ * Surface this explicitly so an operator iterating on prompts isn't
+ * surprised when the agent ignores their unsaved edits.
+ */
+function PromptSourceHint({ agent }: { agent: Agent }) {
+  const compiled = agent.compiledInstructions ?? null
+  if (compiled && compiled.length > 0) {
+    const compiledAtLabel = agent.compiledAt
+      ? formatDate(agent.compiledAt, { format: 'relative' })
+      : null
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-success/20 bg-success/5 p-3 text-sm text-fg-secondary">
+        <FileCode className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+        <span>
+          Using the compiled prompt
+          {compiledAtLabel ? (
+            <>
+              {' '}
+              (compiled <span className="text-fg-primary">{compiledAtLabel}</span>)
+            </>
+          ) : null}
+          . The worker will load it via dispatch metadata for this single session.
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-lg border border-fg-subtle/15 bg-bg-subtle/40 p-3 text-sm text-fg-secondary">
+      <FileCode className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
+      <span>
+        No compiled prompt yet — the worker will use its baked profile default. Compile a prompt
+        above to test it here.
+      </span>
+    </div>
   )
 }

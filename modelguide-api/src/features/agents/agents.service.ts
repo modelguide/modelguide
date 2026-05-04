@@ -892,32 +892,62 @@ export function buildOutboundDispatchMetadata(input: {
 // ============================================================================
 
 /**
+ * Hard cap on the `compiledInstructions` override carried in dispatch
+ * metadata (ADR-015). LiveKit's server SDK serializes job metadata as JSON
+ * and there's a server-side cap on the resulting blob size. 50K chars is
+ * roughly half of LiveKit's effective 100K-byte budget and leaves room
+ * for the other dispatch-metadata fields. A prompt above the cap is
+ * dropped, not truncated — silent truncation would yield a half-prompt
+ * that still "works" but produces wrong behavior.
+ */
+export const COMPILED_INSTRUCTIONS_MAX_CHARS = 50_000;
+
+/**
  * Build the dispatch-metadata payload for a voice-test session.
  *
  * Pure function so the MG-agent-slug ↔ worker-profile-slug coupling is
  * covered by a unit test. If the field names or shape ever drift, the
- * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
+ * worker's entrypoint (examples/agents/livekit-agent/src/agent.py —
  * `agentName = dispatch_metadata.get("agentName")`) stops routing to
  * the right profile and every dispatched call goes silent.
+ *
+ * `compiledInstructions` (ADR-015) is the optional system-prompt
+ * override the worker uses when present. It is omitted entirely (not
+ * blank-stringed) when the agent has no compiled prompt — the worker
+ * treats absence as "use baked profile prompt". Over-cap prompts are
+ * dropped to keep dispatch reliable; the worker falls back to its
+ * baked prompt and the operator sees a UI hint.
  */
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  compiledInstructions?: string | null;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  compiledInstructions?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
   };
+
+  const prompt = input.compiledInstructions;
+  if (
+    typeof prompt === "string" &&
+    prompt.length > 0 &&
+    prompt.length <= COMPILED_INSTRUCTIONS_MAX_CHARS
+  ) {
+    return { ...base, compiledInstructions: prompt };
+  }
+  return base;
 }
 
 export interface VoiceTestSession {
@@ -996,6 +1026,11 @@ export async function createVoiceTestSession(
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    // ADR-015: pass the agent's latest compiled prompt so the worker can
+    // honor "compile → click → talk" without redeploy. Falls back to the
+    // baked profile prompt when no compiled prompt exists yet, or when
+    // the prompt exceeds COMPILED_INSTRUCTIONS_MAX_CHARS.
+    compiledInstructions: agent.compiledInstructions ?? undefined,
   });
 
   let dispatchId: string;
