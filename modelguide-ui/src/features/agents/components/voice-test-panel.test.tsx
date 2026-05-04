@@ -131,13 +131,31 @@ describe('VoiceTestPanel', () => {
     expect(screen.getByText(/configure the livekit/i)).toBeInTheDocument()
   })
 
-  it('allows talk without a compiled prompt (worker uses its baked-in profile)', () => {
+  it('allows talk without a compiled prompt and discloses the worker fallback', () => {
+    // ADR-015: when no compiled prompt exists, the dispatcher omits
+    // `compiledInstructions` from metadata and the worker falls back
+    // to its baked profile prompt. The UI must say so explicitly so
+    // operators don't expect to be testing a prompt that doesn't
+    // exist yet.
     const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
     stubMicPermission(true)
     render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
-    // Button enabled — the worker's profile owns the prompt; the voice-test
-    // flow doesn't inject one.
+
     expect(screen.getByRole('button', { name: /talk to agent/i })).not.toBeDisabled()
+    // Hint disclosing the fallback. Match copy must mention "baked"
+    // or "default" so operators understand the worker — not the
+    // dashboard — chose the prompt.
+    expect(screen.getByText(/baked|profile default|default prompt/i)).toBeInTheDocument()
+  })
+
+  it('shows the compiled-prompt freshness hint when a prompt is compiled', () => {
+    // Operators iterating on prompts need to know "the prompt I just
+    // compiled is the one being tested." The panel must surface a
+    // concrete hint (compiledAt timestamp or "Using compiled prompt"
+    // label) before the call starts. ADR-015.
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    expect(screen.getByText(/using.*compiled prompt|compiled prompt active/i)).toBeInTheDocument()
   })
 
   it('disables the talk button for viewers (canMutate=false)', () => {

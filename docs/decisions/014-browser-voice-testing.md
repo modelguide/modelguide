@@ -1,6 +1,6 @@
 # ADR-014: Browser Voice Testing via LiveKit Dispatch
 
-**Status:** Accepted
+**Status:** Accepted. The "No prompt injection" subsection is superseded by [ADR-015](./015-voice-test-prompt-override.md) — voice-test now ships the agent's latest compiled prompt via dispatch metadata.
 
 ## Context
 

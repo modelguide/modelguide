@@ -265,6 +265,32 @@ from your_agent import YourAgent as AgentClass
 
 That's it. Langfuse traces, ModelGuide session tracking, transcript posting, and the MCP connection all work without changes.
 
+## Voice-test prompt override (ADR-015)
+
+When the dashboard's **Talk to agent** button dispatches the worker, the ModelGuide API attaches the agent's latest compiled prompt to the dispatch metadata as `compiledInstructions`. The worker reads it and uses it as the system prompt for that single session — falling back to the baked profile prompt when the field is absent, empty, whitespace, or not a string.
+
+This is what makes "compile in dashboard → click → talk" work without redeploying the worker.
+
+The decision lives in `prompt_override.resolve_instructions()` (`src/prompt_override.py`):
+
+```python
+def resolve_instructions(dispatch_metadata, baked_prompt):
+    """Use the override iff non-empty, non-whitespace string; else baked."""
+```
+
+`agent.py` calls it after parsing `ctx.job.metadata` and threads the result into `BuildProAgent(instructions_override=...)`. `BuildProAgent.__init__` swaps the override in for `build_system_prompt(...)` when present.
+
+**To enable in your own scenario:** subclass `MCPAgent` and accept an `instructions_override` kwarg (see `BuildProAgent` for the pattern). Pass it through to your prompt-building code so the override wins over the baked prompt.
+
+**Producer-side cap:** the API drops `compiledInstructions` from dispatch metadata if it exceeds 50K chars (see `COMPILED_INSTRUCTIONS_MAX_CHARS` in `agents.service.ts`). The worker doesn't know it was dropped — it just sees no override and falls back to the baked prompt. The dashboard's voice-test panel surfaces a hint either way so operators know which prompt is in use.
+
+The contract is locked from both sides:
+
+- `modelguide-api/tests/unit/agents/voice-test-dispatch.test.ts` — producer
+- `examples/agents/livekit-agent/tests/test_dispatch_prompt.py` — consumer
+
+If you change the field name on either side without updating both tests, the corresponding suite fails in CI.
+
 ## Stubbed Tools
 
 Some tools return fake success responses because their MCP backend doesn't exist yet (e.g. `send_email` — no email connector is deployed). Instead of removing the tool from the LLM (which would break the prompt and demo flow), the agent returns a canned `{"success": true}` response so the conversation continues naturally.

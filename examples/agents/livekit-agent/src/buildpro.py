@@ -36,13 +36,26 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        # ADR-015: an admin-supplied compiled prompt (delivered via
+        # dispatch metadata for a "Talk to agent" voice test) wins over
+        # the baked profile prompt when present. Empty / blank
+        # overrides fall through to the baked path so we never mute
+        # the agent on a misconfigured payload.
+        if instructions_override and instructions_override.strip():
+            instructions = instructions_override
+        else:
+            instructions = build_system_prompt(session_id or "", user_email=user_email)
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

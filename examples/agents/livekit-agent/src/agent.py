@@ -23,7 +23,8 @@ import config
 import mg_client
 from buildpro import BuildProAgent
 from hangup import HangupAction, HangupStateMachine
-from prompts import GREETING
+from prompt_override import resolve_instructions
+from prompts import GREETING, build_system_prompt
 from providers import create_stt, create_tts
 from tracing import setup_langfuse
 
@@ -157,8 +158,27 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to create ModelGuide session — running without tracking")
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
+    # ADR-015: when the dispatcher (ModelGuide voice-test endpoint)
+    # carries a freshly compiled prompt, use it for this single
+    # session. This is what makes "compile → click → talk" work without
+    # redeploying the worker. Falls back to the baked profile prompt
+    # when no override is present.
+    baked_prompt = build_system_prompt(session_id or "", user_email=user_identifier)
+    instructions = resolve_instructions(dispatch_metadata, baked_prompt)
+    if instructions is not baked_prompt:
+        logger.info(
+            "Using compiledInstructions from dispatch metadata (%d chars) — "
+            "voice-test prompt override active",
+            len(instructions),
+        )
+
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=instructions if instructions is not baked_prompt else None,
+    )
     stt = create_stt()
     tts = create_tts()
 
