@@ -1,0 +1,34 @@
+[project]
+name = "livekit-poc-agent"
+version = "0.1.0"
+description = "POC LiveKit voice agent that fetches its prompt from ModelGuide on every session start"
+requires-python = ">=3.11"
+dependencies = [
+    "livekit-agents[silero,turn-detector]~=1.4",
+    "livekit-plugins-openai~=1.4",
+    "livekit-plugins-deepgram~=1.4",
+    "livekit-plugins-elevenlabs~=1.4",
+    "httpx",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[project.scripts]
+livekit-poc-agent = "livekit_poc_agent.agent:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]

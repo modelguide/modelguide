@@ -14,7 +14,7 @@ import {
   evalSuites,
   secrets,
 } from "@db/schema";
-import type { EntitySecretsMap, PromptConfig } from "@db/schema";
+import type { Agent, EntitySecretsMap, PromptConfig } from "@db/schema";
 import { getAgentSecretByType } from "@features/secrets/secrets.service";
 import {
   createSession,
@@ -1059,4 +1059,57 @@ export async function createVoiceTestSession(
     profileName: agent.slug,
     identity,
   };
+}
+
+// ============================================================================
+// Worker runtime-config (POC LiveKit agent fetches latest compiled prompt)
+// ============================================================================
+
+/**
+ * Worker-facing payload returned by GET /api/agents/me/runtime-config.
+ *
+ * Intentionally narrower than `formatAgent` — a worker authenticated by API
+ * key has no business seeing secret refs, integration URLs, or eval state.
+ * The shape is locked by `tests/unit/agents/runtime-config.test.ts`.
+ */
+export interface AgentRuntimeConfig {
+  id: string;
+  name: string;
+  slug: string;
+  modality: "voice" | "text";
+  agentPlatform: "custom" | "elevenlabs" | "livekit";
+  modelFamily: "gpt" | "claude" | "gemini" | "generic";
+  isActive: boolean;
+  compiledInstructions: string | null;
+  compiledAt: string | null;
+  promptConfig: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}
+
+export function formatRuntimeConfig(agent: Agent): AgentRuntimeConfig {
+  return {
+    id: agent.id,
+    name: agent.name,
+    slug: agent.slug,
+    modality: agent.modality as AgentRuntimeConfig["modality"],
+    agentPlatform: agent.agentPlatform as AgentRuntimeConfig["agentPlatform"],
+    modelFamily: agent.modelFamily as AgentRuntimeConfig["modelFamily"],
+    isActive: agent.isActive,
+    compiledInstructions: agent.compiledInstructions ?? null,
+    compiledAt: agent.compiledAt ? agent.compiledAt.toISOString() : null,
+    promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
+    metadata: (agent.metadata ?? {}) as Record<string, unknown>,
+  };
+}
+
+/**
+ * Fetch the runtime config for the API-key-bound agent. Used by the POC
+ * LiveKit worker to load the latest compiled prompt on session start.
+ */
+export async function getAgentRuntimeConfig(
+  orgId: string,
+  agentId: string,
+): Promise<AgentRuntimeConfig> {
+  const agent = await forOrg(orgId, (tx) => requireAgent(tx, agentId));
+  return formatRuntimeConfig(agent);
 }

@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntimeConfig,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -586,6 +589,58 @@ router.openapi(createPlatformAgentRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// GET /me/runtime-config — worker-only (agent API key)
+//
+// MUST be registered BEFORE the `/:id` catch-all so "me" is not parsed as an
+// agent UUID. Used by the POC LiveKit agent (and any other voice/text
+// worker) to fetch its own latest compiled prompt at session start.
+// See examples/agents/livekit-poc-agent and ADR-015.
+// ============================================================================
+
+router.get("/me/runtime-config", requireAgent(), requireOrganization());
+
+const runtimeConfigResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  modality: z.enum(["voice", "text"]),
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  modelFamily: modelFamilySchema,
+  isActive: z.boolean(),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  promptConfig: z.record(z.unknown()),
+  metadata: z.record(z.unknown()),
+});
+
+const runtimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me/runtime-config",
+  tags: ["Agents"],
+  summary: "Get the calling agent's runtime config (worker)",
+  description:
+    "Returns the latest compiled prompt and identity for the agent bound to the API key making this request. Designed for voice/text workers (e.g. the LiveKit POC agent) to pick up the freshly compiled prompt on session start so 'compile in dashboard → talk to the new prompt' works without redeploying the worker. The response is intentionally narrower than GET /agents/{id} — it omits secrets, integration URLs, and eval state.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime config",
+      content: {
+        "application/json": { schema: runtimeConfigResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Agent inactive or wrong auth type"),
+  },
+});
+
+router.openapi(runtimeConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const agent = getCurrentAgent(c);
+  const config = await getAgentRuntimeConfig(orgId, agent.id);
+  return c.json(config, 200);
 });
 
 // GET /:id
