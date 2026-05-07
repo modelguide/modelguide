@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntimeConfig,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -392,6 +395,60 @@ router.openapi(createAgentRoute, async (c) => {
 // ============================================================================
 // Platform Models Endpoint
 // ============================================================================
+
+// ============================================================================
+// GET /me/runtime-config — agent worker bootstrap
+// ============================================================================
+//
+// Voice/chat workers (e.g. examples/agents/modelguide-voice-agent) call this
+// at job-start with their own API key to fetch the *latest* compiled prompt.
+// This is what closes the "Compile → Voice Test" loop without redeploying
+// the worker. See ADR-006.
+//
+// The route MUST stay above any `/:id` route — Hono matches in registration
+// order, and `/me` would otherwise be parsed as `id="me"` and 404 there.
+
+router.get("/me/runtime-config", requireAgent(), requireOrganization());
+
+const agentRuntimeConfigSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  name: z.string(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  instructions: z.string().nullable().openapi({
+    description:
+      "Latest compiled system prompt. Null until the agent has been compiled at least once.",
+  }),
+  compiledAt: z.string().nullable(),
+});
+
+const agentRuntimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me/runtime-config",
+  tags: ["Agents"],
+  summary: "Fetch runtime config for the calling agent",
+  description:
+    "Returns the agent's identity + latest compiled prompt. Authenticates via the agent's API key (mgk_…). Designed for voice/chat workers to pull the freshest instructions at job-start without a redeploy.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime config",
+      content: {
+        "application/json": { schema: agentRuntimeConfigSchema },
+      },
+    },
+    401: errorResponse("Not authenticated as an agent (API key required)"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(agentRuntimeConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const agent = getCurrentAgent(c);
+  const config = await getAgentRuntimeConfig(orgId, agent.id);
+  return c.json(config, 200);
+});
 
 // GET /platform-models
 router.get(

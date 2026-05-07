@@ -108,6 +108,49 @@ export async function listAgents(
   });
 }
 
+/**
+ * Runtime-config: minimal shape that voice/chat workers need at job-start.
+ *
+ * Stays narrow on purpose — exposed under API-key auth so we don't want
+ * platform-config noise (secrets map, integration URLs, eval counters)
+ * leaking out. The worker only needs identity + the latest compiled prompt
+ * so a hot "Compile → Voice Test" loop reflects the freshest instructions.
+ *
+ * See ADR-006 (`docs/decisions/006-livekit-runtime-prompt-fetch.md`) for
+ * the design rationale and the alternatives we rejected (env-stamping the
+ * prompt at deploy time, pushing the prompt over dispatch metadata, etc.).
+ */
+export async function getAgentRuntimeConfig(orgId: string, agentId: string) {
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select({
+        id: agents.id,
+        slug: agents.slug,
+        name: agents.name,
+        modality: agents.modality,
+        modelFamily: agents.modelFamily,
+        compiledInstructions: agents.compiledInstructions,
+        compiledAt: agents.compiledAt,
+      })
+      .from(agents)
+      .where(eq(agents.id, agentId));
+
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
+
+    return {
+      id: agent.id,
+      slug: agent.slug,
+      name: agent.name,
+      modality: agent.modality,
+      modelFamily: agent.modelFamily,
+      instructions: agent.compiledInstructions ?? null,
+      compiledAt: agent.compiledAt?.toISOString() ?? null,
+    };
+  });
+}
+
 export async function getAgentById(orgId: string, agentId: string) {
   return forOrg(orgId, async (tx) => {
     const [agent] = await tx
@@ -901,11 +944,13 @@ export function buildOutboundDispatchMetadata(input: {
  * the right profile and every dispatched call goes silent.
  */
 export function buildVoiceTestDispatchMetadata(input: {
+  agentId: string;
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
 }): {
   mode: "voice-test";
+  agentId: string;
   agentName: string;
   session_id: string;
   user_identifier: string;
@@ -913,6 +958,7 @@ export function buildVoiceTestDispatchMetadata(input: {
 } {
   return {
     mode: "voice-test" as const,
+    agentId: input.agentId,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
@@ -993,6 +1039,7 @@ export async function createVoiceTestSession(
   });
 
   const dispatchMetadata = buildVoiceTestDispatchMetadata({
+    agentId: agent.id,
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
