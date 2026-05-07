@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -1008,6 +1013,94 @@ describe("POST /api/agents/:id/voice-test-token", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me/runtime-config — agent worker bootstrap
+// ============================================================================
+//
+// Voice / chat workers (e.g. the LiveKit agent in
+// examples/agents/modelguide-voice-agent) call this endpoint at job-start to
+// pull the *current* compiled prompt and model — that's what makes the
+// "click Compile → click Voice Test → talk" loop reflect the latest prompt
+// without redeploying the worker.
+//
+// Auth: agent API key (Bearer mgk_...). The bound agent is read from the
+// auth context, so there's no path param — that's why the endpoint is `me`.
+describe("GET /api/agents/me/runtime-config", () => {
+  test("returns compiled prompt + identity for the bound agent (200)", async () => {
+    // Activate the seeded agent and stamp a compiled prompt so the response
+    // is meaningful.
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          compiledInstructions: "You are GlowBox concierge. Be helpful.",
+          compiledAt: new Date(),
+        })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.slug).toBeString();
+    expect(body.name).toBeString();
+    expect(body.modality).toBe("voice");
+    expect(body.modelFamily).toBeString();
+    expect(body.instructions).toBe("You are GlowBox concierge. Be helpful.");
+    expect(body.compiledAt).toBeString();
+  });
+
+  test("returns null instructions when agent has not been compiled yet (200)", async () => {
+    // Create a fresh, never-compiled agent for this test so we don't trample
+    // the seeded one's compiled prompt for other tests in the file.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Uncompiled Runtime Config Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx.update(agents).set({ isActive: true }).where(eq(agents.id, agentId)),
+    );
+
+    const headers = await agentHeadersFor(agentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.id).toBe(agentId);
+    expect(body.instructions).toBeNull();
+    expect(body.compiledAt).toBeNull();
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me/runtime-config");
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects user (JWT) auth — endpoint is for agent workers only (401)", async () => {
+    // Workers MUST authenticate with their own API key, not a logged-in
+    // user JWT. This guards against a UI dev wiring the dashboard to this
+    // endpoint and accidentally leaking compiled prompts.
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(401);
   });
 });
 

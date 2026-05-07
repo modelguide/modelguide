@@ -18,6 +18,7 @@ import { buildVoiceTestDispatchMetadata } from "../../../src/features/agents/age
 describe("buildVoiceTestDispatchMetadata", () => {
   test("carries agentName = agent.slug for multi-profile routing", () => {
     const md = buildVoiceTestDispatchMetadata({
+      agentId: "00000000-0000-0000-0000-000000000001",
       agentSlug: "banknowa_v1",
       sessionId: "sess-abc",
       callerEmail: "admin@example.com",
@@ -28,6 +29,7 @@ describe("buildVoiceTestDispatchMetadata", () => {
 
   test("mode is a literal 'voice-test' marker", () => {
     const md = buildVoiceTestDispatchMetadata({
+      agentId: "00000000-0000-0000-0000-000000000001",
       agentSlug: "x",
       sessionId: "s",
       callerEmail: "c@e.com",
@@ -37,6 +39,7 @@ describe("buildVoiceTestDispatchMetadata", () => {
 
   test("session_id + user_identifier + email carry caller context", () => {
     const md = buildVoiceTestDispatchMetadata({
+      agentId: "00000000-0000-0000-0000-000000000001",
       agentSlug: "tenant_a",
       sessionId: "sess-xyz",
       callerEmail: "tester@corp.com",
@@ -46,14 +49,36 @@ describe("buildVoiceTestDispatchMetadata", () => {
     expect(md.email).toBe("tester@corp.com");
   });
 
-  test("shape is stable — exactly these 5 keys, nothing else", () => {
+  test("agentId is forwarded so the worker can fetch runtime-config", () => {
+    // The runtime-prompt-fetch flow (ADR-006) lets the worker pull the
+    // freshest compiledInstructions for the agent it's been routed to.
+    // It needs both the slug (for profile selection) and the UUID (for
+    // unambiguous lookup against /api/agents/{id} / /me/runtime-config).
     const md = buildVoiceTestDispatchMetadata({
+      agentId: "11111111-2222-3333-4444-555555555555",
+      agentSlug: "banknowa_v1",
+      sessionId: "s",
+      callerEmail: "c@e.com",
+    });
+    expect(md.agentId).toBe("11111111-2222-3333-4444-555555555555");
+  });
+
+  test("shape is stable — exactly these 6 keys, nothing else", () => {
+    const md = buildVoiceTestDispatchMetadata({
+      agentId: "00000000-0000-0000-0000-000000000001",
       agentSlug: "x",
       sessionId: "s",
       callerEmail: "c@e.com",
     });
     expect(Object.keys(md).sort()).toEqual(
-      ["agentName", "email", "mode", "session_id", "user_identifier"].sort(),
+      [
+        "agentId",
+        "agentName",
+        "email",
+        "mode",
+        "session_id",
+        "user_identifier",
+      ].sort(),
     );
   });
 
@@ -63,6 +88,7 @@ describe("buildVoiceTestDispatchMetadata", () => {
     // equality, so any transform silently breaks routing.
     const weird = "Weird_Slug-v1";
     const md = buildVoiceTestDispatchMetadata({
+      agentId: "00000000-0000-0000-0000-000000000001",
       agentSlug: weird,
       sessionId: "s",
       callerEmail: "c@e.com",
@@ -74,6 +100,7 @@ describe("buildVoiceTestDispatchMetadata", () => {
     // The dispatch layer JSON-stringifies this payload. Confirm nothing is
     // a Symbol, function, or other unserializable value.
     const md = buildVoiceTestDispatchMetadata({
+      agentId: "00000000-0000-0000-0000-000000000001",
       agentSlug: "banknowa_v2",
       sessionId: "s",
       callerEmail: "c@e.com",
