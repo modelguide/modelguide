@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -38,6 +38,43 @@ import { PHASE_LABEL, type WidgetState } from './voice-test/state'
 interface VoiceTestPanelProps {
   agent: Agent
   canMutate: boolean
+}
+
+/**
+ * Surface what prompt the worker will pick up on the next "Talk to agent"
+ * click. The prototype LiveKit worker fetches the compiled prompt via
+ * `GET /agents/runtime-config` on every session start, so the timestamp here
+ * is a good proxy for "what you're about to hear."
+ *
+ * If the agent's worker doesn't fetch (e.g. operator deployed a legacy worker
+ * with a baked-in prompt), this banner is still useful as a hint that a
+ * compile happened — and where the operator should look if behaviour diverges.
+ */
+function PromptStatusBanner({
+  compiledAt,
+  hasCompiledPrompt,
+}: { compiledAt: string | null; hasCompiledPrompt: boolean }) {
+  if (hasCompiledPrompt && compiledAt) {
+    const when = new Date(compiledAt)
+    const label = Number.isNaN(when.getTime()) ? compiledAt : when.toLocaleString()
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-success/30 bg-success/5 p-3 text-xs text-fg-secondary">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+        <span>
+          Worker will fetch the latest compiled prompt at session start
+          {' — '}
+          last compiled {label}.
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-fg-secondary">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+      No compiled prompt yet — the worker will fall back to its built-in default. Compile a SOP
+      first if you want to test your own prompt.
+    </div>
+  )
 }
 
 export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
@@ -163,6 +200,11 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
             Configure the LiveKit URL, API key, and secret for this agent before testing.
           </div>
         )}
+
+        <PromptStatusBanner
+          compiledAt={agent.compiledAt ?? null}
+          hasCompiledPrompt={!!agent.compiledInstructions}
+        />
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (

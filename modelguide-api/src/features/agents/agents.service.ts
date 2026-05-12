@@ -108,6 +108,50 @@ export async function listAgents(
   });
 }
 
+/**
+ * Minimal runtime configuration returned to a self-hosted agent worker
+ * (e.g. the LiveKit prototype agent) at the start of every session.
+ *
+ * The worker authenticates with its scoped API key and gets back the *latest*
+ * compiled prompt — letting the dashboard "compile → talk to agent" loop
+ * work without any worker redeploy.
+ *
+ * Deliberately omits secrets/keys/hashes: the worker already authenticated
+ * (it just used its API key) and the LiveKit / TTS / STT credentials live on
+ * the orchestration side, not on the worker.
+ */
+export interface AgentRuntimeConfig {
+  id: string;
+  slug: string;
+  name: string;
+  modality: Modality;
+  modelFamily: ModelFamily;
+  agentPlatform: AgentPlatform;
+  compiledInstructions: string | null;
+  compiledAt: string | null;
+  promptConfig: PromptConfig;
+}
+
+export async function getAgentRuntimeConfig(
+  orgId: string,
+  agentId: string,
+): Promise<AgentRuntimeConfig> {
+  return forOrg(orgId, async (tx) => {
+    const agent = await requireAgent(tx, agentId);
+    return {
+      id: agent.id,
+      slug: agent.slug,
+      name: agent.name,
+      modality: agent.modality,
+      modelFamily: agent.modelFamily,
+      agentPlatform: agent.agentPlatform,
+      compiledInstructions: agent.compiledInstructions ?? null,
+      compiledAt: agent.compiledAt ? agent.compiledAt.toISOString() : null,
+      promptConfig: (agent.promptConfig ?? {}) as PromptConfig,
+    };
+  });
+}
+
 export async function getAgentById(orgId: string, agentId: string) {
   return forOrg(orgId, async (tx) => {
     const [agent] = await tx

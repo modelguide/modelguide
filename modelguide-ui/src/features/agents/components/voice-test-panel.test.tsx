@@ -169,6 +169,20 @@ describe('VoiceTestPanel', () => {
     })
   })
 
+  it('shows when the agent has a compiled prompt that the worker will pick up', () => {
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    // The "compile → talk to agent" loop hinges on this banner being correct:
+    // an operator who just compiled a prompt should immediately see that the
+    // next Talk call will use the latest version.
+    expect(screen.getByText(/fetch the latest compiled prompt/i)).toBeInTheDocument()
+  })
+
+  it('warns when no compiled prompt is present', () => {
+    const noPrompt = { ...configuredAgent, compiledInstructions: null, compiledAt: null } as Agent
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    expect(screen.getByText(/no compiled prompt yet/i)).toBeInTheDocument()
+  })
+
   it('surfaces a clear error when mic permission is denied', async () => {
     stubMicPermission(false)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
