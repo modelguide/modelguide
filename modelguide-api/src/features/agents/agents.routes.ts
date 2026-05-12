@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntimeConfig,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -459,6 +462,56 @@ router.openapi(platformModelsRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// Runtime config (agent self-fetch via API key)
+// ============================================================================
+//
+// Self-hosted agent workers (e.g. the LiveKit prototype agent in
+// examples/agents/livekit-prototype-agent) call this at the start of every
+// session to pick up the *latest* compiled prompt. The route lives BEFORE the
+// "/:id" routes so the literal path "runtime-config" wins over the param
+// matcher.
+
+const agentRuntimeConfigResponseSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  name: z.string(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  promptConfig: promptConfigSchema,
+});
+
+router.get("/runtime-config", requireAgent(), requireOrganization());
+
+const runtimeConfigRoute = createRoute({
+  method: "get",
+  path: "/runtime-config",
+  tags: ["Agents"],
+  summary: "Get runtime config for the authenticated agent",
+  description:
+    "Returns the latest compiled prompt and minimal runtime config for the agent whose API key is in the Authorization header. Designed for self-hosted workers (LiveKit, custom) that fetch their prompt on every session start so dashboard prompt changes propagate without a worker redeploy.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime configuration for the authenticated agent",
+      content: {
+        "application/json": { schema: agentRuntimeConfigResponseSchema },
+      },
+    },
+    401: errorResponse("Agent authentication required"),
+  },
+});
+
+router.openapi(runtimeConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const agent = getCurrentAgent(c);
+  const config = await getAgentRuntimeConfig(orgId, agent.id);
+  return c.json(config, 200);
 });
 
 // ============================================================================
