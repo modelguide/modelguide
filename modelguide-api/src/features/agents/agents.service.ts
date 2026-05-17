@@ -894,30 +894,54 @@ export function buildOutboundDispatchMetadata(input: {
 /**
  * Build the dispatch-metadata payload for a voice-test session.
  *
- * Pure function so the MG-agent-slug ↔ worker-profile-slug coupling is
- * covered by a unit test. If the field names or shape ever drift, the
- * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
- * `agentName = dispatch_metadata.get("agentName")`) stops routing to
- * the right profile and every dispatched call goes silent.
+ * Pure function so two contracts are covered by unit tests:
+ *
+ *   1. MG-agent-slug ↔ worker-profile-slug routing (``agentName``).
+ *   2. Compiled-prompt sync (``compiled_instructions`` + ``compiled_at``).
+ *
+ * Both are read by the worker's entrypoint
+ * (examples/agents/livekit-agent/src/agent.py). If the field names or
+ * shape drift, dispatched calls go silent (wrong profile) or run stale
+ * prompts (wrong override).
+ *
+ * Compiled prompt fields are *omitted* (not nulled) when the agent has
+ * never been compiled, so the Python side can do a simple
+ * ``"compiled_instructions" in metadata`` check and fall back to its
+ * baked-in profile prompt.
  */
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  compiledInstructions?: string | null;
+  compiledAt?: string | null;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  compiled_instructions?: string;
+  compiled_at?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
   };
+  // Compiled prompt is opt-in. Both fields travel together so the worker
+  // never sees half-populated state (instructions without a timestamp, or
+  // vice-versa, would force the worker to invent a fallback).
+  if (input.compiledInstructions && input.compiledAt) {
+    return {
+      ...base,
+      compiled_instructions: input.compiledInstructions,
+      compiled_at: input.compiledAt,
+    };
+  }
+  return base;
 }
 
 export interface VoiceTestSession {
@@ -992,10 +1016,17 @@ export async function createVoiceTestSession(
     },
   });
 
+  // Sync the latest compiled prompt to the worker so "Talk to agent" runs
+  // the version the operator just clicked "Compile" on. When the agent has
+  // never been compiled, both fields are null and the worker falls back to
+  // its baked-in profile prompt — see ADR-014 and
+  // examples/agents/livekit-agent/src/agent.py.
   const dispatchMetadata = buildVoiceTestDispatchMetadata({
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    compiledInstructions: agent.compiledInstructions,
+    compiledAt: agent.compiledAt ? agent.compiledAt.toISOString() : null,
   });
 
   let dispatchId: string;

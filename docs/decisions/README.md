@@ -17,3 +17,7 @@ Historical note: ADR filenames contain duplicate numeric IDs (`002` and `008`) f
 | [009-eval-suites.md](009-eval-suites.md) | Eval Suites | Accepted |
 | [010-cli-onboarding-tool.md](010-cli-onboarding-tool.md) | CLI Onboarding Tool | Accepted |
 | [011-livekit-outbound-calls.md](011-livekit-outbound-calls.md) | LiveKit Outbound Calls | Accepted |
+| [012-evaluator-override-model.md](012-evaluator-override-model.md) | Evaluator Override Model for Per-Test-Case Customization | Accepted |
+| [013-mocked-connectors-and-eval-mock-strategy.md](013-mocked-connectors-and-eval-mock-strategy.md) | Mocked Connectors and Tool Mock Strategy | Accepted |
+| [014-browser-voice-testing.md](014-browser-voice-testing.md) | Browser Voice Testing via LiveKit Dispatch | Accepted |
+| [015-livekit-voice-test-compiled-prompt-sync.md](015-livekit-voice-test-compiled-prompt-sync.md) | LiveKit Voice-Test Compiled-Prompt Sync | Accepted |

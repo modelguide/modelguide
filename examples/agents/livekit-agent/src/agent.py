@@ -34,6 +34,30 @@ logger = logging.getLogger("agent")
 
 
 # ---------------------------------------------------------------------------
+# Dispatch metadata
+# ---------------------------------------------------------------------------
+
+
+def parse_dispatch_metadata(raw: str | None) -> dict:
+    """Parse the LiveKit job metadata JSON blob into a dict.
+
+    The ModelGuide API JSON-encodes a small payload (see
+    ``buildVoiceTestDispatchMetadata`` in
+    ``modelguide-api/src/features/agents/agents.service.ts``) and stuffs
+    it into ``ctx.job.metadata``. We return an empty dict for any
+    malformed input — a worker crash here takes the whole call down,
+    which is worse than running the baked-in fallback profile.
+    """
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+# ---------------------------------------------------------------------------
 # SIP detection
 # ---------------------------------------------------------------------------
 
@@ -84,15 +108,18 @@ async def entrypoint(ctx: agents.JobContext):
             trace_provider.force_flush()
         ctx.add_shutdown_callback(_flush_traces)
 
-    # Parse dispatch metadata (outbound calls include phone_number)
-    outbound_phone = None
-    dispatch_metadata: dict = {}
-    if ctx.job.metadata:
-        try:
-            dispatch_metadata = json.loads(ctx.job.metadata)
-            outbound_phone = dispatch_metadata.get("phone_number")
-        except json.JSONDecodeError:
-            logger.warning("Invalid JSON in job metadata: %s", ctx.job.metadata[:100])
+    # Parse dispatch metadata. Outbound calls carry ``phone_number``.
+    # Voice-test dispatches from the dashboard may carry
+    # ``compiled_instructions`` (ADR-014) — see ``BuildProAgent`` below.
+    dispatch_metadata = parse_dispatch_metadata(ctx.job.metadata)
+    outbound_phone = dispatch_metadata.get("phone_number")
+    compiled_instructions = dispatch_metadata.get("compiled_instructions")
+    if compiled_instructions:
+        logger.info(
+            "Using compiled prompt from dispatch metadata (%d chars, compiled_at=%s)",
+            len(compiled_instructions),
+            dispatch_metadata.get("compiled_at"),
+        )
 
     await ctx.connect()
 
@@ -158,7 +185,12 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=compiled_instructions,
+    )
     stt = create_stt()
     tts = create_tts()
 

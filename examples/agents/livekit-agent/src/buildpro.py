@@ -36,13 +36,25 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        # ADR-014: when the dashboard's "Talk to agent" handshake includes
+        # a freshly-compiled prompt, run that instead of the baked-in
+        # BuildPro template. Empty-string is treated as "not provided" so
+        # we never start a call with `instructions=""`.
+        if instructions_override:
+            instructions = instructions_override
+        else:
+            instructions = build_system_prompt(session_id or "", user_email=user_email)
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

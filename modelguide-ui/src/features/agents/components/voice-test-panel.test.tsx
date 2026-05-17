@@ -181,4 +181,32 @@ describe('VoiceTestPanel', () => {
     // Should not have attempted to fetch the token once the mic check failed.
     expect(mockPost).not.toHaveBeenCalled()
   })
+
+  // -------------------------------------------------------------------------
+  // ADR-014: compiled-prompt sync indicator
+  // -------------------------------------------------------------------------
+
+  it('shows a "Testing compiled prompt" indicator when the agent has been compiled', () => {
+    // The operator clicked Compile, then Talk. We need a visible cue that
+    // the call about to start runs *that* compiled prompt — otherwise the
+    // dashboard feels like a black box ("is this the version I just made?")
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    expect(screen.getByText(/testing compiled prompt/i)).toBeInTheDocument()
+  })
+
+  it('shows an "Uncompiled — using baked-in profile" notice when no compiled prompt exists', () => {
+    // No surprise routing: if the agent has never been compiled, the
+    // worker will fall back to whatever prompt it was shipped with, and
+    // the user should know that's what they're talking to.
+    stubMicPermission(true)
+    const uncompiled = {
+      ...configuredAgent,
+      compiledInstructions: null,
+      compiledAt: null,
+    } as Agent
+    render(<VoiceTestPanel agent={uncompiled} canMutate />, { wrapper })
+    expect(screen.getByText(/uncompiled/i)).toBeInTheDocument()
+    expect(screen.getByText(/baked-in profile/i)).toBeInTheDocument()
+  })
 })

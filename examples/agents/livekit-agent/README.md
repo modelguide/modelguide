@@ -58,6 +58,44 @@ Click **Join** in the browser, allow mic access, and talk to Sam.
 
 > **How it connects:** `livekit-server --dev` uses built-in credentials (`devkey` / `secret`) on `ws://localhost:7880` — these match `.env.example` defaults. The `--agent buildpro-sam` flag in the token tells LiveKit to dispatch the agent to the room.
 
+### Compiled-prompt sync (ADR-015) — "Talk to agent" from the dashboard
+
+When the dashboard's **Talk to agent** button dispatches this worker, the
+ModelGuide API stuffs the agent's latest `compiled_instructions` (from
+`POST /api/agents/:id/compile`) into the LiveKit job metadata blob.
+
+The worker reads it on entrypoint:
+
+```python
+# src/agent.py
+dispatch_metadata = parse_dispatch_metadata(ctx.job.metadata)
+compiled_instructions = dispatch_metadata.get("compiled_instructions")
+agent = BuildProAgent(
+    session_id=session_id,
+    user_email=user_identifier,
+    mcp=mcp,
+    instructions_override=compiled_instructions,
+)
+```
+
+`BuildProAgent`:
+
+- **Override present →** uses it verbatim (no template interpolation).
+- **Override absent or empty →** falls back to `build_system_prompt(...)`
+  from `prompts/__init__.py`, the legacy hardcoded BuildPro template.
+
+This closes the **compile → click sync/test → speak** loop without
+redeploying the worker on every prompt edit. See ADR-015 for the contract
+and the supersession of ADR-014's "no prompt injection" stance.
+
+The metadata shape and override semantics are locked by
+`tests/test_dispatch_metadata.py`. Run it after touching anything in
+`agent.py` or `buildpro.py`:
+
+```bash
+uv run pytest tests/test_dispatch_metadata.py -v
+```
+
 ### Console mode (text-only, no LiveKit needed)
 
 ```bash
