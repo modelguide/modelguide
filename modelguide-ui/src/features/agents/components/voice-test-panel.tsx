@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -164,6 +164,8 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
           </div>
         )}
 
+        <CompiledPromptStatus agent={agent} />
+
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
             <Button
@@ -213,4 +215,51 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       </CardContent>
     </Card>
   )
+}
+
+/**
+ * Compiled-prompt indicator — surfaces which prompt the upcoming dispatch
+ * will run. The API includes ``compiled_instructions`` in dispatch metadata
+ * (ADR-014); when ``compiledAt`` is set, that prompt is what the worker
+ * will actually use. When unset, the worker falls back to its baked-in
+ * profile prompt, and we say so up front instead of letting the operator
+ * wonder which version they're testing.
+ */
+function CompiledPromptStatus({ agent }: { agent: Agent }) {
+  const compiledAt = agent.compiledAt ?? null
+  if (!compiledAt) {
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-fg-subtle/20 bg-bg-subtle p-3 text-xs text-fg-secondary">
+        <FileCode className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
+        <span>
+          <strong className="text-fg-primary">Uncompiled.</strong> No compiled prompt yet — the
+          worker will use its baked-in profile.
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-lg border border-success/20 bg-success/5 p-3 text-xs text-fg-secondary">
+      <FileCode className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      <span>
+        <strong className="text-fg-primary">Testing compiled prompt</strong> from{' '}
+        <time dateTime={compiledAt}>{formatRelativeTime(compiledAt)}</time>.
+      </span>
+    </div>
+  )
+}
+
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diffMs = Date.now() - then
+  if (!Number.isFinite(diffMs) || diffMs < 0) return iso
+  const seconds = Math.floor(diffMs / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  return new Date(iso).toLocaleDateString()
 }
