@@ -57,6 +57,14 @@ const envSchema = z
     // E.g. "http://localhost:5173,https://demo.example.com"
     CORS_ORIGINS: z.string().optional(),
 
+    // LiveKit preview-worker name. The preview LiveKit agent (see
+    // `examples/agents/livekit-preview-agent`) registers itself under this
+    // worker name; the API's `preview-voice-token` endpoint dispatches into
+    // it so the operator can talk to an un-deployed compiled prompt. POC
+    // feature — see ADR-015. May also be overridden per agent via
+    // `metadata.livekit.previewAgentName`.
+    LIVEKIT_PREVIEW_AGENT_NAME: z.string().default("preview-worker"),
+
     // Persona simulation — LLM provider for synthetic conversations
     SIMULATION_LLM_API_KEY: z.string().optional(),
     SIMULATION_LLM_MODEL: z.string().default("gpt-5-mini"),

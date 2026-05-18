@@ -2,6 +2,7 @@
  * Agents service - business logic for agent management, API keys, and connector tool assignment
  */
 
+import { env } from "@/env";
 import { forOrg } from "@db/rls";
 import type { Transaction } from "@db/rls";
 import {
@@ -920,6 +921,66 @@ export function buildVoiceTestDispatchMetadata(input: {
   };
 }
 
+// ============================================================================
+// Preview-voice (POC: talk to the *latest compiled prompt* before it ships)
+//
+// Sibling of voice-test, with one critical difference: preview INJECTS the
+// compiled prompt into dispatch metadata as `instructions_override`. The
+// preview LiveKit worker (examples/agents/livekit-preview-agent) reads it
+// and uses it verbatim as the LLM system prompt — no MCP tools, no profile
+// registry, pure conversation against the prompt under test.
+//
+// This is deliberately not what voice-test does (ADR-014 rejected prompt
+// injection on the deployed worker because of the "works in test, broke in
+// prod" drift hazard). Preview is a different feature for a different
+// moment in the workflow: edit a SOP → compile → hear it → iterate, all
+// without redeploying. See ADR-015 for the trade-off in full.
+// ============================================================================
+
+/** Cap on the compiled prompt sent over dispatch metadata.
+ *
+ * LiveKit's dispatch metadata field is JSON-stringified and stamped onto
+ * the room as a single attribute. We keep a generous-but-bounded cap so a
+ * runaway compiled prompt can't blow past LiveKit's per-attribute limit
+ * and silently truncate the prompt mid-rule. 50K chars ≈ 12.5K tokens —
+ * comfortably above any prompt we've shipped, comfortably below LiveKit's
+ * ~64KB attribute ceiling.
+ */
+export const PREVIEW_INSTRUCTIONS_MAX_CHARS = 50_000;
+
+/**
+ * Build the dispatch-metadata payload for a preview-voice session.
+ *
+ * Pure function so the API ↔ preview-worker contract is unit-tested
+ * (`tests/unit/agents/preview-voice-dispatch.test.ts`). If field names or
+ * shape ever drift, the worker can't find the prompt and dispatched
+ * rooms go silent. Mirrors ``buildVoiceTestDispatchMetadata`` so the two
+ * dispatch payloads stay structurally familiar to anyone reading the
+ * worker code.
+ */
+export function buildPreviewDispatchMetadata(input: {
+  agentSlug: string;
+  sessionId: string;
+  callerEmail: string;
+  instructions: string;
+}): {
+  mode: "preview";
+  agentName: string;
+  session_id: string;
+  user_identifier: string;
+  email: string;
+  instructions_override: string;
+} {
+  return {
+    mode: "preview" as const,
+    agentName: input.agentSlug,
+    session_id: input.sessionId,
+    user_identifier: input.callerEmail,
+    email: input.callerEmail,
+    instructions_override: input.instructions,
+  };
+}
+
 export interface VoiceTestSession {
   livekitUrl: string;
   roomName: string;
@@ -1058,5 +1119,204 @@ export async function createVoiceTestSession(
     agentName,
     profileName: agent.slug,
     identity,
+  };
+}
+
+export interface PreviewVoiceSession {
+  livekitUrl: string;
+  roomName: string;
+  token: string;
+  sessionId: string;
+  dispatchId: string;
+  agentName: string; // preview worker name (which worker to dispatch into)
+  profileName: string; // MG agent slug, echoed for parity with voice-test
+  identity: string;
+  promptLength: number; // chars; lets the UI confirm the right prompt was sent
+}
+
+/**
+ * Resolve which preview-worker name to dispatch into for this agent.
+ *
+ * Order:
+ *   1. Per-agent override `metadata.livekit.previewAgentName` (lets a single
+ *      org run multiple preview workers — e.g. one per LLM provider).
+ *   2. Platform default `env.LIVEKIT_PREVIEW_AGENT_NAME` (defaults to
+ *      `"preview-worker"`).
+ *
+ * Exported so the route handler can surface a hint in error messages and
+ * so the unit-test contract pins the resolution rule (no surprise "we use
+ * the production agentName if the override is missing" behaviour, which
+ * would silently send the preview prompt at the production worker — a
+ * worse failure mode than "preview not configured").
+ */
+export function resolvePreviewAgentName(agent: { metadata: unknown }): string {
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const override = lkMeta.previewAgentName;
+  if (typeof override === "string" && override.length > 0) return override;
+  return env.LIVEKIT_PREVIEW_AGENT_NAME;
+}
+
+/**
+ * Start a preview-voice session: dispatch the *preview* LiveKit worker into
+ * a fresh room with the supplied (or last-compiled) instructions injected
+ * as `instructions_override`, and mint a short-lived AccessToken so the
+ * browser can join via WebRTC.
+ *
+ * The contract:
+ * - Dispatches the **preview** worker (`resolvePreviewAgentName(agent)`),
+ *   NEVER the agent's production worker. The production worker owns its
+ *   prompt; preview is for testing un-deployed prompts in isolation.
+ * - If `instructions` is supplied, uses it verbatim. Otherwise falls back
+ *   to the agent's persisted `compiledInstructions`. Errors if neither is
+ *   available — there's no point dispatching a preview with no prompt.
+ * - Mirrors `createVoiceTestSession` for session-creation,
+ *   dispatch-error rollback, and token-mint behaviour so on-call has one
+ *   mental model for both flows.
+ */
+export async function createPreviewVoiceSession(
+  orgId: string,
+  agentId: string,
+  caller: { userId: string; email: string; name: string },
+  override: { instructions?: string },
+): Promise<PreviewVoiceSession> {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (!a.isActive) {
+      throw Errors.invalidInput("Agent is not active");
+    }
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Preview voice requires a voice agent");
+    }
+    if (a.agentPlatform !== "livekit") {
+      throw Errors.invalidInput(
+        "Preview voice is only supported for LiveKit agents",
+      );
+    }
+    return a;
+  });
+
+  const instructions =
+    override.instructions ?? agent.compiledInstructions ?? "";
+
+  if (instructions.length === 0) {
+    throw Errors.invalidInput(
+      "No compiled prompt to preview. Compile the agent's prompt first or pass `instructions` in the request body.",
+    );
+  }
+  // Defence in depth: route's Zod schema already caps the body, but a
+  // database row could in theory hold a longer compiled prompt. Cap here
+  // too so the dispatch payload can't blow past LiveKit's attribute
+  // ceiling and silently truncate mid-rule.
+  if (instructions.length > PREVIEW_INSTRUCTIONS_MAX_CHARS) {
+    throw Errors.invalidInput(
+      `Compiled prompt is ${instructions.length} chars; preview cap is ${PREVIEW_INSTRUCTIONS_MAX_CHARS}.`,
+    );
+  }
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+
+  if (!livekitUrl) {
+    throw Errors.invalidInput(
+      "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const previewAgentName = resolvePreviewAgentName(agent);
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `preview-${nanoid()}`;
+  const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
+
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: caller.email,
+    userMetadata: {
+      previewVoice: true,
+      userId: caller.userId,
+      name: caller.name,
+      roomName,
+      previewAgentName,
+      promptLength: instructions.length,
+    },
+  });
+
+  const dispatchMetadata = buildPreviewDispatchMetadata({
+    agentSlug: agent.slug,
+    sessionId: session.id,
+    callerEmail: caller.email,
+    instructions,
+  });
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      previewAgentName,
+      roomName,
+      dispatchMetadata,
+    );
+  } catch (err) {
+    // Same rollback pattern as voice-test: orphan-row prevention without
+    // shadowing the original dispatch error.
+    try {
+      await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    } catch (rollbackErr) {
+      getLogger().error(
+        { orgId, agentId, sessionId: session.id, rollbackErr },
+        "failed to abandon preview-voice session after dispatch failure",
+      );
+    }
+    throw err;
+  }
+
+  const token = await generateVoiceTestToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity,
+    name: caller.name,
+  });
+
+  getLogger().info(
+    {
+      orgId,
+      agentId,
+      sessionId: session.id,
+      dispatchId,
+      roomName,
+      previewAgentName,
+      profileName: agent.slug,
+      promptLength: instructions.length,
+    },
+    "preview-voice dispatched",
+  );
+
+  return {
+    livekitUrl,
+    roomName,
+    token,
+    sessionId: session.id,
+    dispatchId,
+    agentName: previewAgentName,
+    profileName: agent.slug,
+    identity,
+    promptLength: instructions.length,
   };
 }
