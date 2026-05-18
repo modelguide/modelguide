@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose lk-agent-setup lk-agent-console lk-agent-dev livekit-up livekit-up-docker livekit-down livekit-token
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose lk-agent-setup lk-agent-console lk-agent-dev livekit-up livekit-up-docker livekit-down livekit-token lk-preview-setup lk-preview-dev lk-preview-test
 
 .DEFAULT_GOAL := help
 
@@ -195,3 +195,18 @@ livekit-down: ## [LiveKit] Stop Docker LiveKit server
 
 livekit-token: ## [LiveKit] Generate token and open meet.livekit.io (NAME=yourname)
 	lk token create --api-key devkey --api-secret secret --room test-room --identity $(or $(NAME),artur) --join --valid-for 1h --agent $(LK_AGENT_NAME) --open meet
+
+# =============================================================================
+# LiveKit Preview Agent (examples/agents/livekit-preview-agent) — see ADR-015
+# =============================================================================
+
+LK_PREVIEW_DIR := examples/agents/livekit-preview-agent
+
+lk-preview-setup: ## [LK Preview] Install deps and download model files
+	cd $(LK_PREVIEW_DIR) && uv sync && uv run python src/agent.py download-files
+
+lk-preview-dev: ## [LK Preview] Run preview worker in WebRTC dev mode
+	cd $(LK_PREVIEW_DIR) && uv run python src/agent.py dev --log-level $(LK_LOG_LEVEL)
+
+lk-preview-test: ## [LK Preview] Run pure dispatch-parser unit tests
+	cd $(LK_PREVIEW_DIR) && uv run pytest -v

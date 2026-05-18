@@ -2,6 +2,7 @@ import { FileCode } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
+import { PreviewVoicePanel } from '~/features/agents/components/preview-voice-panel'
 import type { Agent } from '~/schemas/agents'
 import { CompileDialog } from './compile-dialog'
 import { CompileSummaryBar } from './compile-summary-bar'
@@ -16,6 +17,11 @@ export function CompiledPromptCard({ agent, canMutate }: CompiledPromptCardProps
   const [showDialog, setShowDialog] = useState(false)
 
   const hasCompiledPrompt = !!agent.compiledInstructions
+  // Only voice agents on the LiveKit platform can be previewed via the
+  // POC preview-worker. The PreviewVoicePanel itself renders nothing for
+  // non-livekit agents — but skipping the render here also avoids an
+  // empty Card on text agents.
+  const canPreview = agent.modality === 'voice' && agent.agentPlatform === 'livekit'
 
   return (
     <>
@@ -58,6 +64,16 @@ export function CompiledPromptCard({ agent, canMutate }: CompiledPromptCardProps
           )}
         </CardContent>
       </Card>
+
+      {canPreview ? (
+        <div className="lg:col-span-2">
+          <PreviewVoicePanel
+            agent={agent}
+            instructions={agent.compiledInstructions ?? ''}
+            canMutate={canMutate}
+          />
+        </div>
+      ) : null}
 
       {showDialog ? (
         <CompileDialog

@@ -19,9 +19,11 @@ import {
 import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
 import {
+  PREVIEW_INSTRUCTIONS_MAX_CHARS,
   assignConnectorToAgent,
   createAgent,
   createOutboundCall,
+  createPreviewVoiceSession,
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
@@ -1358,6 +1360,93 @@ router.openapi(voiceTestTokenRoute, async (c) => {
     email: user.email,
     name: user.name,
   });
+
+  return c.json(result, 201);
+});
+
+// ============================================================================
+// Preview Voice (browser WebRTC against an *un-deployed* compiled prompt)
+//
+// POC — see ADR-015. Sibling of voice-test that intentionally injects the
+// supplied (or last-compiled) prompt into the preview worker so the operator
+// can hear an edit before promoting it.
+// ============================================================================
+
+router.post(
+  "/:id/preview-voice-token",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const previewVoiceTokenBodySchema = z.object({
+  instructions: z
+    .string()
+    .max(PREVIEW_INSTRUCTIONS_MAX_CHARS)
+    .optional()
+    .openapi({
+      description:
+        "Compiled prompt to preview. If omitted, falls back to the agent's persisted `compiledInstructions`.",
+    }),
+});
+
+const previewVoiceTokenResponseSchema = z.object({
+  livekitUrl: z.string(),
+  roomName: z.string(),
+  token: z.string(),
+  sessionId: z.string().uuid(),
+  dispatchId: z.string(),
+  agentName: z.string(),
+  profileName: z.string(),
+  identity: z.string(),
+  promptLength: z.number().int().nonnegative(),
+});
+
+const previewVoiceTokenRoute = createRoute({
+  method: "post",
+  path: "/{id}/preview-voice-token",
+  tags: ["Agents"],
+  summary: "Issue a LiveKit preview-voice token (POC)",
+  description:
+    "Creates a ModelGuide session, dispatches the *preview* LiveKit worker into a fresh room with the supplied (or last-compiled) instructions injected as `instructions_override` in dispatch metadata, and returns a short-lived LiveKit AccessToken so the browser can join via WebRTC. Use this to hear an un-deployed compiled prompt before promoting it.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: {
+        "application/json": { schema: previewVoiceTokenBodySchema },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Preview voice session created",
+      content: {
+        "application/json": { schema: previewVoiceTokenResponseSchema },
+      },
+    },
+    400: errorResponse(
+      "LiveKit not configured, missing credentials, wrong modality, or no prompt to preview",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+    422: errorResponse("Invalid request body (prompt too long)"),
+  },
+});
+
+router.openapi(previewVoiceTokenRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const user = getCurrentUser(c);
+  const { id } = c.req.valid("param");
+  const body = c.req.valid("json");
+
+  const result = await createPreviewVoiceSession(
+    orgId,
+    id,
+    { userId: user.id, email: user.email, name: user.name },
+    { instructions: body.instructions },
+  );
 
   return c.json(result, 201);
 });

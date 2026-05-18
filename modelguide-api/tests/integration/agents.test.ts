@@ -1011,6 +1011,226 @@ describe("POST /api/agents/:id/voice-test-token", () => {
   });
 });
 
+// ============================================================================
+// POST /api/agents/:id/preview-voice-token — Talk to the *latest compiled*
+// prompt before promoting it onto the deployed worker (POC, see ADR-015).
+// ============================================================================
+
+describe("POST /api/agents/:id/preview-voice-token", () => {
+  test("returns 400 when LiveKit is not configured", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ instructions: "You are helpful." }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/LiveKit/i);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/preview-voice-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ instructions: "x" }),
+      },
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  test("org B cannot preview an org A agent (404)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgBAdminHeaders,
+        body: JSON.stringify({ instructions: "x" }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 for unknown agent", async () => {
+    const response = await request(
+      "/api/agents/00000000-0000-0000-0000-000000000000/preview-voice-token",
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ instructions: "x" }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("rejects inactive agents (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Inactive Preview Voice Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    const response = await request(
+      `/api/agents/${agentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ instructions: "x" }),
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/not active/i);
+  });
+
+  test("rejects non-voice modality (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Text Preview Voice Agent",
+        modality: "text",
+      }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          agentPlatform: "livekit",
+          metadata: {
+            livekit: { url: "wss://test.livekit.cloud", agentName: "w" },
+          },
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(
+      `/api/agents/${agentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ instructions: "x" }),
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/voice agent/i);
+  });
+
+  test("rejects non-livekit platform (400)", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Custom Platform Preview Voice Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx.update(agents).set({ isActive: true }).where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(
+      `/api/agents/${agentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ instructions: "x" }),
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/LiveKit/i);
+  });
+
+  test("rejects support role (403) — agents:activate is admin-only", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgASupportHeaders,
+        body: JSON.stringify({ instructions: "x" }),
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  test("rejects prompts over the 50K-char cap (422)", async () => {
+    // Body validation runs before the per-agent guards, so we can hit this
+    // on any agent id.
+    const huge = "x".repeat(50_001);
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({ instructions: huge }),
+      },
+    );
+
+    expect(response.status).toBe(422);
+  });
+
+  test("rejects empty instructions when agent has no compiled prompt (400)", async () => {
+    // Voice agent on orgA with LiveKit configured but no compiledInstructions —
+    // body must supply something, otherwise there's nothing to preview.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Empty Preview Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          agentPlatform: "livekit",
+          metadata: {
+            livekit: {
+              url: "wss://test.livekit.cloud",
+              agentName: "w",
+              previewAgentName: "preview-worker",
+            },
+          },
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(
+      `/api/agents/${agentId}/preview-voice-token`,
+      {
+        method: "POST",
+        headers: orgAAdminHeaders,
+        body: JSON.stringify({}),
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/no compiled prompt/i);
+  });
+});
+
 describe("Agent slug uniqueness", () => {
   test("creating agent with duplicate name (same slug) returns 409", async () => {
     const res1 = await request("/api/agents", {
