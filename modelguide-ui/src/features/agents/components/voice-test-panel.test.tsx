@@ -169,6 +169,41 @@ describe('VoiceTestPanel', () => {
     })
   })
 
+  // -------------------------------------------------------------------------
+  // Compiled-prompt indicator (ADR-015)
+  //
+  // The dashboard "Compile" button writes `compiledInstructions` on the
+  // agent. The voice-test panel surfaces *which* prompt the user is
+  // about to hear so they aren't guessing whether their last edit made
+  // it through the cycle.
+  // -------------------------------------------------------------------------
+
+  it('shows the compiled-prompt timestamp when the agent has compiled instructions', () => {
+    const compiled: Agent = {
+      ...configuredAgent,
+      compiledInstructions: 'You are Sam.',
+      compiledAt: '2026-04-01T12:34:00Z',
+    }
+    render(<VoiceTestPanel agent={compiled} canMutate />, { wrapper })
+    // Tells the operator which compile cycle they're about to test.
+    expect(screen.getByText(/will use prompt compiled/i)).toBeInTheDocument()
+  })
+
+  it('warns when no compiled prompt exists (worker falls back to baked profile)', () => {
+    const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    // The talk button still works — the worker has its own baked prompt —
+    // but the operator should know the dashboard's compile cycle isn't
+    // the source of truth for this call.
+    expect(screen.getByText(/no compiled prompt/i)).toBeInTheDocument()
+  })
+
+  it('hides the compiled-prompt indicator entirely for non-livekit agents', () => {
+    const elevenAgent = { ...configuredAgent, agentPlatform: 'elevenlabs' } as Agent
+    render(<VoiceTestPanel agent={elevenAgent} canMutate />, { wrapper })
+    expect(screen.queryByText(/compiled prompt/i)).not.toBeInTheDocument()
+  })
+
   it('surfaces a clear error when mic permission is denied', async () => {
     stubMicPermission(false)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })

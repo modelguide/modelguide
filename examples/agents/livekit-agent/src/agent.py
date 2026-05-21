@@ -34,6 +34,29 @@ logger = logging.getLogger("agent")
 
 
 # ---------------------------------------------------------------------------
+# Dispatch metadata helpers
+# ---------------------------------------------------------------------------
+
+
+def extract_instructions_override(metadata: object) -> str | None:
+    """Pull a compiled-prompt override out of dispatch metadata.
+
+    The ModelGuide API may include an ``instructions`` field in the
+    voice-test dispatch metadata so this worker uses the latest compiled
+    prompt instead of its baked profile (see ADR-015). We accept the
+    field defensively: missing/wrong-typed/whitespace-only inputs all
+    return ``None`` so the worker falls back to the baked prompt rather
+    than crashing the call.
+    """
+    if not isinstance(metadata, dict):
+        return None
+    val = metadata.get("instructions")
+    if not isinstance(val, str) or not val.strip():
+        return None
+    return val
+
+
+# ---------------------------------------------------------------------------
 # SIP detection
 # ---------------------------------------------------------------------------
 
@@ -158,7 +181,13 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    instructions_override = extract_instructions_override(dispatch_metadata)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=instructions_override,
+    )
     stt = create_stt()
     tts = create_tts()
 

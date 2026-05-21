@@ -892,32 +892,64 @@ export function buildOutboundDispatchMetadata(input: {
 // ============================================================================
 
 /**
+ * Hard ceiling on the compiled prompt we pump through LiveKit dispatch
+ * metadata. LiveKit's dispatch RPC has no published size limit, but the
+ * metadata blob is sent over the control channel as a JSON string and
+ * we'd rather drop the override than risk fragmenting the dispatch
+ * (which would silently abort the call). 32KB comfortably fits any
+ * reasonable compiled system prompt — a typical one is 3-8KB.
+ */
+export const VOICE_TEST_INSTRUCTIONS_MAX_BYTES = 32 * 1024;
+
+/**
  * Build the dispatch-metadata payload for a voice-test session.
  *
  * Pure function so the MG-agent-slug ↔ worker-profile-slug coupling is
  * covered by a unit test. If the field names or shape ever drift, the
- * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
+ * worker's entrypoint (examples/agents/livekit-agent/src/agent.py —
  * `agentName = dispatch_metadata.get("agentName")`) stops routing to
  * the right profile and every dispatched call goes silent.
+ *
+ * Optional `instructions` overrides the worker's baked-in profile prompt
+ * for the duration of the call (ADR-015). Omitted when the input is
+ * null/empty/whitespace-only or exceeds VOICE_TEST_INSTRUCTIONS_MAX_BYTES;
+ * the worker falls back to its profile prompt in those cases.
  */
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  instructions?: string | null;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  instructions?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
   };
+
+  const instructions = input.instructions;
+  if (typeof instructions !== "string" || instructions.trim() === "") {
+    return base;
+  }
+
+  // Size guard uses byte length, not character count — a single emoji is
+  // 4 bytes in UTF-8 and would otherwise sail past a naive .length check.
+  if (
+    Buffer.byteLength(instructions, "utf8") > VOICE_TEST_INSTRUCTIONS_MAX_BYTES
+  ) {
+    return base;
+  }
+
+  return { ...base, instructions };
 }
 
 export interface VoiceTestSession {
@@ -996,7 +1028,23 @@ export async function createVoiceTestSession(
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    instructions: agent.compiledInstructions,
   });
+
+  // Surface whether the override actually made it into metadata. If a
+  // compiled prompt exists but was dropped by the size guard, leave a
+  // breadcrumb so the operator can see why "I just compiled but the
+  // agent doesn't sound different" happened.
+  if (agent.compiledInstructions && !("instructions" in dispatchMetadata)) {
+    getLogger().warn(
+      {
+        orgId,
+        agentId,
+        compiledLength: agent.compiledInstructions.length,
+      },
+      "voice-test: compiled prompt dropped from dispatch metadata (size guard)",
+    );
+  }
 
   let dispatchId: string;
   try {

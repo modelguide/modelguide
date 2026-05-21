@@ -114,6 +114,40 @@ docker logs -f livekit-agent-livekit-server-1
 | `make livekit-down` | Stop Docker LiveKit server |
 | `make livekit-token` | Generate token + open meet.livekit.io |
 
+## Prompt Override from the Dashboard (ADR-015)
+
+The dashboard's "Compile → Talk to agent" cycle is the fast feedback loop the platform exists to enable. To make it actually fast, the API ships the agent's currently-compiled prompt to this worker via dispatch metadata, and the worker uses it instead of its baked profile prompt for that one call.
+
+**What you need to know:**
+
+- When the MG voice-test endpoint dispatches this worker, the metadata blob may include an `instructions` field carrying the compiled system prompt. The base class `MCPAgent` checks for it and overrides the baked default if present (see `resolve_instructions` in `mcp_agent.py`).
+- Empty / whitespace / oversized prompts are silently ignored and the baked profile prompt is used — the override is opportunistic, not required.
+- Local dev (`make lk-agent-dev` + `make livekit-token`) does not go through MG dispatch, so no override happens. You're hearing the baked profile prompt, the same as before this change.
+- The worker logs a single line when the override fires: `"Using compiled-prompt override from dispatch metadata (N chars, baked default ignored)"`. Grep for that to confirm a dashboard test cycle made it through.
+
+**End-to-end flow:**
+
+```
+Dashboard (modelguide-ui)
+  │
+  ├── operator edits Configuration tab
+  ├── operator clicks "Compile" → POST /agents/:id/compile
+  │     └── compiledInstructions persisted on agent row
+  │
+  └── operator clicks "Talk to agent"
+        └── POST /agents/:id/voice-test-token
+              ├── buildVoiceTestDispatchMetadata({ instructions: agent.compiledInstructions, … })
+              └── AgentDispatchClient.createDispatch(roomName, agentName, metadata)
+                    │
+                    ▼
+            this worker entrypoint
+              ├── extract_instructions_override(dispatch_metadata)
+              └── BuildProAgent(…, instructions_override=…)
+                    └── MCPAgent picks override over baked default
+```
+
+The 32 KB size guard lives on the API side. The worker just trusts what it gets.
+
 ## Phone Calls (SIP)
 
 The agent supports phone calls via SIP in addition to browser WebRTC. See [`sip/README.md`](./sip/README.md) for setup and [`DEPLOY.md`](./DEPLOY.md) for deployment.

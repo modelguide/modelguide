@@ -36,14 +36,24 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
         instructions = build_system_prompt(session_id or "", user_email=user_email)
-        super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
+        super().__init__(
+            session_id=session_id,
+            mcp=mcp,
+            instructions=instructions,
+            instructions_override=instructions_override,
+        )
 
     # ------------------------------------------------------------------
     # 11 @function_tool methods (camelCase params to match MCP)
