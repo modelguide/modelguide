@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -38,6 +38,41 @@ import { PHASE_LABEL, type WidgetState } from './voice-test/state'
 interface VoiceTestPanelProps {
   agent: Agent
   canMutate: boolean
+}
+
+/**
+ * Tells the operator which compiled prompt the worker will use for the
+ * call they're about to start. Mirrors the API-side dispatch contract:
+ * when `compiledInstructions` exists, the API ships it in dispatch
+ * metadata and the worker overrides its baked profile prompt with it
+ * (ADR-015). Without this label, operators couldn't tell whether their
+ * last edit actually made it into the test cycle.
+ */
+function CompiledPromptIndicator({
+  compiledInstructions,
+  compiledAt,
+}: {
+  compiledInstructions: string | null
+  compiledAt: string | null
+}) {
+  if (compiledInstructions && compiledAt) {
+    const when = new Date(compiledAt)
+    const label = Number.isNaN(when.getTime())
+      ? 'this agent'
+      : when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    return (
+      <p className="mt-3 flex items-center gap-1.5 text-xs text-fg-muted">
+        <FileCode className="h-3.5 w-3.5" />
+        Will use prompt compiled {label}
+      </p>
+    )
+  }
+  return (
+    <p className="mt-3 flex items-center gap-1.5 text-xs text-fg-muted">
+      <FileCode className="h-3.5 w-3.5" />
+      No compiled prompt — worker will use its baked-in profile.
+    </p>
+  )
 }
 
 export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
@@ -163,6 +198,11 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
             Configure the LiveKit URL, API key, and secret for this agent before testing.
           </div>
         )}
+
+        <CompiledPromptIndicator
+          compiledInstructions={agent.compiledInstructions ?? null}
+          compiledAt={agent.compiledAt ?? null}
+        />
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (

@@ -39,6 +39,21 @@ def _get_stubbed_tools() -> set[str]:
     return {t.strip() for t in raw.split(",") if t.strip()}
 
 
+def resolve_instructions(default: str, override: str | None) -> str:
+    """Pick the effective system prompt for the agent.
+
+    Returns ``override`` verbatim when it's a non-empty, non-whitespace
+    string. Otherwise falls back to the baked profile prompt
+    (``default``). Mirrors the API-side guard in
+    ``buildVoiceTestDispatchMetadata`` so the two sides agree on what
+    counts as "no override" — a whitespace-only override must NOT replace
+    the baked prompt with whitespace.
+    """
+    if isinstance(override, str) and override.strip():
+        return override
+    return default
+
+
 class MCPAgent(Agent):
     """Voice agent base class with MCP tool execution, tracing, and transcripts.
 
@@ -58,12 +73,20 @@ class MCPAgent(Agent):
         session_id: str | None,
         mcp: mg_client.MCPConnection | None = None,
         instructions: str,
+        instructions_override: str | None = None,
     ) -> None:
         self._session_id = session_id
         self._transcript = TranscriptCollector()
         self._mcp = mcp
         self._tool_map = {name: f"{config.CONNECTOR_PREFIX}_{name}" for name in self.TOOL_NAMES}
-        super().__init__(instructions=instructions)
+        effective = resolve_instructions(instructions, instructions_override)
+        if effective is not instructions:
+            logger.info(
+                "Using compiled-prompt override from dispatch metadata "
+                "(%d chars, baked default ignored)",
+                len(effective),
+            )
+        super().__init__(instructions=effective)
 
     # ------------------------------------------------------------------
     # MCP execution core
