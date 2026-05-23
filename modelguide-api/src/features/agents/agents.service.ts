@@ -902,11 +902,13 @@ export function buildOutboundDispatchMetadata(input: {
  */
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
+  agentId: string;
   sessionId: string;
   callerEmail: string;
 }): {
   mode: "voice-test";
   agentName: string;
+  mg_agent_id: string;
   session_id: string;
   user_identifier: string;
   email: string;
@@ -914,6 +916,11 @@ export function buildVoiceTestDispatchMetadata(input: {
   return {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
+    // The MG agent UUID — the worker reads this on dispatch and calls
+    // GET /api/agents/:id to load the current compiledInstructions
+    // (ADR-015). We pass an ID rather than the prompt itself to avoid the
+    // 48KB metadata cap and the drift failure mode that ADR-014 flagged.
+    mg_agent_id: input.agentId,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
@@ -994,6 +1001,7 @@ export async function createVoiceTestSession(
 
   const dispatchMetadata = buildVoiceTestDispatchMetadata({
     agentSlug: agent.slug,
+    agentId: agent.id,
     sessionId: session.id,
     callerEmail: caller.email,
   });

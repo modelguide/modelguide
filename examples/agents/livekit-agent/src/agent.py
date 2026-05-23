@@ -25,6 +25,7 @@ from buildpro import BuildProAgent
 from hangup import HangupAction, HangupStateMachine
 from prompts import GREETING
 from providers import create_stt, create_tts
+from runtime_prompt_agent import RuntimePromptAgent, select_agent_class
 from tracing import setup_langfuse
 
 VERSION = "0.4.0"
@@ -157,8 +158,29 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to create ModelGuide session — running without tracking")
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
-    # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    # Pick the agent class for this dispatch. Voice-test rooms (dashboard
+    # "Sync & Test") get RuntimePromptAgent so the worker fetches the
+    # latest compiled prompt from MG — see ADR-015. Everything else
+    # (production WebRTC, SIP) stays on BuildProAgent's baked-in prompt.
+    AgentClass = select_agent_class(dispatch_metadata)
+    if AgentClass is RuntimePromptAgent:
+        mg_agent_id = dispatch_metadata.get("mg_agent_id")
+        runtime_instructions = await mg_client.fetch_compiled_instructions(mg_agent_id)
+        logger.info(
+            "voice-test dispatch: runtime prompt fetched=%s (agent=%s)",
+            bool(runtime_instructions),
+            mg_agent_id,
+        )
+        agent = RuntimePromptAgent(
+            session_id=session_id,
+            user_email=user_identifier,
+            instructions=runtime_instructions,
+            mcp=mcp,
+        )
+    else:
+        agent = BuildProAgent(
+            session_id=session_id, user_email=user_identifier, mcp=mcp
+        )
     stt = create_stt()
     tts = create_tts()
 
