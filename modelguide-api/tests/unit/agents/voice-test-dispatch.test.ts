@@ -16,28 +16,27 @@ import { describe, expect, test } from "bun:test";
 import { buildVoiceTestDispatchMetadata } from "../../../src/features/agents/agents.service";
 
 describe("buildVoiceTestDispatchMetadata", () => {
+  const baseInput = {
+    agentSlug: "banknowa_v1",
+    agentId: "11111111-1111-1111-1111-111111111111",
+    sessionId: "sess-abc",
+    callerEmail: "admin@example.com",
+  };
+
   test("carries agentName = agent.slug for multi-profile routing", () => {
-    const md = buildVoiceTestDispatchMetadata({
-      agentSlug: "banknowa_v1",
-      sessionId: "sess-abc",
-      callerEmail: "admin@example.com",
-    });
+    const md = buildVoiceTestDispatchMetadata(baseInput);
     // The single most important field — workers route on this.
     expect(md.agentName).toBe("banknowa_v1");
   });
 
   test("mode is a literal 'voice-test' marker", () => {
-    const md = buildVoiceTestDispatchMetadata({
-      agentSlug: "x",
-      sessionId: "s",
-      callerEmail: "c@e.com",
-    });
+    const md = buildVoiceTestDispatchMetadata(baseInput);
     expect(md.mode).toBe("voice-test");
   });
 
   test("session_id + user_identifier + email carry caller context", () => {
     const md = buildVoiceTestDispatchMetadata({
-      agentSlug: "tenant_a",
+      ...baseInput,
       sessionId: "sess-xyz",
       callerEmail: "tester@corp.com",
     });
@@ -46,14 +45,31 @@ describe("buildVoiceTestDispatchMetadata", () => {
     expect(md.email).toBe("tester@corp.com");
   });
 
-  test("shape is stable — exactly these 5 keys, nothing else", () => {
+  test("mg_agent_id is the MG agent UUID — the worker uses it to pull the latest compiled prompt", () => {
+    // This is the runtime-prompt-fetch contract (ADR-015). The worker reads
+    // `mg_agent_id` from dispatch metadata and calls
+    // `GET /api/agents/:id` to retrieve the current `compiledInstructions`.
+    // If the field name drifts, the worker silently falls back to its
+    // baked-in prompt and "Sync & Test" stops actually testing the latest
+    // compiled prompt.
     const md = buildVoiceTestDispatchMetadata({
-      agentSlug: "x",
-      sessionId: "s",
-      callerEmail: "c@e.com",
+      ...baseInput,
+      agentId: "22222222-2222-2222-2222-222222222222",
     });
+    expect(md.mg_agent_id).toBe("22222222-2222-2222-2222-222222222222");
+  });
+
+  test("shape is stable — exactly these 6 keys, nothing else", () => {
+    const md = buildVoiceTestDispatchMetadata(baseInput);
     expect(Object.keys(md).sort()).toEqual(
-      ["agentName", "email", "mode", "session_id", "user_identifier"].sort(),
+      [
+        "agentName",
+        "email",
+        "mg_agent_id",
+        "mode",
+        "session_id",
+        "user_identifier",
+      ].sort(),
     );
   });
 
@@ -63,9 +79,8 @@ describe("buildVoiceTestDispatchMetadata", () => {
     // equality, so any transform silently breaks routing.
     const weird = "Weird_Slug-v1";
     const md = buildVoiceTestDispatchMetadata({
+      ...baseInput,
       agentSlug: weird,
-      sessionId: "s",
-      callerEmail: "c@e.com",
     });
     expect(md.agentName).toBe(weird);
   });
@@ -74,9 +89,8 @@ describe("buildVoiceTestDispatchMetadata", () => {
     // The dispatch layer JSON-stringifies this payload. Confirm nothing is
     // a Symbol, function, or other unserializable value.
     const md = buildVoiceTestDispatchMetadata({
+      ...baseInput,
       agentSlug: "banknowa_v2",
-      sessionId: "s",
-      callerEmail: "c@e.com",
     });
     const roundTripped = JSON.parse(JSON.stringify(md));
     expect(roundTripped).toEqual(md);

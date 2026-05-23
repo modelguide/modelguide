@@ -181,4 +181,21 @@ describe('VoiceTestPanel', () => {
     // Should not have attempted to fetch the token once the mic check failed.
     expect(mockPost).not.toHaveBeenCalled()
   })
+
+  // --- ADR-015: "Sync & Test" indicators ---------------------------------
+
+  it('shows the last-compiled timestamp when a compiled prompt is present', () => {
+    // The operator needs to see *which* prompt the LiveKit worker will pull
+    // before they click. Without this they have no idea whether the room
+    // will use yesterday's prompt or the one they just compiled.
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    expect(screen.getByText(/last compiled/i)).toBeInTheDocument()
+  })
+
+  it('warns when no compiled prompt exists — the worker will use the baked-in fallback', () => {
+    const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    // Don't fail the call; just tell the operator what they're about to test.
+    expect(screen.getByText(/no compiled prompt/i)).toBeInTheDocument()
+  })
 })

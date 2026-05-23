@@ -291,6 +291,28 @@ No code changes needed. The tool's `@function_tool` definition and MCP name mapp
 
 - **`EndCallTool`** — LiveKit agents ships a built-in [`EndCallTool`](https://docs.livekit.io/agents/build/end-call-tool/) (`livekit.agents.beta.tools.end_call`) that lets the LLM decide when to hang up via tool calling instead of the current event-based state machine. Worth evaluating once it graduates from beta.
 
+## Runtime-Prompt Voice Test (ADR-015)
+
+The dashboard's **Voice Test** panel now lets an operator iterate on a prompt without redeploying the worker:
+
+1. Edit a SOP in the dashboard.
+2. Click **Compile prompt** — the new system prompt lands in `agents.compiled_instructions`.
+3. Click **Talk to agent** — the worker reads `mg_agent_id` from dispatch metadata, calls `GET /api/agents/:id`, and uses the freshly-compiled `compiledInstructions` as its system prompt for this call only.
+
+If the fetch fails or the agent has no compiled prompt yet, the worker falls back to its baked-in BuildPro prompt — voice test always succeeds, even when MG is unreachable.
+
+The wiring lives in:
+
+| File | Role |
+|---|---|
+| `src/runtime_prompt_agent.py` | `RuntimePromptAgent` subclass + `select_agent_class()` dispatcher |
+| `src/mg_client.py:fetch_compiled_instructions` | REST call to `GET /api/agents/:id` |
+| `src/agent.py` (entrypoint) | Calls `select_agent_class(dispatch_metadata)` and fetches the prompt before constructing the agent |
+
+Production dispatches (SIP, direct `lk dispatch`, outbound calls) are unaffected — `select_agent_class` only returns `RuntimePromptAgent` when both `mode == "voice-test"` and `mg_agent_id` are set in the dispatch metadata.
+
+See [`docs/decisions/015-voice-test-runtime-prompt-fetch.md`](../../../docs/decisions/015-voice-test-runtime-prompt-fetch.md) for the full rationale.
+
 ## LiveKit Cloud Deployment
 
 See [DEPLOY.md](./DEPLOY.md) for full deployment instructions.

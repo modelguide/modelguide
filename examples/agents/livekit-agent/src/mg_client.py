@@ -92,6 +92,46 @@ async def add_messages(session_id: str, messages: list[dict]) -> None:
             logger.exception("Error posting message to session %s", session_id)
 
 
+async def fetch_compiled_instructions(agent_id: str) -> str | None:
+    """Pull the latest compiled prompt for an agent (ADR-015).
+
+    The voice-test dispatcher hands us an ``mg_agent_id`` in dispatch
+    metadata. We call ``GET /api/agents/:id`` and return the
+    ``compiledInstructions`` field so the worker can use the prompt the
+    operator just compiled in the dashboard, without redeploying.
+
+    Errors and empty / missing values all collapse to ``None`` — the
+    caller falls back to the worker's baked-in prompt. The voice-test
+    button never fails because of a fetch hiccup; we'd rather talk to a
+    slightly stale agent than show the operator a spinner that errors.
+    """
+    try:
+        async with httpx.AsyncClient(
+            base_url=config.MODELGUIDE_API_URL,
+            headers=_headers(),
+            timeout=10.0,
+        ) as client:
+            res = await client.get(f"/api/agents/{agent_id}")
+            if not res.is_success:
+                logger.warning(
+                    "fetch_compiled_instructions: status %s for agent %s",
+                    res.status_code,
+                    agent_id,
+                )
+                return None
+            data = res.json()
+            compiled = data.get("compiledInstructions")
+            if isinstance(compiled, str) and compiled.strip():
+                return compiled
+            return None
+    except Exception:
+        logger.exception(
+            "fetch_compiled_instructions failed for agent %s — falling back",
+            agent_id,
+        )
+        return None
+
+
 async def complete_session(
     session_id: str,
     status: str = "completed",
