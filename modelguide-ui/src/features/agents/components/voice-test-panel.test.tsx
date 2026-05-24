@@ -169,6 +169,30 @@ describe('VoiceTestPanel', () => {
     })
   })
 
+  it('shows the compile-freshness hint when a compiledAt is set', () => {
+    // The hint exists so operators using a runtime-fetch worker
+    // (livekit-prototype, ADR-015) can see at a glance whether the
+    // worker would dispatch with a stale or fresh prompt. Pinning the
+    // presence of the data-testid here so the hint can't be silently
+    // removed in a refactor.
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    const hint = screen.getByTestId('voice-test-compile-hint')
+    expect(hint).toHaveTextContent(/latest compile/i)
+    expect(hint).toHaveTextContent(/runtime-fetch/i)
+  })
+
+  it('shows a no-compile warning when compiledAt is null', () => {
+    const noPrompt = {
+      ...configuredAgent,
+      compiledInstructions: null,
+      compiledAt: null,
+    } as Agent
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    expect(screen.getByTestId('voice-test-compile-hint')).toHaveTextContent(/no compiled prompt/i)
+  })
+
   it('surfaces a clear error when mic permission is denied', async () => {
     stubMicPermission(false)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })

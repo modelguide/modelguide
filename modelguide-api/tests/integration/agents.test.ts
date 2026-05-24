@@ -8,12 +8,19 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
 let orgASupportHeaders: Record<string, string>;
 let orgBAdminHeaders: Record<string, string>;
+let orgAAgentHeaders: Record<string, string>;
+let orgBAgentHeaders: Record<string, string>;
 
 /** IDs of agents created during tests (for cleanup) */
 const createdAgentIds: string[] = [];
@@ -27,6 +34,8 @@ beforeAll(async () => {
   orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
   orgASupportHeaders = await authHeadersFor(s.orgASupport);
   orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
+  orgAAgentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+  orgBAgentHeaders = await agentHeadersFor(s.orgBAgentId, s.orgB.id);
 });
 
 afterAll(async () => {
@@ -190,6 +199,118 @@ describe("POST /api/agents", () => {
     });
 
     expect(response.status).toBe(422);
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me - Agent self-introspection (API key auth)
+//
+// Used by the livekit-prototype worker to fetch its own compiled prompt at
+// runtime so the worker can pick up the latest compile without redeploying.
+// See ADR-015 for the rationale (prototype-only — production agents still
+// bake the prompt into the worker image per ADR-014).
+// ============================================================================
+
+describe("GET /api/agents/me", () => {
+  test("returns the calling agent with API key auth (200)", async () => {
+    const response = await request("/api/agents/me", {
+      headers: orgAAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.name).toBeDefined();
+    expect(body.slug).toBeDefined();
+    expect(body.modality).toBeDefined();
+    expect(body.agentPlatform).toBeDefined();
+    expect(body.isActive).toBe(true);
+    // Compile state — null is valid (agent may not have been compiled yet)
+    expect("compiledInstructions" in body).toBe(true);
+    expect("compiledAt" in body).toBe(true);
+    expect("compiledFrom" in body).toBe(true);
+    expect(body.promptConfig).toBeDefined();
+  });
+
+  test("does not leak secret material (api keys, secret refs only)", async () => {
+    const response = await request("/api/agents/me", {
+      headers: orgAAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    // The agent's own response must never include a plaintext API key,
+    // decrypted secret values, or webhook HMAC. If any of these surface
+    // the worker (which runs in a less-trusted env than the API) becomes
+    // a credential exfil vector.
+    expect(body.apiKey).toBeUndefined();
+    expect(body.webhook_hmac_secret).toBeUndefined();
+    // `secrets` is a ref map of UUIDs only — never decrypted values
+    if (body.secrets) {
+      for (const value of Object.values(body.secrets)) {
+        expect(typeof value).toBe("string");
+        // UUIDs only — no raw key material
+        expect(value as string).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        );
+      }
+    }
+  });
+
+  test("isolates cross-org agents (orgB key returns orgB agent only)", async () => {
+    const response = await request("/api/agents/me", {
+      headers: orgBAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    // The orgB API key must return the orgB agent — never the orgA agent.
+    // This is the load-bearing isolation property: a leaked org-B key
+    // cannot enumerate org-A agents through this endpoint.
+    expect(body.id).toBe(s.orgBAgentId);
+    expect(body.id).not.toBe(s.orgAAgentId);
+  });
+
+  test("rejects user JWT auth (401)", async () => {
+    // Admin/support JWTs MUST NOT work here — this endpoint identifies
+    // the *agent*, not a user. A user JWT carries no agent context, so
+    // there is no "me" to return.
+    const response = await request("/api/agents/me", {
+      headers: orgAAdminHeaders,
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me");
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects malformed API key (401)", async () => {
+    const response = await request("/api/agents/me", {
+      headers: {
+        Authorization: "Bearer mgk_definitely_not_a_real_key_aaaaaaaa",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  test("does not collide with GET /:id route (uuid-only param)", async () => {
+    // Sanity: confirm the literal "/me" path is not interpreted as an
+    // agent ID by the dynamic `/:id` route. If route ordering ever
+    // regresses, the request will fail validation against the UUID
+    // schema and return 422 instead of hitting the /me handler.
+    const response = await request("/api/agents/me", {
+      headers: orgAAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
   });
 });
 

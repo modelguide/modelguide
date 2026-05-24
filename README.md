@@ -147,6 +147,7 @@ Start with the LiveKit implementation for the fastest end-to-end path. Use the P
 | Runtime | Why it exists | Path |
 |---|---|---|
 | **LiveKit Agents** *(flagship)* | Fastest path to a production voice agent with telephony, MCP tool wiring, session tracking, eval tests, and deployment docs | [`examples/agents/livekit-agent/`](examples/agents/livekit-agent/) |
+| **LiveKit Prototype** *(POC)* | Runtime prompt + MCP-tool fetch so you can compile in the dashboard and hear the new prompt on the next "Talk to agent" click — no redeploy. Iteration-only; see [ADR-015](docs/decisions/015-livekit-prototype-runtime-prompt-fetch.md) | [`examples/agents/livekit-prototype/`](examples/agents/livekit-prototype/) |
 | **Pipecat** | Same orchestration model for teams already committed to Pipecat | [`examples/agents/pipecat-agent/`](examples/agents/pipecat-agent/) |
 | **ElevenLabs Conversational AI** | Manage platform agent config, tools, and prompts from version-controlled local definitions | [`examples/agents/elevenlabs-agent/`](examples/agents/elevenlabs-agent/) |
 | **Mastra** | Email "Where Is My Order?" example showing the orchestration layer extends beyond voice when you need another customer-facing channel | [`examples/agents/mastra-wismo-email-agent/`](examples/agents/mastra-wismo-email-agent/) |
