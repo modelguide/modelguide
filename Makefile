@@ -195,3 +195,18 @@ livekit-down: ## [LiveKit] Stop Docker LiveKit server
 
 livekit-token: ## [LiveKit] Generate token and open meet.livekit.io (NAME=yourname)
 	lk token create --api-key devkey --api-secret secret --room test-room --identity $(or $(NAME),artur) --join --valid-for 1h --agent $(LK_AGENT_NAME) --open meet
+
+# =============================================================================
+# LiveKit Prototype Agent (examples/agents/livekit-prototype) — ADR-015
+# =============================================================================
+
+LK_PROTOTYPE_DIR := examples/agents/livekit-prototype
+
+lk-prototype-setup: ## [LK Prototype] Install deps and download model files
+	cd $(LK_PROTOTYPE_DIR) && uv sync && uv run python src/agent.py download-files
+
+lk-prototype-dev: ## [LK Prototype] Run in WebRTC dev mode (fetches prompt from MG at session start)
+	cd $(LK_PROTOTYPE_DIR) && uv run python src/agent.py dev --log-level $(LK_LOG_LEVEL)
+
+lk-prototype-test: ## [LK Prototype] Run unit tests (no LiveKit / network needed)
+	cd $(LK_PROTOTYPE_DIR) && uv run pytest tests/ -v

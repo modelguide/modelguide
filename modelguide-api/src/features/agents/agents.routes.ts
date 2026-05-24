@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -459,6 +461,53 @@ router.openapi(platformModelsRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// Self-Introspection (Agent API key only)
+//
+// `GET /me` returns the agent identified by the calling `mgk_…` API key.
+// Used by the livekit-prototype worker (see examples/agents/livekit-prototype/)
+// to fetch the latest compiled prompt at session start so the worker picks up
+// new compiles without redeploying. Production workers should still bake the
+// prompt into their image (ADR-014); this endpoint is the runtime-fetch
+// escape hatch the prototype relies on. See ADR-015.
+//
+// Defined here (before the dynamic `:id` routes) so the literal "/me" path
+// is matched first by Hono's router. The route uses agent API key auth
+// (`requireAgent`), so user JWTs are rejected with 401.
+// ============================================================================
+
+router.get("/me", requireAgent(), requireOrganization());
+
+const meRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Agents"],
+  summary: "Get the calling agent (API key self-introspection)",
+  description:
+    "Returns the agent identified by the API key in the Authorization header. Intended for voice/chat workers that need their own compiled prompt at runtime. Rejects user JWTs — this endpoint is agent-only.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Agent detail for the API key's owning agent",
+      content: {
+        "application/json": { schema: agentResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated as an agent"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(meRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const agent = getCurrentAgent(c);
+  // Reuse the same loader / formatter as `GET /:id` so the response shape is
+  // identical. The worker can treat `me` and `/:id` interchangeably.
+  const fullAgent = await getAgentById(orgId, agent.id);
+
+  return c.json(formatAgent(fullAgent), 200);
 });
 
 // ============================================================================

@@ -23,12 +23,13 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { api } from '~/lib/api'
+import { formatDate } from '~/lib/utils'
 import type { Agent, VoiceTestTokenResponse } from '~/schemas/agents'
 
 import { ensureMicPermission } from './voice-test/mic-permission'
@@ -163,6 +164,35 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
             Configure the LiveKit URL, API key, and secret for this agent before testing.
           </div>
         )}
+
+        {livekitConfigured ? (
+          /*
+           * Compile freshness hint — surfaces compiledAt next to the
+           * "Talk to agent" button so the operator can see what the
+           * worker would pick up. Only meaningful for the prototype
+           * worker (livekit-prototype, ADR-015) which fetches the prompt
+           * at runtime; production workers (livekit-agent, ADR-014)
+           * still use their baked-in prompt regardless of what's shown
+           * here. We don't gate the hint on worker type because the UI
+           * doesn't know which worker is configured.
+           */
+          <div
+            className="mt-3 flex items-center gap-2 text-xs text-fg-muted"
+            data-testid="voice-test-compile-hint"
+          >
+            <FileCode className="h-3.5 w-3.5" />
+            {agent.compiledAt ? (
+              <span>
+                Latest compile: {formatDate(agent.compiledAt, { format: 'relative' })}
+                {' — '}runtime-fetch workers will use this prompt.
+              </span>
+            ) : (
+              <span className="text-warning">
+                No compiled prompt yet — runtime-fetch workers will fall back to a placeholder.
+              </span>
+            )}
+          </div>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
