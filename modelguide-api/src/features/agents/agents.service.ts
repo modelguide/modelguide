@@ -108,6 +108,27 @@ export async function listAgents(
   });
 }
 
+/**
+ * Load just the row that a worker calling /agents/me/runtime-config needs.
+ *
+ * Skips the extra joins `getAgentById` does (active API key prefix, eval
+ * suite count) — the worker has no use for either and they cost an extra
+ * round-trip per session boot.
+ */
+export async function getAgentRowForRuntime(orgId: string, agentId: string) {
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId));
+
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
+    return agent;
+  });
+}
+
 export async function getAgentById(orgId: string, agentId: string) {
   return forOrg(orgId, async (tx) => {
     const [agent] = await tx

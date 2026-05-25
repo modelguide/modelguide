@@ -1,0 +1,7 @@
+# LiveKit Cloud deploy config — replace `subdomain` with your project's and
+# leave `id` empty until first deploy (LiveKit fills it in).
+[project]
+  subdomain = ""
+
+[agent]
+  id = ""

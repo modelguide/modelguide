@@ -169,6 +169,41 @@ describe('VoiceTestPanel', () => {
     })
   })
 
+  // -------------------------------------------------------------------------
+  // Prompt sync indicator (ADR-015)
+  //
+  // The POC worker calls /agents/me/runtime-config at session boot and uses
+  // agent.compiledInstructions as the system prompt. These tests lock the
+  // operator-facing UX for that contract: a confirmation that the next call
+  // will use a recently-compiled prompt vs. a warning that nothing has been
+  // compiled yet.
+  // -------------------------------------------------------------------------
+
+  it('shows a "worker uses compiled prompt" indicator when a compiled prompt is present', () => {
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    const indicator = screen.getByTestId('prompt-sync-indicator')
+    expect(indicator).toBeInTheDocument()
+    expect(indicator.textContent).toMatch(/compiled prompt/i)
+    expect(indicator.textContent).toMatch(/recompile/i)
+  })
+
+  it('warns and points to Compile when no prompt has been compiled yet', () => {
+    const noPrompt = { ...configuredAgent, compiledInstructions: null, compiledAt: null } as Agent
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    expect(screen.queryByTestId('prompt-sync-indicator')).not.toBeInTheDocument()
+    expect(screen.getByText(/no compiled prompt yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/compile prompt/i)).toBeInTheDocument()
+  })
+
+  it('omits the sync indicator entirely until LiveKit is configured', () => {
+    // If LiveKit isn't configured, the call can't happen at all — showing a
+    // "synced" badge then is misleading.
+    const unconfigured = { ...baseAgent } as Agent
+    render(<VoiceTestPanel agent={unconfigured} canMutate />, { wrapper })
+    expect(screen.queryByTestId('prompt-sync-indicator')).not.toBeInTheDocument()
+    expect(screen.queryByText(/no compiled prompt yet/i)).not.toBeInTheDocument()
+  })
+
   it('surfaces a clear error when mic permission is denied', async () => {
     stubMicPermission(false)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
