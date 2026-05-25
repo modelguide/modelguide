@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -264,6 +269,76 @@ describe("GET /api/agents/:id", () => {
     ]);
     expect(body.compiledFrom.toolCount).toBe(2);
     expect(body.compiledFrom.guardrailIds).toEqual([]);
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me/runtime-config — agent-auth runtime config (ADR-015)
+//
+// This is the endpoint a LiveKit (or any external) voice-agent worker hits
+// on every session boot to pick up the dashboard's latest compiled prompt.
+// Critical properties we lock in here:
+//   - agent's own API key works; user JWT does not
+//   - the calling agent's identity is taken from the key — no `:id` to spoof
+//   - the response is narrow: no secrets, no orgId, no full metadata blob
+// ============================================================================
+
+describe("GET /api/agents/me/runtime-config", () => {
+  test("returns runtime config when called with the agent's API key (200)", async () => {
+    // Stamp a compiled prompt so we exercise the "fresh prompt is visible
+    // to the worker" path, not just the null fallback.
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          compiledInstructions: "You are a runtime-config test agent.",
+          compiledAt: new Date("2026-05-20T12:00:00Z"),
+        })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.compiledInstructions).toBe(
+      "You are a runtime-config test agent.",
+    );
+    expect(body.compiledAt).toBe("2026-05-20T12:00:00.000Z");
+    expect(body.modality).toBeDefined();
+    expect(body.slug).toBeDefined();
+    expect(body.promptConfig).toBeDefined();
+  });
+
+  test("rejects user JWT (401) — agent-auth only", async () => {
+    // Dashboard admins use /agents/:id, not /me. Locking this prevents a
+    // future "let admins call this for convenience" change from quietly
+    // widening the surface to user sessions.
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me/runtime-config");
+    expect(response.status).toBe(401);
+  });
+
+  test("does NOT leak secrets, organizationId, or full metadata", async () => {
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.secrets).toBeUndefined();
+    expect(body.organizationId).toBeUndefined();
+    expect(body.metadata).toBeUndefined();
   });
 });
 

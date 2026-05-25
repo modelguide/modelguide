@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose lk-agent-setup lk-agent-console lk-agent-dev livekit-up livekit-up-docker livekit-down livekit-token
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose lk-agent-setup lk-agent-console lk-agent-dev livekit-up livekit-up-docker livekit-down livekit-token lk-poc-setup lk-poc-dev lk-poc-test
 
 .DEFAULT_GOAL := help
 
@@ -195,3 +195,20 @@ livekit-down: ## [LiveKit] Stop Docker LiveKit server
 
 livekit-token: ## [LiveKit] Generate token and open meet.livekit.io (NAME=yourname)
 	lk token create --api-key devkey --api-secret secret --room test-room --identity $(or $(NAME),artur) --join --valid-for 1h --agent $(LK_AGENT_NAME) --open meet
+
+# =============================================================================
+# LiveKit POC Agent — dashboard-driven prompt (ADR-015)
+# (examples/agents/modelguide-livekit-poc-agent)
+# =============================================================================
+
+LK_POC_DIR := examples/agents/modelguide-livekit-poc-agent
+LK_POC_NAME ?= modelguide-poc
+
+lk-poc-setup: ## [LK POC] Install deps and download model files
+	cd $(LK_POC_DIR) && uv sync && uv run python src/agent.py download-files
+
+lk-poc-dev: ## [LK POC] Run in WebRTC dev mode (uses compiled prompt from MG dashboard)
+	cd $(LK_POC_DIR) && uv run python src/agent.py dev --log-level $(LK_LOG_LEVEL)
+
+lk-poc-test: ## [LK POC] Run Python unit tests for the POC agent
+	cd $(LK_POC_DIR) && uv run pytest tests/ -v

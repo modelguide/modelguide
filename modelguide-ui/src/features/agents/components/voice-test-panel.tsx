@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -164,6 +164,13 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
           </div>
         )}
 
+        {livekitConfigured ? (
+          <PromptSyncIndicator
+            compiledAt={agent.compiledAt}
+            hasCompiledPrompt={!!agent.compiledInstructions}
+          />
+        ) : null}
+
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
             <Button
@@ -213,4 +220,73 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       </CardContent>
     </Card>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Prompt sync indicator
+//
+// Surfaces whether the worker will pick up a dashboard-edited prompt on the
+// next Talk click.  See ADR-015: a LiveKit POC worker calls
+// `/agents/me/runtime-config` at session start and uses the agent's
+// `compiledInstructions`.  This indicator translates that contract into UX:
+//   - has compiled prompt  →  green "synced …" line with the relative timestamp
+//   - no compiled prompt   →  warning row pointing the user at the Prompt tab
+//
+// We deliberately do NOT add a "Sync" button here.  Compile is the canonical
+// action and it lives one card up (Prompt tab → Compile). A duplicate button
+// here would diverge UX and become a second source of truth.
+// ---------------------------------------------------------------------------
+
+function PromptSyncIndicator({
+  compiledAt,
+  hasCompiledPrompt,
+}: {
+  compiledAt: string | null | undefined
+  hasCompiledPrompt: boolean
+}) {
+  if (!hasCompiledPrompt) {
+    return (
+      <div className="mt-4 flex items-start gap-2 rounded-lg border border-fg-subtle/15 bg-bg-subtle/40 p-3 text-xs text-fg-secondary">
+        <FileCode className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted" />
+        <span>
+          No compiled prompt yet — open the <strong>Prompt</strong> tab and click{' '}
+          <strong>Compile Prompt</strong>. The worker fetches the latest compiled prompt on every
+          call.
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <p
+      className="mt-4 flex items-center gap-1.5 text-xs text-fg-secondary"
+      data-testid="prompt-sync-indicator"
+    >
+      <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+      <span>
+        Worker uses the compiled prompt {compiledAt ? formatRelativeSync(compiledAt) : 'on file'}.
+        Recompile to push a new version.
+      </span>
+    </p>
+  )
+}
+
+/**
+ * Render the compiled-at timestamp as a short relative string so the
+ * operator can glance and confirm the call will use what they just
+ * compiled. Falls back to the ISO string if Date parsing fails — better to
+ * show something machine-readable than nothing.
+ */
+function formatRelativeSync(iso: string): string {
+  const then = Date.parse(iso)
+  if (Number.isNaN(then)) return `(compiled ${iso})`
+  const seconds = Math.round((Date.now() - then) / 1000)
+  if (seconds < 5) return '(compiled just now)'
+  if (seconds < 60) return `(compiled ${seconds}s ago)`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `(compiled ${minutes}m ago)`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `(compiled ${hours}h ago)`
+  const days = Math.round(hours / 24)
+  return `(compiled ${days}d ago)`
 }
