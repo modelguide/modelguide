@@ -17,6 +17,7 @@ from livekit.agents import RunContext, function_tool
 
 import config
 import mg_client
+from dispatch import select_instructions
 from mcp_agent import MCPAgent
 from prompts import build_system_prompt
 
@@ -36,13 +37,25 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        # Prompt Lab (ADR-015): when MG dispatched us with `prompt_override`,
+        # use it verbatim instead of building the baked-in profile prompt.
+        instructions = select_instructions(
+            override=instructions_override,
+            default_factory=lambda: build_system_prompt(
+                session_id or "", user_email=user_email
+            ),
+        )
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

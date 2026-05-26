@@ -22,6 +22,7 @@ from livekit.plugins.turn_detector.english import EnglishModel
 import config
 import mg_client
 from buildpro import BuildProAgent
+from dispatch import extract_prompt_override
 from hangup import HangupAction, HangupStateMachine
 from prompts import GREETING
 from providers import create_stt, create_tts
@@ -157,8 +158,23 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to create ModelGuide session — running without tracking")
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
+    # Prompt Lab (ADR-015): when MG dispatched us with `prompt_override` in
+    # the metadata, use that string as the agent's instructions instead of
+    # the baked-in profile prompt. Falls back cleanly when absent.
+    prompt_override = extract_prompt_override(dispatch_metadata)
+    if prompt_override:
+        logger.info(
+            "Prompt Lab override active (%d chars) — skipping baked-in profile prompt",
+            len(prompt_override),
+        )
+
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=prompt_override,
+    )
     stt = create_stt()
     tts = create_tts()
 

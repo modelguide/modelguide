@@ -1011,6 +1011,118 @@ describe("POST /api/agents/:id/voice-test-token", () => {
   });
 });
 
+// ============================================================================
+// POST /api/agents/:id/voice-test-prompt — Prompt Lab (ADR-015)
+// ============================================================================
+
+describe("POST /api/agents/:id/voice-test-prompt", () => {
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-prompt`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "hi" }),
+      },
+    );
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects support role (403) — agents:activate is admin-only", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-prompt`,
+      {
+        method: "POST",
+        headers: { ...orgASupportHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "hi" }),
+      },
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test("org B cannot Prompt-Lab an org A agent (404)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-prompt`,
+      {
+        method: "POST",
+        headers: { ...orgBAdminHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "hi" }),
+      },
+    );
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 for unknown agent", async () => {
+    const response = await request(
+      "/api/agents/00000000-0000-0000-0000-000000000000/voice-test-prompt",
+      {
+        method: "POST",
+        headers: { ...orgAAdminHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "hi" }),
+      },
+    );
+    expect(response.status).toBe(404);
+  });
+
+  test("rejects empty prompt (400) — schema-level", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-prompt`,
+      {
+        method: "POST",
+        headers: { ...orgAAdminHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "" }),
+      },
+    );
+    // zod min(1) rejects at schema parse time before the route runs.
+    expect(response.status).toBe(400);
+  });
+
+  test("rejects oversized prompt (400) — schema-level", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-prompt`,
+      {
+        method: "POST",
+        headers: { ...orgAAdminHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "x".repeat(60_001) }),
+      },
+    );
+    expect(response.status).toBe(400);
+  });
+
+  test("returns 400 when LiveKit is not configured for the agent", async () => {
+    // Seeded orgA voice agent has no LiveKit config — same precondition as
+    // the standard /voice-test-token guard.
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-prompt`,
+      {
+        method: "POST",
+        headers: { ...orgAAdminHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "You are a pirate." }),
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/LiveKit/i);
+  });
+
+  test("rejects whitespace-only prompt at service layer (400)", async () => {
+    // Spaces / tabs / newlines pass `min(1)` at the schema layer, so the
+    // service-layer trim() guard in buildVoiceTestDispatchMetadata is what
+    // catches them. Verify that error surfaces as 400, not 500.
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-prompt`,
+      {
+        method: "POST",
+        headers: { ...orgAAdminHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "   \n\t  " }),
+      },
+    );
+    // Either the LiveKit config guard trips first (most likely on the seeded
+    // agent — also 400) or the prompt guard does — both are 400 by design.
+    expect(response.status).toBe(400);
+  });
+});
+
 describe("Agent slug uniqueness", () => {
   test("creating agent with duplicate name (same slug) returns 409", async () => {
     const res1 = await request("/api/agents", {

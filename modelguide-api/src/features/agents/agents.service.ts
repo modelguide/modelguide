@@ -892,32 +892,70 @@ export function buildOutboundDispatchMetadata(input: {
 // ============================================================================
 
 /**
+ * Hard cap on the Prompt Lab `prompt_override` payload, in UTF-8 bytes.
+ *
+ * LiveKit job metadata has its own (larger) byte cap; 50 KB is plenty for
+ * any realistic system prompt and keeps a single Prompt Lab session from
+ * blowing the metadata envelope when combined with the other fields.
+ * Counted in bytes (not JS string length) because the worker measures the
+ * metadata JSON in bytes on receive.
+ *
+ * See ADR-015 for why this whole override path exists at all.
+ */
+export const PROMPT_LAB_MAX_BYTES = 50_000;
+
+/**
  * Build the dispatch-metadata payload for a voice-test session.
  *
  * Pure function so the MG-agent-slug ↔ worker-profile-slug coupling is
  * covered by a unit test. If the field names or shape ever drift, the
- * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
- * `agentName = dispatch_metadata.get("agentName")`) stops routing to
- * the right profile and every dispatched call goes silent.
+ * worker's entrypoint (examples/agents/livekit-agent/src/agent.py —
+ * `dispatch_metadata.get("agentName")`) stops routing to the right
+ * profile and every dispatched call goes silent.
+ *
+ * When `promptOverride` is set (Prompt Lab POC, ADR-015), the worker uses
+ * that string as the agent's instructions for this single session instead
+ * of the baked-in profile prompt. Empty / whitespace-only / oversized
+ * overrides are rejected at this layer so the caller gets a clear error
+ * instead of silently falling through to the worker's default.
  */
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  promptOverride?: string;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  prompt_override?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
   };
+
+  if (input.promptOverride === undefined) {
+    return base;
+  }
+
+  const prompt = input.promptOverride;
+  if (prompt.trim().length === 0) {
+    throw Errors.invalidInput("prompt_override must not be empty");
+  }
+  const bytes = Buffer.byteLength(prompt, "utf8");
+  if (bytes > PROMPT_LAB_MAX_BYTES) {
+    throw Errors.invalidInput(
+      `prompt_override exceeds ${PROMPT_LAB_MAX_BYTES} bytes (got ${bytes})`,
+    );
+  }
+
+  return { ...base, prompt_override: prompt };
 }
 
 export interface VoiceTestSession {
@@ -935,6 +973,7 @@ export async function createVoiceTestSession(
   orgId: string,
   agentId: string,
   caller: { userId: string; email: string; name: string },
+  opts: { promptOverride?: string } = {},
 ): Promise<VoiceTestSession> {
   const agent = await forOrg(orgId, async (tx) => {
     const a = await requireAgent(tx, agentId);
@@ -996,6 +1035,7 @@ export async function createVoiceTestSession(
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    promptOverride: opts.promptOverride,
   });
 
   let dispatchId: string;
