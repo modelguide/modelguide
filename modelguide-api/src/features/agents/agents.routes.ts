@@ -1362,4 +1362,84 @@ router.openapi(voiceTestTokenRoute, async (c) => {
   return c.json(result, 201);
 });
 
+// ============================================================================
+// Prompt Lab (voice-test with an editor-supplied prompt — POC, ADR-015)
+//
+// Same dispatch pipeline as `/voice-test-token`, but the caller supplies a
+// `prompt` string that the worker uses as the agent's instructions for this
+// single session. The standard voice-test path stays as-is per ADR-014; this
+// is an opt-in surface for prompt iteration during development.
+// ============================================================================
+
+router.post(
+  "/:id/voice-test-prompt",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const voiceTestPromptBodySchema = z.object({
+  prompt: z
+    .string()
+    .min(1, "Prompt must not be empty")
+    // 50 KB matches PROMPT_LAB_MAX_BYTES in agents.service. Counted in chars
+    // here (cheap) and re-checked in bytes by buildVoiceTestDispatchMetadata
+    // — that is the actual contract. This is a friendlier first line of
+    // defence so the payload doesn't blow zod's parse cost on a 10 MB blob.
+    .max(60_000, "Prompt too large")
+    .openapi({
+      description: "System prompt to inject as the agent's instructions",
+    }),
+});
+
+const voiceTestPromptRoute = createRoute({
+  method: "post",
+  path: "/{id}/voice-test-prompt",
+  tags: ["Agents"],
+  summary: "Prompt Lab — voice-test with an editor-supplied prompt (POC)",
+  description:
+    "Same dispatch pipeline as POST /voice-test-token, plus a `prompt_override` field in the dispatch metadata so the LiveKit worker uses the editor's prompt as the agent's instructions for this single session. See ADR-015 for scope and trade-offs.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+    body: {
+      content: { "application/json": { schema: voiceTestPromptBodySchema } },
+    },
+  },
+  responses: {
+    201: {
+      description: "Prompt Lab session created",
+      content: {
+        "application/json": { schema: voiceTestTokenResponseSchema },
+      },
+    },
+    400: errorResponse(
+      "LiveKit not configured, missing credentials, wrong modality, or prompt validation failed",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(voiceTestPromptRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const user = getCurrentUser(c);
+  const { id } = c.req.valid("param");
+  const { prompt } = c.req.valid("json");
+
+  const result = await createVoiceTestSession(
+    orgId,
+    id,
+    {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+    },
+    { promptOverride: prompt },
+  );
+
+  return c.json(result, 201);
+});
+
 export default router;

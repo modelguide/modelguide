@@ -26,6 +26,7 @@ import { DetailsCard } from '~/features/agents/components/details-card'
 import { IntegrationCard } from '~/features/agents/components/integration-card'
 import { OutboundCallDialog } from '~/features/agents/components/outbound-call-dialog'
 import { PlatformCard } from '~/features/agents/components/platform-card'
+import { PromptLabPanel } from '~/features/agents/components/prompt-lab-panel'
 import { PromptSection } from '~/features/agents/components/prompt-section'
 import { VoiceTestPanel } from '~/features/agents/components/voice-test-panel'
 import { api } from '~/lib/api'
@@ -464,6 +465,9 @@ function AgentDetailPage() {
 
           {/* Row 3b: Voice test (LiveKit agents only, rendered by the panel) */}
           <VoiceTestPanel agent={agent} canMutate={isAdmin} />
+
+          {/* Row 3c: Prompt Lab — POC, ADR-015 (LiveKit agents only) */}
+          <PromptLabPanel agent={agent} canMutate={isAdmin} />
 
           {/* Row 4: Integration (full width) */}
           <IntegrationCard agent={agent} isAdmin={isAdmin} onRegenerateSuccess={setNewApiKey} />

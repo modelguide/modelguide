@@ -162,6 +162,44 @@ ModelGuide API
 
 **Tool mapping:** The LLM uses short tool names (`list_products`, `add_to_cart`). These are mapped to connector-prefixed MCP names (`glowbox_store_list_products`, `glowbox_store_add_to_cart`) in the `BuildProAgent._call_mcp_tool()` method.
 
+## Prompt Lab override (ADR-015)
+
+When the MG dashboard dispatches us via the Prompt Lab surface, the
+dispatch metadata carries a `prompt_override` field. The worker uses
+that string as the agent's `instructions` for that single session
+instead of the baked-in profile prompt — no redeploy needed.
+
+The path is:
+
+```
+LiveKit dispatch metadata: { ..., "prompt_override": "..." }
+        │
+        ▼
+agent.py entrypoint   →   extract_prompt_override(metadata)
+        │                       (dispatch.py — pure, no livekit imports)
+        ▼
+BuildProAgent(..., instructions_override="...")
+        │
+        ▼
+select_instructions(override=..., default_factory=build_system_prompt)
+        │
+        ▼
+super().__init__(instructions=...)
+```
+
+If the metadata is missing, empty, whitespace, or not a string, the
+worker falls back to the baked-in profile prompt — i.e. it behaves
+exactly like the standard "Talk to agent" path (ADR-014). This makes a
+stale worker against a newer MG safe: the agent always has *some*
+instructions to start with.
+
+Tests for both the metadata extraction and the instruction-selection
+logic live in `tests/test_dispatch.py` and run without livekit
+installed.
+
+For the rest of the design (why two surfaces, byte caps, what's not
+done), see `docs/decisions/015-prompt-lab-poc.md`.
+
 ## Architecture
 
 ```
@@ -170,6 +208,7 @@ src/
   mcp_agent.py    # MCPAgent base class (tool execution, tracing, transcripts)
   buildpro.py     # BuildProAgent — tools + hooks for contractor supply scenario
   config.py       # Environment variables (AGENT_NAME, CONNECTOR_PREFIX, etc.)
+  dispatch.py     # Dispatch-metadata helpers (Prompt Lab override read path)
   providers.py    # STT/TTS factory functions (Deepgram, ElevenLabs, Cartesia)
   tracing.py      # Langfuse OpenTelemetry setup
   hangup.py       # Auto-hangup state machine
