@@ -8,12 +8,19 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
 let orgASupportHeaders: Record<string, string>;
 let orgBAdminHeaders: Record<string, string>;
+let orgAAgentHeaders: Record<string, string>;
+let orgBAgentHeaders: Record<string, string>;
 
 /** IDs of agents created during tests (for cleanup) */
 const createdAgentIds: string[] = [];
@@ -27,6 +34,8 @@ beforeAll(async () => {
   orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
   orgASupportHeaders = await authHeadersFor(s.orgASupport);
   orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
+  orgAAgentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+  orgBAgentHeaders = await agentHeadersFor(s.orgBAgentId, s.orgB.id);
 });
 
 afterAll(async () => {
@@ -1058,5 +1067,90 @@ describe("Agent slug uniqueness", () => {
     expect(res2.status).toBe(409);
     const body = await res2.json();
     expect(body.code).toBe("ALREADY_EXISTS");
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me - Self-lookup for API-key callers (LiveKit workers etc.)
+// ============================================================================
+//
+// Lets a voice agent (running with its own mgk_* API key) fetch its current
+// profile — including the compiled prompt — at session start. This is the
+// hook that makes "Compile prompt → click Talk to agent → hear the latest
+// prompt" work without baking the prompt into the worker image.
+// ============================================================================
+
+describe("GET /api/agents/me", () => {
+  test("returns the calling agent's profile (200)", async () => {
+    const response = await request("/api/agents/me", {
+      headers: orgAAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.name).toBeDefined();
+    expect(body.slug).toBeDefined();
+    expect(body.modality).toBeDefined();
+    expect(body.agentPlatform).toBeDefined();
+    // Compiled-prompt fields are always present in the response shape — null
+    // when the agent has not been compiled yet.
+    expect(body).toHaveProperty("compiledInstructions");
+    expect(body).toHaveProperty("compiledAt");
+    expect(body).toHaveProperty("compiledFrom");
+  });
+
+  test("returns the up-to-date compiled prompt after a write (200)", async () => {
+    // Regression guard for the "stale prompt" failure mode: if the route
+    // ever cached or memoized the agent record, recompiling wouldn't be
+    // visible to the worker on the next session.
+    const updatedPrompt = `Updated prompt at ${Date.now()}`;
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          compiledInstructions: updatedPrompt,
+          compiledAt: new Date(),
+        })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const response = await request("/api/agents/me", {
+      headers: orgAAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.compiledInstructions).toBe(updatedPrompt);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me");
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects user JWT — agent API key required (401)", async () => {
+    // Admin JWT must not be able to call /me. This is "self-lookup for the
+    // calling agent", not "list my agents for the org".
+    const response = await request("/api/agents/me", {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("two different agents see two different identities (cross-org)", async () => {
+    const [respA, respB] = await Promise.all([
+      request("/api/agents/me", { headers: orgAAgentHeaders }),
+      request("/api/agents/me", { headers: orgBAgentHeaders }),
+    ]);
+
+    expect(respA.status).toBe(200);
+    expect(respB.status).toBe(200);
+    const [bodyA, bodyB] = await Promise.all([respA.json(), respB.json()]);
+
+    expect(bodyA.id).toBe(s.orgAAgentId);
+    expect(bodyB.id).toBe(s.orgBAgentId);
+    expect(bodyA.id).not.toBe(bodyB.id);
   });
 });

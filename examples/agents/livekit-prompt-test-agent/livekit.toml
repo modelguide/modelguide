@@ -1,0 +1,7 @@
+# LiveKit Cloud manifest. Populated by `lk agent create` — see
+# DEPLOY.md in this directory for the first-time setup.
+[project]
+  subdomain = ""
+
+[agent]
+  id = ""

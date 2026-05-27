@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -586,6 +588,43 @@ router.openapi(createPlatformAgentRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// GET /me — self-lookup for API-key callers (LiveKit workers, etc.)
+//
+// Registered before `/:id` so the static segment wins over the UUID
+// parameter and a worker's `GET /api/agents/me` doesn't fall through to
+// the UUID-typed handler (which would 422). Returns the same shape as
+// `GET /:id` so a single client schema covers both routes.
+// ============================================================================
+
+router.get("/me", requireAgent(), requireOrganization());
+
+const getCurrentAgentRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Agents"],
+  summary: "Get the calling agent's own profile",
+  description:
+    "Returns the profile of the agent identified by the API key in the Authorization header — including the latest `compiledInstructions`. Intended for voice/text workers that need to fetch their own configuration at session start (e.g. the LiveKit prompt-test agent). Requires `mgk_*` API key auth; user JWTs are rejected.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Agent detail for the calling agent",
+      content: {
+        "application/json": { schema: agentResponseSchema },
+      },
+    },
+    401: errorResponse("Missing or invalid API key"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(getCurrentAgentRoute, async (c) => {
+  const auth = getCurrentAgent(c);
+  const agent = await getAgentById(auth.organizationId, auth.id);
+  return c.json(formatAgent(agent), 200);
 });
 
 // GET /:id
