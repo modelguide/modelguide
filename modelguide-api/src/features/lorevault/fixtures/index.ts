@@ -154,6 +154,24 @@ export const FIXTURE_ENTITLEMENTS: EntitlementResponse = {
   },
 };
 
+// Starter-tier fixture — used by entitlement fail-fast tests (Phase 0 §1.7
+// + HubSpot Connector Spec §11). Starter excludes OSI, so Mode B must
+// refuse to start when this is the entitlement response.
+export const FIXTURE_ENTITLEMENTS_STARTER: EntitlementResponse = {
+  vault_id: FIXTURE_VAULT_ID,
+  knowledge_space_id: FIXTURE_KS_ID,
+  tier: "starter",
+  features: {
+    osi_enabled: false,
+    lssr_enabled: false,
+  },
+  quotas: {
+    monthly_signal_events: { limit: 0, used: 0 },
+    monthly_ingest_mb: { limit: 512, used: 0 },
+    monthly_query_count: { limit: 0, used: 0 },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Narratives + evidence
 // ---------------------------------------------------------------------------

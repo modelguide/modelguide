@@ -75,6 +75,23 @@ export interface MockClientOptions {
   now?: () => Date;
   /** Deterministic ID factory for jobs / job IDs. */
   newId?: (prefix: string) => string;
+  /** Entitlement fixture override — supply the Starter-tier fixture to
+   * exercise Mode B fail-fast (Phase 0 §1.7). Defaults to the Enterprise
+   * fixture. */
+  entitlements?: EntitlementResponse;
+  /**
+   * Optional script for `emitSignal`: each call shifts one response from the
+   * head of the array. A `null` entry behaves as the default (idempotent
+   * append). A function entry can throw to simulate transient failures or
+   * compute a custom response. When the script is exhausted the client
+   * falls back to default behavior.
+   */
+  emitSignalScript?: Array<
+    | ((
+        event: SignalEvent,
+      ) => SignalAcceptResponse | Promise<SignalAcceptResponse>)
+    | null
+  >;
 }
 
 const DEFAULT_NOW = () => new Date("2026-05-28T00:00:00.000Z");
@@ -88,6 +105,8 @@ export class MockLoreVaultClient implements LoreVaultIntegrationClient {
 
   private readonly now: () => Date;
   private readonly newId: (prefix: string) => string;
+  private readonly entitlements: EntitlementResponse;
+  private readonly emitSignalScript: MockClientOptions["emitSignalScript"];
   private seq = 0;
 
   constructor(options: MockClientOptions = {}) {
@@ -96,6 +115,8 @@ export class MockLoreVaultClient implements LoreVaultIntegrationClient {
       options.newId ??
       ((prefix: string) =>
         `${prefix}_${(++this.seq).toString().padStart(6, "0")}`);
+    this.entitlements = options.entitlements ?? FIXTURE_ENTITLEMENTS;
+    this.emitSignalScript = options.emitSignalScript;
   }
 
   // -------------------------------------------------------------------------
@@ -103,6 +124,23 @@ export class MockLoreVaultClient implements LoreVaultIntegrationClient {
   // -------------------------------------------------------------------------
 
   async emitSignal(event: SignalEvent): Promise<SignalAcceptResponse> {
+    if (this.emitSignalScript && this.emitSignalScript.length > 0) {
+      const next = this.emitSignalScript.shift();
+      if (typeof next === "function") {
+        const response = await next(event);
+        // Recorded only when the scripted call accepts the event.
+        if (
+          response.accepted &&
+          !this.state.emittedSignals.some(
+            (e) => e.signal_id === event.signal_id,
+          )
+        ) {
+          this.state.emittedSignals.push(event);
+        }
+        return response;
+      }
+      // null entry → fall through to default behavior below.
+    }
     const alreadySeen = this.state.emittedSignals.some(
       (e) => e.signal_id === event.signal_id,
     );
@@ -262,7 +300,7 @@ export class MockLoreVaultClient implements LoreVaultIntegrationClient {
   // -------------------------------------------------------------------------
 
   async getEntitlements(): Promise<EntitlementResponse> {
-    return FIXTURE_ENTITLEMENTS;
+    return this.entitlements;
   }
 
   async getPacks(): Promise<PackCatalogResponse> {

@@ -13,6 +13,7 @@ export type HubSpotObjectType =
   | "deal"
   | "ticket"
   | "engagement"
+  | "note"
   | "knowledge_article";
 
 export const HUBSPOT_SOURCE_SYSTEM = "hubspot" as const;
@@ -37,5 +38,10 @@ export const DATASET_IDS: Record<HubSpotObjectType, string> = {
   deal: "hubspot-deals",
   ticket: "hubspot-tickets",
   engagement: "hubspot-engagements",
+  // `note` is an entity type for canonical identity (Mode B emits
+  // note.created) but notes are not a separate Mode C corpus surface —
+  // they ride along inside ticket/contact documents. Keep the dataset
+  // identifier so the source_system→dataset_id mapping is total.
+  note: "hubspot-notes",
   knowledge_article: "hubspot-kb",
 };
