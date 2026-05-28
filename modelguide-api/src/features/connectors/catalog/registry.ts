@@ -24,6 +24,7 @@ export async function loadAllManifests(): Promise<ConnectorManifest[]> {
   const modules = await Promise.all([
     import("./medusa/index"),
     import("./zendesk/index"),
+    import("./hubspot/index"),
   ]);
 
   for (const mod of modules) {
