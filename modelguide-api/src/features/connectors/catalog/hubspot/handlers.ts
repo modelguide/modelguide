@@ -19,6 +19,7 @@ import { withConnector } from "../lib/http-client";
 import { runHealthCheck } from "../lib/run-health-check";
 import type { HealthCheckResult, ToolExecutionResult } from "../types";
 import { type HubSpotFetcher, createHubSpotFetcher } from "./client";
+import { withSignalEmission } from "./ingest/mode-b/emit";
 
 // ---------------------------------------------------------------------------
 // Property allowlists (spec §6)
@@ -219,7 +220,7 @@ export const searchContacts = withHubSpot(async (fetcher, ctx) => {
   return { success: true, data };
 });
 
-export const createContact = withHubSpot(async (fetcher, ctx) => {
+const createContactImpl = withHubSpot(async (fetcher, ctx) => {
   const { properties } = ctx.input as { properties: Record<string, unknown> };
   if (!properties || typeof properties !== "object") {
     return { success: false, error: "properties object is required" };
@@ -235,7 +236,7 @@ export const createContact = withHubSpot(async (fetcher, ctx) => {
   );
 });
 
-export const updateContact = withHubSpot(async (fetcher, ctx) => {
+const updateContactImpl = withHubSpot(async (fetcher, ctx) => {
   const { contactId, properties } = ctx.input as {
     contactId: string;
     properties: Record<string, unknown>;
@@ -348,7 +349,7 @@ export const listDealsForContact = withHubSpot(async (fetcher, ctx) => {
   return { success: true, data };
 });
 
-export const createDeal = withHubSpot(async (fetcher, ctx) => {
+const createDealImpl = withHubSpot(async (fetcher, ctx) => {
   const input = ctx.input as {
     properties: Record<string, unknown>;
     associations?: HubSpotAssociation[];
@@ -376,7 +377,7 @@ export const createDeal = withHubSpot(async (fetcher, ctx) => {
   );
 });
 
-export const updateDealStage = withHubSpot(async (fetcher, ctx) => {
+const updateDealStageImpl = withHubSpot(async (fetcher, ctx) => {
   const { dealId, stage } = ctx.input as {
     dealId: string;
     stage: string;
@@ -485,7 +486,7 @@ export const searchTickets = withHubSpot(async (fetcher, ctx) => {
   return { success: true, data };
 });
 
-export const createTicket = withHubSpot(async (fetcher, ctx) => {
+const createTicketImpl = withHubSpot(async (fetcher, ctx) => {
   const input = ctx.input as {
     properties: Record<string, unknown>;
     associations?: HubSpotAssociation[];
@@ -513,7 +514,7 @@ export const createTicket = withHubSpot(async (fetcher, ctx) => {
   );
 });
 
-export const updateTicket = withHubSpot(async (fetcher, ctx) => {
+const updateTicketImpl = withHubSpot(async (fetcher, ctx) => {
   const { ticketId, properties } = ctx.input as {
     ticketId: string;
     properties: Record<string, unknown>;
@@ -570,7 +571,7 @@ export const updateTicket = withHubSpot(async (fetcher, ctx) => {
   );
 });
 
-export const closeTicket = withHubSpot(async (fetcher, ctx) => {
+const closeTicketImpl = withHubSpot(async (fetcher, ctx) => {
   const { ticketId, closeNote } = ctx.input as {
     ticketId: string;
     closeNote?: string;
@@ -688,7 +689,7 @@ async function getPrimaryTicketThread(
   return { thread: sorted[0] };
 }
 
-export const addReplyToTicket = withHubSpot(async (fetcher, ctx) => {
+const addReplyToTicketImpl = withHubSpot(async (fetcher, ctx) => {
   const { ticketId, text, richText, internal } = ctx.input as {
     ticketId: string;
     text?: string;
@@ -751,7 +752,7 @@ export const addReplyToTicket = withHubSpot(async (fetcher, ctx) => {
 // Engagements (2)
 // ---------------------------------------------------------------------------
 
-export const logCallEngagement = withHubSpot(async (fetcher, ctx) => {
+const logCallEngagementImpl = withHubSpot(async (fetcher, ctx) => {
   const input = ctx.input as {
     properties: Record<string, unknown>;
     associations?: HubSpotAssociation[];
@@ -769,7 +770,7 @@ export const logCallEngagement = withHubSpot(async (fetcher, ctx) => {
   return { success: true, data };
 });
 
-export const createNote = withHubSpot(async (fetcher, ctx) => {
+const createNoteImpl = withHubSpot(async (fetcher, ctx) => {
   const input = ctx.input as {
     properties: Record<string, unknown>;
     associations?: HubSpotAssociation[];
@@ -786,6 +787,44 @@ export const createNote = withHubSpot(async (fetcher, ctx) => {
   });
   return { success: true, data };
 });
+
+// ---------------------------------------------------------------------------
+// Mode B re-exports — 10 emitting tools per spec §5 are wrapped so each
+// success path also enqueues a signal envelope. Read-only tools are
+// re-exported as-is below.
+// ---------------------------------------------------------------------------
+
+export const createContact = withSignalEmission(
+  "Create Contact",
+  createContactImpl,
+);
+export const updateContact = withSignalEmission(
+  "Update Contact",
+  updateContactImpl,
+);
+export const createDeal = withSignalEmission("Create Deal", createDealImpl);
+export const updateDealStage = withSignalEmission(
+  "Update Deal Stage",
+  updateDealStageImpl,
+);
+export const createTicket = withSignalEmission(
+  "Create Ticket",
+  createTicketImpl,
+);
+export const updateTicket = withSignalEmission(
+  "Update Ticket",
+  updateTicketImpl,
+);
+export const closeTicket = withSignalEmission("Close Ticket", closeTicketImpl);
+export const addReplyToTicket = withSignalEmission(
+  "Add Reply To Ticket",
+  addReplyToTicketImpl,
+);
+export const logCallEngagement = withSignalEmission(
+  "Log Call Engagement",
+  logCallEngagementImpl,
+);
+export const createNote = withSignalEmission("Create Note", createNoteImpl);
 
 // ---------------------------------------------------------------------------
 // Internal-only KB ingest operations — NOT MCP-registered (spec §5).

@@ -629,6 +629,25 @@ const hubspotManifest: ConnectorManifest = {
       description:
         "Default ticket pipeline ID. Used by Create Ticket when the agent does not specify one.",
     },
+    lorevaultKnowledgeSpaceId: {
+      type: "string",
+      required: false,
+      description:
+        "LoreVault Knowledge Space ID for Mode B signal emission. When unset (alongside lorevaultVaultId), Mode B is disabled.",
+    },
+    lorevaultVaultId: {
+      type: "string",
+      required: false,
+      description:
+        "LoreVault Vault ID. Becomes tenant_id in the canonical_object_identity envelope per Phase 0 §1.1.",
+    },
+    signalEmissionEnabled: {
+      type: "boolean",
+      required: false,
+      default: true,
+      description:
+        "Mode B toggle. When false, state-changing tool calls do not emit signals. Useful for staging environments.",
+    },
   },
   tools,
   healthCheck,
