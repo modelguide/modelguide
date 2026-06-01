@@ -1,0 +1,25 @@
+[project]
+name = "livekit-poc"
+version = "0.1.0"
+description = "Minimal LiveKit voice POC for ModelGuide (prompt from dispatch metadata)"
+requires-python = ">=3.11"
+dependencies = [
+    "livekit-agents[silero,turn-detector]~=1.4",
+    "livekit-plugins-openai~=1.4",
+    "livekit-plugins-deepgram~=1.4",
+    "livekit-plugins-elevenlabs~=1.4",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

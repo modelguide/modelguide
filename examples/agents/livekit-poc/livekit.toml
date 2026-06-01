@@ -1,0 +1,7 @@
+# LiveKit Cloud agent config. Fill in subdomain + id after running
+# `lk agent create` (see README — LiveKit Cloud Deployment section).
+[project]
+  subdomain = ""
+
+[agent]
+  id = ""
