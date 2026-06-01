@@ -892,6 +892,14 @@ export function buildOutboundDispatchMetadata(input: {
 // ============================================================================
 
 /**
+ * LiveKit caps job metadata at 64KB. Reserve ~16KB for the rest of the
+ * payload (mode, session_id, email, etc.) and headers — anything over this
+ * for the prompt alone should be dropped at this layer rather than blowing
+ * up the dispatch call at runtime.
+ */
+export const MAX_INSTRUCTIONS_BYTES = 48 * 1024;
+
+/**
  * Build the dispatch-metadata payload for a voice-test session.
  *
  * Pure function so the MG-agent-slug ↔ worker-profile-slug coupling is
@@ -899,24 +907,47 @@ export function buildOutboundDispatchMetadata(input: {
  * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
  * `agentName = dispatch_metadata.get("agentName")`) stops routing to
  * the right profile and every dispatched call goes silent.
+ *
+ * Optional `instructions` / `greeting` are the POC livekit-poc contract
+ * (ADR-015). When the caller passes the freshly-compiled prompt, the worker
+ * uses it directly instead of whatever it had baked in at start time —
+ * "compile → talk" reflects the dashboard edit immediately. Empty strings
+ * are dropped on purpose so the key-present check stays meaningful. Prompts
+ * larger than ``MAX_INSTRUCTIONS_BYTES`` are dropped (not truncated) — a
+ * half-prompt is worse than no prompt at all because the LLM would obey a
+ * mangled rule set.
  */
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  instructions?: string | null;
+  greeting?: string | null;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  instructions?: string;
+  greeting?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
+  };
+  const safeInstructions =
+    input.instructions &&
+    Buffer.byteLength(input.instructions, "utf8") <= MAX_INSTRUCTIONS_BYTES
+      ? input.instructions
+      : undefined;
+  return {
+    ...base,
+    ...(safeInstructions ? { instructions: safeInstructions } : {}),
+    ...(input.greeting ? { greeting: input.greeting } : {}),
   };
 }
 
@@ -992,10 +1023,18 @@ export async function createVoiceTestSession(
     },
   });
 
+  // Prompt-in-dispatch is opt-in per agent (ADR-015). The flag lives on
+  // `metadata.livekit.injectCompiledPrompt`. Legacy/production agents leave
+  // it falsy and continue to behave per ADR-014 (worker uses its baked-in
+  // prompt, no drift between voice-test and prod). POC agents on the
+  // livekit-poc worker set it to true so a fresh compile takes effect on
+  // the next "Talk to agent" click.
+  const injectPrompt = lkMeta.injectCompiledPrompt === true;
   const dispatchMetadata = buildVoiceTestDispatchMetadata({
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    instructions: injectPrompt ? agent.compiledInstructions : undefined,
   });
 
   let dispatchId: string;
