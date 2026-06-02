@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRowForWorker,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -45,6 +48,7 @@ import {
   type ModelFamily,
   getElevenLabsModelGroups,
 } from "./elevenlabs-models";
+import { buildAgentPromptPayload } from "./prompt-payload";
 
 const router = createRouter();
 
@@ -1360,6 +1364,57 @@ router.openapi(voiceTestTokenRoute, async (c) => {
   });
 
   return c.json(result, 201);
+});
+
+// ============================================================================
+// Worker prompt fetch (agent API key auth)
+//
+// Used by the LiveKit prototype worker at session start so a click on
+// "Compile" in the dashboard propagates to the very next voice-test call
+// without redeploying the worker. See:
+//   - examples/agents/livekit-prototype/src/prompt_fetcher.py
+//   - docs/decisions/015-livekit-prototype-dynamic-prompts.md
+// ============================================================================
+
+router.get("/me/prompt", requireAgent(), requireOrganization());
+
+const agentPromptResponseSchema = z.object({
+  agent: z.object({
+    id: z.string().uuid(),
+    slug: z.string(),
+    name: z.string(),
+    modality: z.string(),
+  }),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  promptConfig: z.record(z.unknown()),
+});
+
+const agentPromptRoute = createRoute({
+  method: "get",
+  path: "/me/prompt",
+  tags: ["Agents"],
+  summary: "Get the calling agent's latest compiled prompt",
+  description:
+    "Returns the compiled instructions and prompt config for the agent whose API key authenticated this request. Intended for voice/text workers to fetch the live prompt at session start.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Prompt payload",
+      content: {
+        "application/json": { schema: agentPromptResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(agentPromptRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const authAgent = getCurrentAgent(c);
+  const row = await getAgentRowForWorker(orgId, authAgent.id);
+  return c.json(buildAgentPromptPayload(row), 200);
 });
 
 export default router;

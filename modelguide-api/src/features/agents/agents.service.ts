@@ -1060,3 +1060,17 @@ export async function createVoiceTestSession(
     identity,
   };
 }
+
+// ============================================================================
+// Worker-facing prompt fetch (agent API key auth)
+//
+// Returns just the fields a LiveKit / voice worker needs to apply the latest
+// compiled prompt at session start. Intentionally narrow — no secrets, no
+// metadata, no provenance — see `buildAgentPromptPayload` for the shape.
+// ============================================================================
+
+export async function getAgentRowForWorker(orgId: string, agentId: string) {
+  return forOrg(orgId, async (tx) => {
+    return requireAgent(tx, agentId);
+  });
+}

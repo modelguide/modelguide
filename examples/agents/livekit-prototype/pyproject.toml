@@ -1,0 +1,27 @@
+[project]
+name = "livekit-modelguide-prototype"
+version = "0.1.0"
+description = "Minimal LiveKit voice agent that pulls the latest compiled prompt from ModelGuide at session start"
+requires-python = ">=3.11"
+dependencies = [
+    "livekit-agents[silero,turn-detector]~=1.4",
+    "livekit-plugins-openai~=1.4",
+    "livekit-plugins-deepgram~=1.4",
+    "livekit-plugins-elevenlabs~=1.4",
+    "httpx",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
