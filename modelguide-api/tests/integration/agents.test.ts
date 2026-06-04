@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -860,6 +865,81 @@ describe("Strict PATCH schema", () => {
     expect(response.status).toBe(422);
     const body = await response.json();
     expect(body.error?.formErrors || body.error?.fieldErrors).toBeDefined();
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me — runtime config fetch by the calling agent (api-key auth)
+//
+// This is the endpoint LiveKit voice workers hit at session start to pull the
+// latest compiled prompt + identity for "their" agent record. ADR-015 — runtime
+// pull keeps the worker authoritative on tools/structure while letting the
+// prompt iterate without redeploying.
+// ============================================================================
+
+describe("GET /api/agents/me", () => {
+  test("returns the calling agent's runtime config (200)", async () => {
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me", { headers });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.slug).toBeDefined();
+    expect(body.name).toBeDefined();
+    expect(body.modality).toBeDefined();
+    expect(body.modelFamily).toBeDefined();
+    expect(body.agentPlatform).toBeDefined();
+    // compiledInstructions / compiledAt may be null but must be present in the
+    // response shape so callers don't have to do `in`-checks.
+    expect("compiledInstructions" in body).toBe(true);
+    expect("compiledAt" in body).toBe(true);
+  });
+
+  test("returns updated compiledInstructions after the prompt changes", async () => {
+    const fresh = `Test prompt baked at ${Date.now()}`;
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({ compiledInstructions: fresh, compiledAt: new Date() })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me", { headers });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.compiledInstructions).toBe(fresh);
+    expect(body.compiledAt).toBeTruthy();
+  });
+
+  test("rejects user JWT auth (401) — agent API key only", async () => {
+    const response = await request("/api/agents/me", {
+      headers: orgAAdminHeaders,
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me");
+
+    expect(response.status).toBe(401);
+  });
+
+  test("does not leak agent secrets in the response", async () => {
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me", { headers });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const stringified = JSON.stringify(body);
+    // Secrets are stored as encrypted refs by ID, never as plaintext on the
+    // agent record. Sanity-check no obvious credential field leaks anyway.
+    expect(stringified).not.toContain("apiSecret");
+    expect(stringified).not.toContain("webhook_hmac_secret");
   });
 });
 

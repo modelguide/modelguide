@@ -1060,3 +1060,97 @@ export async function createVoiceTestSession(
     identity,
   };
 }
+
+// ============================================================================
+// Runtime config — what a voice worker reads at session start (api-key auth)
+//
+// Pull model, not push: the worker fetches its own compiled prompt + identity
+// each time a call lands. This keeps the worker authoritative on tools and
+// pipeline wiring (per ADR-014) while letting the prompt iterate without a
+// worker redeploy (ADR-015).
+//
+// Pure formatter so the wire contract is unit-testable independent of routing,
+// auth, or DB shape changes. Mirrors `formatAgent` but is deliberately leaner:
+// no `secrets` map, no `integrationUrls`, no compile-provenance — only the
+// fields the worker needs to boot a session.
+// ============================================================================
+
+export type AgentRuntimeConfig = {
+  id: string;
+  slug: string;
+  name: string;
+  modality: Modality;
+  modelFamily: ModelFamily;
+  agentPlatform: AgentPlatform;
+  isActive: boolean;
+  promptConfig: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  compiledInstructions: string | null;
+  compiledAt: string | null;
+  updatedAt: string | null;
+};
+
+export function formatAgentRuntimeConfig(agent: {
+  id: string;
+  name: string;
+  slug: string;
+  modality: Modality;
+  modelFamily: ModelFamily;
+  promptConfig: PromptConfig | null;
+  agentPlatform: AgentPlatform;
+  isActive: boolean;
+  metadata: Record<string, unknown> | null;
+  compiledInstructions: string | null;
+  compiledAt: Date | null;
+  updatedAt: Date | null;
+}): AgentRuntimeConfig {
+  // Strip webhook_hmac_secret defensively — even though it lives in metadata
+  // for historical reasons, it must never appear in any agent-facing response.
+  const metadata = agent.metadata
+    ? (() => {
+        const { webhook_hmac_secret, ...rest } = agent.metadata as Record<
+          string,
+          unknown
+        >;
+        return Object.keys(rest).length > 0 ? rest : undefined;
+      })()
+    : undefined;
+
+  return {
+    id: agent.id,
+    slug: agent.slug,
+    name: agent.name,
+    modality: agent.modality,
+    modelFamily: agent.modelFamily,
+    agentPlatform: agent.agentPlatform,
+    isActive: agent.isActive,
+    promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
+    metadata,
+    compiledInstructions: agent.compiledInstructions ?? null,
+    compiledAt: agent.compiledAt?.toISOString() ?? null,
+    updatedAt: agent.updatedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * Load the calling agent's row and return its runtime config. Used by
+ * `GET /api/agents/me` — the auth layer has already resolved the API key to
+ * an agent ID, so this is a single RLS-scoped lookup.
+ */
+export async function getAgentRuntimeConfig(
+  orgId: string,
+  agentId: string,
+): Promise<AgentRuntimeConfig> {
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId));
+
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
+
+    return formatAgentRuntimeConfig(agent);
+  });
+}

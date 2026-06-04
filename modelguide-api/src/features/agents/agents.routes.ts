@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntimeConfig,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -292,6 +295,59 @@ function formatAgent(
 // ============================================================================
 // Routes
 // ============================================================================
+
+// ----------------------------------------------------------------------------
+// GET /me — runtime config for the calling agent (api-key auth)
+//
+// Registered BEFORE /:id so the literal `me` segment wins routing even though
+// `:id` is uuid-validated. Pull model — voice workers fetch their own compiled
+// prompt at session start (ADR-015).
+// ----------------------------------------------------------------------------
+
+const agentRuntimeConfigResponseSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  name: z.string(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  isActive: z.boolean(),
+  promptConfig: z.record(z.unknown()),
+  metadata: z.record(z.unknown()).optional(),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+
+router.get("/me", requireAgent());
+
+const getAgentRuntimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Agents"],
+  summary: "Get the calling agent's runtime config",
+  description:
+    "Returns the calling agent's identity + compiled prompt + persona. Used by voice workers (e.g. the LiveKit prototype agent) to fetch the latest compiled instructions at session start without redeploying. Requires an agent API key (mgk_…).",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Agent runtime config",
+      content: {
+        "application/json": {
+          schema: agentRuntimeConfigResponseSchema,
+        },
+      },
+    },
+    401: errorResponse("Agent API key required"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(getAgentRuntimeConfigRoute, async (c) => {
+  const agent = getCurrentAgent(c);
+  const config = await getAgentRuntimeConfig(agent.organizationId, agent.id);
+  return c.json(config, 200);
+});
 
 // GET /
 router.get(
