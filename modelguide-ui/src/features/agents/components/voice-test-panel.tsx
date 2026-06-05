@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -164,6 +164,8 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
           </div>
         )}
 
+        <PromptStatus agent={agent} />
+
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
             <Button
@@ -213,4 +215,57 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       </CardContent>
     </Card>
   )
+}
+
+// ---------------------------------------------------------------------------
+// PromptStatus
+//
+// Surfaces which prompt the dispatched worker will use. Dynamic-prompt
+// workers (e.g. the livekit-prompt-poc example) pull the agent's
+// `compiledInstructions` at job start, so this widget answers the question
+// "what will I actually be talking to?" before the operator clicks Talk.
+// ---------------------------------------------------------------------------
+
+function PromptStatus({ agent }: { agent: Agent }) {
+  const compiledInstructions = agent.compiledInstructions
+  if (!compiledInstructions) {
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-fg-secondary">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+        <span>
+          No compiled prompt — the worker will fall back to a placeholder.{' '}
+          <span className="text-fg-muted">
+            Compile the prompt above before testing for a realistic call.
+          </span>
+        </span>
+      </div>
+    )
+  }
+
+  const promptLength = compiledInstructions.length
+  return (
+    <div className="mt-3 flex items-center gap-2 rounded-lg bg-bg-subtle px-3 py-2 text-xs text-fg-secondary">
+      <FileCode className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+      <span>
+        Compiled prompt
+        <span className="text-fg-muted"> · {promptLength} chars</span>
+        {agent.compiledAt ? (
+          <span className="text-fg-muted"> · {formatRelativeDate(agent.compiledAt)}</span>
+        ) : null}
+      </span>
+    </div>
+  )
+}
+
+function formatRelativeDate(iso: string): string {
+  const date = new Date(iso)
+  const diffMs = Date.now() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60_000)
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
 }

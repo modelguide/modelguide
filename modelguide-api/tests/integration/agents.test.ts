@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -264,6 +269,111 @@ describe("GET /api/agents/:id", () => {
     ]);
     expect(body.compiledFrom.toolCount).toBe(2);
     expect(body.compiledFrom.guardrailIds).toEqual([]);
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me - Self-profile (agent API key auth)
+// ============================================================================
+
+describe("GET /api/agents/me", () => {
+  test("returns the authenticated agent's compiled prompt + config (200)", async () => {
+    // Seed the agent with a known compiled prompt so we can assert the worker
+    // can pull it via its own API key — this is the canonical "live prompt"
+    // path that the LiveKit POC worker uses on every job dispatch.
+    const compiledAt = new Date();
+    const compiledFrom = {
+      sops: [
+        {
+          sopId: "22222222-2222-2222-2222-222222222222",
+          sopName: "Me-Endpoint Test SOP",
+          stepCount: 2,
+        },
+      ],
+      guardrailIds: [],
+      toolCount: 0,
+    };
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          compiledInstructions: "You are the test agent. Be brief.",
+          compiledAt,
+          compiledFrom,
+          promptConfig: { persona: "Friendly", language: "en" },
+        })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const agentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me", { headers: agentHeaders });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.name).toBeDefined();
+    expect(body.slug).toBeDefined();
+    expect(body.compiledInstructions).toBe("You are the test agent. Be brief.");
+    expect(body.compiledAt).toBeDefined();
+    expect(body.compiledFrom).toEqual(compiledFrom);
+    expect(body.promptConfig).toEqual({ persona: "Friendly", language: "en" });
+    expect(body.modality).toBeDefined();
+    expect(body.modelFamily).toBeDefined();
+    // No secrets or raw API keys must leak through.
+    expect(body.apiKey).toBeUndefined();
+    expect(body.secrets).toBeUndefined();
+  });
+
+  test("returns null compiledInstructions when none has been compiled (200)", async () => {
+    // Fresh agent without a compiled prompt — the worker must see explicit
+    // `null` so it can decide to fall back to a stub system prompt.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({
+        name: "Me Endpoint Uncompiled Agent",
+        modality: "voice",
+      }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: newAgentId, apiKey } = await createResp.json();
+    createdAgentIds.push(newAgentId);
+
+    // The freshly created agent is inactive by default — activate it so the
+    // /me endpoint accepts the API key (requireAgent rejects inactive ones).
+    const activate = await request(`/api/agents/${newAgentId}/activate`, {
+      method: "POST",
+      headers: orgAAdminHeaders,
+    });
+    expect(activate.status).toBe(200);
+
+    const response = await request("/api/agents/me", {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.id).toBe(newAgentId);
+    expect(body.compiledInstructions).toBeNull();
+    expect(body.compiledAt).toBeNull();
+  });
+
+  test("rejects user JWT auth (401)", async () => {
+    // Only API key (agent) auth is allowed — a logged-in dashboard user must
+    // not be able to "impersonate" any agent through this endpoint.
+    const response = await request("/api/agents/me", {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me");
+    expect(response.status).toBe(401);
   });
 });
 
