@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -459,6 +461,80 @@ router.openapi(platformModelsRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// Agent self-profile (API key auth)
+//
+// Workers (LiveKit voice agents, MCP agents, etc.) authenticate with their
+// own API key and call this endpoint at job start to pull the latest
+// compiled prompt and prompt-config without round-tripping through the
+// dashboard or being told their own ID. Registered before `/:id` so the
+// literal "me" path takes precedence over the param route.
+// ============================================================================
+
+router.get("/me", requireAgent(), requireOrganization());
+
+const agentSelfResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  description: z.string().nullable(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  promptConfig: promptConfigSchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  isActive: z.boolean(),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  compiledFrom: compiledFromSchema,
+});
+
+const getCurrentAgentRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Agents"],
+  summary: "Get current agent (API key auth)",
+  description:
+    "Returns the authenticated agent's profile, including the latest compiled prompt. Designed for voice/MCP workers to pull their own configuration at job start.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Agent self-profile",
+      content: {
+        "application/json": { schema: agentSelfResponseSchema },
+      },
+    },
+    401: errorResponse("Agent authentication required"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(getCurrentAgentRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const callingAgent = getCurrentAgent(c);
+  const agent = await getAgentById(orgId, callingAgent.id);
+
+  return c.json(
+    {
+      id: agent.id,
+      name: agent.name,
+      slug: agent.slug,
+      description: agent.description,
+      modality: agent.modality,
+      modelFamily: agent.modelFamily,
+      promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
+      agentPlatform: agent.agentPlatform,
+      isActive: agent.isActive,
+      compiledInstructions: agent.compiledInstructions ?? null,
+      compiledAt: agent.compiledAt?.toISOString() ?? null,
+      compiledFrom: (() => {
+        const parsed = compiledFromSchema.safeParse(agent.compiledFrom ?? null);
+        return parsed.success ? parsed.data : null;
+      })(),
+    },
+    200,
+  );
 });
 
 // ============================================================================

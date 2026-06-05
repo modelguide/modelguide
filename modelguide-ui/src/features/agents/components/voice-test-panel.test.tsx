@@ -146,6 +146,28 @@ describe('VoiceTestPanel', () => {
     expect(screen.getByRole('button', { name: /talk to agent/i })).toBeDisabled()
   })
 
+  it('shows the compiled-prompt indicator when the agent has been compiled', () => {
+    // Surface the live-prompt contract so the operator knows which prompt the
+    // worker will pick up when they click Talk — no surprises after a Compile.
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    expect(screen.getByText(/compiled prompt/i)).toBeInTheDocument()
+    // Length is surfaced so a stale/empty prompt is immediately obvious.
+    expect(screen.getByText(/34 chars/i)).toBeInTheDocument()
+  })
+
+  it('warns when no compiled prompt is available', () => {
+    const uncompiled = {
+      ...configuredAgent,
+      compiledInstructions: null,
+      compiledAt: null,
+    } as Agent
+    render(<VoiceTestPanel agent={uncompiled} canMutate />, { wrapper })
+    // The POC worker falls back to a placeholder prompt — make sure the
+    // operator sees that before they hit Talk and get confused by a generic
+    // canned response.
+    expect(screen.getByText(/no compiled prompt/i)).toBeInTheDocument()
+  })
+
   it('fetches a token and mounts the LiveKit room on click', async () => {
     stubMicPermission(true)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
