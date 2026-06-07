@@ -1009,6 +1009,71 @@ describe("POST /api/agents/:id/voice-test-token", () => {
 
     expect(response.status).toBe(403);
   });
+
+  // --------------------------------------------------------------------
+  // ADR-015 prompt-sync prototype: the body's `useCompiledPrompt` flag
+  // requires the agent to have a non-null `compiledInstructions`. If the
+  // flag is true but no prompt exists, the route must 400 before any
+  // LiveKit dispatch — this is the precondition that makes the prototype
+  // safe to ship: the worker never gets a half-baked dispatch.
+  // --------------------------------------------------------------------
+
+  test("useCompiledPrompt=true with no compiled prompt returns 400", async () => {
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Prompt Sync No Prompt Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    // Activate + configure LiveKit so the modality / platform / cred
+    // checks all pass — the useCompiledPrompt guard is the one that
+    // should trip. compiledInstructions stays null (fresh agent).
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          agentPlatform: "livekit",
+          metadata: {
+            livekit: { url: "wss://test.livekit.cloud", agentName: "w" },
+          },
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(`/api/agents/${agentId}/voice-test-token`, {
+      method: "POST",
+      headers: { ...orgAAdminHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ useCompiledPrompt: true }),
+    });
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/compiled prompt/i);
+  });
+
+  test("useCompiledPrompt=false is the same code path as no body", async () => {
+    // Doesn't matter that LiveKit isn't configured — we're checking that
+    // passing the flag explicitly false doesn't trip the new guard and
+    // ends up on the existing "LiveKit not configured" path.
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/voice-test-token`,
+      {
+        method: "POST",
+        headers: { ...orgAAdminHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ useCompiledPrompt: false }),
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    // The error must be the LiveKit-not-configured one — NOT the new
+    // compiled-prompt guard. If this assertion ever flips it means the
+    // body parser is mis-defaulting useCompiledPrompt to true.
+    expect(JSON.stringify(body)).toMatch(/LiveKit/i);
+    expect(JSON.stringify(body)).not.toMatch(/compiled prompt/i);
+  });
 });
 
 describe("Agent slug uniqueness", () => {

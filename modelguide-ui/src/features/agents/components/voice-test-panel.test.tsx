@@ -22,8 +22,11 @@ const mockTokenResponse = {
 
 vi.mock('~/lib/api', () => ({
   api: {
-    post: (url: string) => {
-      mockPost(url)
+    post: (url: string, opts?: { json?: unknown }) => {
+      // Capture body so prompt-sync tests can assert the flag was sent.
+      // ky's API is `post(url, { json: body })` — we unwrap once so the
+      // assertion reads naturally as `(url, { useCompiledPrompt: ... })`.
+      mockPost(url, opts?.json)
       return {
         json: () => Promise.resolve(mockTokenResponse),
       }
@@ -156,7 +159,13 @@ describe('VoiceTestPanel', () => {
     fireEvent.click(btn)
 
     await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('agents/agent-1/voice-test-token')
+      // Default behavior — body says the worker should use its baked-in
+      // profile prompt (ADR-014). The flag is included explicitly false
+      // so a future server-side default change can't silently flip the
+      // behavior of an idle dashboard.
+      expect(mockPost).toHaveBeenCalledWith('agents/agent-1/voice-test-token', {
+        useCompiledPrompt: false,
+      })
     })
     // Once we have a token, <LiveKitRoom> mounts.
     await waitFor(() => {
@@ -166,6 +175,43 @@ describe('VoiceTestPanel', () => {
     // Session id appears in the footer for debugging.
     await waitFor(() => {
       expect(screen.getByText(/Session/)).toBeInTheDocument()
+    })
+  })
+
+  // --------------------------------------------------------------------
+  // Prompt-sync prototype (ADR-015): a toggle on the panel asks the
+  // server to ship the agent's compiled prompt to the worker via
+  // dispatch metadata. The toggle is only useful when a compiled prompt
+  // actually exists.
+  // --------------------------------------------------------------------
+
+  it('shows the prompt-sync toggle when a compiled prompt exists', () => {
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    const toggle = screen.getByRole('checkbox', { name: /use latest compiled prompt/i })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle).not.toBeDisabled()
+  })
+
+  it('disables the prompt-sync toggle when there is no compiled prompt', () => {
+    stubMicPermission(true)
+    const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    const toggle = screen.getByRole('checkbox', { name: /use latest compiled prompt/i })
+    expect(toggle).toBeDisabled()
+  })
+
+  it('sends useCompiledPrompt=true when the toggle is enabled', async () => {
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /use latest compiled prompt/i }))
+    fireEvent.click(screen.getByRole('button', { name: /talk to agent/i }))
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('agents/agent-1/voice-test-token', {
+        useCompiledPrompt: true,
+      })
     })
   })
 

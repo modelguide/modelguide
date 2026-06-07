@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, Mic, Radio, Sparkles } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -46,6 +46,13 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
   const [wsUrl, setWsUrl] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // Prompt-sync prototype (ADR-015): when true, the API ships the agent's
+  // latest compiled prompt to the worker as part of dispatch metadata. The
+  // toggle only makes sense for agents that already have a compiled prompt
+  // — for fresh agents the option is rendered disabled and the panel falls
+  // back to the ADR-014 "worker uses its baked-in profile" default.
+  const hasCompiledPrompt = !!agent.compiledInstructions
+  const [useCompiledPrompt, setUseCompiledPrompt] = useState(false)
 
   // Hang-up generation counter: once the operator hangs up, the in-flight
   // token fetch's onSuccess must not drag the UI back into a CONNECTING
@@ -80,7 +87,13 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       setState('CHECKING_MIC')
       await ensureMicPermission()
       setState('REQUESTING_TOKEN')
-      return api.post(`agents/${agent.id}/voice-test-token`).json<VoiceTestTokenResponse>()
+      // Always send the flag explicitly — if the server-side default ever
+      // changes, an idle dashboard shouldn't silently flip behavior.
+      return api
+        .post(`agents/${agent.id}/voice-test-token`, {
+          json: { useCompiledPrompt: useCompiledPrompt && hasCompiledPrompt },
+        })
+        .json<VoiceTestTokenResponse>()
     },
     onSuccess: (resp) => {
       setSessionId(resp.sessionId)
@@ -163,6 +176,33 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
             Configure the LiveKit URL, API key, and secret for this agent before testing.
           </div>
         )}
+
+        {/* Prompt-sync toggle — ADR-015. Shown for every LiveKit agent so the
+            affordance is discoverable; disabled until the agent has been
+            compiled. The label sits inside the same label element as the
+            checkbox so click-on-text toggles the checkbox. */}
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-bg-subtle bg-bg-subtle/30 p-3">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+          <div className="flex flex-col gap-1">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-primary">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 rounded border-bg-subtle accent-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+                checked={useCompiledPrompt && hasCompiledPrompt}
+                onChange={(e) => setUseCompiledPrompt(e.target.checked)}
+                disabled={!hasCompiledPrompt || inCall}
+                aria-label="Use latest compiled prompt"
+              />
+              Use latest compiled prompt
+              <Badge variant="default">Prototype</Badge>
+            </label>
+            <p className="text-xs text-fg-muted">
+              {hasCompiledPrompt
+                ? 'Ships the dashboard-compiled prompt to the worker via dispatch metadata so you can talk with the prompt you just edited — no redeploy needed.'
+                : 'Compile this agent first to enable prompt-sync testing.'}
+            </p>
+          </div>
+        </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
