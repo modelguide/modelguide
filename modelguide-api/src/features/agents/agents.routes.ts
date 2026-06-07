@@ -1310,6 +1310,15 @@ router.post(
   requireOrganization(),
 );
 
+const voiceTestTokenBodySchema = z
+  .object({
+    useCompiledPrompt: z.boolean().optional().openapi({
+      description:
+        "Prompt-sync prototype (ADR-015): when true, the agent's latest compiled prompt rides in dispatch metadata so a prompt-sync-aware worker uses it instead of the prompt baked into the worker profile. Defaults to false — the worker uses its baked-in profile (ADR-014 behavior).",
+    }),
+  })
+  .openapi("VoiceTestTokenBody");
+
 const voiceTestTokenResponseSchema = z.object({
   livekitUrl: z.string(),
   roomName: z.string(),
@@ -1327,10 +1336,16 @@ const voiceTestTokenRoute = createRoute({
   tags: ["Agents"],
   summary: "Issue a LiveKit voice-test token",
   description:
-    "Creates a ModelGuide session, dispatches the configured LiveKit worker into a fresh room with the agent's slug as `agentName` in metadata (so a multi-profile worker picks the correct profile), and returns a short-lived LiveKit AccessToken so the browser can join via WebRTC and talk to the agent.",
+    "Creates a ModelGuide session, dispatches the configured LiveKit worker into a fresh room with the agent's slug as `agentName` in metadata (so a multi-profile worker picks the correct profile), and returns a short-lived LiveKit AccessToken so the browser can join via WebRTC and talk to the agent. When body.useCompiledPrompt=true, the agent's latest compiled prompt is included in dispatch metadata for a prompt-sync-aware worker (ADR-015 prototype).",
   security: [{ bearerAuth: [] }],
   request: {
     params: agentIdParams,
+    body: {
+      required: false,
+      content: {
+        "application/json": { schema: voiceTestTokenBodySchema },
+      },
+    },
   },
   responses: {
     201: {
@@ -1340,7 +1355,7 @@ const voiceTestTokenRoute = createRoute({
       },
     },
     400: errorResponse(
-      "LiveKit not configured, missing credentials, or wrong modality",
+      "LiveKit not configured, missing credentials, wrong modality, or useCompiledPrompt=true with no compiled prompt available",
     ),
     401: errorResponse("Not authenticated"),
     403: errorResponse("Insufficient permissions"),
@@ -1352,12 +1367,27 @@ router.openapi(voiceTestTokenRoute, async (c) => {
   const orgId = getOrganizationId(c);
   const user = getCurrentUser(c);
   const { id } = c.req.valid("param");
+  // Body is optional — tolerate clients that POST without one.
+  let useCompiledPrompt = false;
+  try {
+    const parsed = c.req.valid("json") as
+      | z.infer<typeof voiceTestTokenBodySchema>
+      | undefined;
+    useCompiledPrompt = parsed?.useCompiledPrompt ?? false;
+  } catch {
+    // No body or invalid body — fall back to the default ADR-014 path.
+  }
 
-  const result = await createVoiceTestSession(orgId, id, {
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-  });
+  const result = await createVoiceTestSession(
+    orgId,
+    id,
+    {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+    },
+    { useCompiledPrompt },
+  );
 
   return c.json(result, 201);
 });

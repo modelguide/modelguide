@@ -904,19 +904,40 @@ export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  /**
+   * Optional compiled prompt to ride along in the dispatch metadata.
+   * When set, a prompt-sync-aware worker (see ADR-015) uses it as the
+   * agent's instructions instead of the prompt baked into the worker
+   * profile. When omitted, the dispatch is byte-for-byte identical to
+   * the ADR-014 flow and the worker uses its baked-in prompt.
+   */
+  compiledPrompt?: string;
+  compiledAt?: string;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  compiled_prompt?: string;
+  compiled_prompt_compiled_at?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
+  };
+  if (input.compiledPrompt === undefined) {
+    return base;
+  }
+  return {
+    ...base,
+    compiled_prompt: input.compiledPrompt,
+    ...(input.compiledAt !== undefined && {
+      compiled_prompt_compiled_at: input.compiledAt,
+    }),
   };
 }
 
@@ -935,6 +956,7 @@ export async function createVoiceTestSession(
   orgId: string,
   agentId: string,
   caller: { userId: string; email: string; name: string },
+  options: { useCompiledPrompt?: boolean } = {},
 ): Promise<VoiceTestSession> {
   const agent = await forOrg(orgId, async (tx) => {
     const a = await requireAgent(tx, agentId);
@@ -951,6 +973,23 @@ export async function createVoiceTestSession(
     }
     return a;
   });
+
+  // Prompt-sync prototype (ADR-015): when the caller opts in, the agent's
+  // latest compiled prompt rides along in dispatch metadata so the worker
+  // can talk with the prompt the operator just edited — without redeploying
+  // the worker profile. The default path remains ADR-014 (worker uses its
+  // baked-in profile prompt).
+  let compiledPrompt: string | undefined;
+  let compiledAt: string | undefined;
+  if (options.useCompiledPrompt) {
+    if (!agent.compiledInstructions) {
+      throw Errors.invalidInput(
+        "useCompiledPrompt=true but the agent has no compiled prompt. Compile the agent first.",
+      );
+    }
+    compiledPrompt = agent.compiledInstructions;
+    compiledAt = agent.compiledAt?.toISOString();
+  }
 
   const meta = (agent.metadata ?? {}) as Record<string, unknown>;
   const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
@@ -996,6 +1035,8 @@ export async function createVoiceTestSession(
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    compiledPrompt,
+    compiledAt,
   });
 
   let dispatchId: string;

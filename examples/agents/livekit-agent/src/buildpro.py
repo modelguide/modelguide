@@ -36,13 +36,26 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        # Prompt-sync prototype (ADR-015): when the dispatcher passes a
+        # compiled prompt via job metadata, use it verbatim — the operator
+        # is testing the prompt they just edited in the dashboard. Empty
+        # strings are ignored so accidental "" overrides don't blank the
+        # agent. Otherwise fall through to the baked-in BuildPro prompt.
+        if instructions_override and instructions_override.strip():
+            instructions = instructions_override
+        else:
+            instructions = build_system_prompt(session_id or "", user_email=user_email)
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

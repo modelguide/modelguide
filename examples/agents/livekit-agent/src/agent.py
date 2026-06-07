@@ -84,7 +84,8 @@ async def entrypoint(ctx: agents.JobContext):
             trace_provider.force_flush()
         ctx.add_shutdown_callback(_flush_traces)
 
-    # Parse dispatch metadata (outbound calls include phone_number)
+    # Parse dispatch metadata (outbound calls include phone_number;
+    # prompt-sync test sessions include `compiled_prompt`)
     outbound_phone = None
     dispatch_metadata: dict = {}
     if ctx.job.metadata:
@@ -93,6 +94,19 @@ async def entrypoint(ctx: agents.JobContext):
             outbound_phone = dispatch_metadata.get("phone_number")
         except json.JSONDecodeError:
             logger.warning("Invalid JSON in job metadata: %s", ctx.job.metadata[:100])
+
+    # Prompt-sync prototype (ADR-015): when the dashboard ships the latest
+    # compiled prompt via dispatch metadata, log which version we're
+    # running with so a broken session can be traced back to a specific
+    # compile. Pass through to BuildProAgent below.
+    compiled_prompt: str | None = dispatch_metadata.get("compiled_prompt")
+    compiled_at: str | None = dispatch_metadata.get("compiled_prompt_compiled_at")
+    if compiled_prompt:
+        logger.info(
+            "Prompt-sync test: using compiled prompt (len=%d, compiled_at=%s)",
+            len(compiled_prompt),
+            compiled_at or "unknown",
+        )
 
     await ctx.connect()
 
@@ -158,7 +172,12 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=compiled_prompt,
+    )
     stt = create_stt()
     tts = create_tts()
 
