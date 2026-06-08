@@ -73,6 +73,51 @@ async def create_session(user_identifier: str | None = None) -> str:
     return session_id
 
 
+async def get_runtime_config() -> dict | None:
+    """Fetch the agent's runtime config (latest compiled prompt + voice config).
+
+    Pairs with ``GET /api/agents/me/runtime-config`` on the API. Lets the
+    worker pull the latest compiled prompt at session start instead of using
+    the baked-in copy, so the dashboard's compile-and-talk loop takes effect
+    without redeploying the worker. See ADR-015.
+
+    Returns ``None`` on error rather than raising — the caller is expected
+    to fall back to its baked-in prompt. Errors are logged.
+
+    Response shape (success):
+        {
+            "id": "<agent uuid>",
+            "name": "...",
+            "slug": "...",
+            "modality": "voice"|"text",
+            "modelFamily": "gpt"|"claude"|"gemini"|"generic",
+            "promptConfig": {"persona": ..., "language": ..., ...},
+            "compiledInstructions": "..." | None,
+            "compiledAt": "...iso..." | None,
+            "isActive": true,
+        }
+    """
+    client = _get_http_client()
+    try:
+        res = await client.get("/api/agents/me/runtime-config")
+    except Exception:
+        logger.exception("Failed to fetch runtime config")
+        return None
+
+    if not res.is_success:
+        logger.warning(
+            "Runtime config fetch failed (status %s): %s",
+            res.status_code,
+            res.text[:200],
+        )
+        return None
+    try:
+        return res.json()
+    except Exception:
+        logger.exception("Failed to parse runtime config response")
+        return None
+
+
 async def add_messages(session_id: str, messages: list[dict]) -> None:
     """Post messages to a session. Errors are logged, not raised."""
     client = _get_http_client()

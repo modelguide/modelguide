@@ -140,6 +140,22 @@ describe('VoiceTestPanel', () => {
     expect(screen.getByRole('button', { name: /talk to agent/i })).not.toBeDisabled()
   })
 
+  it('surfaces the runtime-fetch hint when a compiled prompt is set (ADR-015)', () => {
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    // The hint exists so admins know a fresh "Compile" lands in the next call
+    // without redeploying the worker.
+    expect(screen.getByText(/INSTRUCTIONS_SOURCE=remote/)).toBeInTheDocument()
+    expect(screen.getByText(/ADR-015/)).toBeInTheDocument()
+  })
+
+  it('hides the runtime-fetch hint when no compiled prompt is set', () => {
+    const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
+    stubMicPermission(true)
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    expect(screen.queryByText(/INSTRUCTIONS_SOURCE=remote/)).not.toBeInTheDocument()
+  })
+
   it('disables the talk button for viewers (canMutate=false)', () => {
     stubMicPermission(true)
     render(<VoiceTestPanel agent={configuredAgent} canMutate={false} />, { wrapper })

@@ -23,7 +23,7 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileCode, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -152,11 +152,20 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       </CardHeader>
       <CardContent>
         {livekitConfigured ? (
-          <p className="text-sm text-fg-muted">
-            Dispatches the configured LiveKit worker with this agent's slug as{' '}
-            <code>agentName</code> metadata, then joins the room from your browser so you can talk
-            to the agent end-to-end.
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-fg-muted">
+              Dispatches the configured LiveKit worker with this agent's slug as{' '}
+              <code>agentName</code> metadata, then joins the room from your browser so you can talk
+              to the agent end-to-end.
+            </p>
+            {agent.compiledInstructions ? (
+              <p className="flex items-center gap-1.5 text-xs text-fg-muted">
+                <FileCode className="h-3 w-3 text-success" />
+                Workers running with <code>INSTRUCTIONS_SOURCE=remote</code> pick up the latest
+                compiled prompt on each call — no redeploy needed. See ADR-015.
+              </p>
+            ) : null}
+          </div>
         ) : (
           <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-fg-secondary">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />

@@ -156,6 +156,9 @@ ModelGuide API
 
 **Session lifecycle:**
 - On connect: Creates a ModelGuide session via `POST /api/sessions`
+- On connect (when `INSTRUCTIONS_SOURCE=remote`): pulls the latest compiled prompt
+  via `GET /api/agents/me/runtime-config` so the dashboard's compile → talk loop
+  takes effect without redeploying the worker (see ADR-015)
 - During call: LLM tool calls execute via ModelGuide's MCP endpoint (`POST /mcp/:agentId`)
 - On goodbye: Agent signs off → user confirms → agent replies once → auto-disconnect after 3s
 - On close: Posts the full transcript to ModelGuide, then marks the session as completed
@@ -264,6 +267,37 @@ from your_agent import YourAgent as AgentClass
 ```
 
 That's it. Langfuse traces, ModelGuide session tracking, transcript posting, and the MCP connection all work without changes.
+
+## Runtime Prompt Fetch (ADR-015)
+
+By default the worker uses its baked-in prompt (`prompts/base.py` +
+`prompts/workflows/`). That keeps first-time setup zero-config and gives
+the example a known-good fallback.
+
+For the "compile in the dashboard → click Talk to agent → hear the new
+prompt immediately" loop, set:
+
+```bash
+INSTRUCTIONS_SOURCE=remote
+```
+
+When set, the worker calls `GET /api/agents/me/runtime-config` on every
+session start (using its API key) and uses the returned `compiledInstructions`
+as the system prompt. The baked-in prompt becomes the fallback for any
+fetch failure (network error, MG outage, no compile yet, empty prompt).
+
+**Operational consequence:** an MG outage degrades to "old prompt" rather
+than "no calls work." The runtime fetch never blocks call setup.
+
+**What this does NOT do:**
+
+- Hot-reload during a live call — the fetch happens at session start only.
+  A compile mid-call doesn't reach an in-progress session (by design — LLMs
+  respond poorly to mid-conversation system-prompt swaps).
+- Replace redeploying tool wiring — only the system-prompt string is
+  fetched. Adding a new tool still needs a worker release.
+
+See ADR-015 in `docs/decisions/` for the full reasoning.
 
 ## Stubbed Tools
 

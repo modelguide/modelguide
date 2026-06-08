@@ -108,6 +108,45 @@ export async function listAgents(
   });
 }
 
+/**
+ * Minimal runtime config exposed to a deployed worker authenticating with its
+ * own API key. Returns the compiled prompt + prompt config so the worker can
+ * use the latest version on every session start without redeploying its image.
+ *
+ * Deliberately narrower than ``getAgentById``:
+ *  - no secrets map / external IDs / eval counts (not relevant at runtime)
+ *  - no integration URLs (worker already knows where MG lives — that's how it
+ *    just authenticated)
+ *  - no metadata (avoids leaking org-internal config the worker doesn't need)
+ *
+ * Pairs with ``mg_client.get_runtime_config()`` in
+ * ``examples/agents/livekit-agent``. See ADR-015.
+ */
+export async function getAgentRuntimeConfig(orgId: string, agentId: string) {
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select({
+        id: agents.id,
+        name: agents.name,
+        slug: agents.slug,
+        modality: agents.modality,
+        modelFamily: agents.modelFamily,
+        promptConfig: agents.promptConfig,
+        compiledInstructions: agents.compiledInstructions,
+        compiledAt: agents.compiledAt,
+        isActive: agents.isActive,
+      })
+      .from(agents)
+      .where(eq(agents.id, agentId));
+
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
+
+    return agent;
+  });
+}
+
 export async function getAgentById(orgId: string, agentId: string) {
   return forOrg(orgId, async (tx) => {
     const [agent] = await tx

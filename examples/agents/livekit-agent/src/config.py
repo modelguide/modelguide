@@ -71,6 +71,13 @@ LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 # Stubbed tools (comma-separated names with no MCP backend yet — returns fake success)
 STUBBED_TOOLS: str = "send_email"
 
+# Where the system prompt comes from at session start:
+#   "local"  — baked-in prompts/base.py + prompts/workflows/ (default, fastest)
+#   "remote" — fetch from MG via GET /api/agents/me/runtime-config at session
+#              start so the dashboard's compile → talk loop takes effect
+#              without redeploying the worker (ADR-015)
+INSTRUCTIONS_SOURCE: str = "local"
+
 # SIP / Telephony
 SIP_OUTBOUND_TRUNK_ID: str = ""  # Twilio outbound trunk ID (ST_xxxx)
 
@@ -122,6 +129,8 @@ def validate() -> None:
         "LANGFUSE_HOST": os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
         # Stubbed tools
         "STUBBED_TOOLS": os.getenv("STUBBED_TOOLS", "send_email"),
+        # ADR-015 — prompt source (local | remote)
+        "INSTRUCTIONS_SOURCE": os.getenv("INSTRUCTIONS_SOURCE", "local"),
         # SIP / Telephony
         "SIP_OUTBOUND_TRUNK_ID": os.getenv("SIP_OUTBOUND_TRUNK_ID", ""),
         # Other
