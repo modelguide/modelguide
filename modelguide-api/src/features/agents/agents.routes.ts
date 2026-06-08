@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntimeConfig,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -387,6 +390,68 @@ router.openapi(createAgentRoute, async (c) => {
   const { agent, apiKey } = await createAgent(orgId, body, user.id);
 
   return c.json({ ...formatAgent(agent), apiKey }, 201);
+});
+
+// ============================================================================
+// Worker Runtime Config (agent-authenticated)
+//
+// Deployed LiveKit workers call this at session start to fetch the latest
+// compiled prompt. Lets the dashboard "Talk to agent" + "Compile prompt" loop
+// take effect without a worker redeploy. See ADR-015.
+// ============================================================================
+
+const runtimeConfigResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  promptConfig: promptConfigSchema,
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  isActive: z.boolean(),
+});
+
+// GET /me/runtime-config
+router.get("/me/runtime-config", requireAgent());
+
+const runtimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me/runtime-config",
+  tags: ["Agents"],
+  summary: "Fetch the calling agent's runtime config",
+  description:
+    "Returns the authenticated agent's runtime config — including the latest compiled prompt. Authenticated via API key (mgk_*); user JWTs are rejected. Intended for deployed workers fetching prompt + voice settings at session start so the dashboard's compile → talk loop takes effect without a worker redeploy.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Agent runtime config",
+      content: {
+        "application/json": { schema: runtimeConfigResponseSchema },
+      },
+    },
+    401: errorResponse("API key required (user JWT not accepted)"),
+  },
+});
+
+router.openapi(runtimeConfigRoute, async (c) => {
+  const agent = getCurrentAgent(c);
+  const cfg = await getAgentRuntimeConfig(agent.organizationId, agent.id);
+
+  return c.json(
+    {
+      id: cfg.id,
+      name: cfg.name,
+      slug: cfg.slug,
+      modality: cfg.modality,
+      modelFamily: cfg.modelFamily,
+      promptConfig: (cfg.promptConfig ?? {}) as Record<string, unknown>,
+      compiledInstructions: cfg.compiledInstructions ?? null,
+      compiledAt: cfg.compiledAt?.toISOString() ?? null,
+      isActive: cfg.isActive,
+    },
+    200,
+  );
 });
 
 // ============================================================================

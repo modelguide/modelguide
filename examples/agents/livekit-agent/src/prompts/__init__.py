@@ -17,10 +17,18 @@ def build_system_prompt(
     user_email: str = "voice-caller",
     channel: str = "voice",
     order_id: str = "",
+    template: str | None = None,
 ) -> str:
-    """Interpolate runtime values into the system prompt."""
+    """Interpolate runtime values into the system prompt.
+
+    ``template`` — when provided, replaces ``SYSTEM_PROMPT_TEMPLATE`` for this
+    call only. Used by ADR-015's runtime-fetch path so the same {{mg_session_id}}
+    / {{userEmail}} / {{channel}} / {{orderId}} placeholders are honored
+    whether the prompt is the baked-in copy or freshly compiled from MG.
+    """
+    base = template if template is not None else SYSTEM_PROMPT_TEMPLATE
     return (
-        SYSTEM_PROMPT_TEMPLATE
+        base
         .replace("{{mg_session_id}}", session_id)
         .replace("{{userEmail}}", user_email)
         .replace("{{channel}}", channel)

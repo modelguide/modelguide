@@ -157,8 +157,18 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to create ModelGuide session — running without tracking")
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
+    # Fetch the latest compiled prompt from ModelGuide (ADR-015). Falls back to
+    # the baked-in template if INSTRUCTIONS_SOURCE=local or the fetch fails —
+    # the worker is never blocked on a missing/slow API.
+    instructions_override = await _resolve_instructions_override()
+
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        instructions_override=instructions_override,
+    )
     stt = create_stt()
     tts = create_tts()
 
@@ -272,6 +282,35 @@ async def entrypoint(ctx: agents.JobContext):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _resolve_instructions_override() -> str | None:
+    """Pull the latest compiled prompt from MG when INSTRUCTIONS_SOURCE=remote.
+
+    Returns ``None`` if remote fetch is disabled, the response is missing a
+    compiled prompt, or the fetch fails. The caller falls back to the baked-in
+    template — the worker is never blocked on a slow/missing API.
+    See ADR-015.
+    """
+    if config.INSTRUCTIONS_SOURCE != "remote":
+        return None
+
+    cfg = await mg_client.get_runtime_config()
+    if not cfg:
+        logger.warning("Runtime config unavailable — using baked-in prompt")
+        return None
+
+    compiled = cfg.get("compiledInstructions")
+    if not compiled:
+        logger.info("No compiled prompt set on MG agent — using baked-in prompt")
+        return None
+
+    logger.info(
+        "Using remote compiled prompt (%d chars, compiled_at=%s)",
+        len(compiled),
+        cfg.get("compiledAt"),
+    )
+    return compiled
 
 
 def _extract_text(item) -> str:

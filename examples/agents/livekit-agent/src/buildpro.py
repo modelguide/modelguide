@@ -36,13 +36,32 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        instructions_override: str | None = None,
     ) -> None:
+        """Build the agent.
+
+        ``instructions_override`` — when set (e.g. the compiled prompt fetched
+        from MG at session start), it replaces the baked-in template. Runtime
+        placeholders are still interpolated so {{mg_session_id}} etc. work the
+        same way regardless of the source. See ADR-015.
+        """
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        if instructions_override:
+            instructions = build_system_prompt(
+                session_id or "",
+                user_email=user_email,
+                template=instructions_override,
+            )
+        else:
+            instructions = build_system_prompt(session_id or "", user_email=user_email)
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

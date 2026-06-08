@@ -65,6 +65,48 @@ class TestBuildSystemPrompt:
         assert "two forty nine dollars" in SYSTEM_PROMPT_TEMPLATE
 
 
+class TestTemplateOverride:
+    """ADR-015 — prompts/get_runtime_config() flow."""
+
+    def test_uses_override_template_when_provided(self):
+        result = build_system_prompt(
+            "sess_1",
+            user_email="bob@x.com",
+            template="Custom: {{userEmail}} / {{mg_session_id}}",
+        )
+        assert result == "Custom: bob@x.com / sess_1"
+        # Critically: no leakage from the baked-in BuildPro template
+        assert "BuildPro" not in result
+        assert "Sam" not in result
+
+    def test_falls_back_to_baked_in_when_template_is_none(self):
+        result = build_system_prompt("sess_1", template=None)
+        assert "BuildPro" in result
+        assert "Sam" in result
+
+    def test_falls_back_to_baked_in_by_default(self):
+        # No template arg at all — same as None
+        result = build_system_prompt("sess_1")
+        assert "BuildPro" in result
+
+    def test_override_still_interpolates_all_placeholders(self):
+        template = "S:{{mg_session_id}} U:{{userEmail}} C:{{channel}} O:{{orderId}}"
+        result = build_system_prompt(
+            "sess_x",
+            user_email="alice@y.com",
+            channel="text",
+            order_id="ORD-9",
+            template=template,
+        )
+        assert result == "S:sess_x U:alice@y.com C:text O:ORD-9"
+
+    def test_empty_string_override_is_respected(self):
+        # Edge case: caller explicitly passes "" — that's a valid (empty) prompt,
+        # not a "fall back to baked-in" signal. The is-not-None check matters.
+        result = build_system_prompt("sess_1", template="")
+        assert result == ""
+
+
 class TestWorkflowLoading:
     def test_loads_all_workflows(self):
         workflows = load_all()

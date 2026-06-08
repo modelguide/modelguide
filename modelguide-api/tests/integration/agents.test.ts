@@ -8,12 +8,19 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
 let orgASupportHeaders: Record<string, string>;
 let orgBAdminHeaders: Record<string, string>;
+let orgAAgentHeaders: Record<string, string>;
+let orgBAgentHeaders: Record<string, string>;
 
 /** IDs of agents created during tests (for cleanup) */
 const createdAgentIds: string[] = [];
@@ -27,6 +34,8 @@ beforeAll(async () => {
   orgAAdminHeaders = await authHeadersFor(s.orgAAdmin);
   orgASupportHeaders = await authHeadersFor(s.orgASupport);
   orgBAdminHeaders = await authHeadersFor(s.orgBAdmin);
+  orgAAgentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+  orgBAgentHeaders = await agentHeadersFor(s.orgBAgentId, s.orgB.id);
 });
 
 afterAll(async () => {
@@ -1058,5 +1067,86 @@ describe("Agent slug uniqueness", () => {
     expect(res2.status).toBe(409);
     const body = await res2.json();
     expect(body.code).toBe("ALREADY_EXISTS");
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me/runtime-config — agent-authenticated runtime fetch
+//
+// The deployed LiveKit worker calls this at session start to pull the latest
+// compiled prompt instead of using a baked-in copy. See ADR-015.
+// ============================================================================
+
+describe("GET /api/agents/me/runtime-config", () => {
+  test("returns the authenticated agent's runtime config (200)", async () => {
+    // Set a compiled prompt on the seeded agent so we can assert it round-trips
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          compiledInstructions: "You are Sam from BuildPro. Be concise.",
+          compiledAt: new Date(),
+        })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.slug).toBeDefined();
+    expect(body.name).toBeDefined();
+    expect(body.modality).toBe("voice");
+    expect(body.isActive).toBe(true);
+    expect(body.compiledInstructions).toBe(
+      "You are Sam from BuildPro. Be concise.",
+    );
+    expect(body.compiledAt).toBeDefined();
+    expect(body.promptConfig).toBeDefined();
+  });
+
+  test("returns compiledInstructions: null when not compiled (200)", async () => {
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({ compiledInstructions: null, compiledAt: null })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.compiledInstructions).toBeNull();
+    expect(body.compiledAt).toBeNull();
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me/runtime-config");
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects user JWT (401) — agent-only endpoint", async () => {
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("scopes to the agent the key belongs to (cross-org)", async () => {
+    // orgB's agent key should return orgB's agent, never orgA's
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgBAgentHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.id).toBe(s.orgBAgentId);
+    expect(body.id).not.toBe(s.orgAAgentId);
   });
 });

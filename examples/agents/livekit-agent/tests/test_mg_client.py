@@ -84,6 +84,79 @@ class TestAddMessages:
             await mg_client.add_messages("sess_1", [{"role": "user", "content": "hi"}])
 
 
+class TestGetRuntimeConfig:
+    @pytest.mark.asyncio
+    async def test_returns_config_on_success(self):
+        config_payload = {
+            "id": "agt_123",
+            "name": "Sam",
+            "slug": "buildpro-sam",
+            "modality": "voice",
+            "modelFamily": "gpt",
+            "promptConfig": {"persona": "concise"},
+            "compiledInstructions": "You are Sam. Be helpful.",
+            "compiledAt": "2026-06-08T12:00:00.000Z",
+            "isActive": True,
+        }
+        client = _mock_client("get", _mock_response(200, config_payload))
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            result = await mg_client.get_runtime_config()
+
+        assert result == config_payload
+        call_args = client.get.call_args
+        assert call_args[0][0] == "/api/agents/me/runtime-config"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_http_error(self):
+        client = _mock_client("get", _mock_response(401, text="Unauthorized"))
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            result = await mg_client.get_runtime_config()
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_network_failure(self):
+        client = AsyncMock()
+        client.get.side_effect = httpx.ConnectError("connection refused")
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            result = await mg_client.get_runtime_config()
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_invalid_json(self):
+        resp = _mock_response(200)
+        resp.json.side_effect = ValueError("not json")
+        client = _mock_client("get", resp)
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            result = await mg_client.get_runtime_config()
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_compiled_instructions_can_be_null(self):
+        # Agent without a compiled prompt — endpoint returns null, not omitted
+        config_payload = {
+            "id": "agt_123",
+            "name": "Sam",
+            "slug": "buildpro-sam",
+            "modality": "voice",
+            "modelFamily": "gpt",
+            "promptConfig": {},
+            "compiledInstructions": None,
+            "compiledAt": None,
+            "isActive": True,
+        }
+        client = _mock_client("get", _mock_response(200, config_payload))
+        with patch("mg_client.httpx.AsyncClient", return_value=client):
+            result = await mg_client.get_runtime_config()
+
+        assert result is not None
+        assert result["compiledInstructions"] is None
+
+
 class TestCompleteSession:
     @pytest.mark.asyncio
     async def test_patches_status(self):
