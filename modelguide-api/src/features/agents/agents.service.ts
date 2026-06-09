@@ -1060,3 +1060,72 @@ export async function createVoiceTestSession(
     identity,
   };
 }
+
+// ============================================================================
+// Runtime config — `GET /api/agents/me/runtime-config`
+//
+// The contract between an external agent runtime (LiveKit worker, etc.) and
+// the platform. A worker authenticates with its API key (`mgk_*`) and pulls
+// the compiled prompt + prompt config at session start so it always runs
+// the latest version without redeploy.
+//
+// Why a dedicated projection (not `formatAgent`):
+//   - Workers don't need secrets, evalSuiteCount, integrationUrls, or any
+//     of the dashboard-only fields. Returning the full agent shape would
+//     widen the surface unnecessarily.
+//   - Renaming `compiledInstructions → instructions` matches the LiveKit
+//     Agent SDK term, so the worker can pass the field straight through.
+//   - Null-collapsing `promptConfig` and `compiledAt` on the boundary keeps
+//     the worker code branch-free.
+//
+// Pure projection so the wire format is covered by a unit test (see
+// `tests/unit/agents/runtime-config.test.ts`) — the worker has no type
+// system connection to MG, so any drift here breaks every session
+// silently.
+// ============================================================================
+
+export interface AgentRuntimeConfig {
+  id: string;
+  name: string;
+  slug: string;
+  modality: Modality;
+  isActive: boolean;
+  instructions: string | null;
+  promptConfig: PromptConfig;
+  compiledAt: string | null;
+}
+
+export function formatRuntimeConfig(agent: {
+  id: string;
+  name: string;
+  slug: string;
+  modality: Modality;
+  isActive: boolean;
+  promptConfig: PromptConfig | null;
+  compiledInstructions: string | null;
+  compiledAt: Date | string | null;
+}): AgentRuntimeConfig {
+  const compiledAt =
+    agent.compiledAt instanceof Date
+      ? agent.compiledAt.toISOString()
+      : (agent.compiledAt ?? null);
+
+  return {
+    id: agent.id,
+    name: agent.name,
+    slug: agent.slug,
+    modality: agent.modality,
+    isActive: agent.isActive,
+    instructions: agent.compiledInstructions ?? null,
+    promptConfig: agent.promptConfig ?? {},
+    compiledAt,
+  };
+}
+
+export async function getAgentRuntimeConfig(
+  orgId: string,
+  agentId: string,
+): Promise<AgentRuntimeConfig> {
+  const agent = await forOrg(orgId, (tx) => requireAgent(tx, agentId));
+  return formatRuntimeConfig(agent);
+}

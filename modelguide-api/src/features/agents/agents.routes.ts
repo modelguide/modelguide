@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntimeConfig,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -1297,6 +1300,68 @@ router.openapi(outboundCallRoute, async (c) => {
   const result = await createOutboundCall(orgId, id, body);
 
   return c.json(result, 201);
+});
+
+// ============================================================================
+// Agent self-fetch — `GET /me/runtime-config`
+//
+// External agent runtimes (LiveKit worker, etc.) authenticate with their
+// `mgk_*` API key and pull the latest compiled prompt + prompt config at
+// session start. This closes the "edit prompt → compile → talk to agent"
+// loop without redeploying the worker. See ADR-015.
+//
+// No conflict with `GET /:id` above — `/me/runtime-config` has two
+// segments where `:id` is one, and `:id` is constrained to UUIDs by its
+// zod schema. Uses `requireAgent` (API key) instead of `requireUser`.
+// ============================================================================
+
+router.get("/me/runtime-config", requireAgent(), requireOrganization());
+
+const runtimeConfigResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  modality: z.enum(["voice", "text"]),
+  isActive: z.boolean(),
+  instructions: z.string().nullable().openapi({
+    description:
+      "Compiled system prompt. Null when the prompt was never compiled.",
+  }),
+  promptConfig: promptConfigSchema.openapi({
+    description:
+      "Persona, language rules, and approved filler phrases. Always an object — never null on the wire.",
+  }),
+  compiledAt: z
+    .string()
+    .nullable()
+    .openapi({ description: "ISO timestamp of the last successful compile." }),
+});
+
+const runtimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me/runtime-config",
+  tags: ["Agents"],
+  summary: "Get the authenticated agent's runtime config",
+  description:
+    "Returns the compiled prompt + prompt configuration the agent runtime needs to materialize itself at session start. Authenticated with the agent's API key (`mgk_*`). Workers should call this at the start of every session so they always run the latest compiled prompt without redeploy.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime config",
+      content: {
+        "application/json": { schema: runtimeConfigResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated as an agent (API key required)"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(runtimeConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const agent = getCurrentAgent(c);
+  const config = await getAgentRuntimeConfig(orgId, agent.id);
+  return c.json(config, 200);
 });
 
 // ============================================================================

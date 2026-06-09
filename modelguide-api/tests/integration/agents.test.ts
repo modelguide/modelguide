@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -1058,5 +1063,88 @@ describe("Agent slug uniqueness", () => {
     expect(res2.status).toBe(409);
     const body = await res2.json();
     expect(body.code).toBe("ALREADY_EXISTS");
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me/runtime-config — Agent self-fetch (API key auth)
+//
+// External agent runtimes (LiveKit worker, etc.) authenticate with their
+// `mgk_*` API key and pull the latest compiled prompt + prompt config at
+// session start. The whole point of the POC is "edit prompt, click sync,
+// talk to agent" — so a refactor that breaks this endpoint silently breaks
+// the "test the latest prompt without redeploy" loop.
+// ============================================================================
+
+describe("GET /api/agents/me/runtime-config", () => {
+  test("returns the runtime config when authenticated with the agent's API key", async () => {
+    const agentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: agentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.slug).toBeDefined();
+    expect(body.name).toBeDefined();
+    expect(body.modality).toBeDefined();
+    // promptConfig is always an object (never null) so workers don't branch.
+    expect(body.promptConfig).toBeDefined();
+    expect(typeof body.promptConfig).toBe("object");
+    // `instructions` is the field the worker reads — not `compiledInstructions`.
+    expect(body).toHaveProperty("instructions");
+  });
+
+  test("reflects the latest compiled prompt after a recompile", async () => {
+    // The whole POC contract: edit → compile → the worker picks it up on
+    // the next session. Simulate the "recompile" step by writing
+    // compiledInstructions and confirm the endpoint returns the new value.
+    const agentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+
+    const marker = `POC v${Date.now()}: You are a friendly assistant.`;
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({ compiledInstructions: marker, compiledAt: new Date() })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: agentHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.instructions).toBe(marker);
+    expect(body.compiledAt).toBeDefined();
+  });
+
+  test("rejects unauthenticated (401)", async () => {
+    const response = await request("/api/agents/me/runtime-config");
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects user JWT — this endpoint is agent-only", async () => {
+    // User JWTs don't carry an agent identity; route requires API key auth.
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("never returns platform secrets or webhook config", async () => {
+    const agentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: agentHeaders,
+    });
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    // Defense in depth — even if a future change pulls extra fields from
+    // the agent row, none of these terms should appear.
+    expect(text).not.toMatch(/api_secret/i);
+    expect(text).not.toMatch(/api_key/i);
+    expect(text).not.toMatch(/hmac/i);
+    expect(text).not.toMatch(/webhook_secret/i);
   });
 });
