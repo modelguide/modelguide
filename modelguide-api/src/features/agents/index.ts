@@ -6,6 +6,7 @@ export { default as agentRoutes } from "./agents.routes";
 export {
   listAgents,
   getAgentById,
+  getAgentRuntime,
   createAgent,
   updateAgent,
   deleteAgent,
