@@ -108,6 +108,66 @@ export async function listAgents(
   });
 }
 
+/**
+ * Runtime payload returned to a remote voice agent on session start.
+ *
+ * Deliberately narrow: only the fields a runtime needs to render a
+ * conversation. Secret refs, integration URLs, and platform credentials
+ * never leave the API — anything sensitive belongs in the secrets vault,
+ * not in a payload that lands in worker logs.
+ */
+export interface AgentRuntimePayload {
+  id: string;
+  name: string;
+  slug: string;
+  modality: Modality;
+  modelFamily: ModelFamily;
+  agentPlatform: AgentPlatform;
+  isActive: boolean;
+  promptConfig: PromptConfig;
+  compiledInstructions: string | null;
+  compiledAt: string | null;
+}
+
+/**
+ * Look up the agent for a given API key (already verified by auth middleware).
+ *
+ * Returns the minimal payload a runtime needs to introduce itself: identity,
+ * modality, latest compiled prompt, and the small prompt-config bundle
+ * (persona/filler phrases/language) used to shape the voice.
+ *
+ * The runtime calls this on every session start so prompt edits made in the
+ * dashboard go live with the next call — no agent redeploy required.
+ */
+export async function getAgentRuntime(
+  orgId: string,
+  agentId: string,
+): Promise<AgentRuntimePayload> {
+  return forOrg(orgId, async (tx) => {
+    const [agent] = await tx
+      .select()
+      .from(agents)
+      .where(eq(agents.id, agentId));
+
+    if (!agent) {
+      throw Errors.agentNotFound(agentId);
+    }
+
+    return {
+      id: agent.id,
+      name: agent.name,
+      slug: agent.slug,
+      modality: agent.modality,
+      modelFamily: agent.modelFamily,
+      agentPlatform: agent.agentPlatform,
+      isActive: agent.isActive,
+      promptConfig: (agent.promptConfig ?? {}) as PromptConfig,
+      compiledInstructions: agent.compiledInstructions ?? null,
+      compiledAt: agent.compiledAt?.toISOString() ?? null,
+    };
+  });
+}
+
 export async function getAgentById(orgId: string, agentId: string) {
   return forOrg(orgId, async (tx) => {
     const [agent] = await tx

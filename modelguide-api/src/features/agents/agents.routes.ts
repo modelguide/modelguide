@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntime,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -459,6 +462,64 @@ router.openapi(platformModelsRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// Runtime self-introspection (agent API key auth)
+//
+// A remote voice runtime (e.g. the voiceblox prototype in
+// examples/agents/voiceblox-agent) calls this on session start to pull the
+// latest compiled prompt + identity for the agent the API key belongs to.
+//
+// This is what lets "compile → talk" work without redeploying the worker —
+// the runtime always reads the dashboard's current prompt before greeting
+// the caller. See ADR-015.
+// ============================================================================
+
+// Must be registered BEFORE /:id routes so /me does not get captured by the
+// id param. Hono matches in the order routes are registered.
+router.get("/me/runtime", requireAgent(), requireOrganization());
+
+const agentRuntimeResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  isActive: z.boolean(),
+  promptConfig: promptConfigSchema,
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+});
+
+const agentRuntimeRoute = createRoute({
+  method: "get",
+  path: "/me/runtime",
+  tags: ["Agents"],
+  summary: "Get runtime payload for the authenticated agent",
+  description:
+    "Returns the calling agent's identity + latest compiled system prompt. " +
+    "Designed to be polled by a remote voice runtime on session start so prompt " +
+    "edits from the dashboard go live with the next call (no worker redeploy). " +
+    "Deliberately omits secrets, integration URLs, and platform credentials.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime payload",
+      content: {
+        "application/json": { schema: agentRuntimeResponseSchema },
+      },
+    },
+    401: errorResponse("Agent authentication required"),
+  },
+});
+
+router.openapi(agentRuntimeRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const agent = getCurrentAgent(c);
+  const payload = await getAgentRuntime(orgId, agent.id);
+  return c.json(payload, 200);
 });
 
 // ============================================================================
