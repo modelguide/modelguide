@@ -142,3 +142,16 @@ export const voiceTestTokenResponseSchema = z.object({
 })
 
 export type VoiceTestTokenResponse = z.infer<typeof voiceTestTokenResponseSchema>
+
+export const voicePrototypeTokenResponseSchema = z.object({
+  livekitUrl: z.string(),
+  roomName: z.string(),
+  token: z.string(),
+  sessionId: z.string().uuid(),
+  dispatchId: z.string(),
+  agentName: z.string(),
+  identity: z.string(),
+  promptChars: z.number().int().nonnegative(),
+})
+
+export type VoicePrototypeTokenResponse = z.infer<typeof voicePrototypeTokenResponseSchema>

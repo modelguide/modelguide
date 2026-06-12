@@ -1060,3 +1060,197 @@ export async function createVoiceTestSession(
     identity,
   };
 }
+
+// ============================================================================
+// Voice Prototype (browser WebRTC + compiled prompt injected via metadata)
+//
+// This is the prototype counterpart to the production "Voice Test" flow
+// above. The contract — and the rationale for keeping them as separate code
+// paths — is documented in ADR-015. Short version: the prototype injects the
+// agent's compiled prompt into dispatch metadata so an admin can iterate on
+// a prompt and immediately hear it without redeploying a worker profile.
+// ============================================================================
+
+const PROTOTYPE_AGENT_WORKER = "voice-prototype";
+
+/**
+ * Build the dispatch-metadata payload for a voice-prototype session.
+ *
+ * Mirrors the contract enforced on the Python side by
+ * ``prompt_agent.parse_dispatch_metadata`` — if either side drifts, dispatched
+ * calls silently land in a worker that refuses them. The contract test on the
+ * TS side is ``tests/unit/agents/voice-prototype-dispatch.test.ts``; on the
+ * Python side it's ``tests/test_prompt_agent.py::TestParseDispatchMetadata``.
+ */
+export function buildVoicePrototypeDispatchMetadata(input: {
+  agentId: string;
+  agentSlug: string;
+  sessionId: string;
+  callerEmail: string;
+  compiledPrompt: string;
+}): {
+  mode: "voice-prototype";
+  agentName: string;
+  agent_id: string;
+  session_id: string;
+  user_identifier: string;
+  email: string;
+  compiled_prompt: string;
+} {
+  if (!input.compiledPrompt || !input.compiledPrompt.trim()) {
+    throw Errors.invalidInput(
+      "Voice prototype requires a non-empty compiled prompt — compile the agent first.",
+    );
+  }
+
+  return {
+    mode: "voice-prototype" as const,
+    agentName: input.agentSlug,
+    agent_id: input.agentId,
+    session_id: input.sessionId,
+    user_identifier: input.callerEmail,
+    email: input.callerEmail,
+    compiled_prompt: input.compiledPrompt,
+  };
+}
+
+export interface VoicePrototypeSession {
+  livekitUrl: string;
+  roomName: string;
+  token: string;
+  sessionId: string;
+  dispatchId: string;
+  agentName: string;
+  identity: string;
+  promptChars: number;
+}
+
+export async function createVoicePrototypeSession(
+  orgId: string,
+  agentId: string,
+  caller: { userId: string; email: string; name: string },
+): Promise<VoicePrototypeSession> {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (!a.isActive) {
+      throw Errors.invalidInput("Agent is not active");
+    }
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Voice prototype requires a voice agent");
+    }
+    if (a.agentPlatform !== "livekit") {
+      throw Errors.invalidInput(
+        "Voice prototype is only supported for LiveKit agents",
+      );
+    }
+    if (!a.compiledInstructions || !a.compiledInstructions.trim()) {
+      throw Errors.invalidInput(
+        "Agent has no compiled prompt — compile the prompt before testing.",
+      );
+    }
+    return a;
+  });
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+
+  if (!livekitUrl) {
+    throw Errors.invalidInput(
+      "LiveKit URL is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `voice-prototype-${nanoid()}`;
+  const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
+
+  // Create the session row first so a failed dispatch still gets attributed
+  // and rolled forward (same pattern as createVoiceTestSession).
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: caller.email,
+    userMetadata: {
+      voicePrototype: true,
+      userId: caller.userId,
+      name: caller.name,
+      roomName,
+    },
+  });
+
+  // compiledInstructions is non-null here — guarded above inside forOrg.
+  const compiledPrompt = agent.compiledInstructions as string;
+
+  const dispatchMetadata = buildVoicePrototypeDispatchMetadata({
+    agentId: agent.id,
+    agentSlug: agent.slug,
+    sessionId: session.id,
+    callerEmail: caller.email,
+    compiledPrompt,
+  });
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      PROTOTYPE_AGENT_WORKER,
+      roomName,
+      dispatchMetadata,
+    );
+  } catch (err) {
+    try {
+      await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    } catch (rollbackErr) {
+      getLogger().error(
+        { orgId, agentId, sessionId: session.id, rollbackErr },
+        "failed to abandon voice-prototype session after dispatch failure",
+      );
+    }
+    throw err;
+  }
+
+  const token = await generateVoiceTestToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity,
+    name: caller.name,
+  });
+
+  getLogger().info(
+    {
+      orgId,
+      agentId,
+      sessionId: session.id,
+      dispatchId,
+      roomName,
+      promptChars: compiledPrompt.length,
+    },
+    "voice-prototype dispatched",
+  );
+
+  return {
+    livekitUrl,
+    roomName,
+    token,
+    sessionId: session.id,
+    dispatchId,
+    agentName: PROTOTYPE_AGENT_WORKER,
+    identity,
+    promptChars: compiledPrompt.length,
+  };
+}

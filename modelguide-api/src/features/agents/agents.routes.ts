@@ -22,6 +22,7 @@ import {
   assignConnectorToAgent,
   createAgent,
   createOutboundCall,
+  createVoicePrototypeSession,
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
@@ -1354,6 +1355,69 @@ router.openapi(voiceTestTokenRoute, async (c) => {
   const { id } = c.req.valid("param");
 
   const result = await createVoiceTestSession(orgId, id, {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+  });
+
+  return c.json(result, 201);
+});
+
+// ============================================================================
+// Voice Prototype (browser WebRTC + compiled prompt injected via metadata)
+// ============================================================================
+
+router.post(
+  "/:id/voice-prototype-token",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const voicePrototypeTokenResponseSchema = z.object({
+  livekitUrl: z.string(),
+  roomName: z.string(),
+  token: z.string(),
+  sessionId: z.string().uuid(),
+  dispatchId: z.string(),
+  agentName: z.string(),
+  identity: z.string(),
+  promptChars: z.number().int().nonnegative(),
+});
+
+const voicePrototypeTokenRoute = createRoute({
+  method: "post",
+  path: "/{id}/voice-prototype-token",
+  tags: ["Agents"],
+  summary: "Issue a LiveKit voice-prototype token",
+  description:
+    "Like /voice-test-token, but dispatches the prompt-driven prototype worker with the agent's compiled instructions injected into dispatch metadata. Lets an admin compile a prompt and immediately hear how it sounds without redeploying a worker profile. See ADR-015 for why this is a separate code path from the production voice-test flow.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    201: {
+      description: "Voice prototype session created",
+      content: {
+        "application/json": { schema: voicePrototypeTokenResponseSchema },
+      },
+    },
+    400: errorResponse(
+      "LiveKit not configured, agent not active, modality wrong, or no compiled prompt",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(voicePrototypeTokenRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const user = getCurrentUser(c);
+  const { id } = c.req.valid("param");
+
+  const result = await createVoicePrototypeSession(orgId, id, {
     userId: user.id,
     email: user.email,
     name: user.name,
