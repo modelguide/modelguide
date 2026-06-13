@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -1058,5 +1063,106 @@ describe("Agent slug uniqueness", () => {
     expect(res2.status).toBe(409);
     const body = await res2.json();
     expect(body.code).toBe("ALREADY_EXISTS");
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me/runtime-config
+//
+// The LiveKit prototype worker uses this endpoint at session start to pull
+// the latest compiled prompt (so iterating in the dashboard → clicking "Talk
+// to agent" exercises the new instructions without a redeploy). Auth is the
+// agent's own API key. The agent in scope is implied by the key — no path
+// param, mirroring the "me" convention used elsewhere (/users/me).
+// ============================================================================
+
+describe("GET /api/agents/me/runtime-config", () => {
+  let runtimeAgentId: string;
+  let runtimeAgentHeaders: Record<string, string>;
+  const compiledPromptValue =
+    "You are a helpful voice assistant for ACME. Always greet warmly.";
+  const compiledAt = new Date("2026-01-15T12:34:56.000Z");
+
+  beforeAll(async () => {
+    // Create a dedicated agent so we can mutate compiled fields without
+    // polluting the seeded fixtures other tests rely on.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Runtime Config Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id } = await createResp.json();
+    runtimeAgentId = id;
+    createdAgentIds.push(runtimeAgentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          compiledInstructions: compiledPromptValue,
+          compiledAt,
+        })
+        .where(eq(agents.id, runtimeAgentId)),
+    );
+
+    runtimeAgentHeaders = await agentHeadersFor(runtimeAgentId, s.orgA.id);
+  });
+
+  test("returns compiled prompt + agent identity (200)", async () => {
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: runtimeAgentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.agentId).toBe(runtimeAgentId);
+    expect(body.slug).toBeDefined();
+    expect(body.name).toBe("Runtime Config Agent");
+    expect(body.compiledInstructions).toBe(compiledPromptValue);
+    expect(body.compiledAt).toBe(compiledAt.toISOString());
+  });
+
+  test("rejects request with no auth header (401)", async () => {
+    const response = await request("/api/agents/me/runtime-config");
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects JWT (admin) auth — must be agent API key (401)", async () => {
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAdminHeaders,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("returns null compiled fields when agent has never been compiled", async () => {
+    // Fresh agent → never compiled → endpoint must still respond 200 so
+    // the LiveKit worker can fall back to a default prompt instead of
+    // crash-looping. Returning 200 + null prevents the worker from
+    // treating a brand-new agent as a hard error.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Uncompiled Runtime Agent" }),
+    });
+    const { id } = await createResp.json();
+    createdAgentIds.push(id);
+
+    await forApp((tx) =>
+      tx.update(agents).set({ isActive: true }).where(eq(agents.id, id)),
+    );
+
+    const headers = await agentHeadersFor(id, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.agentId).toBe(id);
+    expect(body.compiledInstructions).toBeNull();
+    expect(body.compiledAt).toBeNull();
   });
 });
