@@ -1,0 +1,7 @@
+# LiveKit Cloud deploy config. Created via `lk agent create` — the agent.id
+# below is filled in by the LiveKit CLI on first deploy.
+[project]
+  subdomain = ""
+
+[agent]
+  id = ""

@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -20,6 +22,7 @@ import { paginatedResponseSchema, paginationSchema } from "@lib/pagination";
 import { errorResponse } from "@lib/schemas";
 import {
   assignConnectorToAgent,
+  buildRuntimeConfig,
   createAgent,
   createOutboundCall,
   createVoiceTestSession,
@@ -387,6 +390,59 @@ router.openapi(createAgentRoute, async (c) => {
   const { agent, apiKey } = await createAgent(orgId, body, user.id);
 
   return c.json({ ...formatAgent(agent), apiKey }, 201);
+});
+
+// ============================================================================
+// GET /me/runtime-config
+//
+// Used by the deployed LiveKit prototype worker (and any other agent runtime
+// that wants to pull the latest compiled prompt at session start). Auth is
+// the agent's own API key — there is no path param, the agent in scope is
+// implied by the key. Mirrors the "/me" convention used by /users/me.
+//
+// IMPORTANT: this route is declared BEFORE the generic `/:id` routes so it
+// isn't shadowed by them — Hono matches in declaration order and "me" would
+// otherwise be parsed as a UUID and fail validation.
+// ============================================================================
+
+router.get("/me/runtime-config", requireAgent(), requireOrganization());
+
+const runtimeConfigResponseSchema = z.object({
+  agentId: z.string().uuid(),
+  slug: z.string(),
+  name: z.string(),
+  modality: z.string(),
+  modelFamily: z.string(),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+});
+
+const runtimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me/runtime-config",
+  tags: ["Agents"],
+  summary: "Get runtime config for the authenticated agent",
+  description:
+    "Returns the compiled prompt and identity of the agent that owns the API key in use. Designed for self-fetching by a deployed agent worker (e.g. the LiveKit prototype) at session start so iterating on the prompt in the dashboard takes effect on the next call without redeploy. Returns 200 with `compiledInstructions: null` if the agent has never been compiled — the worker can fall back to a default prompt.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime config",
+      content: {
+        "application/json": { schema: runtimeConfigResponseSchema },
+      },
+    },
+    401: errorResponse("Not authenticated as an agent"),
+  },
+});
+
+router.openapi(runtimeConfigRoute, async (c) => {
+  const agentCtx = getCurrentAgent(c);
+  const orgId = getOrganizationId(c);
+  // Fetch the full row so we get compiled_* fields (the auth context only
+  // carries the lookup-time projection — modality/metadata, not the prompt).
+  const agent = await getAgentById(orgId, agentCtx.id);
+  return c.json(buildRuntimeConfig(agent), 200);
 });
 
 // ============================================================================

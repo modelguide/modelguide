@@ -687,6 +687,48 @@ export async function removeConnectorFromAgent(
 }
 
 // ============================================================================
+// Runtime config (LiveKit prototype "pull-latest-prompt" endpoint)
+//
+// A deployed LiveKit worker authenticates with its agent API key and hits this
+// at session start to fetch the compiled prompt. The shape is intentionally
+// minimal — just the bits the worker needs at runtime — so future fields
+// (model, voice, kbase) can be added without changing existing consumers.
+//
+// Pure function: takes a row already authorized by the agent API key
+// middleware. Doesn't touch the DB so it's straightforward to unit test.
+// ============================================================================
+
+export interface RuntimeConfig {
+  agentId: string;
+  slug: string;
+  name: string;
+  modality: string;
+  modelFamily: string;
+  compiledInstructions: string | null;
+  compiledAt: string | null;
+}
+
+export function buildRuntimeConfig(agent: {
+  id: string;
+  slug: string;
+  name: string;
+  modality: string;
+  modelFamily: string;
+  compiledInstructions: string | null;
+  compiledAt: Date | null;
+}): RuntimeConfig {
+  return {
+    agentId: agent.id,
+    slug: agent.slug,
+    name: agent.name,
+    modality: agent.modality,
+    modelFamily: agent.modelFamily,
+    compiledInstructions: agent.compiledInstructions,
+    compiledAt: agent.compiledAt?.toISOString() ?? null,
+  };
+}
+
+// ============================================================================
 // LiveKit Config
 // ============================================================================
 

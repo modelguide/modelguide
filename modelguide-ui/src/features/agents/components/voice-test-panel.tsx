@@ -23,12 +23,13 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FileText, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { api } from '~/lib/api'
+import { formatDate } from '~/lib/utils'
 import type { Agent, VoiceTestTokenResponse } from '~/schemas/agents'
 
 import { ensureMicPermission } from './voice-test/mic-permission'
@@ -163,6 +164,31 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
             Configure the LiveKit URL, API key, and secret for this agent before testing.
           </div>
         )}
+
+        {/*
+          Compiled-prompt indicator.
+
+          For "thin-pull" workers (see livekit-prototype) the dashboard's
+          compiled prompt IS the next-call prompt — the worker fetches it on
+          dispatch. Surfacing the compiled-at timestamp closes the
+          "did my edit land?" loop without an extra click. For baked workers
+          (BuildPro etc.) the indicator is informational only — they ignore
+          /me/runtime-config and serve their bundled profile.
+        */}
+        {livekitConfigured ? (
+          agent.compiledAt ? (
+            <p className="mt-3 flex items-center gap-2 text-xs text-fg-muted">
+              <FileText className="h-3 w-3" />
+              Prompt compiled {formatDate(agent.compiledAt, { format: 'relative' })}
+              {' — thin-pull workers will use it on the next call.'}
+            </p>
+          ) : (
+            <p className="mt-3 flex items-center gap-2 text-xs text-warning">
+              <AlertTriangle className="h-3 w-3" />
+              Prompt not compiled yet. Thin-pull workers will fall back to a default greeting.
+            </p>
+          )
+        ) : null}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (

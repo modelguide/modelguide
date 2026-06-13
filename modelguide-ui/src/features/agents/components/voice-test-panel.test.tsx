@@ -169,6 +169,20 @@ describe('VoiceTestPanel', () => {
     })
   })
 
+  it('shows the compiled-at timestamp so the operator knows which prompt is live', () => {
+    // For thin-pull workers (livekit-prototype) the dashboard's compiled
+    // prompt IS what the agent will use on the next call. Surfacing the
+    // timestamp closes the "did my edit land?" loop without an extra click.
+    render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+    expect(screen.getByText(/compiled/i)).toBeInTheDocument()
+  })
+
+  it('warns when the agent has never been compiled', () => {
+    const noPrompt = { ...configuredAgent, compiledInstructions: null, compiledAt: null } as Agent
+    render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+    expect(screen.getByText(/not compiled/i)).toBeInTheDocument()
+  })
+
   it('surfaces a clear error when mic permission is denied', async () => {
     stubMicPermission(false)
     render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
