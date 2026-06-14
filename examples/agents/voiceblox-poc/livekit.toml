@@ -1,0 +1,8 @@
+[project]
+  subdomain = "modelguide-yxrkr4h6"
+
+[agent]
+  # Fill in once you've run `lk agent create` against your LiveKit Cloud
+  # project. The buildpro example uses `CA_57Whiv6J6EyK` — the prototype gets
+  # its own ID so the two workers don't fight over dispatches.
+  id = ""

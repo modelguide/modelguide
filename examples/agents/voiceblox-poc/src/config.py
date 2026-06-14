@@ -1,0 +1,77 @@
+"""Environment variable loading for the voiceblox prototype.
+
+Kept deliberately small: the prototype pulls almost everything (prompt,
+tools to surface, etc.) from ModelGuide at session start, so the env file
+only carries provider credentials and the API key that identifies *which*
+agent the worker is running as.
+
+AGENT_NAME is read at import time because LiveKit's WorkerOptions needs it
+before validate() runs.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+
+from dotenv import load_dotenv
+
+logger = logging.getLogger("config")
+
+load_dotenv()
+
+REQUIRED_VARS = [
+    "OPENAI_API_KEY",
+    "DEEPGRAM_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "MODELGUIDE_API_URL",
+    "MODELGUIDE_API_KEY",
+]
+
+
+class ConfigError(RuntimeError):
+    pass
+
+
+AGENT_NAME: str = os.getenv("AGENT_NAME", "voiceblox-poc")
+
+OPENAI_API_KEY: str = ""
+DEEPGRAM_API_KEY: str = ""
+ELEVENLABS_API_KEY: str = ""
+LLM_MODEL: str = "gpt-4.1-mini"
+ELEVENLABS_VOICE_ID: str = ""
+
+MODELGUIDE_API_URL: str = ""
+MODELGUIDE_API_KEY: str = ""
+
+_validated = False
+
+
+def validate() -> None:
+    """Validate required env vars and populate module-level constants."""
+    global _validated
+    if _validated:
+        return
+
+    missing = [v for v in REQUIRED_VARS if not os.getenv(v)]
+    if missing:
+        raise ConfigError(
+            f"Missing required environment variables: {', '.join(missing)}"
+        )
+
+    g = globals()
+    g.update(
+        {
+            "OPENAI_API_KEY": os.environ["OPENAI_API_KEY"],
+            "DEEPGRAM_API_KEY": os.environ["DEEPGRAM_API_KEY"],
+            "ELEVENLABS_API_KEY": os.environ["ELEVENLABS_API_KEY"],
+            "LLM_MODEL": os.getenv("LLM_MODEL", "gpt-4.1-mini"),
+            "ELEVENLABS_VOICE_ID": os.getenv(
+                "ELEVENLABS_VOICE_ID", "iP95p4xoKVk53GoZ742B"
+            ),
+            "MODELGUIDE_API_URL": os.environ["MODELGUIDE_API_URL"].rstrip("/"),
+            "MODELGUIDE_API_KEY": os.environ["MODELGUIDE_API_KEY"],
+        }
+    )
+
+    _validated = True
