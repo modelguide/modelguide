@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -1008,6 +1013,92 @@ describe("POST /api/agents/:id/voice-test-token", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me — Agent self-discovery (API-key auth)
+// ============================================================================
+
+describe("GET /api/agents/me", () => {
+  test("returns runtime config for authenticated agent (200)", async () => {
+    // Seed a compiled prompt so the agent has something to fetch
+    const compiled = "You are a helpful assistant.";
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({ compiledInstructions: compiled, compiledAt: new Date() })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me", { headers });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.name).toBeDefined();
+    expect(body.slug).toBeDefined();
+    expect(body.modality).toBeDefined();
+    expect(body.compiledInstructions).toBe(compiled);
+    expect(body.compiledAt).toBeDefined();
+    expect(body.promptConfig).toBeDefined();
+  });
+
+  test("returns null compiledInstructions when not yet compiled (200)", async () => {
+    // Create a fresh agent with no compiled prompt
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Uncompiled Self-Discovery Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    const headers = await agentHeadersFor(agentId, s.orgA.id);
+    const response = await request("/api/agents/me", { headers });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.id).toBe(agentId);
+    expect(body.compiledInstructions).toBeNull();
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request("/api/agents/me");
+    expect(response.status).toBe(401);
+  });
+
+  test("rejects user (JWT) auth — endpoint is API-key only (401)", async () => {
+    const response = await request("/api/agents/me", {
+      headers: orgAAdminHeaders,
+    });
+    // requireAgent() returns 401 when the caller is a user, not an agent
+    expect(response.status).toBe(401);
+  });
+
+  test("does not leak webhook_hmac_secret in metadata", async () => {
+    // Seed an agent whose metadata contains a legacy plaintext webhook secret
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          metadata: {
+            webhook_hmac_secret: "super-secret-should-not-leak",
+            livekit: { url: "wss://x.livekit.cloud", agentName: "w" },
+          },
+        })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const headers = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me", { headers });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(JSON.stringify(body)).not.toContain("super-secret-should-not-leak");
   });
 });
 

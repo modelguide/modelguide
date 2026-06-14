@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -115,6 +117,26 @@ const agentResponseSchema = z.object({
 
 const agentWithKeyResponseSchema = agentResponseSchema.extend({
   apiKey: z.string(),
+});
+
+// Runtime config for self-discovery (GET /me, API-key auth).
+// Trimmed down to what a deployed worker needs at session start so we don't
+// hand out secret refs, eval counts, integration URLs, or anything else that
+// only matters to the dashboard.
+const agentRuntimeConfigSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  description: z.string().nullable(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  isActive: z.boolean(),
+  promptConfig: promptConfigSchema,
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  compiledFrom: compiledFromSchema,
+  metadata: z.record(z.unknown()).optional(),
 });
 
 const agentConnectorToolSchema = z.object({
@@ -289,9 +311,77 @@ function formatAgent(
   };
 }
 
+// Lean projection for /me — only fields a runtime worker needs. Strips
+// `webhook_hmac_secret` from metadata for the same reason the full formatter
+// does (legacy plaintext that should never leave the server).
+function formatRuntimeConfig(agent: Agent) {
+  const metadata = agent.metadata
+    ? (() => {
+        const { webhook_hmac_secret, ...rest } = agent.metadata as Record<
+          string,
+          unknown
+        >;
+        return Object.keys(rest).length > 0 ? rest : undefined;
+      })()
+    : undefined;
+
+  return {
+    id: agent.id,
+    name: agent.name,
+    slug: agent.slug,
+    description: agent.description,
+    modality: agent.modality,
+    modelFamily: agent.modelFamily,
+    agentPlatform: agent.agentPlatform,
+    isActive: agent.isActive,
+    promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
+    compiledInstructions: agent.compiledInstructions ?? null,
+    compiledAt: agent.compiledAt?.toISOString() ?? null,
+    compiledFrom: (() => {
+      const parsed = compiledFromSchema.safeParse(agent.compiledFrom ?? null);
+      return parsed.success ? parsed.data : null;
+    })(),
+    metadata,
+  };
+}
+
 // ============================================================================
 // Routes
 // ============================================================================
+
+// GET /me — Agent self-discovery (API-key auth).
+// Must be declared before /:id so the literal segment beats the UUID matcher.
+router.get("/me", requireAgent(), requireOrganization());
+
+const getAgentRuntimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Agents"],
+  summary: "Get runtime config for the authenticated agent",
+  description:
+    "Returns the runtime config (id, slug, compiled instructions, prompt config, metadata) for the agent identified by the API key in the Authorization header. Used by deployed workers (e.g. LiveKit voice agents) to pull the latest compiled prompt at session start without requiring redeployment.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime config",
+      content: {
+        "application/json": { schema: agentRuntimeConfigSchema },
+      },
+    },
+    401: errorResponse("Not authenticated (or not an agent API key)"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(getAgentRuntimeConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const ctxAgent = getCurrentAgent(c);
+  // Re-read from DB so we serve the current compiled prompt, not whatever was
+  // present when the API key was minted. The auth context only carries the
+  // fields needed for permission checks.
+  const agent = await getAgentById(orgId, ctxAgent.id);
+  return c.json(formatRuntimeConfig(agent), 200);
+});
 
 // GET /
 router.get(
