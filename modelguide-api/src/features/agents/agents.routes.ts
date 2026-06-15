@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -286,6 +288,27 @@ function formatAgent(
     })(),
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * Narrow projection of an agent row for `GET /me`. Strips secret refs,
+ * integration URLs, and everything else a runtime worker has no business
+ * seeing. The contract here is part of ADR-015 — keep it tight.
+ */
+export function formatAgentMe(agent: Agent) {
+  return {
+    id: agent.id,
+    name: agent.name,
+    slug: agent.slug,
+    description: agent.description,
+    modality: agent.modality,
+    modelFamily: agent.modelFamily,
+    agentPlatform: agent.agentPlatform,
+    promptConfig: (agent.promptConfig ?? {}) as Record<string, unknown>,
+    compiledInstructions: agent.compiledInstructions ?? null,
+    compiledAt: agent.compiledAt?.toISOString() ?? null,
+    isActive: agent.isActive,
   };
 }
 
@@ -586,6 +609,62 @@ router.openapi(createPlatformAgentRoute, async (c) => {
   }
 
   throw Errors.invalidInput(`Unsupported platform: ${platform}`);
+});
+
+// ============================================================================
+// GET /me — Runtime-prompt-fetch endpoint for prototype workers
+//
+// Powers the LiveKit POC agent (ADR-015): when a voice-test dispatch lands,
+// the worker calls this with its own API key to pull the latest compiled
+// prompt + identity, then boots an LLM session with that prompt as the
+// system message.
+//
+// Deliberately narrow: no platform secrets, no encrypted vault refs, no
+// integration URLs. Just enough for the worker to render itself as the MG
+// agent it was provisioned for.
+// ============================================================================
+
+router.get("/me", requireAgent(), requireOrganization());
+
+const agentMeResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  description: z.string().nullable(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  promptConfig: promptConfigSchema,
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+  isActive: z.boolean(),
+});
+
+const getAgentMeRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Agents"],
+  summary: "Get the agent authenticated by the API key",
+  description:
+    "Returns the identity and compiled prompt for the agent whose API key authenticated this request. Designed for runtime worker boot (e.g. the LiveKit POC agent in `examples/agents/livekit-poc-agent`) — never returns secrets, integration URLs, or any data outside the agent's own row.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Agent identity + compiled prompt",
+      content: {
+        "application/json": { schema: agentMeResponseSchema },
+      },
+    },
+    401: errorResponse("API key authentication required"),
+  },
+});
+
+router.openapi(getAgentMeRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const authAgent = getCurrentAgent(c);
+  const agent = await getAgentById(orgId, authAgent.id);
+
+  return c.json(formatAgentMe(agent), 200);
 });
 
 // GET /:id

@@ -1,4 +1,4 @@
-.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose lk-agent-setup lk-agent-console lk-agent-dev livekit-up livekit-up-docker livekit-down livekit-token
+.PHONY: help quickstart api-install api-dev api-build api-start api-test api-test-unit api-test-integration api-typecheck api-lint api-lint-check api-format sync-connectors ui-install ui-dev ui-test ui-typecheck ui-lint ui-format db-up db-down db-generate db-migrate db-push db-studio db-seed demo-enable demo-disable clean reset tunnel logs docker-up docker-down docker-logs docker-rebuild docker-reset docker-expose lk-agent-setup lk-agent-console lk-agent-dev livekit-up livekit-up-docker livekit-down livekit-token lk-poc-setup lk-poc-test lk-poc-console lk-poc-dev
 
 .DEFAULT_GOAL := help
 
@@ -195,3 +195,21 @@ livekit-down: ## [LiveKit] Stop Docker LiveKit server
 
 livekit-token: ## [LiveKit] Generate token and open meet.livekit.io (NAME=yourname)
 	lk token create --api-key devkey --api-secret secret --room test-room --identity $(or $(NAME),artur) --join --valid-for 1h --agent $(LK_AGENT_NAME) --open meet
+
+# =============================================================================
+# LiveKit POC Agent — runtime-prompt-fetch prototype (ADR-015)
+# =============================================================================
+
+LK_POC_DIR := examples/agents/livekit-poc-agent
+
+lk-poc-setup: ## [LK POC] Install deps for the runtime-prompt-fetch prototype
+	cd $(LK_POC_DIR) && uv sync --all-extras
+
+lk-poc-test: ## [LK POC] Run unit tests for the prototype
+	cd $(LK_POC_DIR) && uv run --extra test pytest -v
+
+lk-poc-console: ## [LK POC] Run in text-only console mode (uses the live compiled prompt)
+	cd $(LK_POC_DIR) && uv run python src/agent.py console
+
+lk-poc-dev: ## [LK POC] Run as a LiveKit worker against your project
+	cd $(LK_POC_DIR) && uv run python src/agent.py dev
