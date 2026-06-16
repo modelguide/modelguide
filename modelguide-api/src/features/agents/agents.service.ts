@@ -901,19 +901,27 @@ export function buildOutboundDispatchMetadata(input: {
  * the right profile and every dispatched call goes silent.
  */
 export function buildVoiceTestDispatchMetadata(input: {
+  agentId: string;
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
 }): {
   mode: "voice-test";
   agentName: string;
+  agent_id: string;
   session_id: string;
   user_identifier: string;
   email: string;
 } {
+  // `agent_id` is consumed by the livekit-poc worker
+  // (examples/agents/livekit-poc/) so it can fetch the latest compiled
+  // prompt from `GET /api/agents/:id` at session start. The production
+  // multi-profile worker keys on `agentName` and ignores this field; see
+  // ADR-015 for why we thread the ID instead of injecting the prompt.
   return {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
+    agent_id: input.agentId,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
@@ -993,6 +1001,7 @@ export async function createVoiceTestSession(
   });
 
   const dispatchMetadata = buildVoiceTestDispatchMetadata({
+    agentId: agent.id,
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
