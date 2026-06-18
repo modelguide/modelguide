@@ -10,8 +10,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { createRouter } from "@lib/create-app";
 import { Errors } from "@lib/errors";
 import {
+  getCurrentAgent,
   getCurrentUser,
   getOrganizationId,
+  requireAgent,
   requireOrganization,
   requirePermission,
   requireUser,
@@ -25,6 +27,7 @@ import {
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
+  getAgentRuntimeConfig,
   listAgentConnectors,
   listAgents,
   pingLivekitConfig,
@@ -387,6 +390,56 @@ router.openapi(createAgentRoute, async (c) => {
   const { agent, apiKey } = await createAgent(orgId, body, user.id);
 
   return c.json({ ...formatAgent(agent), apiKey }, 201);
+});
+
+// ============================================================================
+// Agent self / runtime config (API-key authenticated)
+// Workers (LiveKit voice agent, etc.) fetch the latest compiled prompt and
+// dashboard-side settings via their own API key at session start. That's how
+// the dashboard's "compile prompt → click Talk → hear the new prompt" loop
+// works without redeploying the worker.
+// Registered before /:id so the literal `me` segment isn't routed to the
+// UUID-typed get/update handlers.
+// ============================================================================
+
+router.get("/me/runtime-config", requireAgent(), requireOrganization());
+
+const agentRuntimeConfigResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  modality: z.enum(["voice", "text"]),
+  modelFamily: modelFamilySchema,
+  agentPlatform: z.enum(["custom", "elevenlabs", "livekit"]),
+  promptConfig: promptConfigSchema.passthrough(),
+  compiledInstructions: z.string().nullable(),
+  compiledAt: z.string().nullable(),
+});
+
+const agentRuntimeConfigRoute = createRoute({
+  method: "get",
+  path: "/me/runtime-config",
+  tags: ["Agents"],
+  summary: "Fetch runtime config for the calling agent",
+  description:
+    "Returns the compiled prompt, prompt-config knobs (persona, language, filler phrases) and identity for the agent that owns this API key. Designed for workers — LiveKit voice agent, custom runners — to refresh themselves at session start without a redeploy.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Runtime config for the calling agent",
+      content: {
+        "application/json": { schema: agentRuntimeConfigResponseSchema },
+      },
+    },
+    401: errorResponse("Agent authentication required"),
+  },
+});
+
+router.openapi(agentRuntimeConfigRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const agent = getCurrentAgent(c);
+  const config = await getAgentRuntimeConfig(orgId, agent.id);
+  return c.json(config, 200);
 });
 
 // ============================================================================

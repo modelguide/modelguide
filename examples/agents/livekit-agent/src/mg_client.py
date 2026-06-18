@@ -52,6 +52,64 @@ async def close_http_client() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Runtime config (REST) — fetched at session start
+# ---------------------------------------------------------------------------
+
+
+async def fetch_runtime_config() -> dict | None:
+    """Fetch the agent's current compiled prompt and prompt config.
+
+    Hits ``GET /api/agents/me/runtime-config``. The endpoint is gated on the
+    agent's own API key, so the worker doesn't need to know its own UUID —
+    the API resolves it from the bearer token.
+
+    Returns the parsed JSON payload on success, ``None`` on any failure.
+    Falling back to the locally bundled prompt is far better than crashing a
+    voice call when the platform is briefly unavailable.
+    """
+    try:
+        async with httpx.AsyncClient(
+            base_url=config.MODELGUIDE_API_URL,
+            headers=_headers(),
+            timeout=10.0,
+        ) as client:
+            res = await client.get("/api/agents/me/runtime-config")
+            if not res.is_success:
+                logger.warning(
+                    "runtime-config fetch failed (status %s): %s",
+                    res.status_code,
+                    res.text[:200],
+                )
+                return None
+            data = res.json()
+            logger.info(
+                "runtime-config fetched: agent=%s slug=%s compiled=%s",
+                data.get("id"),
+                data.get("slug"),
+                bool(data.get("compiledInstructions")),
+            )
+            return data
+    except Exception:
+        logger.exception("runtime-config fetch raised")
+        return None
+
+
+def resolve_instructions(fetched: dict | None, local: str) -> str:
+    """Pick between the dashboard-compiled prompt and the locally bundled one.
+
+    Local prompts ship with the worker so it always has something to say,
+    even on a cold start with a network blip. Compiled prompts come from
+    the dashboard and represent the latest configuration — use them when
+    available and non-empty.
+    """
+    if fetched:
+        compiled = fetched.get("compiledInstructions")
+        if isinstance(compiled, str) and compiled.strip():
+            return compiled
+    return local
+
+
+# ---------------------------------------------------------------------------
 # Session management (REST)
 # ---------------------------------------------------------------------------
 

@@ -108,6 +108,48 @@ export async function listAgents(
   });
 }
 
+/**
+ * Runtime config a worker (e.g. LiveKit voice agent) needs to bootstrap a
+ * session against the latest dashboard state. Exposed via API-key auth so the
+ * worker can fetch it at session start — that's what makes the "compile
+ * prompt → click Talk → hear the new prompt" loop work without redeploying
+ * the worker.
+ *
+ * Keep this payload small and stable. Anything that needs deeper auth
+ * (secrets, connector IDs) belongs on the user-facing endpoints.
+ */
+export interface AgentRuntimeConfig {
+  id: string;
+  name: string;
+  slug: string;
+  modality: Modality;
+  modelFamily: ModelFamily;
+  agentPlatform: AgentPlatform;
+  promptConfig: PromptConfig;
+  compiledInstructions: string | null;
+  compiledAt: string | null;
+}
+
+export async function getAgentRuntimeConfig(
+  orgId: string,
+  agentId: string,
+): Promise<AgentRuntimeConfig> {
+  return forOrg(orgId, async (tx) => {
+    const agent = await requireAgent(tx, agentId);
+    return {
+      id: agent.id,
+      name: agent.name,
+      slug: agent.slug,
+      modality: agent.modality,
+      modelFamily: agent.modelFamily,
+      agentPlatform: agent.agentPlatform,
+      promptConfig: (agent.promptConfig ?? {}) as PromptConfig,
+      compiledInstructions: agent.compiledInstructions ?? null,
+      compiledAt: agent.compiledAt?.toISOString() ?? null,
+    };
+  });
+}
+
 export async function getAgentById(orgId: string, agentId: string) {
   return forOrg(orgId, async (tx) => {
     const [agent] = await tx
