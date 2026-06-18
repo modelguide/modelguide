@@ -294,3 +294,9 @@ No code changes needed. The tool's `@function_tool` definition and MCP name mapp
 ## LiveKit Cloud Deployment
 
 See [DEPLOY.md](./DEPLOY.md) for full deployment instructions.
+
+## Dashboard prompt sync (POC)
+
+The worker fetches its latest compiled prompt from ModelGuide at session start so the dashboard's "edit prompt → click Talk to agent" loop works without a redeploy. Falls back to the locally bundled prompt on any failure.
+
+See [PROMPT_SYNC.md](./PROMPT_SYNC.md) for the loop, the tests, and the known follow-ups. The architectural rationale lives in [ADR-015](../../../docs/decisions/015-worker-pulled-runtime-config.md).

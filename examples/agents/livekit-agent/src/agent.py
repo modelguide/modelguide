@@ -106,6 +106,11 @@ async def entrypoint(ctx: agents.JobContext):
             logger.exception("Failed to open persistent MCP connection — falling back to one-shot")
             return None
 
+    # Pull the latest compiled prompt from ModelGuide so dashboard prompt
+    # edits land on the next call without redeploying the worker. None on
+    # any failure — BuildProAgent then uses its bundled local prompt.
+    runtime_config = await mg_client.fetch_runtime_config()
+
     if outbound_phone:
         # --- Outbound flow: dial first, then handle participant ---
         logger.info("Outbound call to %s (room: %s)", outbound_phone, ctx.room.name)
@@ -158,7 +163,12 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info("ModelGuide session: %s (user: %s)", session_id, user_identifier)
 
     # Build agent + session
-    agent = BuildProAgent(session_id=session_id, user_email=user_identifier, mcp=mcp)
+    agent = BuildProAgent(
+        session_id=session_id,
+        user_email=user_identifier,
+        mcp=mcp,
+        runtime_config=runtime_config,
+    )
     stt = create_stt()
     tts = create_tts()
 

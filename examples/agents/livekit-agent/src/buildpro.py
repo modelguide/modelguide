@@ -36,13 +36,25 @@ class BuildProAgent(MCPAgent):
     ]
 
     def __init__(
-        self, *, session_id: str | None, user_email: str, mcp: mg_client.MCPConnection | None = None
+        self,
+        *,
+        session_id: str | None,
+        user_email: str,
+        mcp: mg_client.MCPConnection | None = None,
+        runtime_config: dict | None = None,
     ) -> None:
         self._active_cart_id: str | None = None
         self._cart_ready = asyncio.Event()
         self._reorder_product_ids: list[str] = []
 
-        instructions = build_system_prompt(session_id or "", user_email=user_email)
+        local = build_system_prompt(session_id or "", user_email=user_email)
+        instructions = mg_client.resolve_instructions(runtime_config, local)
+        if runtime_config and instructions is not local:
+            logger.info(
+                "Using dashboard-compiled prompt (%d chars, agent=%s)",
+                len(instructions),
+                runtime_config.get("slug"),
+            )
         super().__init__(session_id=session_id, mcp=mcp, instructions=instructions)
 
     # ------------------------------------------------------------------

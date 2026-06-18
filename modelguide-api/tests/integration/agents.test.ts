@@ -8,7 +8,12 @@ import app from "@/app";
 import { forApp } from "@db/rls";
 import { agentConnectorTools, agents } from "@db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { type TestSeed, authHeadersFor, getTestSeed } from "../helpers/seed";
+import {
+  type TestSeed,
+  agentHeadersFor,
+  authHeadersFor,
+  getTestSeed,
+} from "../helpers/seed";
 
 let s: TestSeed;
 let orgAAdminHeaders: Record<string, string>;
@@ -1008,6 +1013,96 @@ describe("POST /api/agents/:id/voice-test-token", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+});
+
+// ============================================================================
+// GET /api/agents/me/runtime-config — agent-API-key-authenticated
+// Worker (e.g. LiveKit voice agent) fetches its own compiled prompt + config
+// at session start. Lets the dashboard's "compile prompt → talk" loop work
+// without redeploying the worker.
+// ============================================================================
+
+describe("GET /api/agents/me/runtime-config", () => {
+  test("returns 401 without auth", async () => {
+    const response = await request("/api/agents/me/runtime-config");
+    expect(response.status).toBe(401);
+  });
+
+  test("returns 401 with a user JWT (agent API key only)", async () => {
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: orgAAdminHeaders,
+    });
+    // The route is gated behind requireAgent — JWTs don't satisfy it.
+    expect(response.status).toBe(401);
+  });
+
+  test("returns runtime config for the API-key-owning agent (200)", async () => {
+    // Seeded agents are inactive by default; activate orgA's agent so the
+    // requireAgent middleware doesn't trip the agentInactive guard.
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          compiledInstructions: "You are Sam, a contractor supply agent.",
+          promptConfig: {
+            persona: "Friendly contractor concierge.",
+            language: "English",
+            fillerPhrases: ["One moment.", "Let me check."],
+          },
+        })
+        .where(eq(agents.id, s.orgAAgentId)),
+    );
+
+    const agentHeaders = await agentHeadersFor(s.orgAAgentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: agentHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.id).toBe(s.orgAAgentId);
+    expect(body.slug).toBeDefined();
+    expect(body.compiledInstructions).toBe(
+      "You are Sam, a contractor supply agent.",
+    );
+    expect(body.promptConfig).toEqual({
+      persona: "Friendly contractor concierge.",
+      language: "English",
+      fillerPhrases: ["One moment.", "Let me check."],
+    });
+    expect(body.modality).toBe("voice");
+  });
+
+  test("returns null compiledInstructions when the agent has never compiled", async () => {
+    // Create a fresh agent and explicitly clear any compiled prompt.
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Uncompiled Runtime Config Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({ isActive: true, compiledInstructions: null })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const agentHeaders = await agentHeadersFor(agentId, s.orgA.id);
+    const response = await request("/api/agents/me/runtime-config", {
+      headers: agentHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.compiledInstructions).toBeNull();
+    // promptConfig defaults to {} for unconfigured agents.
+    expect(body.promptConfig).toEqual({});
   });
 });
 
