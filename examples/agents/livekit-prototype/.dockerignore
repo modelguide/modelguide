@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.env
+.env.local
+tests/
+uv.lock
+*.md
+.gitignore
+.dockerignore

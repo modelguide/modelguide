@@ -1011,6 +1011,99 @@ describe("POST /api/agents/:id/voice-test-token", () => {
   });
 });
 
+// ============================================================================
+// POST /api/agents/:id/prototype-voice-test-token — ADR-015 prototype path
+//
+// Error-path coverage only — the happy path (real LiveKit dispatch + token
+// mint) shares the same constraint as ADR-014: out of scope for CI. The
+// unit tests on `buildPrototypeDispatchMetadata` cover the metadata shape.
+// ============================================================================
+
+describe("POST /api/agents/:id/prototype-voice-test-token", () => {
+  test("returns 400 when LiveKit is not configured", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/LiveKit|prompt/i);
+  });
+
+  test("rejects unauthenticated request (401)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/prototype-voice-test-token`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  test("org B cannot prototype-test an org A agent (404)", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgBAdminHeaders },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 for unknown agent", async () => {
+    const response = await request(
+      "/api/agents/00000000-0000-0000-0000-000000000000/prototype-voice-test-token",
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("rejects support role (403) — agents:activate is admin-only", async () => {
+    const response = await request(
+      `/api/agents/${s.orgAAgentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgASupportHeaders },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  test("rejects when compiled prompt is missing (400)", async () => {
+    // Create + activate + configure LiveKit but leave compiledInstructions null
+    // so the prototype-specific guard is the one that fails (not the LiveKit
+    // config check or the modality check).
+    const createResp = await request("/api/agents", {
+      method: "POST",
+      headers: orgAAdminHeaders,
+      body: JSON.stringify({ name: "Prototype No-Prompt Agent" }),
+    });
+    expect(createResp.status).toBe(201);
+    const { id: agentId } = await createResp.json();
+    createdAgentIds.push(agentId);
+
+    await forApp((tx) =>
+      tx
+        .update(agents)
+        .set({
+          isActive: true,
+          agentPlatform: "livekit",
+          metadata: {
+            livekit: { url: "wss://test.livekit.cloud", agentName: "w" },
+          },
+          compiledInstructions: null,
+        })
+        .where(eq(agents.id, agentId)),
+    );
+
+    const response = await request(
+      `/api/agents/${agentId}/prototype-voice-test-token`,
+      { method: "POST", headers: orgAAdminHeaders },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/compile/i);
+  });
+});
+
 describe("Agent slug uniqueness", () => {
   test("creating agent with duplicate name (same slug) returns 409", async () => {
     const res1 = await request("/api/agents", {

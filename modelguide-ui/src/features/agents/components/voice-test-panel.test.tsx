@@ -181,4 +181,44 @@ describe('VoiceTestPanel', () => {
     // Should not have attempted to fetch the token once the mic check failed.
     expect(mockPost).not.toHaveBeenCalled()
   })
+
+  // ADR-015 — prototype voice test, dispatches the prototype worker with the
+  // compiled prompt inline. Gated on a compiled prompt existing.
+  describe('Test latest prompt (ADR-015)', () => {
+    it('is disabled when there is no compiled prompt', () => {
+      const noPrompt = { ...configuredAgent, compiledInstructions: null } as Agent
+      stubMicPermission(true)
+      render(<VoiceTestPanel agent={noPrompt} canMutate />, { wrapper })
+      expect(screen.getByRole('button', { name: /test latest prompt/i })).toBeDisabled()
+    })
+
+    it('is disabled when LiveKit is not configured', () => {
+      const unconfigured = { ...baseAgent } as Agent
+      render(<VoiceTestPanel agent={unconfigured} canMutate />, { wrapper })
+      expect(screen.getByRole('button', { name: /test latest prompt/i })).toBeDisabled()
+    })
+
+    it('is disabled for viewers (canMutate=false)', () => {
+      stubMicPermission(true)
+      render(<VoiceTestPanel agent={configuredAgent} canMutate={false} />, { wrapper })
+      expect(screen.getByRole('button', { name: /test latest prompt/i })).toBeDisabled()
+    })
+
+    it('hits the prototype endpoint when clicked and mounts the room', async () => {
+      stubMicPermission(true)
+      render(<VoiceTestPanel agent={configuredAgent} canMutate />, { wrapper })
+
+      const btn = screen.getByRole('button', { name: /test latest prompt/i })
+      expect(btn).not.toBeDisabled()
+
+      fireEvent.click(btn)
+
+      await waitFor(() => {
+        expect(mockPost).toHaveBeenCalledWith('agents/agent-1/prototype-voice-test-token')
+      })
+      await waitFor(() => {
+        expect(screen.getByTestId('lk-room')).toBeInTheDocument()
+      })
+    })
+  })
 })

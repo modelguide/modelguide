@@ -1060,3 +1060,204 @@ export async function createVoiceTestSession(
     identity,
   };
 }
+
+// ============================================================================
+// Prototype voice-test (browser WebRTC + inline prompt override)
+//
+// Unlike `createVoiceTestSession` above — which dispatches the worker's
+// pre-deployed profile and rejects prompt injection (ADR-014) — this flow
+// is intentionally a prototype loop: it carries the agent's compiled
+// instructions inline in the dispatch metadata so an admin can iterate on
+// prompt copy without redeploying the worker image.
+//
+// The trade-off is documented in ADR-015. The prototype worker
+// (examples/agents/livekit-prototype/src/agent.py) is the only client of
+// this metadata shape and is intentionally stripped of MCP/SOP/tools — it
+// renders the prompt and runs STT→LLM→TTS, nothing else.
+// ============================================================================
+
+/**
+ * Upper bound on the inline instructions string. LiveKit's dispatch
+ * metadata is serialized as JSON and has a ~48 KB ceiling, so 50K of raw
+ * prompt is the practical max once you account for JSON-encoded newlines
+ * and the other fields. Most compiled prompts we've seen are <10 KB.
+ */
+export const MAX_PROTOTYPE_INSTRUCTIONS_LENGTH = 50_000;
+
+/**
+ * Build the dispatch-metadata payload for a prototype voice-test session.
+ *
+ * The prototype worker reads `instructions` verbatim as the system prompt.
+ * Echo the input — no .trim(), no normalization — so what the admin saw
+ * in the dashboard is what the worker uses.
+ */
+export function buildPrototypeDispatchMetadata(input: {
+  agentSlug: string;
+  sessionId: string;
+  callerEmail: string;
+  instructions: string;
+}): {
+  mode: "prototype";
+  agentName: string;
+  session_id: string;
+  user_identifier: string;
+  email: string;
+  instructions: string;
+} {
+  return {
+    mode: "prototype" as const,
+    agentName: input.agentSlug,
+    session_id: input.sessionId,
+    user_identifier: input.callerEmail,
+    email: input.callerEmail,
+    instructions: input.instructions,
+  };
+}
+
+export interface PrototypeVoiceTestSession {
+  livekitUrl: string;
+  roomName: string;
+  token: string;
+  sessionId: string;
+  dispatchId: string;
+  agentName: string;
+  profileName: string;
+  identity: string;
+  promptLength: number;
+}
+
+export async function createPrototypeVoiceTestSession(
+  orgId: string,
+  agentId: string,
+  caller: { userId: string; email: string; name: string },
+): Promise<PrototypeVoiceTestSession> {
+  const agent = await forOrg(orgId, async (tx) => {
+    const a = await requireAgent(tx, agentId);
+    if (!a.isActive) {
+      throw Errors.invalidInput("Agent is not active");
+    }
+    if (a.modality !== "voice") {
+      throw Errors.invalidInput("Voice test requires a voice agent");
+    }
+    if (a.agentPlatform !== "livekit") {
+      throw Errors.invalidInput(
+        "Prototype voice test is only supported for LiveKit agents",
+      );
+    }
+    return a;
+  });
+
+  const instructions = agent.compiledInstructions;
+  if (!instructions || instructions.trim().length === 0) {
+    throw Errors.invalidInput(
+      "Compile the agent prompt before running a prototype voice test.",
+    );
+  }
+  if (instructions.length > MAX_PROTOTYPE_INSTRUCTIONS_LENGTH) {
+    throw Errors.invalidInput(
+      `Compiled prompt is ${instructions.length} chars — exceeds ${MAX_PROTOTYPE_INSTRUCTIONS_LENGTH} cap for prototype dispatch.`,
+    );
+  }
+
+  const meta = (agent.metadata ?? {}) as Record<string, unknown>;
+  const lkMeta = (meta.livekit ?? {}) as Record<string, unknown>;
+  const livekitUrl = lkMeta.url as string | undefined;
+  const agentName = lkMeta.agentName as string | undefined;
+
+  if (!livekitUrl || !agentName) {
+    throw Errors.invalidInput(
+      "LiveKit is not configured for this agent. Configure it first.",
+    );
+  }
+
+  const apiKey = await getAgentSecretByType(orgId, agentId, "livekit_api_key");
+  const apiSecret = await getAgentSecretByType(
+    orgId,
+    agentId,
+    "livekit_api_secret",
+  );
+
+  if (!apiKey || !apiSecret) {
+    throw Errors.invalidInput(
+      "LiveKit credentials not found. Re-configure LiveKit for this agent.",
+    );
+  }
+
+  const roomName = `prototype-${nanoid()}`;
+  const identity = `user-${caller.userId.slice(0, 8)}-${nanoid(6)}`;
+
+  const session = await createSession(orgId, agentId, {
+    channelType: "voice",
+    userIdentifier: caller.email,
+    userMetadata: {
+      prototypeVoiceTest: true,
+      userId: caller.userId,
+      name: caller.name,
+      roomName,
+      promptLength: instructions.length,
+    },
+  });
+
+  const dispatchMetadata = buildPrototypeDispatchMetadata({
+    agentSlug: agent.slug,
+    sessionId: session.id,
+    callerEmail: caller.email,
+    instructions,
+  });
+
+  let dispatchId: string;
+  try {
+    dispatchId = await dispatchAgentToRoom(
+      livekitUrl,
+      apiKey,
+      apiSecret,
+      agentName,
+      roomName,
+      dispatchMetadata,
+    );
+  } catch (err) {
+    try {
+      await updateSession(orgId, session.id, agentId, { status: "abandoned" });
+    } catch (rollbackErr) {
+      getLogger().error(
+        { orgId, agentId, sessionId: session.id, rollbackErr },
+        "failed to abandon prototype voice-test session after dispatch failure",
+      );
+    }
+    throw err;
+  }
+
+  const token = await generateVoiceTestToken({
+    apiKey,
+    apiSecret,
+    roomName,
+    identity,
+    name: caller.name,
+  });
+
+  getLogger().info(
+    {
+      orgId,
+      agentId,
+      sessionId: session.id,
+      dispatchId,
+      roomName,
+      agentName,
+      profileName: agent.slug,
+      promptLength: instructions.length,
+    },
+    "prototype voice-test dispatched",
+  );
+
+  return {
+    livekitUrl,
+    roomName,
+    token,
+    sessionId: session.id,
+    dispatchId,
+    agentName,
+    profileName: agent.slug,
+    identity,
+    promptLength: instructions.length,
+  };
+}

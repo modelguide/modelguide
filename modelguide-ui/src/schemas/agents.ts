@@ -142,3 +142,13 @@ export const voiceTestTokenResponseSchema = z.object({
 })
 
 export type VoiceTestTokenResponse = z.infer<typeof voiceTestTokenResponseSchema>
+
+// Prototype voice-test response (ADR-015) — same shape as the production
+// voice-test, plus `promptLength` so the UI can surface the size of the
+// prompt that was just dispatched. `roomName` will be prefixed `prototype-`
+// instead of `voice-test-`.
+export const prototypeVoiceTestTokenResponseSchema = voiceTestTokenResponseSchema.extend({
+  promptLength: z.number().int(),
+})
+
+export type PrototypeVoiceTestTokenResponse = z.infer<typeof prototypeVoiceTestTokenResponseSchema>

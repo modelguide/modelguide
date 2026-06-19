@@ -22,6 +22,7 @@ import {
   assignConnectorToAgent,
   createAgent,
   createOutboundCall,
+  createPrototypeVoiceTestSession,
   createVoiceTestSession,
   deleteAgent,
   getAgentById,
@@ -1354,6 +1355,75 @@ router.openapi(voiceTestTokenRoute, async (c) => {
   const { id } = c.req.valid("param");
 
   const result = await createVoiceTestSession(orgId, id, {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+  });
+
+  return c.json(result, 201);
+});
+
+// ============================================================================
+// Prototype Voice Test (browser WebRTC + inline compiled prompt)
+//
+// See ADR-015. Dispatches the prototype LiveKit worker
+// (examples/agents/livekit-prototype) with the agent's compiled prompt
+// inline in the metadata, so admins can iterate on prompt copy without
+// redeploying a worker profile.
+// ============================================================================
+
+router.post(
+  "/:id/prototype-voice-test-token",
+  requireUser(),
+  requirePermission("agents:activate"),
+  requireOrganization(),
+);
+
+const prototypeVoiceTestTokenResponseSchema = z.object({
+  livekitUrl: z.string(),
+  roomName: z.string(),
+  token: z.string(),
+  sessionId: z.string().uuid(),
+  dispatchId: z.string(),
+  agentName: z.string(),
+  profileName: z.string(),
+  identity: z.string(),
+  promptLength: z.number().int(),
+});
+
+const prototypeVoiceTestTokenRoute = createRoute({
+  method: "post",
+  path: "/{id}/prototype-voice-test-token",
+  tags: ["Agents"],
+  summary: "Issue a prototype LiveKit voice-test token with inline prompt",
+  description:
+    "Creates a ModelGuide session, dispatches the prototype LiveKit worker with the agent's compiled instructions in dispatch metadata, and returns a short-lived AccessToken so the browser can join via WebRTC. Unlike `/voice-test-token`, this carries the prompt inline so iterating on copy does not require a worker redeploy (see ADR-015).",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: agentIdParams,
+  },
+  responses: {
+    201: {
+      description: "Prototype voice-test session created",
+      content: {
+        "application/json": { schema: prototypeVoiceTestTokenResponseSchema },
+      },
+    },
+    400: errorResponse(
+      "LiveKit not configured, missing credentials, no compiled prompt, or prompt exceeds size cap",
+    ),
+    401: errorResponse("Not authenticated"),
+    403: errorResponse("Insufficient permissions"),
+    404: errorResponse("Agent not found"),
+  },
+});
+
+router.openapi(prototypeVoiceTestTokenRoute, async (c) => {
+  const orgId = getOrganizationId(c);
+  const user = getCurrentUser(c);
+  const { id } = c.req.valid("param");
+
+  const result = await createPrototypeVoiceTestSession(orgId, id, {
     userId: user.id,
     email: user.email,
     name: user.name,
