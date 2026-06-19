@@ -23,13 +23,17 @@
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Mic, Radio } from 'lucide-react'
+import { AlertTriangle, FlaskConical, Mic, Radio } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
 import { api } from '~/lib/api'
-import type { Agent, VoiceTestTokenResponse } from '~/schemas/agents'
+import type {
+  Agent,
+  PrototypeVoiceTestTokenResponse,
+  VoiceTestTokenResponse,
+} from '~/schemas/agents'
 
 import { ensureMicPermission } from './voice-test/mic-permission'
 import { RoomController } from './voice-test/room-controller'
@@ -94,6 +98,31 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
     },
   })
 
+  // Prototype voice test — dispatches the prototype LiveKit worker with the
+  // agent's compiled prompt inline in metadata (ADR-015). Lets admins iterate
+  // on prompt copy without rebuilding the production worker image.
+  const prototypeMutation = useMutation({
+    mutationFn: async (): Promise<PrototypeVoiceTestTokenResponse> => {
+      setErrorMsg(null)
+      setState('CHECKING_MIC')
+      await ensureMicPermission()
+      setState('REQUESTING_TOKEN')
+      return api
+        .post(`agents/${agent.id}/prototype-voice-test-token`)
+        .json<PrototypeVoiceTestTokenResponse>()
+    },
+    onSuccess: (resp) => {
+      setSessionId(resp.sessionId)
+      setToken(resp.token)
+      setWsUrl(resp.livekitUrl)
+      setState('CONNECTING')
+    },
+    onError: (err) => {
+      setState('ERROR')
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to start prototype test')
+    },
+  })
+
   const handleHangUp = useCallback(() => {
     endingRef.current = true
     setState('ENDING')
@@ -153,9 +182,9 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
       <CardContent>
         {livekitConfigured ? (
           <p className="text-sm text-fg-muted">
-            Dispatches the configured LiveKit worker with this agent's slug as{' '}
-            <code>agentName</code> metadata, then joins the room from your browser so you can talk
-            to the agent end-to-end.
+            <strong className="text-fg-primary">Talk to agent</strong> joins the production worker
+            (deployed prompt). <strong className="text-fg-primary">Test latest prompt</strong> joins
+            the prototype worker with the freshly compiled prompt inline — no redeploy needed.
           </p>
         ) : (
           <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-fg-secondary">
@@ -166,17 +195,39 @@ export function VoiceTestPanel({ agent, canMutate }: VoiceTestPanelProps) {
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {showStartButton ? (
-            <Button
-              onClick={() => {
-                reset()
-                startMutation.mutate()
-              }}
-              loading={startMutation.isPending}
-              disabled={!canMutate || !livekitConfigured}
-            >
-              <Mic className="h-4 w-4" />
-              {state === 'ENDED' ? 'Talk again' : 'Talk to agent'}
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  reset()
+                  startMutation.mutate()
+                }}
+                loading={startMutation.isPending}
+                disabled={!canMutate || !livekitConfigured}
+              >
+                <Mic className="h-4 w-4" />
+                {state === 'ENDED' ? 'Talk again' : 'Talk to agent'}
+              </Button>
+              {/* ADR-015: prototype dispatch carries the compiled prompt in
+                  metadata, so admins can hear copy changes without redeploying
+                  the worker. Gated on a compiled prompt existing. */}
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  reset()
+                  prototypeMutation.mutate()
+                }}
+                loading={prototypeMutation.isPending}
+                disabled={!canMutate || !livekitConfigured || !agent.compiledInstructions}
+                title={
+                  !agent.compiledInstructions
+                    ? 'Compile the prompt first'
+                    : 'Dispatch the prototype worker with the latest compiled prompt (ADR-015)'
+                }
+              >
+                <FlaskConical className="h-4 w-4" />
+                Test latest prompt
+              </Button>
+            </>
           ) : null}
 
           {token && wsUrl ? (

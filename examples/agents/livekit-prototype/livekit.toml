@@ -1,0 +1,6 @@
+[project]
+  subdomain = "modelguide-prototype"
+
+[agent]
+  # Set after the first `lk agent create` — see README for deploy steps.
+  id = ""
