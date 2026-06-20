@@ -82,3 +82,98 @@ describe("buildVoiceTestDispatchMetadata", () => {
     expect(roundTripped).toEqual(md);
   });
 });
+
+/**
+ * POC extension (see ADR-015): when a `compiledInstructions` string is
+ * provided, dispatch metadata carries it through as `instructions` so an
+ * opt-in worker (the livekit-poc prototype) can pick up the latest compiled
+ * prompt without a worker redeploy. ADR-014 deliberately left this off for
+ * production workers — the POC pattern is opt-in on the worker side: workers
+ * that ignore the field behave exactly as before.
+ *
+ * These tests pin the contract on the API half. The Python half lives in
+ * `examples/agents/livekit-poc/tests/test_prompt_resolution.py`.
+ */
+describe("buildVoiceTestDispatchMetadata — compiled instructions (POC)", () => {
+  test("omits `instructions` when no compiledInstructions provided", () => {
+    const md = buildVoiceTestDispatchMetadata({
+      agentSlug: "x",
+      sessionId: "s",
+      callerEmail: "c@e.com",
+    });
+    // Strict absence — not "instructions: undefined" — so JSON.stringify
+    // doesn't accidentally encode it for a worker that would then read it
+    // as the literal string "undefined" on the Python side.
+    expect("instructions" in md).toBe(false);
+  });
+
+  test("carries `instructions` verbatim when compiledInstructions provided", () => {
+    const compiled = "You are Sam, a friendly contractor supply assistant.";
+    const md = buildVoiceTestDispatchMetadata({
+      agentSlug: "x",
+      sessionId: "s",
+      callerEmail: "c@e.com",
+      compiledInstructions: compiled,
+    });
+    expect(md.instructions).toBe(compiled);
+  });
+
+  test("omits `instructions` for empty string (treats empty as absent)", () => {
+    // An empty compiled prompt is meaningless to the worker and would
+    // override the worker's baked-in default with nothing. Treat it the
+    // same as "not provided" so the worker's default still wins.
+    const md = buildVoiceTestDispatchMetadata({
+      agentSlug: "x",
+      sessionId: "s",
+      callerEmail: "c@e.com",
+      compiledInstructions: "",
+    });
+    expect("instructions" in md).toBe(false);
+  });
+
+  test("omits `instructions` for whitespace-only string", () => {
+    const md = buildVoiceTestDispatchMetadata({
+      agentSlug: "x",
+      sessionId: "s",
+      callerEmail: "c@e.com",
+      compiledInstructions: "   \n\t  ",
+    });
+    expect("instructions" in md).toBe(false);
+  });
+
+  test("preserves the other five keys when instructions is added", () => {
+    // Regression guard: the original 5-key shape must remain intact.
+    const md = buildVoiceTestDispatchMetadata({
+      agentSlug: "tenant_a",
+      sessionId: "sess-1",
+      callerEmail: "c@e.com",
+      compiledInstructions: "Be helpful.",
+    });
+    expect(Object.keys(md).sort()).toEqual(
+      [
+        "agentName",
+        "email",
+        "instructions",
+        "mode",
+        "session_id",
+        "user_identifier",
+      ].sort(),
+    );
+  });
+
+  test("survives JSON round-trip with a long prompt", () => {
+    // ADR-014 cited a 50K char cap for prompt-in-metadata; the LiveKit
+    // dispatch metadata cap is 48KB. Keep the test prompt well below both
+    // so it asserts the encoding round-trip without testing the cap itself
+    // (the cap is enforced upstream in createVoiceTestSession).
+    const prompt = "You are a helpful assistant.\n".repeat(200); // ~6KB
+    const md = buildVoiceTestDispatchMetadata({
+      agentSlug: "x",
+      sessionId: "s",
+      callerEmail: "c@e.com",
+      compiledInstructions: prompt,
+    });
+    const roundTripped = JSON.parse(JSON.stringify(md));
+    expect(roundTripped.instructions).toBe(prompt);
+  });
+});
