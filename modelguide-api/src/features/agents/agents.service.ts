@@ -899,25 +899,43 @@ export function buildOutboundDispatchMetadata(input: {
  * worker's entrypoint (demos/bank-nowa/voice-agent/src/agent.py —
  * `agentName = dispatch_metadata.get("agentName")`) stops routing to
  * the right profile and every dispatched call goes silent.
+ *
+ * When `compiledInstructions` is provided, the optional `instructions`
+ * field is added so an opt-in worker (see `examples/agents/livekit-poc`
+ * + ADR-015) can use the latest compiled prompt without a redeploy.
+ * Workers that ignore the field behave exactly as before — this is
+ * additive, not a breaking change to the dispatch contract.
  */
 export function buildVoiceTestDispatchMetadata(input: {
   agentSlug: string;
   sessionId: string;
   callerEmail: string;
+  compiledInstructions?: string | null;
 }): {
   mode: "voice-test";
   agentName: string;
   session_id: string;
   user_identifier: string;
   email: string;
+  instructions?: string;
 } {
-  return {
+  const base = {
     mode: "voice-test" as const,
     agentName: input.agentSlug,
     session_id: input.sessionId,
     user_identifier: input.callerEmail,
     email: input.callerEmail,
   };
+  // Treat empty / whitespace-only prompts as absent — see ADR-015. An empty
+  // override would silently null out the worker's baked-in default, which is
+  // surprising. Emptiness is decided here (not on the worker) so the JSON
+  // blob is authoritative across all worker implementations — but the
+  // payload itself preserves the prompt verbatim, including leading or
+  // trailing whitespace that the compiler chose to emit.
+  if (input.compiledInstructions && input.compiledInstructions.trim() !== "") {
+    return { ...base, instructions: input.compiledInstructions };
+  }
+  return base;
 }
 
 export interface VoiceTestSession {
@@ -996,6 +1014,10 @@ export async function createVoiceTestSession(
     agentSlug: agent.slug,
     sessionId: session.id,
     callerEmail: caller.email,
+    // Opt-in pattern (ADR-015): always pass the compiled prompt through.
+    // Production workers (BuildPro) ignore the field; the livekit-poc worker
+    // reads it as a same-session override of its baked-in default.
+    compiledInstructions: agent.compiledInstructions,
   });
 
   let dispatchId: string;

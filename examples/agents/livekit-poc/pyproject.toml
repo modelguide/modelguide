@@ -1,0 +1,23 @@
+[project]
+name = "livekit-poc"
+version = "0.1.0"
+description = "Minimal LiveKit voice agent that reads its system prompt from dispatch metadata (ADR-015 POC)."
+requires-python = ">=3.11"
+dependencies = [
+    "livekit-agents~=1.4",
+    "livekit-plugins-openai~=1.4",
+    "httpx",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
